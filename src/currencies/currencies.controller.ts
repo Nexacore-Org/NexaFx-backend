@@ -17,13 +17,12 @@ export class CurrenciesController {
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string) {
+  async findOne(@Param('id') id: string) { // Ensure id is treated as a string
     return this.currenciesService.findOne(id);
   }
-
+  
   @Delete(':id')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  async remove(@Param('id') id: string) {
+  async remove(@Param('id') id: string) { // Ensure id is treated as a string
     return this.currenciesService.remove(id);
   }
 }

@@ -1,11 +1,14 @@
 import { Module } from '@nestjs/common';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
-import { CurrenciesModule } from './currencies/currencies.module';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { Transaction } from './transactions/entities/transaction.entity';
+import { TransactionsService } from './transactions/transactions.service';
+import { TransactionsController } from './transactions/transactions.controller';
+import { Currency } from './currencies/entities/currency.entity';
 
 @Module({
-  imports: [CurrenciesModule],
-  controllers: [AppController],
-  providers: [AppService],
+  imports: [TypeOrmModule.forFeature([Transaction, Currency])],
+  controllers: [TransactionsController],
+  providers: [TransactionsService],
 })
-export class AppModule {}
+
+export class AppModule {} 

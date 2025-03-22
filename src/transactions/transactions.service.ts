@@ -1,43 +1,26 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Transaction } from './entities/transaction.entity';
+import { Injectable } from '@nestjs/common';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 
 @Injectable()
 export class TransactionsService {
-  constructor(
-    @InjectRepository(Transaction)
-    private readonly transactionRepository: Repository<Transaction>,
-  ) {}
-
-  async create(createTransactionDto: CreateTransactionDto): Promise<Transaction> {
-    const transaction = this.transactionRepository.create(createTransactionDto);
-    // Optionally, add logging or state machine logic here
-    return this.transactionRepository.save(transaction);
+  create(createTransactionDto: CreateTransactionDto) {
+    return 'This action adds a new transaction';
   }
 
-  async findAll(): Promise<Transaction[]> {
-    return this.transactionRepository.find();
+  findAll() {
+    return `This action returns all transactions`;
   }
 
-  async findOne(id: string): Promise<Transaction> {
-    const transaction = await this.transactionRepository.findOne({ where: { id } });
-    if (!transaction) {
-      throw new NotFoundException(`Transaction with id ${id} not found`);
-    }
-    return transaction;
+  findOne(id: number) {
+    return `This action returns a #${id} transaction`;
   }
 
-  async update(id: string, updateTransactionDto: UpdateTransactionDto): Promise<Transaction> {
-    const transaction = await this.findOne(id);
-    const updatedTransaction = Object.assign(transaction, updateTransactionDto);
-    return this.transactionRepository.save(updatedTransaction);
+  update(id: number, updateTransactionDto: UpdateTransactionDto) {
+    return `This action updates a #${id} transaction`;
   }
 
-  async remove(id: string): Promise<void> {
-    const transaction = await this.findOne(id);
-    await this.transactionRepository.remove(transaction);
+  remove(id: number) {
+    return `This action removes a #${id} transaction`;
   }
 }

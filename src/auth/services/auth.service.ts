@@ -1,51 +1,75 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { UsersService } from '../../users/services/users.service';
-import { BcryptPasswordHashingService } from './password-hashing.service';
-import { Token } from '../entities/token.entity';
-import { Repository } from 'typeorm';
-import { InjectRepository } from '@nestjs/typeorm';
+import { UserService } from 'src/user/user.service';
+import { RegisterDto } from '../dto/register.dto';
+import { LoginDto } from '../dto/login.dto';
+import { BcryptPasswordHashingService } from './passwod.hashing.service';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly usersService: UsersService,
+    private readonly usersService: UserService,
     private readonly jwtService: JwtService,
     private readonly passwordService: BcryptPasswordHashingService,
-    @InjectRepository(Token) private readonly tokenRepository: Repository<Token>,
   ) {}
 
-  async validateUser(email: string, password: string): Promise<any> {
-    const user = await this.usersService.findByEmail(email);
-    if (user && (await this.passwordService.comparePassword(password, user.password))) {
+  //Register User
+  public async register(registerDto: RegisterDto) {
+    const existingUser = await this.usersService.findOne(registerDto.email);
+    if (existingUser) throw new ConflictException('Email is already in use');
+
+    const hashedPassword = await this.passwordService.hashPassword(
+      registerDto.password,
+    );
+    const newUser = await this.usersService.create({
+      ...registerDto,
+      password: hashedPassword,
+    });
+
+    return this.login(newUser);
+  }
+
+  // ✅ Validate User Credentials
+  public async validateUser(email: string, password: string): Promise<any> {
+    const user = await this.usersService.findOne(email);
+    if (
+      user &&
+      (await this.passwordService.comparePassword(password, user.password))
+    ) {
       return user;
     }
     throw new UnauthorizedException('Invalid credentials');
   }
 
-  async login(user: any) {
+  //Login Method (Generate JWT tokens)
+  public async login(user: any) {
     const payload = { email: user.email, sub: user.id };
-    const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
-    const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
 
-    await this.tokenRepository.save({
-      user,
-      refreshToken,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-    });
-
-    return { accessToken, refreshToken };
+    return {
+      accessToken: this.jwtService.sign(payload, { expiresIn: '15m' }),
+      refreshToken: this.jwtService.sign(payload, { expiresIn: '7d' }), // No DB storage
+    };
   }
 
-  async refreshToken(token: string) {
-    const storedToken = await this.tokenRepository.findOne({ where: { refreshToken: token, isRevoked: false } });
-    if (!storedToken) throw new UnauthorizedException('Invalid refresh token');
+  //Refresh Token Method (No DB lookup)
+  public async refreshToken(token: string) {
+    try {
+      const decoded = this.jwtService.verify(token);
+      const user = await this.usersService.findOne(decoded.email);
+      if (!user) throw new UnauthorizedException('Invalid refresh token');
 
-    const user = storedToken.user;
-    return this.login(user);
+      return this.login(user); // Issue new tokens
+    } catch (error) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
   }
 
-  async logout(token: string) {
-    await this.tokenRepository.update({ refreshToken: token }, { isRevoked: true });
+  //Logout (No DB token storage, so just return message)
+  public async logout() {
+    return { message: 'Logged out successfully' };
   }
 }

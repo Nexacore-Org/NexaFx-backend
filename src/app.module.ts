@@ -7,18 +7,21 @@ import { Currency } from './currencies/entities/currency.entity';
 import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
+import { KycModule } from './kyc/kyc.module';
+import { KycVerification } from './kyc/entities/kyc.entity';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    
-    TypeOrmModule.forFeature([Transaction, Currency]),
+
+    TypeOrmModule.forFeature([Transaction, Currency, KycVerification]),
     UserModule,
     AuthModule,
+    KycModule,
   ],
   controllers: [TransactionsController],
   providers: [TransactionsService],
 })
-export class AppModule {} 
+export class AppModule {}

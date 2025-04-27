@@ -9,6 +9,7 @@ export enum AccountType {
 export enum UserRole {
     USER = 'User',
     ADMIN = 'Admin',
+    AUDITOR ='Auditor'
 }
 
 @Entity('users')
@@ -67,9 +68,6 @@ export class User {
 
     @OneToMany(() => Token, (token) => token.user, { cascade: true })
     tokens: Token[]; 
-
-    @Column({ nullable: true })
-    passwordResetToken: string; 
 
     @CreateDateColumn()
     createdAt: Date;

@@ -8,6 +8,7 @@ import { UserService } from 'src/user/user.service';
 import { RegisterDto } from '../dto/register.dto';
 import { LoginDto } from '../dto/login.dto';
 import { BcryptPasswordHashingService } from './passwod.hashing.service';
+import { CreateUserDto } from 'src/user/dto/create-user.dto';
 
 @Injectable()
 export class AuthService {
@@ -29,6 +30,7 @@ export class AuthService {
       ...registerDto,
       password: hashedPassword,
     });
+   
 
     return this.login(newUser);
   }

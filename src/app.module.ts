@@ -7,6 +7,7 @@ import { KycModule } from './kyc/kyc.module';
 import { CurrenciesModule } from './currencies/currencies.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { TransactionsModule } from './transactions/transactions.module';
 
 @Module({
   imports: [
@@ -23,7 +24,7 @@ import { AppService } from './app.service';
           host: configService.get<string>('DB_HOST', 'localhost'),
           port: parseInt(configService.get<string>('DB_PORT', '5432')),
           username: configService.get<string>('DB_USERNAME', 'postgres'),
-          password: configService.get<string>('DB_PASSWORD', 'Juvino@19'),
+          password: configService.get<string>('DB_PASSWORD', 'password'),
           database: configService.get<string>('DB_NAME', 'nexafx'),
           synchronize: configService.get('NODE_ENV') === 'development',
           autoLoadEntities: true,
@@ -36,6 +37,7 @@ import { AppService } from './app.service';
     UserModule,
     AuthModule,
     KycModule,
+    TransactionsModule,
     CurrenciesModule,
   ],
   controllers: [AppController],

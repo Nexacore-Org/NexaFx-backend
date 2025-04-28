@@ -69,7 +69,7 @@ import { UserRole } from 'src/user/entities/user.entity';
           await this.transactionsService.generateUniqueReference();
       }
 
-      return this.transactionsService.create(createTransactionDto);
+      return this.transactionsService.createTransaction(createTransactionDto);
     }
 
     @Get()

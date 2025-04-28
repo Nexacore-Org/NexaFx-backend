@@ -12,6 +12,7 @@ import { TransactionsModule } from './transactions/transactions.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { BlockchainModule } from './blockchain/blockchain.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { InAppNotificationModule } from './in-app-notifications/in-app-notification.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     TransactionsModule,
     CurrenciesModule,
     NotificationsModule,
+    InAppNotificationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -15,4 +15,4 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
   providers: [InAppNotificationService, EmailService],
   exports: [InAppNotificationService, EmailService],
 })
-export class NotificationModule {}
+export class InAppNotificationModule {}

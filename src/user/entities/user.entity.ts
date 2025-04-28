@@ -8,6 +8,7 @@ import {
 } from 'typeorm';
 import { Token } from '../../auth/entities/token.entity';
 import { Notification } from '../../notifications/entities/notification.entity';
+import { InAppNotification } from 'src/in-app-notifications/in-app-notification.entity';
 
 export enum AccountType {
   PERSONAL = 'Personal',
@@ -83,8 +84,8 @@ export class User {
   @Column({ default: true })
   isActive: boolean;
 
-  @OneToMany(() => Notification, (notification) => notification.user)
-  notifications: Notification[];
+  @OneToMany(() => InAppNotification, (notification) => notification.user)
+  notifications: InAppNotification[];
 
   @CreateDateColumn()
   createdAt: Date;

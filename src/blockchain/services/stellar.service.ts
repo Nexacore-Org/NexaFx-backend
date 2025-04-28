@@ -13,27 +13,34 @@ export class StellarService {
 
   constructor(private configService: ConfigService) {
     // Initialize Stellar configuration
-    const horizonUrl = this.configService.get<string>('STELLAR_HORIZON_URL') || 'https://horizon-testnet.stellar.org';
-    const isTestnet = this.configService.get<string>('STELLAR_NETWORK') !== 'public';
-    
-    this.networkPassphrase = isTestnet 
-      ? stellarSdk.Networks.TESTNET 
+    const horizonUrl =
+      this.configService.get<string>('STELLAR_HORIZON_URL') ||
+      'https://horizon-testnet.stellar.org';
+    const isTestnet =
+      this.configService.get<string>('STELLAR_NETWORK') !== 'public';
+
+    this.networkPassphrase = isTestnet
+      ? stellarSdk.Networks.TESTNET
       : stellarSdk.Networks.PUBLIC;
-    
+
     // Create the server instance correctly using the Horizon namespace
     this.server = new stellarSdk.Horizon.Server(horizonUrl);
-    
+
     // Load source account (platform wallet) from environment
     const secretKey = this.configService.get<string>('STELLAR_SECRET_KEY');
     if (!secretKey) {
-      throw new Error('STELLAR_SECRET_KEY is not defined in environment variables');
+      throw new Error(
+        'STELLAR_SECRET_KEY is not defined in environment variables',
+      );
     }
     this.sourceSecretKey = secretKey;
-    
+
     this.sourceKeypair = stellarSdk.Keypair.fromSecret(this.sourceSecretKey);
     this.sourcePublicKey = this.sourceKeypair.publicKey();
-    
-    this.logger.log(`Stellar service initialized with network: ${isTestnet ? 'TESTNET' : 'PUBLIC'}`);
+
+    this.logger.log(
+      `Stellar service initialized with network: ${isTestnet ? 'TESTNET' : 'PUBLIC'}`,
+    );
   }
 
   /**
@@ -41,14 +48,16 @@ export class StellarService {
    * @param params Transaction parameters
    * @returns Signed transaction XDR
    */
-  async buildAndSignTransaction(params: StellarTransactionParams): Promise<string> {
+  async buildAndSignTransaction(
+    params: StellarTransactionParams,
+  ): Promise<string> {
     try {
       const {
         destinationAddress,
         amount,
         asset,
         memo = '',
-        timeout = 180
+        timeout = 180,
       } = params;
 
       // Validate destination address
@@ -66,7 +75,11 @@ export class StellarService {
         stellarAsset = stellarSdk.Asset.native();
       } else {
         const [code, issuer] = asset.split(':');
-        if (!code || !issuer || !stellarSdk.StrKey.isValidEd25519PublicKey(issuer)) {
+        if (
+          !code ||
+          !issuer ||
+          !stellarSdk.StrKey.isValidEd25519PublicKey(issuer)
+        ) {
           throw new Error('Invalid asset format. Expected "CODE:ISSUER"');
         }
         stellarAsset = new stellarSdk.Asset(code, issuer);
@@ -88,7 +101,7 @@ export class StellarService {
           destination: destinationAddress,
           asset: stellarAsset,
           amount: amount.toString(),
-        })
+        }),
       );
 
       // Add memo if provided
@@ -103,7 +116,10 @@ export class StellarService {
       this.logger.debug('Transaction built and signed successfully');
       return transaction.toXDR();
     } catch (error) {
-      this.logger.error(`Error building transaction: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error building transaction: ${error.message}`,
+        error.stack,
+      );
       throw new Error(`Failed to build Stellar transaction: ${error.message}`);
     }
   }
@@ -113,16 +129,18 @@ export class StellarService {
    * @param signedTransactionXdr The signed transaction in XDR format
    * @returns Transaction result
    */
-  async submitTransaction(signedTransactionXdr: string): Promise<StellarTransactionResult> {
+  async submitTransaction(
+    signedTransactionXdr: string,
+  ): Promise<StellarTransactionResult> {
     try {
       const transaction = stellarSdk.TransactionBuilder.fromXDR(
         signedTransactionXdr,
-        this.networkPassphrase
+        this.networkPassphrase,
       );
-  
+
       this.logger.debug('Submitting transaction to Stellar network');
       const result = await this.server.submitTransaction(transaction);
-      
+
       this.logger.log(`Transaction submitted successfully: ${result.hash}`);
       return {
         successful: true,
@@ -136,17 +154,21 @@ export class StellarService {
       // Handle Stellar-specific errors
       let errorMessage = 'Unknown error';
       let errorCode = 'TRANSACTION_FAILED';
-      
+
       if (error.response?.data?.extras?.result_codes) {
         const resultCodes = error.response.data.extras.result_codes;
-        errorMessage = resultCodes.transaction || resultCodes.operations?.join(', ');
+        errorMessage =
+          resultCodes.transaction || resultCodes.operations?.join(', ');
         errorCode = errorMessage;
       } else if (error.message) {
         errorMessage = error.message;
       }
-  
-      this.logger.error(`Transaction submission failed: ${errorMessage}`, error.stack);
-      
+
+      this.logger.error(
+        `Transaction submission failed: ${errorMessage}`,
+        error.stack,
+      );
+
       return {
         successful: false,
         errorCode,
@@ -160,12 +182,17 @@ export class StellarService {
    * @param params Transaction parameters
    * @returns Transaction result
    */
-  async sendTransaction(params: StellarTransactionParams): Promise<StellarTransactionResult> {
+  async sendTransaction(
+    params: StellarTransactionParams,
+  ): Promise<StellarTransactionResult> {
     try {
       const signedXdr = await this.buildAndSignTransaction(params);
       return this.submitTransaction(signedXdr);
     } catch (error) {
-      this.logger.error(`Failed to send transaction: ${error.message}`, error.stack);
+      this.logger.error(
+        `Failed to send transaction: ${error.message}`,
+        error.stack,
+      );
       return {
         successful: false,
         errorCode: 'TRANSACTION_CREATION_FAILED',
@@ -199,8 +226,8 @@ export class StellarService {
   async getAccountBalances(address: string): Promise<AssetBalance[]> {
     try {
       const account = await this.server.loadAccount(address);
-      
-      return account.balances.map(balance => {
+
+      return account.balances.map((balance) => {
         // Handle native XLM asset
         if (balance.asset_type === 'native') {
           return {
@@ -210,7 +237,7 @@ export class StellarService {
             limit: undefined,
           };
         }
-        
+
         // Handle other assets
         if ('asset_code' in balance && 'asset_issuer' in balance) {
           return {
@@ -219,7 +246,7 @@ export class StellarService {
             limit: balance.limit,
           };
         }
-        
+
         // Handle liquidity pool shares or other balance types
         return {
           asset: balance.asset_type,
@@ -228,7 +255,10 @@ export class StellarService {
         };
       });
     } catch (error) {
-      this.logger.error(`Failed to get account balances: ${error.message}`, error.stack);
+      this.logger.error(
+        `Failed to get account balances: ${error.message}`,
+        error.stack,
+      );
       throw new Error(`Unable to fetch account balances: ${error.message}`);
     }
   }

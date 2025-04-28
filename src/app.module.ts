@@ -12,9 +12,8 @@ import { LogsModule } from './logs/logs.module';
 import { Module } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core/constants';
 import { AuditInterceptor } from './common/interceptors/audit/audit.interceptor';
-import { TransactionsService } from './transactions/transactions.
+import { TransactionsService } from './transactions/transactions';
 import { NotificationsModule } from './notifications/notifications.module';
-import { BlockchainModule } from './blockchain/blockcha
 import { BlockchainModule } from './blockchain/blockchain.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { InAppNotificationModule } from './in-app-notifications/in-app-notification.module';

@@ -61,6 +61,9 @@ export class Transaction {
   destinationAccount?: string;
 
   @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  totalAmount?: number; 
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
   feeAmount?: number;
 
   @Column({ type: 'uuid', nullable: true })

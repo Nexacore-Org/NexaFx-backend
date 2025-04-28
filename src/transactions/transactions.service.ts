@@ -39,70 +39,61 @@ export class TransactionsService {
       description,
       sourceAccount,
       destinationAccount,
+      reference,
     } = createTransactionDto;
-
-    // Check if reference already exists
+  
+    // Step 1: Check for duplicate reference
     const existingTransaction = await this.transactionsRepository.findOne({
-      where: { reference: createTransactionDto.reference },
+      where: { reference },
     });
-
+  
     if (existingTransaction) {
       throw new ConflictException(
-        `Transaction with reference ${createTransactionDto.reference} already exists`,
+        `Transaction with reference ${reference} already exists`,
       );
     }
-
-    // Set default status if not provided
-    if (!createTransactionDto.status) {
-      createTransactionDto.status = TransactionStatus.PENDING;
-    }
-
-    // Fetch currency to get feePercentage
+  
+    // Step 2: Get currency and feePercentage
     const currency = await this.currencyRepository.findOne({
       where: { id: currencyId },
     });
-
+  
     if (!currency) {
-      throw new Error('Currency not found.');
+      throw new NotFoundException(`Currency with ID ${currencyId} not found`);
     }
-
+  
     const feePercentage = currency.feePercentage ?? 0;
-
-    // Calculate fee and total
+  
+    // Step 3: Calculate fee and total
     const feeAmount = Number((amount * feePercentage).toFixed(2));
     const totalAmount = Number((amount + feeAmount).toFixed(2));
-
-    // Log for auditing
-    this.logger.log(`Transaction Fee Breakdown:
-      User ID: ${userId}
-      Base Amount: ${amount}
-      Fee Percentage: ${feePercentage * 100}%
-      Fee Amount: ${feeAmount}
-      Total Amount (Amount + Fee): ${totalAmount}
-    `);
-
+  
+    // Step 4: Generate reference and set default status
+    const finalReference = reference || this.generateReference();
+    const status = createTransactionDto.status || TransactionStatus.PENDING;
+  
     const transaction = this.transactionsRepository.create({
       userId,
-      type,
-      amount: totalAmount, // Save total amount as the main amount
       currencyId,
-      status: TransactionStatus.PENDING,
-      reference: this.generateReference(), // Assume you have a reference generator
+      amount,
+      type,
       description,
       sourceAccount,
       destinationAccount,
+      reference: finalReference,
+      status, 
       feeAmount,
-      feeCurrencyId: currencyId,
-      metadata: {
-        baseAmount: amount,
-        feePercentage,
-        feeAmount,
-        totalAmount,
-      },
+      totalAmount,
     });
-
-    return await this.transactionsRepository.save(transaction);
+  
+    // Save the transaction
+    await this.transactionsRepository.save(transaction);
+    this.logger.log(`Transaction created with reference ${finalReference}`);
+  
+    return transaction;
   }
+  
+  
 
   private generateReference(): string {
     return (

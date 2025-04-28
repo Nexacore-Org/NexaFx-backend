@@ -33,9 +33,13 @@ import { UserRole } from 'src/user/entities/user.entity';
     
     @Get('user')
     @Roles(UserRole.USER)
-    findMyTransactions(@Req() req) {
-      const userId = req.user.id;
-      // Return only transactions belonging to the authenticated user
+    @ApiOperation({ summary: 'Get transactions for the current user' })
+    @ApiResponse({ status: HttpStatus.OK, description: 'User transactions returned' })
+    async findMyTransactions(
+      @Request() req,
+      @Query() query: QueryTransactionDto,
+    ): Promise<Transaction[]> {
+      return this.transactionsService.findAll(req.user.id, query);
     }
 
     @Post()

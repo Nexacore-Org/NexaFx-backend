@@ -1,47 +1,46 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable prettier/prettier */
-// eslint-disable-next-line prettier/prettier
-import { Module } from "@nestjs/common";
-import { TypeOrmModule } from "@nestjs/typeorm";
-import { ConfigModule } from "@nestjs/config";
-// eslint-disable-next-line prettier/prettier
-import { APP_INTERCEPTOR } from "@nestjs/core";
-
-// Entities
-import { Transaction } from "./transactions/entities/transaction.entity";
-import { Currency } from "./currencies/entities/currency.entity";
-
-// Modules
-import { UserModule } from "./user/user.module";
-import { AuthModule } from "./auth/auth.module";
-import { LogsModule } from "./logs/logs.module";
-
-// Controllers
-import { TransactionsController } from "./transactions/transactions.controller";
-
-// Services
-import { TransactionsService } from "./transactions/transactions.service";
-
-// Interceptors
-import { AuditInterceptor } from "./common/interceptors/audit/audit.interceptor";
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { UserModule } from './user/user.module';
+import { AuthModule } from './auth/auth.module';
+import { KycModule } from './kyc/kyc.module';
+import { CurrenciesModule } from './currencies/currencies.module';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { TransactionsModule } from './transactions/transactions.module';
 
 @Module({
-	imports: [
-		ConfigModule.forRoot({
-			isGlobal: true,
-		}),
-		TypeOrmModule.forFeature([Transaction, Currency]),
-		UserModule,
-		AuthModule,
-		LogsModule,
-	],
-	controllers: [TransactionsController],
-	providers: [
-		TransactionsService,
-		{
-			provide: APP_INTERCEPTOR,
-			useClass: AuditInterceptor,
-		},
-	],
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '.env',
+    }),
+
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: async (configService: ConfigService) => {
+        const config = {
+          type: 'postgres' as const,
+          host: configService.get<string>('DB_HOST', 'localhost'),
+          port: parseInt(configService.get<string>('DB_PORT', '5432')),
+          username: configService.get<string>('DB_USERNAME', 'postgres'),
+          password: configService.get<string>('DB_PASSWORD', 'password'),
+          database: configService.get<string>('DB_NAME', 'nexafx'),
+          synchronize: configService.get('NODE_ENV') === 'development',
+          autoLoadEntities: true,
+          logging: false,
+        };
+        return config;
+      },
+      inject: [ConfigService],
+    }),
+    UserModule,
+    AuthModule,
+    KycModule,
+    TransactionsModule,
+    CurrenciesModule,
+  ],
+  controllers: [AppController],
+  providers: [AppService],
 })
 export class AppModule {}

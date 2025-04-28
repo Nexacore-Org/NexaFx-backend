@@ -7,7 +7,8 @@ import { JwtService } from '@nestjs/jwt';
 import { UserService } from 'src/user/user.service';
 import { RegisterDto } from '../dto/register.dto';
 import { LoginDto } from '../dto/login.dto';
-import { BcryptPasswordHashingService } from './passwod.hashing.service';
+import { BcryptPasswordHashingService } from './bcrypt-password-hashing.service';
+import { CreateUserDto } from 'src/user/dto/create-user.dto';
 
 @Injectable()
 export class AuthService {
@@ -22,23 +23,23 @@ export class AuthService {
     const existingUser = await this.usersService.findOne(registerDto.email);
     if (existingUser) throw new ConflictException('Email is already in use');
 
-    const hashedPassword = await this.passwordService.hashPassword(
+    const hashedPassword = await this.passwordService.hash(
       registerDto.password,
     );
     const newUser = await this.usersService.create({
       ...registerDto,
       password: hashedPassword,
     });
-
+   
     return this.login(newUser);
   }
 
-  // ✅ Validate User Credentials
+  // Validate User Credentials
   public async validateUser(email: string, password: string): Promise<any> {
     const user = await this.usersService.findOne(email);
     if (
       user &&
-      (await this.passwordService.comparePassword(password, user.password))
+      (await this.passwordService.compare(password, user.password))
     ) {
       return user;
     }

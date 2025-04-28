@@ -15,6 +15,9 @@ import { AuditInterceptor } from './common/interceptors/audit/audit.interceptor'
 import { TransactionsService } from './transactions/transactions.
 import { NotificationsModule } from './notifications/notifications.module';
 import { BlockchainModule } from './blockchain/blockcha
+import { BlockchainModule } from './blockchain/blockchain.module';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { InAppNotificationModule } from './in-app-notifications/in-app-notification.module';
 
 @Module({
   imports: [
@@ -46,9 +49,11 @@ import { BlockchainModule } from './blockchain/blockcha
     LogsModule,
     KycModule,
     BlockchainModule,
+    EventEmitterModule.forRoot(),
     TransactionsModule,
     CurrenciesModule,
     NotificationsModule,
+    InAppNotificationModule,
   ],
   controllers: [AppController, ],
   

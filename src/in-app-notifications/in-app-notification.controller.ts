@@ -7,13 +7,13 @@ import {
   UseGuards,
   Request,
 } from '@nestjs/common';
-import { NotificationService } from './notification.service';
+import { InAppNotificationService } from './in-app-notification.service';
 import { JwtAuthGuard } from 'src/auth/guard/jwt.auth.guard';
 
 @Controller('notifications')
 @UseGuards(JwtAuthGuard)
-export class NotificationController {
-  constructor(private readonly notificationService: NotificationService) {}
+export class InAppNotificationController {
+  constructor(private readonly notificationService: InAppNotificationService) {}
 
   @Get()
   async getAllNotifications(

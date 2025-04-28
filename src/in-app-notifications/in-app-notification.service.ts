@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
-import { Notification } from './notification.entity';
+import { InAppNotification } from './in-app-notification.entity';
 import { EmailService } from './email.service';
 import { In } from 'typeorm';
 import { NotificationChannel } from './enums/notificationChannel.enum';
@@ -46,19 +46,19 @@ export interface TransactionFailedEvent {
   timestamp: Date;
 }
 
-export class NotificationService {
-  private readonly logger = new Logger(NotificationService.name);
+export class InAppNotificationService {
+  private readonly logger = new Logger(InAppNotificationService.name);
 
   constructor(
-    @InjectRepository(Notification)
-    private notificationRepository: Repository<Notification>,
+    @InjectRepository(InAppNotification)
+    private notificationRepository: Repository<InAppNotification>,
     private emailService: EmailService,
     private eventEmitter: EventEmitter2,
   ) {}
 
   async createNotification(
     payload: NotificationPayload,
-  ): Promise<Notification> {
+  ): Promise<InAppNotification> {
     const {
       userId,
       type,
@@ -140,7 +140,7 @@ export class NotificationService {
     return 'user@example.com';
   }
 
-  async getUnreadNotifications(userId: string): Promise<Notification[]> {
+  async getUnreadNotifications(userId: string): Promise<InAppNotification[]> {
     return this.notificationRepository.find({
       where: {
         userId,
@@ -158,7 +158,7 @@ export class NotificationService {
     userId: string,
     page = 1,
     limit = 10,
-  ): Promise<[Notification[], number]> {
+  ): Promise<[InAppNotification[], number]> {
     return this.notificationRepository.findAndCount({
       where: {
         userId,

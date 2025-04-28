@@ -11,8 +11,8 @@ import { User } from 'src/user/entities/user.entity';
 import { NotificationChannel } from './enums/notificationChannel.enum';
 import { NotificationType } from './enums/notificationType.enum';
 
-@Entity('notifications')
-export class Notification {
+@Entity()
+export class InAppNotification {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

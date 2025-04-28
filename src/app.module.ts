@@ -4,12 +4,14 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { KycModule } from './kyc/kyc.module';
+import { KycVerification } from './kyc/entities/kyc.entity';
 import { CurrenciesModule } from './currencies/currencies.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { TransactionsModule } from './transactions/transactions.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { BlockchainModule } from './blockchain/blockchain.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
-import { NotificationModule } from './notifications/notification.module';
 
 @Module({
   imports: [
@@ -39,10 +41,11 @@ import { NotificationModule } from './notifications/notification.module';
     UserModule,
     AuthModule,
     KycModule,
+    BlockchainModule,
     EventEmitterModule.forRoot(),
-    NotificationModule,
     TransactionsModule,
     CurrenciesModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

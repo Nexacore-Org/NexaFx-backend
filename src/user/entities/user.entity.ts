@@ -7,7 +7,7 @@ import {
   OneToMany,
 } from 'typeorm';
 import { Token } from '../../auth/entities/token.entity';
-import { Notification } from 'src/notifications/notification.entity';
+import { Notification } from '../../notifications/entities/notification.entity';
 
 export enum AccountType {
   PERSONAL = 'Personal',
@@ -58,6 +58,9 @@ export class User {
 
   @Column({ nullable: true })
   bio: string;
+
+  @OneToMany(() => Notification, (notification) => notification.user)
+  notification: Notification;
 
   @Column({ default: false })
   isVerified: boolean;

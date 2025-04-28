@@ -1,0 +1,13 @@
+POST http://localhost:3000/notifications
+Content-Type : application/json
+{
+  "userId": "12345678-1234-1234-1234-1234567890ab", 
+  "type": "SYSTEM",
+  "category": "INFO",
+  "title": "Test Notification",
+  "message": "This is a test notification",
+  "isRead": false,
+  "priority": "MEDIUM",
+  "channel": "IN_APP"
+}
+

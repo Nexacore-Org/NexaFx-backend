@@ -1,4 +1,4 @@
-import { User } from 'src/user/entities/user.entity';
+import { User } from '../../user/entities/user.entity';
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -7,13 +7,13 @@ import {
   CreateDateColumn,
 } from 'typeorm';
 
-@Entity('tokens') 
+@Entity('tokens')
 export class Token {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => User, (user) => user.tokens, { onDelete: 'CASCADE' })  
-  user: User; 
+  @ManyToOne(() => User, (user) => user.tokens, { onDelete: 'CASCADE' })
+  user: User;
 
   @Column()
   refreshToken: string;
@@ -33,6 +33,3 @@ export class Token {
   @CreateDateColumn()
   createdAt: Date;
 }
-
-
-

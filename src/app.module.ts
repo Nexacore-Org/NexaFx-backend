@@ -5,11 +5,12 @@ import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { KycModule } from './kyc/kyc.module';
 import { KycVerification } from './kyc/entities/kyc.entity';
-import { BlockchainModule } from './blockchain/blockchain.module';
 import { CurrenciesModule } from './currencies/currencies.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { TransactionsModule } from './transactions/transactions.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { BlockchainModule } from './blockchain/blockchain.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { TransactionsModule } from './transactions/transactions.module';
     BlockchainModule,
     TransactionsModule,
     CurrenciesModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

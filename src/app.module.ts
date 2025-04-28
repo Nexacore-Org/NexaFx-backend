@@ -4,10 +4,12 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { KycModule } from './kyc/kyc.module';
+import { KycVerification } from './kyc/entities/kyc.entity';
+import { BlockchainModule } from './blockchain/blockchain.module';
 import { CurrenciesModule } from './currencies/currencies.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { NotificationsModule } from './notifications/notifications.module';
+import { TransactionsModule } from './transactions/transactions.module';
 
 @Module({
   imports: [
@@ -24,7 +26,7 @@ import { NotificationsModule } from './notifications/notifications.module';
           host: configService.get<string>('DB_HOST', 'localhost'),
           port: parseInt(configService.get<string>('DB_PORT', '5432')),
           username: configService.get<string>('DB_USERNAME', 'postgres'),
-          password: configService.get<string>('DB_PASSWORD', '1234'),
+          password: configService.get<string>('DB_PASSWORD', 'password'),
           database: configService.get<string>('DB_NAME', 'nexafx'),
           synchronize: configService.get('NODE_ENV') === 'development',
           autoLoadEntities: true,
@@ -37,6 +39,8 @@ import { NotificationsModule } from './notifications/notifications.module';
     UserModule,
     AuthModule,
     KycModule,
+    BlockchainModule,
+    TransactionsModule,
     CurrenciesModule,
     NotificationsModule,
   ],

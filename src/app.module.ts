@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModule } from './user/user.module';
@@ -7,9 +7,14 @@ import { KycModule } from './kyc/kyc.module';
 import { KycVerification } from './kyc/entities/kyc.entity';
 import { CurrenciesModule } from './currencies/currencies.module';
 import { AppController } from './app.controller';
-import { AppService } from './app.service';
 import { TransactionsModule } from './transactions/transactions.module';
+import { LogsModule } from './logs/logs.module';
+import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core/constants';
+import { AuditInterceptor } from './common/interceptors/audit/audit.interceptor';
+import { TransactionsService } from './transactions/transactions.
 import { NotificationsModule } from './notifications/notifications.module';
+import { BlockchainModule } from './blockchain/blockcha
 import { BlockchainModule } from './blockchain/blockchain.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { InAppNotificationModule } from './in-app-notifications/in-app-notification.module';
@@ -41,6 +46,7 @@ import { InAppNotificationModule } from './in-app-notifications/in-app-notificat
     }),
     UserModule,
     AuthModule,
+    LogsModule,
     KycModule,
     BlockchainModule,
     EventEmitterModule.forRoot(),
@@ -49,7 +55,18 @@ import { InAppNotificationModule } from './in-app-notifications/in-app-notificat
     NotificationsModule,
     InAppNotificationModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
+  controllers: [AppController, ],
+  
+
+  providers: [
+	TransactionsService,
+	{
+		provide: APP_INTERCEPTOR,
+		useClass: AuditInterceptor,
+	},
+
+	  ],
+
+
 })
 export class AppModule {}

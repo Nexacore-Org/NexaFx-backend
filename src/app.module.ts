@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModule } from './user/user.module';
@@ -6,8 +6,12 @@ import { AuthModule } from './auth/auth.module';
 import { KycModule } from './kyc/kyc.module';
 import { CurrenciesModule } from './currencies/currencies.module';
 import { AppController } from './app.controller';
-import { AppService } from './app.service';
 import { TransactionsModule } from './transactions/transactions.module';
+import { LogsModule } from './logs/logs.module';
+import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core/constants';
+import { AuditInterceptor } from './common/interceptors/audit/audit.interceptor';
+import { TransactionsService } from './transactions/transactions.service';
 
 @Module({
   imports: [
@@ -36,11 +40,23 @@ import { TransactionsModule } from './transactions/transactions.module';
     }),
     UserModule,
     AuthModule,
+    LogsModule,
     KycModule,
     TransactionsModule,
     CurrenciesModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
+  controllers: [AppController, ],
+  
+
+  providers: [
+	TransactionsService,
+	{
+		provide: APP_INTERCEPTOR,
+		useClass: AuditInterceptor,
+	},
+
+	  ],
+
+
 })
 export class AppModule {}

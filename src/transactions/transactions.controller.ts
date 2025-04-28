@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable prettier/prettier */
 import { 
     Controller, Get, Post, Req, 
     Body, 
@@ -33,14 +35,11 @@ import { UserRole } from 'src/user/entities/user.entity';
     
     @Get('user')
     @Roles(UserRole.USER)
-    @ApiOperation({ summary: 'Get transactions for the current user' })
-    @ApiResponse({ status: HttpStatus.OK, description: 'User transactions returned' })
-    async findMyTransactions(
-      @Request() req,
-      @Query() query: QueryTransactionDto,
-    ): Promise<Transaction[]> {
-      return this.transactionsService.findAll(req.user.id, query);
+    findMyTransactions(@Req() req) {
+      const userId = req.user.id;
+      // Return only transactions belonging to the authenticated user
     }
+    
 
     @Post()
     @Roles(UserRole.USER, UserRole.ADMIN)
@@ -48,6 +47,18 @@ import { UserRole } from 'src/user/entities/user.entity';
       // Users and Admins can create transactions
     }
     constructor(private readonly transactionsService: TransactionsService) {}
+
+    @UseGuards(JwtAuthGuard)
+    @Get('user')
+    async getUserTransactions(
+      @Request() req,
+      @Query('page') page = 1,
+      @Query('limit') limit = 10,
+    ) {
+      const userId = req.user.id;
+      return this.transactionsService.getTransactionsByUser(userId, +page, +limit);
+    }
+
 
     @Post()
     @ApiOperation({ summary: 'Create a new transaction' })

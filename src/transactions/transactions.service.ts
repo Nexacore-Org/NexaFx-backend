@@ -39,61 +39,71 @@ export class TransactionsService {
       description,
       sourceAccount,
       destinationAccount,
-      reference,
     } = createTransactionDto;
-  
-    // Step 1: Check for duplicate reference
+
+    // Check if reference already exists
     const existingTransaction = await this.transactionsRepository.findOne({
-      where: { reference },
+      where: { reference: createTransactionDto.reference },
     });
-  
+
     if (existingTransaction) {
       throw new ConflictException(
-        `Transaction with reference ${reference} already exists`,
+        `Transaction with reference ${createTransactionDto.reference} already exists`,
       );
     }
-  
-    // Step 2: Get currency and feePercentage
+
+    // Set default status if not provided
+    if (!createTransactionDto.status) {
+      createTransactionDto.status = TransactionStatus.PENDING;
+    }
+
+    // Fetch currency to get feePercentage
     const currency = await this.currencyRepository.findOne({
       where: { id: currencyId },
     });
-  
+
     if (!currency) {
-      throw new NotFoundException(`Currency with ID ${currencyId} not found`);
+      throw new Error('Currency not found.');
     }
-  
+
     const feePercentage = currency.feePercentage ?? 0;
-  
-    // Step 3: Calculate fee and total
+
+    // Calculate fee and total
     const feeAmount = Number((amount * feePercentage).toFixed(2));
     const totalAmount = Number((amount + feeAmount).toFixed(2));
-  
-    // Step 4: Generate reference and set default status
-    const finalReference = reference || this.generateReference();
-    const status = createTransactionDto.status || TransactionStatus.PENDING;
-  
+
+    // Log for auditing
+this.logger.log(`Transaction Fee Breakdown:
+  User ID: ${userId}
+  Base Amount: ${amount}
+  Fee Percentage: ${feePercentage * 100}%
+  Fee Amount: ${feeAmount}
+  Total Amount (Amount + Fee): ${totalAmount}
+`);
+
     const transaction = this.transactionsRepository.create({
       userId,
-      currencyId,
-      amount,
       type,
+      amount: totalAmount, 
+      currencyId,
+      status: TransactionStatus.PENDING,
+      reference: this.generateReference(), 
       description,
       sourceAccount,
       destinationAccount,
-      reference: finalReference,
-      status, 
       feeAmount,
-      totalAmount,
+      feeCurrencyId: currencyId,
+      metadata: {
+        baseAmount: amount,
+        feePercentage,
+        feeAmount,
+        totalAmount,
+      },
     });
-  
-    // Save the transaction
-    await this.transactionsRepository.save(transaction);
-    this.logger.log(`Transaction created with reference ${finalReference}`);
-  
-    return transaction;
+
+    return await this.transactionsRepository.save(transaction);
   }
-  
-  
+
 
   private generateReference(): string {
     return (
@@ -134,6 +144,25 @@ export class TransactionsService {
 
     return query.getMany();
   }
+
+  async getTransactionsByUser(userId: string, page: number, limit: number) {
+    const [transactions, total] = await this.transactionsRepository.findAndCount({
+      where: { userId }, // ✅ fixed here
+      order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+      relations: ['user'], // optional, if you need user details in the response
+    });
+  
+    return {
+      data: transactions,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+  
 
   async findOne(id: string, userId: string): Promise<Transaction> {
     const transaction = await this.transactionsRepository.findOne({

@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { KycModule } from './kyc/kyc.module';
+import { KycVerification } from './kyc/entities/kyc.entity';
 import { CurrenciesModule } from './currencies/currencies.module';
 import { AppController } from './app.controller';
 import { TransactionsModule } from './transactions/transactions.module';
@@ -11,7 +12,9 @@ import { LogsModule } from './logs/logs.module';
 import { Module } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core/constants';
 import { AuditInterceptor } from './common/interceptors/audit/audit.interceptor';
-import { TransactionsService } from './transactions/transactions.service';
+import { TransactionsService } from './transactions/transactions.
+import { NotificationsModule } from './notifications/notifications.module';
+import { BlockchainModule } from './blockchain/blockcha
 
 @Module({
   imports: [
@@ -42,8 +45,10 @@ import { TransactionsService } from './transactions/transactions.service';
     AuthModule,
     LogsModule,
     KycModule,
+    BlockchainModule,
     TransactionsModule,
     CurrenciesModule,
+    NotificationsModule,
   ],
   controllers: [AppController, ],
   

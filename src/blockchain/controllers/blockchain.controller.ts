@@ -1,5 +1,3 @@
-// src/modules/blockchain/blockchain.controller.ts
-
 import { Controller, Post, Get, Body, Param, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { AssetBalance, StellarService, StellarTransactionResult } from '../services/stellar.service';

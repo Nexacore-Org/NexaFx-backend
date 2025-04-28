@@ -1,5 +1,3 @@
-// src/modules/blockchain/blockchain.module.ts
-
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { StellarService } from './services/stellar.service';

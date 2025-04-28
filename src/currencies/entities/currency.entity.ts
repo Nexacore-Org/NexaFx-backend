@@ -22,14 +22,20 @@ export class Currency {
   @Column({ type: 'enum', enum: CurrencyType })
   type: CurrencyType;
 
-  @Column({ type: 'decimal', nullable: true })
-  exchangeRate?: number;
+  @Column({ type: 'decimal', precision: 18, scale: 8, nullable: true })
+  rate?: number;
+
+  @Column({ type: 'timestamp', nullable: true })
+  lastUpdated?: Date;
 
   @Column({ default: true })
   isActive: boolean;
 
   @Column({ default: false })
   isFeatured: boolean;
+
+  @Column({ type: 'decimal', precision: 5, scale: 4, default: 0 })
+  feePercentage: number; // e.g., 0.0200 for 2%
 
   @Column({ nullable: true })
   logoUrl?: string;

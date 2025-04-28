@@ -1,31 +1,49 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Transaction } from './transactions/entities/transaction.entity';
-import { TransactionsService } from './transactions/transactions.service';
-import { TransactionsController } from './transactions/transactions.controller';
-import { Currency } from './currencies/entities/currency.entity';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
-import { ConfigModule } from '@nestjs/config';
 import { KycModule } from './kyc/kyc.module';
 import { KycVerification } from './kyc/entities/kyc.entity';
 import { BlockchainModule } from './blockchain/blockchain.module';
+import { CurrenciesModule } from './currencies/currencies.module';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
 import { TransactionsModule } from './transactions/transactions.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: '.env',
     }),
 
-    TypeOrmModule.forFeature([Transaction, Currency, KycVerification]),
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: async (configService: ConfigService) => {
+        const config = {
+          type: 'postgres' as const,
+          host: configService.get<string>('DB_HOST', 'localhost'),
+          port: parseInt(configService.get<string>('DB_PORT', '5432')),
+          username: configService.get<string>('DB_USERNAME', 'postgres'),
+          password: configService.get<string>('DB_PASSWORD', 'password'),
+          database: configService.get<string>('DB_NAME', 'nexafx'),
+          synchronize: configService.get('NODE_ENV') === 'development',
+          autoLoadEntities: true,
+          logging: false,
+        };
+        return config;
+      },
+      inject: [ConfigService],
+    }),
     UserModule,
     AuthModule,
     KycModule,
     BlockchainModule,
-    TransactionsModule
+    TransactionsModule,
+    CurrenciesModule,
   ],
-  controllers: [TransactionsController],
-  providers: [TransactionsService],
+  controllers: [AppController],
+  providers: [AppService],
 })
 export class AppModule {}

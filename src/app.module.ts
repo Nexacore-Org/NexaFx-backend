@@ -9,6 +9,8 @@ import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
 import { KycModule } from './kyc/kyc.module';
 import { KycVerification } from './kyc/entities/kyc.entity';
+import { BlockchainModule } from './blockchain/blockchain.module';
+import { TransactionsModule } from './transactions/transactions.module';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { KycVerification } from './kyc/entities/kyc.entity';
     UserModule,
     AuthModule,
     KycModule,
+    BlockchainModule,
+    TransactionsModule
   ],
   controllers: [TransactionsController],
   providers: [TransactionsService],

@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -13,19 +14,33 @@ import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { QueryTransactionDto } from './dto/query-transaction.dto';
 import { TransactionStatus } from './enums/transaction-status.enum';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Currency } from 'src/currencies/entities/currency.entity';
 
 @Injectable()
 export class TransactionsService {
+  private readonly logger = new Logger(TransactionsService.name);
+
   constructor(
     @InjectRepository(Transaction)
     private transactionsRepository: Repository<Transaction>,
 
-    private readonly eventEmitter: EventEmitter2,
+    @InjectRepository(Currency)
+    private readonly currencyRepository: Repository<Currency>,
   ) {}
 
-  async create(
+  async createTransaction(
     createTransactionDto: CreateTransactionDto,
   ): Promise<Transaction> {
+    const {
+      userId,
+      currencyId,
+      amount,
+      type,
+      description,
+      sourceAccount,
+      destinationAccount,
+    } = createTransactionDto;
+
     // Check if reference already exists
     const existingTransaction = await this.transactionsRepository.findOne({
       where: { reference: createTransactionDto.reference },
@@ -42,9 +57,60 @@ export class TransactionsService {
       createTransactionDto.status = TransactionStatus.PENDING;
     }
 
-    const transaction =
-      this.transactionsRepository.create(createTransactionDto);
-    return this.transactionsRepository.save(transaction);
+    // Fetch currency to get feePercentage
+    const currency = await this.currencyRepository.findOne({
+      where: { id: currencyId },
+    });
+
+    if (!currency) {
+      throw new Error('Currency not found.');
+    }
+
+    const feePercentage = currency.feePercentage ?? 0;
+
+    // Calculate fee and total
+    const feeAmount = Number((amount * feePercentage).toFixed(2));
+    const totalAmount = Number((amount + feeAmount).toFixed(2));
+
+    // Log for auditing
+    this.logger.log(`Transaction Fee Breakdown:
+      User ID: ${userId}
+      Base Amount: ${amount}
+      Fee Percentage: ${feePercentage * 100}%
+      Fee Amount: ${feeAmount}
+      Total Amount (Amount + Fee): ${totalAmount}
+    `);
+
+    const transaction = this.transactionsRepository.create({
+      userId,
+      type,
+      amount: totalAmount, // Save total amount as the main amount
+      currencyId,
+      status: TransactionStatus.PENDING,
+      reference: this.generateReference(), // Assume you have a reference generator
+      description,
+      sourceAccount,
+      destinationAccount,
+      feeAmount,
+      feeCurrencyId: currencyId,
+      metadata: {
+        baseAmount: amount,
+        feePercentage,
+        feeAmount,
+        totalAmount,
+      },
+    });
+
+    return await this.transactionsRepository.save(transaction);
+  }
+
+  private generateReference(): string {
+    return (
+      'TXN-' +
+      Date.now() +
+      '-' +
+      Math.random().toString(36).substring(2, 8).toUpperCase()
+    );
   }
 
   async findAll(

@@ -42,6 +42,7 @@
     "pg": "^8.15.6",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "stellar-sdk": "^13.3.0",
     "typeorm": "^0.3.21"
   },
   "devDependencies": {
@@ -57,6 +58,7 @@
     "@types/jest": "^29.5.14",
     "@types/node": "^22.15.2",
     "@types/passport-jwt": "^4.0.1",
+    "@types/stellar-sdk": "^0.11.1",
     "@types/supertest": "^6.0.3",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",

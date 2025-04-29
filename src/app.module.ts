@@ -17,6 +17,7 @@ import { APP_GUARD } from '@nestjs/core';
       ttl: 60000, // 1 minute in milliseconds
       limit: 100, // 100 requests per minute
     }]),
+    AdminModule,
   ],
   providers: [
  // Global guard application
@@ -49,6 +50,7 @@ import { BlockchainModule } from './blockchain/blockcha
 import { BlockchainModule } from './blockchain/blockchain.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { InAppNotificationModule } from './in-app-notifications/in-app-notification.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [

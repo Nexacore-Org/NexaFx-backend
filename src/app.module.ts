@@ -11,6 +11,7 @@ import { AppService } from './app.service';
 import { TransactionsModule } from './transactions/transactions.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { BlockchainModule } from './blockchain/blockchain.module';
+import { AuditModule } from './audit/audit.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { BlockchainModule } from './blockchain/blockchain.module';
     TransactionsModule,
     CurrenciesModule,
     NotificationsModule,
+    AuditModule,
   ],
   controllers: [AppController],
   providers: [AppService],

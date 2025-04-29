@@ -5,10 +5,10 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import { JwtAuthGuard } from 'src/auth/guard/jwt.auth.guard';
 import { Roles } from 'src/common/decorators/roles.decorators';
 import { RolesGuard } from 'src/common/guards/roles.guard';
-import { AdminStatsService } from '../services/admin.stats.service';
-import { OverviewStatsDto } from '../dto/overview-stats.dto';
-import { TopCurrencyDto } from '../dto/top-currency.dto';
-import { UserStatsDto } from '../dto/user-stats.dto';
+import { AdminStatsService } from './admin.stats.service';
+import { OverviewStatsDto } from './dto/overview-stats.dto';
+import { TopCurrencyDto } from './dto/top-currency.dto';
+import { UserStatsDto } from './dto/user-stats.dto';
 
 @ApiTags('Admin Stats')
 @ApiBearerAuth()

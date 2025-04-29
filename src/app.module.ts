@@ -1,35 +1,7 @@
-
 import { Module } from '@nestjs/common';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
-// Import your other modules
-// import { AuthModule } from './auth/auth.module';
-// import { AdminModule } from './admin/admin.module';
 
-@Module({
-  imports: [
-    // Your other modules
-    // AuthModule,
-    // AdminModule,
-    
-    // Global throttler module configuration
-    ThrottlerModule.forRoot([{
-      ttl: 60000, // 1 minute in milliseconds
-      limit: 100, // 100 requests per minute
-    }]),
-    AdminModule,
-  ],
-  providers: [
- // Global guard application
- {
-  provide: APP_GUARD,
-  useClass: ThrottlerGuard,
-},
-],
-})
-export class AppModule {}
-
-
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -40,17 +12,18 @@ import { KycVerification } from './kyc/entities/kyc.entity';
 import { CurrenciesModule } from './currencies/currencies.module';
 import { AppController } from './app.controller';
 import { TransactionsModule } from './transactions/transactions.module';
-import { LogsModule } from './logs/logs.module';
-import { Module } from '@nestjs/common';
-import { APP_INTERCEPTOR } from '@nestjs/core/constants';
 import { AuditInterceptor } from './common/interceptors/audit/audit.interceptor';
-import { TransactionsService } from './transactions/transactions.
 import { NotificationsModule } from './notifications/notifications.module';
-import { BlockchainModule } from './blockchain/blockcha
 import { BlockchainModule } from './blockchain/blockchain.module';
+import { AuditModule } from './audit/audit.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { InAppNotificationModule } from './in-app-notifications/in-app-notification.module';
+
 import { AdminModule } from './admin/admin.module';
+
+import { TransactionsService } from './transactions/transactions.service';
+import { AppService } from './app.service';
+
 
 @Module({
   imports: [
@@ -58,7 +31,15 @@ import { AdminModule } from './admin/admin.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
-
+    // Global throttler module configuration
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          ttl: 60000, // time-to-live in milliseconds (60 seconds)
+          limit: 10, // the maximum number of requests within the TTL
+        },
+      ],
+    }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => {
@@ -79,28 +60,28 @@ import { AdminModule } from './admin/admin.module';
     }),
     UserModule,
     AuthModule,
-    LogsModule,
     KycModule,
     BlockchainModule,
     EventEmitterModule.forRoot(),
     TransactionsModule,
     CurrenciesModule,
     NotificationsModule,
+    AuditModule,
     InAppNotificationModule,
   ],
-  controllers: [AppController, ],
-  
-
+  controllers: [AppController],
   providers: [
-	TransactionsService,
-	{
-		provide: APP_INTERCEPTOR,
-		useClass: AuditInterceptor,
-	},
-
-	  ],
-
-
+    AppService,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditInterceptor,
+    },
+    {
+      // Global guard application
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
+  exports: [AppService]
 })
 export class AppModule {}
-

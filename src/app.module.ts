@@ -10,7 +10,7 @@ import { AppController } from './app.controller';
 import { TransactionsModule } from './transactions/transactions.module';
 import { LogsModule } from './logs/logs.module';
 import { Module } from '@nestjs/common';
-import { APP_INTERCEPTOR } from '@nestjs/core/constants';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core/constants';
 import { AuditInterceptor } from './common/interceptors/audit/audit.interceptor';
 import { TransactionsService } from './transactions/transactions.
 import { NotificationsModule } from './notifications/notifications.module';
@@ -18,6 +18,8 @@ import { BlockchainModule } from './blockchain/blockcha
 import { BlockchainModule } from './blockchain/blockchain.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { InAppNotificationModule } from './in-app-notifications/in-app-notification.module';
+import { NestjsThrottlerModule } from './throttler/throttler.module';
+import { CustomThrottlerGuard } from './common/guards/throttle.guards';
 
 @Module({
   imports: [
@@ -54,19 +56,25 @@ import { InAppNotificationModule } from './in-app-notifications/in-app-notificat
     CurrenciesModule,
     NotificationsModule,
     InAppNotificationModule,
+    NestjsThrottlerModule,
+
   ],
-  controllers: [AppController, ],
-  
+  controllers: [AppController,],
+
 
   providers: [
-	TransactionsService,
-	{
-		provide: APP_INTERCEPTOR,
-		useClass: AuditInterceptor,
-	},
+    TransactionsService,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditInterceptor,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: CustomThrottlerGuard,
+    },
 
-	  ],
+  ],
 
 
 })
-export class AppModule {}
+export class AppModule { }

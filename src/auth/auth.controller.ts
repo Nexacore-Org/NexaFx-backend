@@ -4,8 +4,10 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh.token.dto';
 import { JwtAuthGuard } from './guard/jwt.auth.guard';
+import { ThrottleAuth } from 'src/common/decorators/throttle-auth.decorators';
 
 @Controller('auth')
+@ThrottleAuth()
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 

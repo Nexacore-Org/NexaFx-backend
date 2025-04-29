@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModule } from './user/user.module';
@@ -16,8 +18,12 @@ import { BlockchainModule } from './blockchain/blockchain.module';
 import { AuditModule } from './audit/audit.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { InAppNotificationModule } from './in-app-notifications/in-app-notification.module';
+
+import { AdminModule } from './admin/admin.module';
+
 import { TransactionsService } from './transactions/transactions.service';
 import { AppService } from './app.service';
+
 
 @Module({
   imports: [

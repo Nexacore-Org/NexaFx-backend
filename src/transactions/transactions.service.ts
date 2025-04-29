@@ -26,6 +26,8 @@ export class TransactionsService {
 
     @InjectRepository(Currency)
     private readonly currencyRepository: Repository<Currency>,
+
+    private readonly eventEmitter: EventEmitter2
   ) {}
 
   async createTransaction(

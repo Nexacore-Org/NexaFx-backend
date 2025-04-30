@@ -15,6 +15,8 @@ import { QueryTransactionDto } from './dto/query-transaction.dto';
 import { TransactionStatus } from './enums/transaction-status.enum';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Currency } from 'src/currencies/entities/currency.entity';
+import { HorizonService } from 'src/blockchain/services/horizon/horizon.service';
+import { TransactionCurrencyStats, TransactionsStatsDto } from './dto/transaction-stat.dto';
 
 @Injectable()
 export class TransactionsService {
@@ -26,6 +28,11 @@ export class TransactionsService {
 
     @InjectRepository(Currency)
     private readonly currencyRepository: Repository<Currency>,
+
+    private readonly eventEmitter: EventEmitter2,
+
+    private readonly horizonService: HorizonService,
+
   ) {}
 
   async createTransaction(
@@ -73,21 +80,21 @@ export class TransactionsService {
     const totalAmount = Number((amount + feeAmount).toFixed(2));
 
     // Log for auditing
-    this.logger.log(`Transaction Fee Breakdown:
-      User ID: ${userId}
-      Base Amount: ${amount}
-      Fee Percentage: ${feePercentage * 100}%
-      Fee Amount: ${feeAmount}
-      Total Amount (Amount + Fee): ${totalAmount}
-    `);
+this.logger.log(`Transaction Fee Breakdown:
+  User ID: ${userId}
+  Base Amount: ${amount}
+  Fee Percentage: ${feePercentage * 100}%
+  Fee Amount: ${feeAmount}
+  Total Amount (Amount + Fee): ${totalAmount}
+`);
 
     const transaction = this.transactionsRepository.create({
       userId,
       type,
-      amount: totalAmount, // Save total amount as the main amount
+      amount: totalAmount, 
       currencyId,
       status: TransactionStatus.PENDING,
-      reference: this.generateReference(), // Assume you have a reference generator
+      reference: this.generateReference(), 
       description,
       sourceAccount,
       destinationAccount,
@@ -103,6 +110,7 @@ export class TransactionsService {
 
     return await this.transactionsRepository.save(transaction);
   }
+
 
   private generateReference(): string {
     return (
@@ -143,6 +151,25 @@ export class TransactionsService {
 
     return query.getMany();
   }
+
+  async getTransactionsByUser(userId: string, page: number, limit: number) {
+    const [transactions, total] = await this.transactionsRepository.findAndCount({
+      where: { userId }, // ✅ fixed here
+      order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+      relations: ['user'], // optional, if you need user details in the response
+    });
+  
+    return {
+      data: transactions,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+  
 
   async findOne(id: string, userId: string): Promise<Transaction> {
     const transaction = await this.transactionsRepository.findOne({
@@ -321,4 +348,43 @@ export class TransactionsService {
 
     return rates[`${fromAsset}-${toAsset}`] || 1;
   }
+
+  //Get transaction history for a user
+  async getTransactionHistory(accountId: string) {
+    return this.horizonService.getTransactionHistory(accountId);
+  }
+
+  async getStats(): Promise<TransactionsStatsDto> {
+    // Total number of transactions
+    const totalTransactions = await this.transactionsRepository.count();
+
+    // Aggregated stats per currency
+    const rawCurrencyStats = await this.transactionsRepository
+      .createQueryBuilder('tx')
+      .select('tx.currency', 'currency')
+      .addSelect('COUNT(*)', 'count')
+      .addSelect('SUM(tx.amount)', 'totalVolume')
+      .addSelect('AVG(tx.amount)', 'avgValue')
+      .groupBy('tx.currency')
+      .getRawMany();
+
+    const currencyStats: TransactionCurrencyStats[] = rawCurrencyStats.map(stat => ({
+      currency: stat.currency,
+      count: parseInt(stat.count, 10),
+      totalVolume: parseFloat(stat.totalVolume),
+      avgValue: parseFloat(stat.avgValue),
+    }));
+
+    // Most used currencies sorted by count
+    const mostUsedCurrencies = currencyStats
+      .sort((a, b) => b.count - a.count)
+      .map(stat => stat.currency);
+
+    return {
+      totalTransactions,
+      currencyStats,
+      mostUsedCurrencies,
+    };
+  }
 }
+

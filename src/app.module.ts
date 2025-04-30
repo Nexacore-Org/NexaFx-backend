@@ -1,3 +1,7 @@
+import { Module } from '@nestjs/common';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -8,16 +12,20 @@ import { KycVerification } from './kyc/entities/kyc.entity';
 import { CurrenciesModule } from './currencies/currencies.module';
 import { AppController } from './app.controller';
 import { TransactionsModule } from './transactions/transactions.module';
-import { Module } from '@nestjs/common';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core/constants';
 import { AuditInterceptor } from './common/interceptors/audit/audit.interceptor';
+import { TransactionsService } from './transactions/transactions';
 import { NotificationsModule } from './notifications/notifications.module';
 import { BlockchainModule } from './blockchain/blockchain.module';
+import { AuditModule } from './audit/audit.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { InAppNotificationModule } from './in-app-notifications/in-app-notification.module';
-import { NestjsThrottlerModule } from './throttler/throttler.module';
-import { CustomThrottlerGuard } from './common/guards/throttle.guards';
+import { AnnouncementsModule } from './announcements/announcements.module';
+
+import { AdminModule } from './admin/admin.module';
+
+import { TransactionsService } from './transactions/transactions.service';
 import { AppService } from './app.service';
+import { CommonModule } from './common/common.module';
 
 @Module({
   imports: [
@@ -25,7 +33,15 @@ import { AppService } from './app.service';
       isGlobal: true,
       envFilePath: '.env',
     }),
-
+    // Global throttler module configuration
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          ttl: 60000, // time-to-live in milliseconds (60 seconds)
+          limit: 10, // the maximum number of requests within the TTL
+        },
+      ],
+    }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => {
@@ -52,13 +68,12 @@ import { AppService } from './app.service';
     TransactionsModule,
     CurrenciesModule,
     NotificationsModule,
+    AuditModule,
     InAppNotificationModule,
-    NestjsThrottlerModule,
-
+    AnnouncementsModule,
+    CommonModule,
   ],
-  controllers: [AppController,],
-
-
+  controllers: [AppController],
   providers: [
     AppService,
     {
@@ -66,12 +81,11 @@ import { AppService } from './app.service';
       useClass: AuditInterceptor,
     },
     {
+      // Global guard application
       provide: APP_GUARD,
-      useClass: CustomThrottlerGuard,
+      useClass: ThrottlerGuard,
     },
-
   ],
-
-
+  exports: [AppService]
 })
-export class AppModule { }
+export class AppModule {}

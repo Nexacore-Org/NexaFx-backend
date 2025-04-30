@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable prettier/prettier */
 import { 
     Controller, Get, Post, Req, 
     Body, 
@@ -48,6 +50,18 @@ import { TransactionsStatsDto } from './dto/transaction-stat.dto';
       // Users and Admins can create transactions
     }
     constructor(private readonly transactionsService: TransactionsService) {}
+
+    @UseGuards(JwtAuthGuard)
+    @Get('user')
+    async getUserTransactions(
+      @Request() req,
+      @Query('page') page = 1,
+      @Query('limit') limit = 10,
+    ) {
+      const userId = req.user.id;
+      return this.transactionsService.getTransactionsByUser(userId, +page, +limit);
+    }
+
 
     @UseInterceptors(AuditInterceptor)
     @Post()

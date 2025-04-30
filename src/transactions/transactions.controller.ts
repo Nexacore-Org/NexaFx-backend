@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable prettier/prettier */
 import { 
     Controller, Get, Post, Req, 
     Body, 
@@ -10,6 +12,7 @@ import {
     Query,
     ConflictException,
     ForbiddenException,
+    UseInterceptors,
   } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/auth/guard/jwt.auth.guard';
 import { Roles } from 'src/common/decorators/roles.decorators';
@@ -23,6 +26,8 @@ import { UserRole } from 'src/user/entities/user.entity';
   import { Transaction } from './entities/transaction.entity';
   import { TransactionType } from './enums/transaction-type.enum';
   import { TransactionStatus } from './enums/transaction-status.enum';
+import { AuditInterceptor } from 'src/audit/audit.interceptor';
+import { TransactionsStatsDto } from './dto/transaction-stat.dto';
   
   @ApiTags('transactions')
   @ApiBearerAuth()
@@ -38,6 +43,7 @@ import { UserRole } from 'src/user/entities/user.entity';
       // Return only transactions belonging to the authenticated user
     }
 
+    @UseInterceptors(AuditInterceptor)
     @Post()
     @Roles(UserRole.USER, UserRole.ADMIN)
     createTransaction() {
@@ -45,6 +51,19 @@ import { UserRole } from 'src/user/entities/user.entity';
     }
     constructor(private readonly transactionsService: TransactionsService) {}
 
+    @UseGuards(JwtAuthGuard)
+    @Get('user')
+    async getUserTransactions(
+      @Request() req,
+      @Query('page') page = 1,
+      @Query('limit') limit = 10,
+    ) {
+      const userId = req.user.id;
+      return this.transactionsService.getTransactionsByUser(userId, +page, +limit);
+    }
+
+
+    @UseInterceptors(AuditInterceptor)
     @Post()
     @ApiOperation({ summary: 'Create a new transaction' })
     @ApiResponse({
@@ -187,4 +206,11 @@ import { UserRole } from 'src/user/entities/user.entity';
     async remove(@Param('id') id: string, @Request() req): Promise<void> {
       return this.transactionsService.remove(id, req.user.id);
     }
+
+    @Get('stats')
+  async getStats(): Promise<TransactionsStatsDto> {
+    return this.transactionsService.getStats();
   }
+}
+
+

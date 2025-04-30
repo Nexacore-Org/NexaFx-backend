@@ -15,6 +15,7 @@ import { QueryTransactionDto } from './dto/query-transaction.dto';
 import { TransactionStatus } from './enums/transaction-status.enum';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Currency } from 'src/currencies/entities/currency.entity';
+import { HorizonService } from 'src/blockchain/services/horizon/horizon.service';
 
 @Injectable()
 export class TransactionsService {
@@ -27,7 +28,10 @@ export class TransactionsService {
     @InjectRepository(Currency)
     private readonly currencyRepository: Repository<Currency>,
 
-    private readonly eventEmitter: EventEmitter2
+    private readonly eventEmitter: EventEmitter2,
+
+    private readonly horizonService: HorizonService,
+
   ) {}
 
   async createTransaction(
@@ -322,5 +326,10 @@ export class TransactionsService {
     };
 
     return rates[`${fromAsset}-${toAsset}`] || 1;
+  }
+
+  //Get transaction history for a user
+  async getTransactionHistory(accountId: string) {
+    return this.horizonService.getTransactionHistory(accountId);
   }
 }

@@ -27,7 +27,6 @@ import { TransactionsService } from './transactions/transactions.service';
 import { AppService } from './app.service';
 import { CommonModule } from './common/common.module';
 
-
 @Module({
   imports: [
     ConfigModule.forRoot({

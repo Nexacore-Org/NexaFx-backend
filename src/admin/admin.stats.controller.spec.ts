@@ -2,10 +2,10 @@
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { AdminStatsController } from './admin.stats.controller';
-import { AdminStatsService } from '../services/admin.stats.service';
-import { OverviewStatsDto } from '../dto/overview-stats.dto';
-import { TopCurrencyDto } from '../dto/top-currency.dto';
-import { UserStatsDto } from '../dto/user-stats.dto';
+import { AdminStatsService } from './admin.stats.service';
+import { OverviewStatsDto } from './dto/overview-stats.dto';
+import { TopCurrencyDto } from './dto/top-currency.dto';
+import { UserStatsDto } from './dto/user-stats.dto';
 
 describe('AdminStatsController', () => {
   let controller: AdminStatsController;

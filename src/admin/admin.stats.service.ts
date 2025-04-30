@@ -5,9 +5,9 @@ import { Repository } from 'typeorm';
 import { Transaction } from 'src/transactions/entities/transaction.entity';
 import { User } from 'src/user/entities/user.entity';
 import { Currency } from 'src/currencies/entities/currency.entity';
-import { OverviewStatsDto } from '../dto/overview-stats.dto';
-import { TopCurrencyDto } from '../dto/top-currency.dto';
-import { UserStatsDto } from '../dto/user-stats.dto';
+import { OverviewStatsDto } from './dto/overview-stats.dto';
+import { TopCurrencyDto } from './dto/top-currency.dto';
+import { UserStatsDto } from './dto/user-stats.dto';
 
 @Injectable()
 export class AdminStatsService {

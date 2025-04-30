@@ -16,7 +16,12 @@ import { TransactionStatus } from './enums/transaction-status.enum';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Currency } from 'src/currencies/entities/currency.entity';
 import { HorizonService } from 'src/blockchain/services/horizon/horizon.service';
-import { TransactionCurrencyStats, TransactionsStatsDto } from './dto/transaction-stat.dto';
+import { paginate, Pagination } from 'nestjs-typeorm-paginate';
+import {
+  TransactionCurrencyStats,
+  TransactionsStatsDto,
+} from './dto/transaction-stat.dto';
+import { FilterTransactionsDto } from './dto/filter-transaction.dto';
 
 @Injectable()
 export class TransactionsService {
@@ -26,13 +31,15 @@ export class TransactionsService {
     @InjectRepository(Transaction)
     private transactionsRepository: Repository<Transaction>,
 
+    @InjectRepository(Transaction)
+    private readonly transactionRepo: Repository<Transaction>,
+
     @InjectRepository(Currency)
     private readonly currencyRepository: Repository<Currency>,
 
     private readonly eventEmitter: EventEmitter2,
 
     private readonly horizonService: HorizonService,
-
   ) {}
 
   async createTransaction(
@@ -80,7 +87,7 @@ export class TransactionsService {
     const totalAmount = Number((amount + feeAmount).toFixed(2));
 
     // Log for auditing
-this.logger.log(`Transaction Fee Breakdown:
+    this.logger.log(`Transaction Fee Breakdown:
   User ID: ${userId}
   Base Amount: ${amount}
   Fee Percentage: ${feePercentage * 100}%
@@ -91,10 +98,10 @@ this.logger.log(`Transaction Fee Breakdown:
     const transaction = this.transactionsRepository.create({
       userId,
       type,
-      amount: totalAmount, 
+      amount: totalAmount,
       currencyId,
       status: TransactionStatus.PENDING,
-      reference: this.generateReference(), 
+      reference: this.generateReference(),
       description,
       sourceAccount,
       destinationAccount,
@@ -110,7 +117,6 @@ this.logger.log(`Transaction Fee Breakdown:
 
     return await this.transactionsRepository.save(transaction);
   }
-
 
   private generateReference(): string {
     return (
@@ -153,14 +159,15 @@ this.logger.log(`Transaction Fee Breakdown:
   }
 
   async getTransactionsByUser(userId: string, page: number, limit: number) {
-    const [transactions, total] = await this.transactionsRepository.findAndCount({
-      where: { userId }, // ✅ fixed here
-      order: { createdAt: 'DESC' },
-      skip: (page - 1) * limit,
-      take: limit,
-      relations: ['user'], // optional, if you need user details in the response
-    });
-  
+    const [transactions, total] =
+      await this.transactionsRepository.findAndCount({
+        where: { userId }, // ✅ fixed here
+        order: { createdAt: 'DESC' },
+        skip: (page - 1) * limit,
+        take: limit,
+        relations: ['user'], // optional, if you need user details in the response
+      });
+
     return {
       data: transactions,
       total,
@@ -169,7 +176,46 @@ this.logger.log(`Transaction Fee Breakdown:
       totalPages: Math.ceil(total / limit),
     };
   }
-  
+
+  async getTransactions(
+    dto: FilterTransactionsDto,
+  ): Promise<Pagination<Transaction>> {
+    const query = this.transactionRepo.createQueryBuilder('transaction');
+
+    if (dto.status)
+      query.andWhere('transaction.status = :status', { status: dto.status });
+    if (dto.dateFrom)
+      query.andWhere('transaction.createdAt >= :dateFrom', {
+        dateFrom: dto.dateFrom,
+      });
+    if (dto.dateTo)
+      query.andWhere('transaction.createdAt <= :dateTo', {
+        dateTo: dto.dateTo,
+      });
+    if (dto.currency)
+      query.andWhere('transaction.currency = :currency', {
+        currency: dto.currency,
+      });
+    if (dto.userId)
+      query.andWhere('transaction.userId = :userId', { userId: dto.userId });
+    if (dto.search) {
+      query.andWhere(
+        '(transaction.description ILIKE :search OR transaction.reference ILIKE :search)',
+        {
+          search: `%${dto.search}%`,
+        },
+      );
+    }
+
+    if (dto.sortBy) {
+      query.orderBy(`transaction.${dto.sortBy}`, 'DESC'); // Consider validating sortBy input
+    }
+
+    return paginate<Transaction>(query, {
+      page: dto.page,
+      limit: dto.limit,
+    });
+  }
 
   async findOne(id: string, userId: string): Promise<Transaction> {
     const transaction = await this.transactionsRepository.findOne({
@@ -368,17 +414,19 @@ this.logger.log(`Transaction Fee Breakdown:
       .groupBy('tx.currency')
       .getRawMany();
 
-    const currencyStats: TransactionCurrencyStats[] = rawCurrencyStats.map(stat => ({
-      currency: stat.currency,
-      count: parseInt(stat.count, 10),
-      totalVolume: parseFloat(stat.totalVolume),
-      avgValue: parseFloat(stat.avgValue),
-    }));
+    const currencyStats: TransactionCurrencyStats[] = rawCurrencyStats.map(
+      (stat) => ({
+        currency: stat.currency,
+        count: parseInt(stat.count, 10),
+        totalVolume: parseFloat(stat.totalVolume),
+        avgValue: parseFloat(stat.avgValue),
+      }),
+    );
 
     // Most used currencies sorted by count
     const mostUsedCurrencies = currencyStats
       .sort((a, b) => b.count - a.count)
-      .map(stat => stat.currency);
+      .map((stat) => stat.currency);
 
     return {
       totalTransactions,
@@ -387,4 +435,3 @@ this.logger.log(`Transaction Fee Breakdown:
     };
   }
 }
-

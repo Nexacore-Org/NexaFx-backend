@@ -16,6 +16,7 @@ import { TransactionStatus } from './enums/transaction-status.enum';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Currency } from 'src/currencies/entities/currency.entity';
 import { HorizonService } from 'src/blockchain/services/horizon/horizon.service';
+import { TransactionCurrencyStats, TransactionsStatsDto } from './dto/transaction-stat.dto';
 
 @Injectable()
 export class TransactionsService {
@@ -332,4 +333,38 @@ export class TransactionsService {
   async getTransactionHistory(accountId: string) {
     return this.horizonService.getTransactionHistory(accountId);
   }
+
+  async getStats(): Promise<TransactionsStatsDto> {
+    // Total number of transactions
+    const totalTransactions = await this.transactionsRepository.count();
+
+    // Aggregated stats per currency
+    const rawCurrencyStats = await this.transactionsRepository
+      .createQueryBuilder('tx')
+      .select('tx.currency', 'currency')
+      .addSelect('COUNT(*)', 'count')
+      .addSelect('SUM(tx.amount)', 'totalVolume')
+      .addSelect('AVG(tx.amount)', 'avgValue')
+      .groupBy('tx.currency')
+      .getRawMany();
+
+    const currencyStats: TransactionCurrencyStats[] = rawCurrencyStats.map(stat => ({
+      currency: stat.currency,
+      count: parseInt(stat.count, 10),
+      totalVolume: parseFloat(stat.totalVolume),
+      avgValue: parseFloat(stat.avgValue),
+    }));
+
+    // Most used currencies sorted by count
+    const mostUsedCurrencies = currencyStats
+      .sort((a, b) => b.count - a.count)
+      .map(stat => stat.currency);
+
+    return {
+      totalTransactions,
+      currencyStats,
+      mostUsedCurrencies,
+    };
+  }
 }
+

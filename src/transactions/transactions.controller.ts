@@ -25,6 +25,7 @@ import { UserRole } from 'src/user/entities/user.entity';
   import { TransactionType } from './enums/transaction-type.enum';
   import { TransactionStatus } from './enums/transaction-status.enum';
 import { AuditInterceptor } from 'src/audit/audit.interceptor';
+import { TransactionsStatsDto } from './dto/transaction-stat.dto';
   
   @ApiTags('transactions')
   @ApiBearerAuth()
@@ -191,4 +192,11 @@ import { AuditInterceptor } from 'src/audit/audit.interceptor';
     async remove(@Param('id') id: string, @Request() req): Promise<void> {
       return this.transactionsService.remove(id, req.user.id);
     }
+
+    @Get('stats')
+  async getStats(): Promise<TransactionsStatsDto> {
+    return this.transactionsService.getStats();
   }
+}
+
+

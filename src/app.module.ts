@@ -18,11 +18,13 @@ import { BlockchainModule } from './blockchain/blockchain.module';
 import { AuditModule } from './audit/audit.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { InAppNotificationModule } from './in-app-notifications/in-app-notification.module';
+import { AnnouncementsModule } from './announcements/announcements.module';
 
 import { AdminModule } from './admin/admin.module';
 
 import { TransactionsService } from './transactions/transactions.service';
 import { AppService } from './app.service';
+import { CommonModule } from './common/common.module';
 
 
 @Module({
@@ -68,6 +70,8 @@ import { AppService } from './app.service';
     NotificationsModule,
     AuditModule,
     InAppNotificationModule,
+    AnnouncementsModule,
+    CommonModule,
   ],
   controllers: [AppController],
   providers: [

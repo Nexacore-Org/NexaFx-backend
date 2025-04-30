@@ -1,8 +1,3 @@
-
-
-// **src/auth/auth.service.ts** (partial)
-
-
 import { Injectable } from '@nestjs/common';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service';
 import { ActivityType } from '../activity-logs/constants/activity-types.enum';
@@ -37,6 +32,3 @@ export class AuthService {
     );
   }
 }
-
-
-```

@@ -434,4 +434,30 @@ export class TransactionsService {
       mostUsedCurrencies,
     };
   }
+
+  async updateStatus(id: string, newStatus: TransactionStatus) {
+    const transaction = await this.transactionsRepository.findOne({
+      where: { id },
+    });
+
+    if (!transaction) {
+      throw new NotFoundException('Transaction not found');
+    }
+
+    // Only allow transitions from PENDING → SUCCESS | FAILED
+    if (transaction.status !== TransactionStatus.PENDING) {
+      throw new BadRequestException(
+        `Cannot change status from ${transaction.status}`,
+      );
+    }
+
+    if (transaction.status === newStatus) {
+      throw new BadRequestException(`Transaction is already ${newStatus}`);
+    }
+
+    transaction.status = newStatus;
+    await this.transactionsRepository.save(transaction);
+
+    return { message: `Status updated to ${newStatus}` };
+  }
 }

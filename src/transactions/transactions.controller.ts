@@ -37,7 +37,7 @@ import { TransactionType } from './enums/transaction-type.enum';
 import { TransactionStatus } from './enums/transaction-status.enum';
 import { AuditInterceptor } from 'src/audit/audit.interceptor';
 import { TransactionsStatsDto } from './dto/transaction-stat.dto';
-import { FilterTransactionsDto } from './dto/filter-transaction.dto';
+import { UpdateTransactionStatusDto } from './dto/update-transaction-status.dto';
 
 @ApiTags('transactions')
 @ApiBearerAuth()
@@ -73,11 +73,6 @@ export class TransactionsController {
       +page,
       +limit,
     );
-  }
-
-  @Get('/transactions')
-  async getTransactions(@Query() filterDto: FilterTransactionsDto) {
-    return this.transactionsService.getTransactions(filterDto);
   }
 
   @UseInterceptors(AuditInterceptor)
@@ -224,5 +219,15 @@ export class TransactionsController {
   @Get('stats')
   async getStats(): Promise<TransactionsStatsDto> {
     return this.transactionsService.getStats();
+  }
+
+  @Patch(':id/status')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  updateStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateTransactionStatusDto,
+  ) {
+    return this.transactionsService.update(id, dto.status);
   }
 }

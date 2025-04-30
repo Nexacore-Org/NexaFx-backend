@@ -12,6 +12,7 @@ import {
     Query,
     ConflictException,
     ForbiddenException,
+    UseInterceptors,
   } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/auth/guard/jwt.auth.guard';
 import { Roles } from 'src/common/decorators/roles.decorators';
@@ -25,6 +26,7 @@ import { UserRole } from 'src/user/entities/user.entity';
   import { Transaction } from './entities/transaction.entity';
   import { TransactionType } from './enums/transaction-type.enum';
   import { TransactionStatus } from './enums/transaction-status.enum';
+import { AuditInterceptor } from 'src/audit/audit.interceptor';
   
   @ApiTags('transactions')
   @ApiBearerAuth()
@@ -39,8 +41,8 @@ import { UserRole } from 'src/user/entities/user.entity';
       const userId = req.user.id;
       // Return only transactions belonging to the authenticated user
     }
-    
 
+    @UseInterceptors(AuditInterceptor)
     @Post()
     @Roles(UserRole.USER, UserRole.ADMIN)
     createTransaction() {
@@ -60,6 +62,7 @@ import { UserRole } from 'src/user/entities/user.entity';
     }
 
 
+    @UseInterceptors(AuditInterceptor)
     @Post()
     @ApiOperation({ summary: 'Create a new transaction' })
     @ApiResponse({

@@ -13,6 +13,7 @@ import { CurrenciesModule } from './currencies/currencies.module';
 import { AppController } from './app.controller';
 import { TransactionsModule } from './transactions/transactions.module';
 import { AuditInterceptor } from './common/interceptors/audit/audit.interceptor';
+import { TransactionsService } from './transactions/transactions';
 import { NotificationsModule } from './notifications/notifications.module';
 import { BlockchainModule } from './blockchain/blockchain.module';
 import { AuditModule } from './audit/audit.module';

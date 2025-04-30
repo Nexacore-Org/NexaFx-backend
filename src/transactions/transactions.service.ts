@@ -80,21 +80,21 @@ export class TransactionsService {
     const totalAmount = Number((amount + feeAmount).toFixed(2));
 
     // Log for auditing
-    this.logger.log(`Transaction Fee Breakdown:
-      User ID: ${userId}
-      Base Amount: ${amount}
-      Fee Percentage: ${feePercentage * 100}%
-      Fee Amount: ${feeAmount}
-      Total Amount (Amount + Fee): ${totalAmount}
-    `);
+this.logger.log(`Transaction Fee Breakdown:
+  User ID: ${userId}
+  Base Amount: ${amount}
+  Fee Percentage: ${feePercentage * 100}%
+  Fee Amount: ${feeAmount}
+  Total Amount (Amount + Fee): ${totalAmount}
+`);
 
     const transaction = this.transactionsRepository.create({
       userId,
       type,
-      amount: totalAmount, // Save total amount as the main amount
+      amount: totalAmount, 
       currencyId,
       status: TransactionStatus.PENDING,
-      reference: this.generateReference(), // Assume you have a reference generator
+      reference: this.generateReference(), 
       description,
       sourceAccount,
       destinationAccount,
@@ -110,6 +110,7 @@ export class TransactionsService {
 
     return await this.transactionsRepository.save(transaction);
   }
+
 
   private generateReference(): string {
     return (
@@ -150,6 +151,25 @@ export class TransactionsService {
 
     return query.getMany();
   }
+
+  async getTransactionsByUser(userId: string, page: number, limit: number) {
+    const [transactions, total] = await this.transactionsRepository.findAndCount({
+      where: { userId }, // ✅ fixed here
+      order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+      relations: ['user'], // optional, if you need user details in the response
+    });
+  
+    return {
+      data: transactions,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+  
 
   async findOne(id: string, userId: string): Promise<Transaction> {
     const transaction = await this.transactionsRepository.findOne({

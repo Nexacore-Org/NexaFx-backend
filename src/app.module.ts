@@ -8,18 +8,16 @@ import { KycVerification } from './kyc/entities/kyc.entity';
 import { CurrenciesModule } from './currencies/currencies.module';
 import { AppController } from './app.controller';
 import { TransactionsModule } from './transactions/transactions.module';
-import { LogsModule } from './logs/logs.module';
 import { Module } from '@nestjs/common';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core/constants';
 import { AuditInterceptor } from './common/interceptors/audit/audit.interceptor';
-import { TransactionsService } from './transactions/transactions.
 import { NotificationsModule } from './notifications/notifications.module';
-import { BlockchainModule } from './blockchain/blockcha
 import { BlockchainModule } from './blockchain/blockchain.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { InAppNotificationModule } from './in-app-notifications/in-app-notification.module';
 import { NestjsThrottlerModule } from './throttler/throttler.module';
 import { CustomThrottlerGuard } from './common/guards/throttle.guards';
+import { AppService } from './app.service';
 
 @Module({
   imports: [
@@ -48,7 +46,6 @@ import { CustomThrottlerGuard } from './common/guards/throttle.guards';
     }),
     UserModule,
     AuthModule,
-    LogsModule,
     KycModule,
     BlockchainModule,
     EventEmitterModule.forRoot(),
@@ -63,7 +60,7 @@ import { CustomThrottlerGuard } from './common/guards/throttle.guards';
 
 
   providers: [
-    TransactionsService,
+    AppService,
     {
       provide: APP_INTERCEPTOR,
       useClass: AuditInterceptor,

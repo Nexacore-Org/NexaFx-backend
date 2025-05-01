@@ -26,6 +26,7 @@ import { AdminModule } from './admin/admin.module';
 import { TransactionsService } from './transactions/transactions.service';
 import { AppService } from './app.service';
 import { CommonModule } from './common/common.module';
+import { SupportTicketModule } from './support-ticket/support-ticket.module';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { CommonModule } from './common/common.module';
     InAppNotificationModule,
     AnnouncementsModule,
     CommonModule,
+    SupportTicketModule,
   ],
   controllers: [AppController],
   providers: [

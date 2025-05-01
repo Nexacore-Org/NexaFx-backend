@@ -27,6 +27,7 @@ import { TransactionsService } from './transactions/transactions.service';
 import { AppService } from './app.service';
 import { CommonModule } from './common/common.module';
 import { SupportTicketModule } from './support-ticket/support-ticket.module';
+import { TransactionTaggingModule } from './transaction-tagging/transaction-tagging.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { SupportTicketModule } from './support-ticket/support-ticket.module';
     AnnouncementsModule,
     CommonModule,
     SupportTicketModule,
+    TransactionTaggingModule,
   ],
   controllers: [AppController],
   providers: [

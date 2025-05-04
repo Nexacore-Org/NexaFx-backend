@@ -22,17 +22,15 @@ export class TransactionsService {
 
   constructor(
     @InjectRepository(Transaction)
-    private transactionsRepository: Repository<Transaction>,
+    private readonly transactionsRepository: Repository<Transaction>,
 
     @InjectRepository(Currency)
     private readonly currencyRepository: Repository<Currency>,
 
-    private readonly eventEmitter: EventEmitter2
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  async createTransaction(
-    createTransactionDto: CreateTransactionDto,
-  ): Promise<Transaction> {
+  async createTransaction(dto: CreateTransactionDto): Promise<Transaction> {
     const {
       userId,
       currencyId,
@@ -41,178 +39,81 @@ export class TransactionsService {
       description,
       sourceAccount,
       destinationAccount,
-    } = createTransactionDto;
+      reference,
+      status,
+    } = dto;
 
-    // Check if reference already exists
-    const existingTransaction = await this.transactionsRepository.findOne({
-      where: { reference: createTransactionDto.reference },
-    });
-
-    if (existingTransaction) {
-      throw new ConflictException(
-        `Transaction with reference ${createTransactionDto.reference} already exists`,
-      );
+    if (reference) {
+      const exists = await this.transactionsRepository.findOne({ where: { reference } });
+      if (exists) {
+        throw new ConflictException(`Transaction with reference ${reference} already exists`);
+      }
     }
 
-    // Set default status if not provided
-    if (!createTransactionDto.status) {
-      createTransactionDto.status = TransactionStatus.PENDING;
-    }
-
-    // Fetch currency to get feePercentage
-    const currency = await this.currencyRepository.findOne({
-      where: { id: currencyId },
-    });
-
-    if (!currency) {
-      throw new Error('Currency not found.');
-    }
+    const currency = await this.currencyRepository.findOne({ where: { id: currencyId } });
+    if (!currency) throw new NotFoundException('Currency not found');
 
     const feePercentage = currency.feePercentage ?? 0;
-
-    // Calculate fee and total
     const feeAmount = Number((amount * feePercentage).toFixed(2));
     const totalAmount = Number((amount + feeAmount).toFixed(2));
 
-    // Log for auditing
-    this.logger.log(`Transaction Fee Breakdown:
-      User ID: ${userId}
-      Base Amount: ${amount}
-      Fee Percentage: ${feePercentage * 100}%
-      Fee Amount: ${feeAmount}
-      Total Amount (Amount + Fee): ${totalAmount}
-    `);
+    this.logger.log(`Transaction Fee Breakdown for user ${userId} | Base: ${amount}, Fee: ${feeAmount}, Total: ${totalAmount}`);
 
     const transaction = this.transactionsRepository.create({
       userId,
       type,
-      amount: totalAmount, // Save total amount as the main amount
+      amount: totalAmount,
       currencyId,
-      status: TransactionStatus.PENDING,
-      reference: this.generateReference(), // Assume you have a reference generator
+      status: status || TransactionStatus.PENDING,
+      reference: reference || this.generateReference(),
       description,
       sourceAccount,
       destinationAccount,
       feeAmount,
       feeCurrencyId: currencyId,
-      metadata: {
-        baseAmount: amount,
-        feePercentage,
-        feeAmount,
-        totalAmount,
-      },
+      metadata: { baseAmount: amount, feePercentage, feeAmount, totalAmount },
     });
 
-    return await this.transactionsRepository.save(transaction);
+    return this.transactionsRepository.save(transaction);
   }
 
-  private generateReference(): string {
-    return (
-      'TXN-' +
-      Date.now() +
-      '-' +
-      Math.random().toString(36).substring(2, 8).toUpperCase()
-    );
-  }
+  async findAll(userId: string, query?: QueryTransactionDto): Promise<Transaction[]> {
+    const qb = this.transactionsRepository.createQueryBuilder('t').where('t.userId = :userId', { userId });
 
-  async findAll(
-    userId: string,
-    queryParams?: QueryTransactionDto,
-  ): Promise<Transaction[]> {
-    const query = this.transactionsRepository
-      .createQueryBuilder('transaction')
-      .where('transaction.userId = :userId', { userId });
+    if (query?.type) qb.andWhere('t.type = :type', { type: query.type });
+    if (query?.status) qb.andWhere('t.status = :status', { status: query.status });
+    if (query?.currencyId) qb.andWhere('t.currencyId = :currencyId', { currencyId: query.currencyId });
 
-    // Apply filters if provided
-    if (queryParams?.type) {
-      query.andWhere('transaction.type = :type', { type: queryParams.type });
-    }
-
-    if (queryParams?.status) {
-      query.andWhere('transaction.status = :status', {
-        status: queryParams.status,
-      });
-    }
-
-    if (queryParams?.currencyId) {
-      query.andWhere('transaction.currencyId = :currencyId', {
-        currencyId: queryParams.currencyId,
-      });
-    }
-
-    // Order by most recent first
-    query.orderBy('transaction.createdAt', 'DESC');
-
-    return query.getMany();
+    qb.orderBy('t.createdAt', 'DESC');
+    return qb.getMany();
   }
 
   async findOne(id: string, userId: string): Promise<Transaction> {
-    const transaction = await this.transactionsRepository.findOne({
-      where: { id },
-    });
-
-    if (!transaction) {
-      throw new NotFoundException(`Transaction with ID ${id} not found`);
-    }
-
-    // Enforce user-based access control
-    if (transaction.userId !== userId) {
-      throw new ForbiddenException(
-        'You do not have permission to access this transaction',
-      );
-    }
-
+    const transaction = await this.transactionsRepository.findOne({ where: { id } });
+    if (!transaction) throw new NotFoundException(`Transaction ID ${id} not found`);
+    if (transaction.userId !== userId) throw new ForbiddenException('Access denied');
     return transaction;
   }
 
   async findByReference(reference: string): Promise<Transaction> {
-    const transaction = await this.transactionsRepository.findOne({
-      where: { reference },
-    });
-
-    if (!transaction) {
-      throw new NotFoundException(
-        `Transaction with reference ${reference} not found`,
-      );
-    }
-
+    const transaction = await this.transactionsRepository.findOne({ where: { reference } });
+    if (!transaction) throw new NotFoundException(`Reference ${reference} not found`);
     return transaction;
   }
 
-  async update(
-    id: string,
-    updateTransactionDto: UpdateTransactionDto,
-    userId: string,
-  ): Promise<Transaction> {
-    // First check if the transaction exists and belongs to the user
+  async update(id: string, dto: UpdateTransactionDto, userId: string): Promise<Transaction> {
     const transaction = await this.findOne(id, userId);
 
-    // If reference is being updated, check for uniqueness
-    if (
-      updateTransactionDto.reference &&
-      updateTransactionDto.reference !== transaction.reference
-    ) {
-      const existingTransaction = await this.transactionsRepository.findOne({
-        where: { reference: updateTransactionDto.reference },
-      });
-
-      if (existingTransaction) {
-        throw new ConflictException(
-          `Transaction with reference ${updateTransactionDto.reference} already exists`,
-        );
-      }
+    if (dto.reference && dto.reference !== transaction.reference) {
+      const exists = await this.transactionsRepository.findOne({ where: { reference: dto.reference } });
+      if (exists) throw new ConflictException(`Reference ${dto.reference} already exists`);
     }
 
-    // If updating status to COMPLETED, set completionDate if not provided
-    if (
-      updateTransactionDto.status === TransactionStatus.COMPLETED &&
-      !updateTransactionDto.completionDate
-    ) {
-      updateTransactionDto.completionDate = new Date();
+    if (dto.status === TransactionStatus.COMPLETED && !dto.completionDate) {
+      dto.completionDate = new Date();
     }
 
-    // Merge changes and save
-    Object.assign(transaction, updateTransactionDto);
+    Object.assign(transaction, dto);
     return this.transactionsRepository.save(transaction);
   }
 
@@ -221,15 +122,11 @@ export class TransactionsService {
     await this.transactionsRepository.remove(transaction);
   }
 
-  async generateUniqueReference(prefix = 'TXN'): Promise<string> {
-    // Generate a unique reference with format PREFIX-TIMESTAMP-RANDOM
-    const timestamp = Date.now().toString();
-    const random = uuidv4().substring(0, 8);
-    return `${prefix}-${timestamp}-${random}`;
+  generateReference(prefix = 'TXN'): string {
+    return `${prefix}-${Date.now()}-${uuidv4().substring(0, 8)}`;
   }
 
-  // Method for processing a transaction
-  async processTransactionion(
+  async processTransaction(
     userId: string,
     asset: string,
     amount: number,
@@ -244,12 +141,11 @@ export class TransactionsService {
 
       await this.transactionsRepository.save(transaction);
 
-      // Emit wallet.updated event
       this.eventEmitter.emit('wallet.updated', {
         userId,
         walletId: 'wallet-123-sample',
         asset,
-        previousBalance: 100, // Example value
+        previousBalance: 100,
         newBalance: 100 + amount,
         reason: 'transaction',
         timestamp: new Date(),
@@ -257,10 +153,9 @@ export class TransactionsService {
 
       return transaction;
     } catch (error) {
-      // If transaction fails, emit transaction.failed event
       this.eventEmitter.emit('transaction.failed', {
         userId,
-        transactionId: 'tx-sample-transaction-id' + Date.now(),
+        transactionId: 'tx-' + Date.now(),
         asset,
         amount,
         reason: error.message || 'Unknown error',
@@ -271,7 +166,6 @@ export class TransactionsService {
     }
   }
 
-  // Method for processing a swap
   async processSwap(
     userId: string,
     fromAsset: string,
@@ -279,14 +173,12 @@ export class TransactionsService {
     fromAmount: number,
   ): Promise<void> {
     try {
-      // Your swap processing logic here
-      const exchangeRate = await this.getExchangeRate(fromAsset, toAsset);
-      const toAmount = fromAmount * exchangeRate;
+      const rate = await this.getExchangeRate(fromAsset, toAsset);
+      const toAmount = fromAmount * rate;
 
-      // After successful swap
       this.eventEmitter.emit('swap.completed', {
         userId,
-        swapId: 'swap-' + Date.now(), // In a real app, you'd have a real swap ID
+        swapId: 'swap-' + Date.now(),
         fromAsset,
         toAsset,
         fromAmount,
@@ -294,7 +186,6 @@ export class TransactionsService {
         timestamp: new Date(),
       });
     } catch (error) {
-      // If swap fails, emit transaction.failed event
       this.eventEmitter.emit('transaction.failed', {
         userId,
         transactionId: 'swap-' + Date.now(),
@@ -308,19 +199,13 @@ export class TransactionsService {
     }
   }
 
-  // Mock method to get exchange rate
-  private async getExchangeRate(
-    fromAsset: string,
-    toAsset: string,
-  ): Promise<number> {
-    // Add external api service to get exchange rate here
-    const rates = {
+  private async getExchangeRate(from: string, to: string): Promise<number> {
+    const mockRates = {
       'BTC-ETH': 15.5,
       'ETH-BTC': 0.065,
       'BTC-USDT': 30000,
       'ETH-USDT': 2000,
     };
-
-    return rates[`${fromAsset}-${toAsset}`] || 1;
+    return mockRates[`${from}-${to}`] ?? 1;
   }
 }

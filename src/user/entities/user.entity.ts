@@ -10,6 +10,7 @@ import { Token } from '../../auth/entities/token.entity';
 import { Notification } from '../../notifications/entities/notification.entity';
 import { InAppNotification } from 'src/in-app-notifications/in-app-notification.entity';
 
+
 export enum AccountType {
   PERSONAL = 'Personal',
   BUSINESS = 'Business',
@@ -81,6 +82,12 @@ export class User {
   @OneToMany(() => Token, (token) => token.user, { cascade: true })
   tokens: Token[];
 
+  @Column({ nullable: true })
+  walletAddress: string;
+
+  @Column({ default: () => `'${uuidv4()}'` })
+  walletNonce: string;
+
   @Column({ default: true })
   isActive: boolean;
 
@@ -93,3 +100,7 @@ export class User {
   @UpdateDateColumn()
   updatedAt: Date;
 }
+function uuidv4() {
+  throw new Error('Function not implemented.');
+}
+

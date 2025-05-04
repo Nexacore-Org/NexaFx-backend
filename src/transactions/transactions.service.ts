@@ -15,6 +15,13 @@ import { QueryTransactionDto } from './dto/query-transaction.dto';
 import { TransactionStatus } from './enums/transaction-status.enum';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Currency } from 'src/currencies/entities/currency.entity';
+import { HorizonService } from 'src/blockchain/services/horizon/horizon.service';
+import { paginate, Pagination } from 'nestjs-typeorm-paginate';
+import {
+  TransactionCurrencyStats,
+  TransactionsStatsDto,
+} from './dto/transaction-stat.dto';
+import { FilterTransactionsDto } from './dto/filter-transaction.dto';
 
 @Injectable()
 export class TransactionsService {
@@ -24,10 +31,15 @@ export class TransactionsService {
     @InjectRepository(Transaction)
     private readonly transactionsRepository: Repository<Transaction>,
 
+    @InjectRepository(Transaction)
+    private readonly transactionRepo: Repository<Transaction>,
+
     @InjectRepository(Currency)
     private readonly currencyRepository: Repository<Currency>,
 
     private readonly eventEmitter: EventEmitter2,
+
+    private readonly horizonService: HorizonService,
   ) {}
 
   async createTransaction(dto: CreateTransactionDto): Promise<Transaction> {
@@ -56,9 +68,15 @@ export class TransactionsService {
     const feePercentage = currency.feePercentage ?? 0;
     const feeAmount = Number((amount * feePercentage).toFixed(2));
     const totalAmount = Number((amount + feeAmount).toFixed(2));
-
     this.logger.log(`Transaction Fee Breakdown for user ${userId} | Base: ${amount}, Fee: ${feeAmount}, Total: ${totalAmount}`);
-
+    // Log for auditing
+    this.logger.log(`Transaction Fee Breakdown:
+  User ID: ${userId}
+  Base Amount: ${amount}
+  Fee Percentage: ${feePercentage * 100}%
+  Fee Amount: ${feeAmount}
+  Total Amount (Amount + Fee): ${totalAmount}
+`);
     const transaction = this.transactionsRepository.create({
       userId,
       type,
@@ -66,6 +84,8 @@ export class TransactionsService {
       currencyId,
       status: status || TransactionStatus.PENDING,
       reference: reference || this.generateReference(),
+      status: TransactionStatus.PENDING,
+      reference: this.generateReference(),
       description,
       sourceAccount,
       destinationAccount,
@@ -86,6 +106,65 @@ export class TransactionsService {
 
     qb.orderBy('t.createdAt', 'DESC');
     return qb.getMany();
+  }
+
+  async getTransactionsByUser(userId: string, page: number, limit: number) {
+    const [transactions, total] =
+      await this.transactionsRepository.findAndCount({
+        where: { userId }, // ✅ fixed here
+        order: { createdAt: 'DESC' },
+        skip: (page - 1) * limit,
+        take: limit,
+        relations: ['user'], // optional, if you need user details in the response
+      });
+
+    return {
+      data: transactions,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getTransactions(
+    dto: FilterTransactionsDto,
+  ): Promise<Pagination<Transaction>> {
+    const query = this.transactionRepo.createQueryBuilder('transaction');
+
+    if (dto.status)
+      query.andWhere('transaction.status = :status', { status: dto.status });
+    if (dto.dateFrom)
+      query.andWhere('transaction.createdAt >= :dateFrom', {
+        dateFrom: dto.dateFrom,
+      });
+    if (dto.dateTo)
+      query.andWhere('transaction.createdAt <= :dateTo', {
+        dateTo: dto.dateTo,
+      });
+    if (dto.currency)
+      query.andWhere('transaction.currency = :currency', {
+        currency: dto.currency,
+      });
+    if (dto.userId)
+      query.andWhere('transaction.userId = :userId', { userId: dto.userId });
+    if (dto.search) {
+      query.andWhere(
+        '(transaction.description ILIKE :search OR transaction.reference ILIKE :search)',
+        {
+          search: `%${dto.search}%`,
+        },
+      );
+    }
+
+    if (dto.sortBy) {
+      query.orderBy(`transaction.${dto.sortBy}`, 'DESC'); // Consider validating sortBy input
+    }
+
+    return paginate<Transaction>(query, {
+      page: dto.page,
+      limit: dto.limit,
+    });
   }
 
   async findOne(id: string, userId: string): Promise<Transaction> {
@@ -207,5 +286,71 @@ export class TransactionsService {
       'ETH-USDT': 2000,
     };
     return mockRates[`${from}-${to}`] ?? 1;
+  }
+
+  //Get transaction history for a user
+  async getTransactionHistory(accountId: string) {
+    return this.horizonService.getTransactionHistory(accountId);
+  }
+
+  async getStats(): Promise<TransactionsStatsDto> {
+    // Total number of transactions
+    const totalTransactions = await this.transactionsRepository.count();
+
+    // Aggregated stats per currency
+    const rawCurrencyStats = await this.transactionsRepository
+      .createQueryBuilder('tx')
+      .select('tx.currency', 'currency')
+      .addSelect('COUNT(*)', 'count')
+      .addSelect('SUM(tx.amount)', 'totalVolume')
+      .addSelect('AVG(tx.amount)', 'avgValue')
+      .groupBy('tx.currency')
+      .getRawMany();
+
+    const currencyStats: TransactionCurrencyStats[] = rawCurrencyStats.map(
+      (stat) => ({
+        currency: stat.currency,
+        count: parseInt(stat.count, 10),
+        totalVolume: parseFloat(stat.totalVolume),
+        avgValue: parseFloat(stat.avgValue),
+      }),
+    );
+
+    // Most used currencies sorted by count
+    const mostUsedCurrencies = currencyStats
+      .sort((a, b) => b.count - a.count)
+      .map((stat) => stat.currency);
+
+    return {
+      totalTransactions,
+      currencyStats,
+      mostUsedCurrencies,
+    };
+  }
+
+  async updateStatus(id: string, newStatus: TransactionStatus) {
+    const transaction = await this.transactionsRepository.findOne({
+      where: { id },
+    });
+
+    if (!transaction) {
+      throw new NotFoundException('Transaction not found');
+    }
+
+    // Only allow transitions from PENDING → SUCCESS | FAILED
+    if (transaction.status !== TransactionStatus.PENDING) {
+      throw new BadRequestException(
+        `Cannot change status from ${transaction.status}`,
+      );
+    }
+
+    if (transaction.status === newStatus) {
+      throw new BadRequestException(`Transaction is already ${newStatus}`);
+    }
+
+    transaction.status = newStatus;
+    await this.transactionsRepository.save(transaction);
+
+    return { message: `Status updated to ${newStatus}` };
   }
 }

@@ -4,12 +4,15 @@ import { Repository } from 'typeorm';
 import { Wallet } from './entities/wallet.entity';
 import { CreateWalletDto } from './dto/create-wallet.dto';
 import { UpdateWalletDto } from './dto/update-wallet.dto';
+import { HorizonService } from 'src/blockchain/services/horizon/horizon.service';
 
 @Injectable()
 export class WalletService {
     constructor(
         @InjectRepository(Wallet)
         private readonly walletRepository: Repository<Wallet>,
+        private readonly horizonService: HorizonService,
+
     ) {}
 
     async create(userId: string, createWalletDto: CreateWalletDto): Promise<Wallet> {
@@ -57,5 +60,9 @@ export class WalletService {
     async remove(id: string, userId: string): Promise<void> {
         const wallet = await this.findOne(id, userId);
         await this.walletRepository.remove(wallet);
+    }
+
+    async getWalletBalances(accountId: string) {
+        return this.horizonService.getAccountBalances(accountId);
     }
 } 

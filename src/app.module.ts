@@ -28,6 +28,7 @@ import { AppService } from './app.service';
 import { CommonModule } from './common/common.module';
 import { SupportTicketModule } from './support-ticket/support-ticket.module';
 import { TransactionTaggingModule } from './transaction-tagging/transaction-tagging.module';
+import { CurrencyAlertModule } from './currency-alert/currency-alert.module';
 
 @Module({
   imports: [
@@ -76,6 +77,7 @@ import { TransactionTaggingModule } from './transaction-tagging/transaction-tagg
     CommonModule,
     SupportTicketModule,
     TransactionTaggingModule,
+    CurrencyAlertModule,
   ],
   controllers: [AppController],
   providers: [

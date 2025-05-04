@@ -9,6 +9,10 @@ import { RegisterDto } from '../dto/register.dto';
 import { LoginDto } from '../dto/login.dto';
 import { BcryptPasswordHashingService } from './bcrypt-password-hashing.service';
 import { CreateUserDto } from 'src/user/dto/create-user.dto';
+import { Repository } from 'typeorm';
+import { User } from 'src/user/entities/user.entity';
+import { InjectRepository } from '@nestjs/typeorm';
+import { ethers } from 'ethers';
 
 @Injectable()
 export class AuthService {
@@ -16,6 +20,7 @@ export class AuthService {
     private readonly usersService: UserService,
     private readonly jwtService: JwtService,
     private readonly passwordService: BcryptPasswordHashingService,
+    @InjectRepository(User) private userRepo: Repository<User>
   ) {}
 
   //Register User
@@ -44,6 +49,29 @@ export class AuthService {
       return user;
     }
     throw new UnauthorizedException('Invalid credentials');
+  }
+
+  async linkWallet(userId: number, walletAddress: string, signature: string) {
+    const user = await this.userRepo.findOne({ where: { id: userId.toString() } });
+    if (!user) throw new UnauthorizedException('User not found');
+
+    const message = `Link wallet with nonce: ${user.walletNonce}`;
+
+    let recoveredAddress: string;
+    try {
+      recoveredAddress = ethers.utils.verifyMessage(message, signature);
+    } catch (err) {
+      throw new UnauthorizedException('Invalid signature');
+    }
+
+    if (recoveredAddress.toLowerCase() !== walletAddress.toLowerCase()) {
+      throw new UnauthorizedException('Signature verification failed');
+    }
+
+    user.walletAddress = walletAddress;
+    user.walletNonce = crypto.randomUUID(); // rotate nonce after use
+
+    return this.userRepo.save(user);
   }
 
   //Login Method (Generate JWT tokens)

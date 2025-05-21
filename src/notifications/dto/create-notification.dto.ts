@@ -7,11 +7,11 @@ import {
   IsUUID,
   Length,
 } from 'class-validator';
-import { NotificationType } from '../enum/notificationType.enum';
 import { NotificationCategory } from '../enum/notificationCategory.enum';
 import { NotificationPriority } from '../enum/notificationPriority.enum';
-import { NotificationChannel } from '../enum/notificationChannel.enum';
 import { Type } from 'class-transformer';
+import { NotificationChannel } from '../enum/notificationChannel.enum';
+import { NotificationType } from '../enum/notificationType.enum';
 
 export class CreateNotificationDto {
   @IsUUID()
@@ -21,7 +21,7 @@ export class CreateNotificationDto {
   type: NotificationType;
 
   @IsEnum(NotificationCategory)
-  category: NotificationCategory;
+  category?: NotificationCategory;
 
   @IsString()
   @Length(1, 255)
@@ -31,7 +31,7 @@ export class CreateNotificationDto {
   message: string;
 
   @IsEnum(NotificationPriority)
-  priority: NotificationPriority;
+  priority?: NotificationPriority;
 
   @IsEnum(NotificationChannel)
   channel: NotificationChannel;
@@ -55,5 +55,5 @@ export class CreateNotificationDto {
 
   @IsOptional()
   @IsJSON()
-  metadata?: any;
+  metadata?: Record<string, any>;
 }

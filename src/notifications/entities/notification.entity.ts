@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
@@ -13,20 +14,25 @@ import { NotificationType } from '../enum/notificationType.enum';
 import { User } from '../../user/entities/user.entity';
 
 @Entity('notification')
-export class Notification {
+export class Notifications {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column()
   userId: string;
 
-  @ManyToOne(() => User, (user) => user.notification)
+  @ManyToOne(() => User, (user) => user.notification, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'userId' }) // Ensures userId is used for the relationship
   user: User;
 
   @Column({ type: 'enum', enum: NotificationType })
   type: NotificationType;
 
-  @Column({ type: 'enum', enum: NotificationCategory })
+  @Column({
+    type: 'enum',
+    enum: NotificationCategory,
+    default: NotificationCategory.SUCCESS,
+  })
   category: NotificationCategory;
 
   @Column({ length: 255 })
@@ -38,7 +44,11 @@ export class Notification {
   @Column({ default: false })
   isRead: boolean;
 
-  @Column({ type: 'enum', enum: NotificationPriority })
+  @Column({
+    type: 'enum',
+    enum: NotificationPriority,
+    default: NotificationPriority.LOW,
+  })
   priority: NotificationPriority;
 
   @Column({ nullable: true })
@@ -47,7 +57,11 @@ export class Notification {
   @Column({ type: 'uuid', nullable: true })
   relatedEntityId?: string;
 
-  @Column({ type: 'enum', enum: NotificationChannel })
+  @Column({
+    type: 'enum',
+    enum: NotificationChannel,
+    default: NotificationChannel.BOTH,
+  })
   channel: NotificationChannel;
 
   @Column({ nullable: true, type: 'timestamp' })
@@ -57,7 +71,7 @@ export class Notification {
   actionUrl?: string;
 
   @Column({ type: 'json', nullable: true })
-  metadata?: Record<string, any>;
+  metadata: Record<string, any>;
 
   @CreateDateColumn()
   createdAt: Date;

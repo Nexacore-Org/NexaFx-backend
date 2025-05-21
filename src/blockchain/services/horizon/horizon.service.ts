@@ -10,7 +10,7 @@ import { Cache } from 'cache-manager';
 @Injectable()
 export class HorizonService {
   private readonly logger = new Logger(HorizonService.name);
-  private readonly horizonUrl: string|undefined;
+  private readonly horizonUrl: string | undefined;
 
   constructor(
     private readonly configService: ConfigService,
@@ -19,10 +19,10 @@ export class HorizonService {
     this.horizonUrl = this.configService.get<string>('STELLAR_HORIZON_URL');
   }
 
-  private async get(path: string|undefined) {
+  private async get(path: string | undefined) {
     const url = `${this.horizonUrl}${path}`;
 
-    const interceptorId = rax.attach();  // attach retry
+    const interceptorId = rax.attach(); // attach retry
 
     try {
       const response = await axios.get(url, {
@@ -31,7 +31,11 @@ export class HorizonService {
           noResponseRetries: 2,
           retryDelay: 1000,
           httpMethodsToRetry: ['GET'],
-          statusCodesToRetry: [[100, 199], [429, 429], [500, 599]],
+          statusCodesToRetry: [
+            [100, 199],
+            [429, 429],
+            [500, 599],
+          ],
         },
       } as any);
       return response.data;
@@ -55,7 +59,7 @@ export class HorizonService {
       balance: balance.balance,
     }));
 
-    await this.cacheManager.set(cacheKey, balances, 60 ); // cache for 60 seconds
+    await this.cacheManager.set(cacheKey, balances, 60); // cache for 60 seconds
     return balances;
   }
 
@@ -66,7 +70,9 @@ export class HorizonService {
       return cached;
     }
 
-    const data = await this.get(`/accounts/${accountId}/transactions?limit=${limit}&order=desc`);
+    const data = await this.get(
+      `/accounts/${accountId}/transactions?limit=${limit}&order=desc`,
+    );
     const transactions = data._embedded.records.map((txn) => ({
       id: txn.id,
       created_at: txn.created_at,

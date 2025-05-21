@@ -7,11 +7,10 @@ import {
   OneToMany,
 } from 'typeorm';
 import { Token } from '../../auth/entities/token.entity';
-import { Notification } from '../../notifications/entities/notification.entity';
-import { InAppNotification } from 'src/in-app-notifications/in-app-notification.entity';
-
+import { Notifications } from 'src/notifications/entities/notification.entity';
 
 export enum AccountType {
+  ALL = 'All',
   PERSONAL = 'Personal',
   BUSINESS = 'Business',
 }
@@ -61,8 +60,8 @@ export class User {
   @Column({ nullable: true })
   bio: string;
 
-  @OneToMany(() => Notification, (notification) => notification.user)
-  notification: Notification;
+  @OneToMany(() => Notifications, (notification) => notification.user)
+  notification: Notifications;
 
   @Column({ default: false })
   isVerified: boolean;
@@ -85,14 +84,12 @@ export class User {
   @Column({ nullable: true })
   walletAddress: string;
 
-  @Column({ default: () => `'${uuidv4()}'` })
+  // @Column({ default: () => `'${uuidv4()}'` })
+  @Column()
   walletNonce: string;
 
   @Column({ default: true })
   isActive: boolean;
-
-  @OneToMany(() => InAppNotification, (notification) => notification.user)
-  notifications: InAppNotification[];
 
   @CreateDateColumn()
   createdAt: Date;
@@ -100,7 +97,6 @@ export class User {
   @UpdateDateColumn()
   updatedAt: Date;
 }
-function uuidv4() {
-  throw new Error('Function not implemented.');
-}
-
+// function uuidv4() {
+//   throw new Error('Function not implemented.');
+// }

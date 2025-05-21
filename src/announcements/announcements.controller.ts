@@ -1,5 +1,18 @@
-import { Controller, Get, Post, Body, Patch, Param, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/auth/guard/jwt.auth.guard';
 import { AdminGuard } from 'src/common/guards/admin.guard';
 import { AnnouncementsService } from './announcements.service';
@@ -16,14 +29,24 @@ export class AnnouncementsController {
   @UseGuards(JwtAuthGuard, AdminGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new announcement (Admin only)' })
-  @ApiResponse({ status: 201, description: 'Announcement created successfully', type: Announcement })
-  create(@Body() createAnnouncementDto: CreateAnnouncementDto): Promise<Announcement> {
+  @ApiResponse({
+    status: 201,
+    description: 'Announcement created successfully',
+    type: Announcement,
+  })
+  create(
+    @Body() createAnnouncementDto: CreateAnnouncementDto,
+  ): Promise<Announcement> {
     return this.announcementsService.create(createAnnouncementDto);
   }
 
   @Get('active')
   @ApiOperation({ summary: 'Get all currently active announcements' })
-  @ApiResponse({ status: 200, description: 'Returns active announcements', type: [Announcement] })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns active announcements',
+    type: [Announcement],
+  })
   findActive(): Promise<Announcement[]> {
     return this.announcementsService.findActive();
   }
@@ -32,7 +55,11 @@ export class AnnouncementsController {
   @UseGuards(JwtAuthGuard, AdminGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update an announcement (Admin only)' })
-  @ApiResponse({ status: 200, description: 'Announcement updated successfully', type: Announcement })
+  @ApiResponse({
+    status: 200,
+    description: 'Announcement updated successfully',
+    type: Announcement,
+  })
   update(
     @Param('id') id: string,
     @Body() updateAnnouncementDto: UpdateAnnouncementDto,

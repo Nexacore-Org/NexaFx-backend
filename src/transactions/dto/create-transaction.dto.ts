@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 import {
   IsUUID,
   IsEnum,
@@ -11,7 +12,11 @@ import { TransactionStatus } from '../enums/transaction-status.enum';
 
 export class CreateTransactionDto {
   @IsUUID()
-  userId: string;
+  initiatorId: string;
+
+  @IsUUID()
+  @IsOptional()
+  receiverId?: string;
 
   @IsEnum(TransactionType)
   type: TransactionType;

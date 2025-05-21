@@ -19,10 +19,15 @@ export class CheckAlertsTask {
     const alerts = await this.alertService.getPendingAlerts();
 
     for (const alert of alerts) {
-      const currentRate = await this.rateService.getRate(alert.baseCurrency, alert.targetCurrency);
+      const currentRate = await this.rateService.getRate(
+        alert.baseCurrency,
+        alert.targetCurrency,
+      );
       const shouldNotify =
-        (alert.direction === AlertDirection.ABOVE && currentRate > +alert.thresholdRate) ||
-        (alert.direction === AlertDirection.BELOW && currentRate < +alert.thresholdRate);
+        (alert.direction === AlertDirection.ABOVE &&
+          currentRate > +alert.thresholdRate) ||
+        (alert.direction === AlertDirection.BELOW &&
+          currentRate < +alert.thresholdRate);
 
       if (shouldNotify) {
         await this.notificationService.sendCurrencyAlert(alert.userId, {

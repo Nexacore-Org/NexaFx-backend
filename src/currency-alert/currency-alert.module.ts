@@ -1,4 +1,3 @@
-// src/currency-alerts/currency-alerts.module.ts
 import { Module } from '@nestjs/common';
 import { CurrencyAlertsService } from './currency-alerts.service';
 import { CurrencyAlertsController } from './currency-alerts.controller';
@@ -11,6 +10,11 @@ import { ExchangeRateService } from 'src/exchange/exchange-rate.service';
 @Module({
   imports: [TypeOrmModule.forFeature([CurrencyAlert])],
   controllers: [CurrencyAlertsController],
-  providers: [CurrencyAlertsService, CheckAlertsTask, NotificationService, ExchangeRateService],
+  providers: [
+    CurrencyAlertsService,
+    CheckAlertsTask,
+    NotificationService,
+    ExchangeRateService,
+  ],
 })
 export class CurrencyAlertsModule {}

@@ -1,7 +1,8 @@
-
 import { MigrationInterface, QueryRunner, Table, TableIndex } from 'typeorm';
 
-export class CreateScheduledTransfersTable1714433285124 implements MigrationInterface {
+export class CreateScheduledTransfersTable1714433285124
+  implements MigrationInterface
+{
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.createTable(
       new Table({
@@ -90,9 +91,18 @@ export class CreateScheduledTransfersTable1714433285124 implements MigrationInte
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.dropIndex('scheduled_transfers', 'IDX_SCHEDULED_TRANSFERS_SCHEDULED_AT');
-    await queryRunner.dropIndex('scheduled_transfers', 'IDX_SCHEDULED_TRANSFERS_STATUS');
-    await queryRunner.dropIndex('scheduled_transfers', 'IDX_SCHEDULED_TRANSFERS_USER_ID');
+    await queryRunner.dropIndex(
+      'scheduled_transfers',
+      'IDX_SCHEDULED_TRANSFERS_SCHEDULED_AT',
+    );
+    await queryRunner.dropIndex(
+      'scheduled_transfers',
+      'IDX_SCHEDULED_TRANSFERS_STATUS',
+    );
+    await queryRunner.dropIndex(
+      'scheduled_transfers',
+      'IDX_SCHEDULED_TRANSFERS_USER_ID',
+    );
     await queryRunner.dropTable('scheduled_transfers');
   }
 }

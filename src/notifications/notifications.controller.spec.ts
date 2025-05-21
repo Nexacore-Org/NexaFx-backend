@@ -1,9 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotificationsController } from './notifications.controller';
-import { NotificationsService } from './notifications.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
-import { Notification } from './entities/notification.entity';
 import { BadRequestException } from '@nestjs/common';
+import { NotificationsService } from './providers/notifications.service';
 
 describe('NotificationsController', () => {
   let controller: NotificationsController;

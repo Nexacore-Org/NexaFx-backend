@@ -3,4 +3,5 @@ export enum NotificationChannel {
   EMAIL = 'EMAIL',
   SMS = 'SMS',
   PUSH_NOTIFICATION = 'PUSH_NOTIFICATION',
+  BOTH = 'both',
 }

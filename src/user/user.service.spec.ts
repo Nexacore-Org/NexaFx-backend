@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { UserService } from './user.service';
+import { UserService } from './providers/user.service';
 import { User } from './entities/user.entity';
 import { AccountType } from './entities/user.entity';
 import { ConflictException, NotFoundException } from '@nestjs/common';
@@ -93,7 +93,9 @@ describe('UserService', () => {
     it('should throw ConflictException if email already exists', async () => {
       mockRepository.findOne.mockResolvedValue(mockUser);
 
-      await expect(service.create(createUserDto)).rejects.toThrow(ConflictException);
+      await expect(service.create(createUserDto)).rejects.toThrow(
+        ConflictException,
+      );
       expect(mockRepository.findOne).toHaveBeenCalledWith({
         where: { email: createUserDto.email },
       });
@@ -127,7 +129,9 @@ describe('UserService', () => {
     it('should throw NotFoundException if user not found', async () => {
       mockRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.findOne(mockUser.id)).rejects.toThrow(NotFoundException);
+      await expect(service.findOne(mockUser.id)).rejects.toThrow(
+        NotFoundException,
+      );
       expect(mockRepository.findOne).toHaveBeenCalledWith({
         where: { id: mockUser.id },
       });
@@ -158,7 +162,9 @@ describe('UserService', () => {
     it('should throw NotFoundException if user not found', async () => {
       mockRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.update(mockUser.id, updateUserDto)).rejects.toThrow(NotFoundException);
+      await expect(service.update(mockUser.id, updateUserDto)).rejects.toThrow(
+        NotFoundException,
+      );
       expect(mockRepository.findOne).toHaveBeenCalledWith({
         where: { id: mockUser.id },
       });
@@ -177,7 +183,9 @@ describe('UserService', () => {
     it('should throw NotFoundException if user not found', async () => {
       mockRepository.delete.mockResolvedValue({ affected: 0 });
 
-      await expect(service.remove(mockUser.id)).rejects.toThrow(NotFoundException);
+      await expect(service.remove(mockUser.id)).rejects.toThrow(
+        NotFoundException,
+      );
       expect(mockRepository.delete).toHaveBeenCalledWith(mockUser.id);
     });
   });

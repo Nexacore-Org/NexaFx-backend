@@ -4,7 +4,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { UserService } from 'src/user/user.service';
+import { UserService } from 'src/user/providers/user.service';
 import { RegisterDto } from '../dto/register.dto';
 import { LoginDto } from '../dto/login.dto';
 import { BcryptPasswordHashingService } from './bcrypt-password-hashing.service';
@@ -20,7 +20,7 @@ export class AuthService {
     private readonly usersService: UserService,
     private readonly jwtService: JwtService,
     private readonly passwordService: BcryptPasswordHashingService,
-    @InjectRepository(User) private userRepo: Repository<User>
+    @InjectRepository(User) private userRepo: Repository<User>,
   ) {}
 
   //Register User
@@ -35,24 +35,23 @@ export class AuthService {
       ...registerDto,
       password: hashedPassword,
     });
-   
+
     return this.login(newUser);
   }
 
   // Validate User Credentials
   public async validateUser(email: string, password: string): Promise<any> {
     const user = await this.usersService.findOne(email);
-    if (
-      user &&
-      (await this.passwordService.compare(password, user.password))
-    ) {
+    if (user && (await this.passwordService.compare(password, user.password))) {
       return user;
     }
     throw new UnauthorizedException('Invalid credentials');
   }
 
   async linkWallet(userId: number, walletAddress: string, signature: string) {
-    const user = await this.userRepo.findOne({ where: { id: userId.toString() } });
+    const user = await this.userRepo.findOne({
+      where: { id: userId.toString() },
+    });
     if (!user) throw new UnauthorizedException('User not found');
 
     const message = `Link wallet with nonce: ${user.walletNonce}`;

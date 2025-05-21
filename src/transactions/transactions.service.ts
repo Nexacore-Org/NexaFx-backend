@@ -1,13 +1,17 @@
+/* eslint-disable prettier/prettier */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable prettier/prettier */
 import {
   Injectable,
   NotFoundException,
   ForbiddenException,
   ConflictException,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import { Transaction } from './entities/transaction.entity';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
@@ -22,6 +26,20 @@ import {
   TransactionsStatsDto,
 } from './dto/transaction-stat.dto';
 import { FilterTransactionsDto } from './dto/filter-transaction.dto';
+import { FeeService } from 'src/fees/fee.service';
+import { UserService } from 'src/user/providers/user.service';
+import { User } from 'src/user/entities/user.entity';
+
+// Define the interface for transaction history
+export interface TransactionHistory {
+  id: string;
+  created_at: string;
+  source_account: string;
+  destination_account?: string;
+  amount?: string;
+  asset_type?: string;
+  transaction_hash: string;
+}
 
 @Injectable()
 export class TransactionsService {
@@ -31,20 +49,20 @@ export class TransactionsService {
     @InjectRepository(Transaction)
     private readonly transactionsRepository: Repository<Transaction>,
 
-    @InjectRepository(Transaction)
-    private readonly transactionRepo: Repository<Transaction>,
-
     @InjectRepository(Currency)
     private readonly currencyRepository: Repository<Currency>,
 
     private readonly eventEmitter: EventEmitter2,
+    private readonly feeService: FeeService,
+    private readonly userService: UserService,
 
     private readonly horizonService: HorizonService,
   ) {}
 
   async createTransaction(dto: CreateTransactionDto): Promise<Transaction> {
     const {
-      userId,
+      initiatorId,
+      receiverId,
       currencyId,
       amount,
       type,
@@ -55,54 +73,77 @@ export class TransactionsService {
       status,
     } = dto;
 
+    // Validate unique reference
     if (reference) {
-      const exists = await this.transactionsRepository.findOne({ where: { reference } });
-      if (exists) {
-        throw new ConflictException(`Transaction with reference ${reference} already exists`);
-      }
+      const exists = await this.transactionsRepository.findOne({
+        where: { reference },
+      });
+      if (exists)
+        throw new ConflictException(`Reference ${reference} already exists`);
     }
 
-    const currency = await this.currencyRepository.findOne({ where: { id: currencyId } });
+    const user = await this.userService.findOne(initiatorId);
+    const currency = await this.currencyRepository.findOne({
+      where: { id: currencyId },
+    });
     if (!currency) throw new NotFoundException('Currency not found');
 
-    const feePercentage = currency.feePercentage ?? 0;
-    const feeAmount = Number((amount * feePercentage).toFixed(2));
+    let receiver: User | null = null;
+    if (receiverId) {
+      receiver = await this.userService.findOne(receiverId);
+      if (!receiver) throw new NotFoundException('Receiver not found');
+    }
+
+    const { feeAmount = 0, feePercent } = await this.feeService.calculateFee({
+      userAccountType: user.accountType,
+      transactionType: type,
+      amount,
+      currencyId,
+    });
+
     const totalAmount = Number((amount + feeAmount).toFixed(2));
-    this.logger.log(`Transaction Fee Breakdown for user ${userId} | Base: ${amount}, Fee: ${feeAmount}, Total: ${totalAmount}`);
-    // Log for auditing
-    this.logger.log(`Transaction Fee Breakdown:
-  User ID: ${userId}
-  Base Amount: ${amount}
-  Fee Percentage: ${feePercentage * 100}%
-  Fee Amount: ${feeAmount}
-  Total Amount (Amount + Fee): ${totalAmount}
-`);
+
     const transaction = this.transactionsRepository.create({
-      userId,
+      initiatorId: user.id,
+      receiverId: receiver?.id,
       type,
+      asset: currency.symbol,
       amount: totalAmount,
       currencyId,
       status: status || TransactionStatus.PENDING,
       reference: reference || this.generateReference(),
-      status: TransactionStatus.PENDING,
-      reference: this.generateReference(),
       description,
       sourceAccount,
       destinationAccount,
       feeAmount,
       feeCurrencyId: currencyId,
-      metadata: { baseAmount: amount, feePercentage, feeAmount, totalAmount },
+      metadata: {
+        baseAmount: amount,
+        feePercent,
+        feeAmount,
+        totalAmount,
+        transferType: receiverId ? 'internal' : 'external',
+      },
     });
 
     return this.transactionsRepository.save(transaction);
   }
 
-  async findAll(userId: string, query?: QueryTransactionDto): Promise<Transaction[]> {
-    const qb = this.transactionsRepository.createQueryBuilder('t').where('t.userId = :userId', { userId });
+  async findAll(
+    userId: string,
+    query?: QueryTransactionDto,
+  ): Promise<Transaction[]> {
+    const qb = this.transactionsRepository
+      .createQueryBuilder('t')
+      .where('t.initiatorId = :userId OR t.receiverId = :userId', { userId });
 
     if (query?.type) qb.andWhere('t.type = :type', { type: query.type });
-    if (query?.status) qb.andWhere('t.status = :status', { status: query.status });
-    if (query?.currencyId) qb.andWhere('t.currencyId = :currencyId', { currencyId: query.currencyId });
+    if (query?.status)
+      qb.andWhere('t.status = :status', { status: query.status });
+    if (query?.currencyId)
+      qb.andWhere('t.currencyId = :currencyId', {
+        currencyId: query.currencyId,
+      });
 
     qb.orderBy('t.createdAt', 'DESC');
     return qb.getMany();
@@ -111,7 +152,7 @@ export class TransactionsService {
   async getTransactionsByUser(userId: string, page: number, limit: number) {
     const [transactions, total] =
       await this.transactionsRepository.findAndCount({
-        where: { userId }, // ✅ fixed here
+        where: { initiatorId: userId }, // ✅ fixed here
         order: { createdAt: 'DESC' },
         skip: (page - 1) * limit,
         take: limit,
@@ -130,7 +171,7 @@ export class TransactionsService {
   async getTransactions(
     dto: FilterTransactionsDto,
   ): Promise<Pagination<Transaction>> {
-    const query = this.transactionRepo.createQueryBuilder('transaction');
+    const query = this.transactionsRepository.createQueryBuilder('transaction');
 
     if (dto.status)
       query.andWhere('transaction.status = :status', { status: dto.status });
@@ -168,24 +209,40 @@ export class TransactionsService {
   }
 
   async findOne(id: string, userId: string): Promise<Transaction> {
-    const transaction = await this.transactionsRepository.findOne({ where: { id } });
-    if (!transaction) throw new NotFoundException(`Transaction ID ${id} not found`);
-    if (transaction.userId !== userId) throw new ForbiddenException('Access denied');
+    const transaction = await this.transactionsRepository.findOne({
+      where: { id },
+    });
+    if (!transaction)
+      throw new NotFoundException(`Transaction ID ${id} not found`);
+    if (transaction.initiatorId !== userId)
+      throw new ForbiddenException('Access denied');
     return transaction;
   }
 
   async findByReference(reference: string): Promise<Transaction> {
-    const transaction = await this.transactionsRepository.findOne({ where: { reference } });
-    if (!transaction) throw new NotFoundException(`Reference ${reference} not found`);
+    const transaction = await this.transactionsRepository.findOne({
+      where: { reference },
+    });
+    if (!transaction)
+      throw new NotFoundException(`Reference ${reference} not found`);
     return transaction;
   }
 
-  async update(id: string, dto: UpdateTransactionDto, userId: string): Promise<Transaction> {
+  async update(
+    id: string,
+    dto: UpdateTransactionDto,
+    userId: string,
+  ): Promise<Transaction> {
     const transaction = await this.findOne(id, userId);
 
     if (dto.reference && dto.reference !== transaction.reference) {
-      const exists = await this.transactionsRepository.findOne({ where: { reference: dto.reference } });
-      if (exists) throw new ConflictException(`Reference ${dto.reference} already exists`);
+      const exists = await this.transactionsRepository.findOne({
+        where: { reference: dto.reference },
+      });
+      if (exists)
+        throw new ConflictException(
+          `Reference ${dto.reference} already exists`,
+        );
     }
 
     if (dto.status === TransactionStatus.COMPLETED && !dto.completionDate) {
@@ -202,17 +259,18 @@ export class TransactionsService {
   }
 
   generateReference(prefix = 'TXN'): string {
-    return `${prefix}-${Date.now()}-${uuidv4().substring(0, 8)}`;
+    const uuid = uuidv4?.() ?? NIL_UUID;
+    return `${prefix}-${Date.now()}-${uuid.substring(0, 8)}`;
   }
 
   async processTransaction(
-    userId: string,
+    initiatorId: string,
     asset: string,
     amount: number,
   ): Promise<Transaction> {
     try {
       const transaction = this.transactionsRepository.create({
-        userId,
+        initiatorId,
         asset,
         amount,
         status: TransactionStatus.COMPLETED,
@@ -221,7 +279,7 @@ export class TransactionsService {
       await this.transactionsRepository.save(transaction);
 
       this.eventEmitter.emit('wallet.updated', {
-        userId,
+        initiatorId,
         walletId: 'wallet-123-sample',
         asset,
         previousBalance: 100,
@@ -232,27 +290,28 @@ export class TransactionsService {
 
       return transaction;
     } catch (error) {
-      this.eventEmitter.emit('transaction.failed', {
-        userId,
-        transactionId: 'tx-' + Date.now(),
-        asset,
-        amount,
-        reason: error.message || 'Unknown error',
-        timestamp: new Date(),
-      });
-
+      if (error instanceof Error) {
+        this.eventEmitter.emit('transaction.failed', {
+          initiatorId,
+          transactionId: 'tx-' + Date.now(),
+          asset,
+          amount,
+          reason: error.message || 'Unknown error',
+          timestamp: new Date(),
+        });
+      }
       throw error;
     }
   }
 
-  async processSwap(
+  processSwap(
     userId: string,
     fromAsset: string,
     toAsset: string,
     fromAmount: number,
-  ): Promise<void> {
+  ) {
     try {
-      const rate = await this.getExchangeRate(fromAsset, toAsset);
+      const rate = this.getExchangeRate(fromAsset, toAsset);
       const toAmount = fromAmount * rate;
 
       this.eventEmitter.emit('swap.completed', {
@@ -265,31 +324,39 @@ export class TransactionsService {
         timestamp: new Date(),
       });
     } catch (error) {
-      this.eventEmitter.emit('transaction.failed', {
-        userId,
-        transactionId: 'swap-' + Date.now(),
-        asset: fromAsset,
-        amount: fromAmount,
-        reason: error.message || 'Swap failed',
-        timestamp: new Date(),
-      });
+      if (error instanceof Error) {
+        this.eventEmitter.emit('transaction.failed', {
+          userId,
+          transactionId: 'swap-' + Date.now(),
+          asset: fromAsset,
+          amount: fromAmount,
+          reason: error.message || 'Swap failed',
+          timestamp: new Date(),
+        });
+      }
 
       throw error;
     }
   }
 
-  private async getExchangeRate(from: string, to: string): Promise<number> {
-    const mockRates = {
+  private getExchangeRate(from: string, to: string): number {
+    const mockRates: Record<string, number> = {
       'BTC-ETH': 15.5,
       'ETH-BTC': 0.065,
       'BTC-USDT': 30000,
       'ETH-USDT': 2000,
     };
-    return mockRates[`${from}-${to}`] ?? 1;
+    const rate = mockRates[`${from}-${to}`];
+    if (!rate) {
+      throw new Error(`Exchange rate not found for pair ${from}-${to}`);
+    }
+    return rate;
   }
 
   //Get transaction history for a user
-  async getTransactionHistory(accountId: string) {
+  async getTransactionHistory(
+    accountId: string,
+  ): Promise<TransactionHistory[]> {
     return this.horizonService.getTransactionHistory(accountId);
   }
 
@@ -298,7 +365,12 @@ export class TransactionsService {
     const totalTransactions = await this.transactionsRepository.count();
 
     // Aggregated stats per currency
-    const rawCurrencyStats = await this.transactionsRepository
+    const rawCurrencyStats: {
+      currency: string;
+      count: string;
+      totalVolume: string;
+      avgValue: string;
+    }[] = await this.transactionsRepository
       .createQueryBuilder('tx')
       .select('tx.currency', 'currency')
       .addSelect('COUNT(*)', 'count')

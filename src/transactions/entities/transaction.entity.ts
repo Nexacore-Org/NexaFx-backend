@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -5,18 +6,34 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Index,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
 import { TransactionType } from '../enums/transaction-type.enum';
 import { TransactionStatus } from '../enums/transaction-status.enum';
+import { Currency } from 'src/currencies/entities/currency.entity';
+import { User } from 'src/user/entities/user.entity';
 
 @Entity('transactions')
 export class Transaction {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  // User who initiates the transaction
+  @ManyToOne(() => User, { eager: true })
+  @JoinColumn({ name: 'initiatorId' })
+  initiator: User;
+
   @Column({ type: 'uuid' })
-  @Index()
-  userId: string;
+  initiatorId: string;
+
+  // Optional receiver for peer-to-peer transactions
+  @ManyToOne(() => User, { eager: true, nullable: true })
+  @JoinColumn({ name: 'receiverId' })
+  receiver?: User;
+
+  @Column({ type: 'uuid', nullable: true })
+  receiverId?: string;
 
   @Column()
   asset: string;
@@ -27,6 +44,10 @@ export class Transaction {
 
   @Column({ type: 'decimal', precision: 12, scale: 2 })
   amount: number;
+
+  @ManyToOne(() => Currency)
+  @JoinColumn({ name: 'currencyId' })
+  currency: Currency;
 
   @Column({ type: 'uuid' })
   currencyId: string;
@@ -61,10 +82,14 @@ export class Transaction {
   destinationAccount?: string;
 
   @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
-  totalAmount?: number; 
+  totalAmount?: number;
 
   @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
   feeAmount?: number;
+
+  @ManyToOne(() => Currency, { nullable: true })
+  @JoinColumn({ name: 'feeCurrencyId' })
+  feeCurrency?: Currency;
 
   @Column({ type: 'uuid', nullable: true })
   feeCurrencyId?: string;

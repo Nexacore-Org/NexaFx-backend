@@ -16,6 +16,7 @@ import {
   ConflictException,
   ForbiddenException,
   UseInterceptors,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/auth/guard/jwt.auth.guard';
 import { Roles } from 'src/common/decorators/roles.decorators';
@@ -92,12 +93,12 @@ export class TransactionsController {
     @Request() req,
   ): Promise<Transaction> {
     // Ensure the userId in the DTO matches the authenticated user
-    createTransactionDto.userId = req.user.id;
+    createTransactionDto.initiatorId = req.user.id;
 
     // Generate reference if not provided
     if (!createTransactionDto.reference) {
       createTransactionDto.reference =
-        await this.transactionsService.generateUniqueReference();
+        this.transactionsService.generateReference();
     }
 
     return this.transactionsService.createTransaction(createTransactionDto);
@@ -156,7 +157,7 @@ export class TransactionsController {
       await this.transactionsService.findByReference(reference);
 
     // Check if the transaction belongs to the current user
-    if (transaction.userId !== req.user.id) {
+    if (transaction.initiatorId !== req.user.id) {
       throw new ForbiddenException(
         'You do not have permission to access this transaction',
       );
@@ -188,10 +189,10 @@ export class TransactionsController {
   ): Promise<Transaction> {
     // Ensure user cannot change userId
     if (
-      updateTransactionDto.userId &&
-      updateTransactionDto.userId !== req.user.id
+      updateTransactionDto.initiatorId &&
+      updateTransactionDto.initiatorId !== req.user.id
     ) {
-      delete updateTransactionDto.userId;
+      delete updateTransactionDto.initiatorId;
     }
 
     return this.transactionsService.update(
@@ -228,6 +229,6 @@ export class TransactionsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateTransactionStatusDto,
   ) {
-    return this.transactionsService.update(id, dto.status);
+    return this.transactionsService.updateStatus(id, dto.status);
   }
 }

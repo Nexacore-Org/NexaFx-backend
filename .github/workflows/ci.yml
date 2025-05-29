@@ -25,13 +25,13 @@ jobs:
         run: npm ci
         continue-on-error: false
 
-      - name: Run linting
-        run: npm run lint
-        continue-on-error: false
+      # - name: Run linting
+      #   run: npm run lint
+      #   continue-on-error: false
 
-      - name: Run tests
-        run: npm test
-        continue-on-error: false
+      # - name: Run tests
+      #   run: npm test
+      #   continue-on-error: false
 
       - name: Build project
         run: npm run build

@@ -1,7 +1,11 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ThrottlerException, ThrottlerGuard } from '@nestjs/throttler';
-import { BadRequestException, HttpStatus, ValidationPipe } from '@nestjs/common';
+import { ThrottlerException } from '@nestjs/throttler';
+import {
+  BadRequestException,
+  HttpStatus,
+  ValidationPipe,
+} from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
@@ -57,8 +61,8 @@ async function bootstrap() {
 
   // Swagger configuration (from feature/swagger-documentation)
   const config = new DocumentBuilder()
-    .setTitle('Bytechain Academy API')
-    .setDescription('API documentation for Bytechain Academy platform')
+    .setTitle('NexaFx API')
+    .setDescription('API documentation for NexaFx platform')
     .setVersion('1.0')
     .addBearerAuth() // Enable JWT authentication in Swagger
     .build();

@@ -2,8 +2,9 @@ import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/commo
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SupportTicket, TicketStatus } from './entities/support-ticket.entity';
-import { CreateTicketDto } from './dto/create-ticket.dto';
-import { UpdateTicketDto } from './dto/update-ticket.dto';
+import { CreateTicketDto } from './dto/create-support-ticket.dto';
+import { UpdateTicketDto } from './dto/update-support-ticket.dto';
+
 
 @Injectable()
 export class SupportTicketsService {

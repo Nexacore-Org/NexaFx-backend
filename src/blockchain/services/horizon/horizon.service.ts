@@ -1,5 +1,3 @@
-// src/modules/blockchain/services/horizon.service.ts
-
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';

@@ -15,19 +15,18 @@ import { AnnouncementsModule } from './announcements/announcements.module';
 import { AdminModule } from './admin/admin.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { CommonModule } from './common/common.module';
-import { TransactionTagsModule } from './transaction-tagging/transaction-tagging.module';
-// import { CurrencyAlertModule } from './currency-alert/currency-alert.module';
 import { FeeModule } from './fees/fee.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SupportTicketsModule } from './support-ticket/support-ticket.module';
 import { NotificationPreferencesModule } from './notification-preferences/notification-preferences.module';
+import databaseConfig from './config/database.config';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
+      load: [databaseConfig],
     }),
     ThrottlerModule.forRoot({
       throttlers: [
@@ -40,13 +39,14 @@ import { NotificationPreferencesModule } from './notification-preferences/notifi
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        host: configService.get<string>('DB_HOST', 'localhost'),
-        port: parseInt(configService.get<string>('DB_PORT', '5432')),
-        username: configService.get<string>('DB_USERNAME', 'postgres'),
-        password: configService.get<string>('DB_PASSWORD', 'password'),
-        database: configService.get<string>('DB_NAME', 'nexafx'),
-        synchronize: configService.get('NODE_ENV') === 'development',
+        type: configService.get<'postgres'>('database.type'),
+        url: configService.get<string>('database.url'),
+        host: configService.get<string>('database.host'),
+        port: configService.get<number>('database.port'),
+        username: configService.get<string>('database.username'),
+        password: configService.get<string>('database.password'),
+        database: configService.get<string>('database.database'),
+        synchronize: configService.get<boolean>('database.synchronize'),
         autoLoadEntities: true,
         logging: false,
       }),
@@ -63,11 +63,8 @@ import { NotificationPreferencesModule } from './notification-preferences/notifi
     AdminModule,
     FeeModule,
     AnnouncementsModule,
-    CommonModule,
     SupportTicketsModule,
-    TransactionTagsModule,
     NotificationPreferencesModule,
-    // CurrencyAlertModule,
   ],
   controllers: [AppController],
   providers: [

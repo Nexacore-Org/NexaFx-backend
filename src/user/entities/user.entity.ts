@@ -8,7 +8,6 @@ import {
 } from 'typeorm';
 import { Token } from '../../auth/entities/token.entity';
 import { Notifications } from 'src/notifications/entities/notification.entity';
-import { Wallet } from '../../wallet/entities/wallet.entity';
 
 export enum AccountType {
   ALL = 'All',
@@ -85,15 +84,11 @@ export class User {
   @Column({ nullable: true })
   walletAddress: string;
 
-  // @Column({ default: () => `'${uuidv4()}'` })
   @Column()
   walletNonce: string;
 
   @Column({ default: true })
   isActive: boolean;
-
-  @OneToMany(() => Wallet, (wallet) => wallet.user)
-  wallets: Wallet[];
 
   @CreateDateColumn()
   createdAt: Date;
@@ -101,6 +96,3 @@ export class User {
   @UpdateDateColumn()
   updatedAt: Date;
 }
-// function uuidv4() {
-//   throw new Error('Function not implemented.');
-// }

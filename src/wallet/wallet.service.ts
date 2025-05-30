@@ -38,7 +38,7 @@ export class WalletService {
     }
 
     const wallet = this.walletRepository.create({
-      user,
+      userId,
       currency,
       currencyCode,
       balance: 0,
@@ -55,14 +55,14 @@ export class WalletService {
     }
 
     return this.walletRepository.find({
-      where: { user: { id: userId } },
+      where: { userId },
       relations: ['currency'],
     });
   }
 
   async getWalletById(id: string, userId: string): Promise<Wallet> {
     const wallet = await this.walletRepository.findOne({
-      where: { id, user: { id: userId } },
+      where: { id, userId },
       relations: ['currency'],
     });
 
@@ -94,10 +94,7 @@ export class WalletService {
 
     // Check if user already has a wallet for this currency
     const existingWallet = await this.walletRepository.findOne({
-      where: {
-        user: { id: userId },
-        currencyCode: createWalletDto.currencyCode,
-      },
+      where: { userId, currencyCode: createWalletDto.currencyCode },
     });
     if (existingWallet) {
       throw new ConflictException(
@@ -115,13 +112,13 @@ export class WalletService {
     // If this is set as primary, unset any other primary wallets
     if (createWalletDto.isPrimary) {
       await this.walletRepository.update(
-        { user: { id: userId }, isPrimary: true },
+        { userId, isPrimary: true },
         { isPrimary: false },
       );
     }
 
     const wallet = this.walletRepository.create({
-      user,
+      userId,
       currency,
       currencyCode: createWalletDto.currencyCode,
       isPrimary: createWalletDto.isPrimary || false,
@@ -133,14 +130,14 @@ export class WalletService {
 
   async findAll(userId: string): Promise<Wallet[]> {
     return this.walletRepository.find({
-      where: { user: { id: userId } },
+      where: { userId },
       relations: ['currency'],
     });
   }
 
   async findOne(id: string, userId: string): Promise<Wallet> {
     const wallet = await this.walletRepository.findOne({
-      where: { id, user: { id: userId } },
+      where: { id, userId },
       relations: ['currency'],
     });
     if (!wallet) {
@@ -159,7 +156,7 @@ export class WalletService {
     // If setting as primary, unset any other primary wallets
     if (updateWalletDto.isPrimary) {
       await this.walletRepository.update(
-        { user: { id: userId }, isPrimary: true },
+        { userId, isPrimary: true },
         { isPrimary: false },
       );
     }

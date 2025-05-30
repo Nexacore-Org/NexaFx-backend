@@ -37,13 +37,11 @@ export class WalletService {
       throw new NotFoundException('Currency not found');
     }
 
-    const wallet = this.walletRepository.create({
-      userId,
-      currency,
-      currencyCode,
-      balance: 0,
-      isPrimary: false,
-    });
+    const wallet = new Wallet();
+    wallet.user = user;
+    wallet.stellarAddress = '';
+    wallet.metamaskAddress = '';
+    wallet.isPrimary = false;
 
     return this.walletRepository.save(wallet);
   }
@@ -55,15 +53,15 @@ export class WalletService {
     }
 
     return this.walletRepository.find({
-      where: { userId },
-      relations: ['currency'],
+      where: { user: { id: userId } },
+      relations: ['user'],
     });
   }
 
-  async getWalletById(id: string, userId: string): Promise<Wallet> {
+  async getWalletById(id: number, userId: string): Promise<Wallet> {
     const wallet = await this.walletRepository.findOne({
-      where: { id, userId },
-      relations: ['currency'],
+      where: { id, user: { id: userId } },
+      relations: ['user'],
     });
 
     if (!wallet) {
@@ -71,16 +69,6 @@ export class WalletService {
     }
 
     return wallet;
-  }
-
-  async updateWalletBalance(
-    id: string,
-    userId: string,
-    amount: number,
-  ): Promise<Wallet> {
-    const wallet = await this.getWalletById(id, userId);
-    wallet.balance += amount;
-    return this.walletRepository.save(wallet);
   }
 
   async create(
@@ -94,7 +82,7 @@ export class WalletService {
 
     // Check if user already has a wallet for this currency
     const existingWallet = await this.walletRepository.findOne({
-      where: { userId, currencyCode: createWalletDto.currencyCode },
+      where: { user: { id: userId } },
     });
     if (existingWallet) {
       throw new ConflictException(
@@ -102,43 +90,34 @@ export class WalletService {
       );
     }
 
-    const currency = await this.currencyRepository.findOne({
-      where: { code: createWalletDto.currencyCode },
-    });
-    if (!currency) {
-      throw new NotFoundException('Currency not found');
-    }
-
     // If this is set as primary, unset any other primary wallets
     if (createWalletDto.isPrimary) {
       await this.walletRepository.update(
-        { userId, isPrimary: true },
+        { user: { id: userId }, isPrimary: true },
         { isPrimary: false },
       );
     }
 
-    const wallet = this.walletRepository.create({
-      userId,
-      currency,
-      currencyCode: createWalletDto.currencyCode,
-      isPrimary: createWalletDto.isPrimary || false,
-      balance: 0,
-    });
+    const wallet = new Wallet();
+    wallet.user = user;
+    wallet.stellarAddress = createWalletDto.stellarAddress || '';
+    wallet.metamaskAddress = createWalletDto.metamaskAddress || '';
+    wallet.isPrimary = createWalletDto.isPrimary || false;
 
     return this.walletRepository.save(wallet);
   }
 
   async findAll(userId: string): Promise<Wallet[]> {
     return this.walletRepository.find({
-      where: { userId },
-      relations: ['currency'],
+      where: { user: { id: userId } },
+      relations: ['user'],
     });
   }
 
-  async findOne(id: string, userId: string): Promise<Wallet> {
+  async findOne(id: number, userId: string): Promise<Wallet> {
     const wallet = await this.walletRepository.findOne({
-      where: { id, userId },
-      relations: ['currency'],
+      where: { id, user: { id: userId } },
+      relations: ['user'],
     });
     if (!wallet) {
       throw new NotFoundException('Wallet not found');
@@ -147,7 +126,7 @@ export class WalletService {
   }
 
   async update(
-    id: string,
+    id: number,
     userId: string,
     updateWalletDto: UpdateWalletDto,
   ): Promise<Wallet> {
@@ -156,7 +135,7 @@ export class WalletService {
     // If setting as primary, unset any other primary wallets
     if (updateWalletDto.isPrimary) {
       await this.walletRepository.update(
-        { userId, isPrimary: true },
+        { user: { id: userId }, isPrimary: true },
         { isPrimary: false },
       );
     }
@@ -165,7 +144,7 @@ export class WalletService {
     return this.walletRepository.save(wallet);
   }
 
-  async remove(id: string, userId: string): Promise<void> {
+  async remove(id: number, userId: string): Promise<void> {
     const wallet = await this.findOne(id, userId);
     await this.walletRepository.remove(wallet);
   }
@@ -180,7 +159,10 @@ export class WalletService {
    */
   async getUserBalances(userId: string) {
     // Get all wallets for the user
-    const wallets = await this.walletRepository.find({ where: { userId } });
+    const wallets = await this.walletRepository.find({
+      where: { user: { id: userId } },
+      relations: ['user'],
+    });
     if (!wallets.length) return [];
 
     // Explicitly type the balances array
@@ -189,11 +171,13 @@ export class WalletService {
       balance: string;
       locked: string;
       type: string;
-      walletId: string;
+      walletId: number;
     }> = [];
     for (const wallet of wallets) {
       if (wallet.stellarAddress) {
-        const stellarBalances = await this.getWalletBalances(wallet.stellarAddress);
+        const stellarBalances = await this.getWalletBalances(
+          wallet.stellarAddress,
+        );
         for (const b of stellarBalances as any[]) {
           balances.push({
             currency: b.asset_code || b.asset_type,

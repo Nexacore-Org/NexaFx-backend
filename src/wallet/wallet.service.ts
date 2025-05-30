@@ -6,6 +6,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Wallet } from './entities/wallet.entity';
+import { User } from '../user/entities/user.entity';
+import { Currency } from '../currencies/entities/currency.entity';
 import { CreateWalletDto } from './dto/create-wallet.dto';
 import { UpdateWalletDto } from './dto/update-wallet.dto';
 import { HorizonService } from 'src/blockchain/services/horizon/horizon.service';
@@ -15,36 +17,131 @@ export class WalletService {
   constructor(
     @InjectRepository(Wallet)
     private readonly walletRepository: Repository<Wallet>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    @InjectRepository(Currency)
+    private readonly currencyRepository: Repository<Currency>,
     private readonly horizonService: HorizonService,
   ) {}
+
+  async createWallet(userId: string, currencyCode: string): Promise<Wallet> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const currency = await this.currencyRepository.findOne({
+      where: { code: currencyCode },
+    });
+    if (!currency) {
+      throw new NotFoundException('Currency not found');
+    }
+
+    const wallet = this.walletRepository.create({
+      user,
+      currency,
+      currencyCode,
+      balance: 0,
+      isPrimary: false,
+    });
+
+    return this.walletRepository.save(wallet);
+  }
+
+  async getUserWallets(userId: string): Promise<Wallet[]> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return this.walletRepository.find({
+      where: { user: { id: userId } },
+      relations: ['currency'],
+    });
+  }
+
+  async getWalletById(id: string, userId: string): Promise<Wallet> {
+    const wallet = await this.walletRepository.findOne({
+      where: { id, user: { id: userId } },
+      relations: ['currency'],
+    });
+
+    if (!wallet) {
+      throw new NotFoundException('Wallet not found');
+    }
+
+    return wallet;
+  }
+
+  async updateWalletBalance(
+    id: string,
+    userId: string,
+    amount: number,
+  ): Promise<Wallet> {
+    const wallet = await this.getWalletById(id, userId);
+    wallet.balance += amount;
+    return this.walletRepository.save(wallet);
+  }
 
   async create(
     userId: string,
     createWalletDto: CreateWalletDto,
   ): Promise<Wallet> {
-    // Check if user already has a wallet
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Check if user already has a wallet for this currency
     const existingWallet = await this.walletRepository.findOne({
-      where: { userId },
+      where: {
+        user: { id: userId },
+        currencyCode: createWalletDto.currencyCode,
+      },
     });
     if (existingWallet) {
-      throw new ConflictException('User already has a wallet');
+      throw new ConflictException(
+        'User already has a wallet for this currency',
+      );
+    }
+
+    const currency = await this.currencyRepository.findOne({
+      where: { code: createWalletDto.currencyCode },
+    });
+    if (!currency) {
+      throw new NotFoundException('Currency not found');
+    }
+
+    // If this is set as primary, unset any other primary wallets
+    if (createWalletDto.isPrimary) {
+      await this.walletRepository.update(
+        { user: { id: userId }, isPrimary: true },
+        { isPrimary: false },
+      );
     }
 
     const wallet = this.walletRepository.create({
-      userId,
-      ...createWalletDto,
+      user,
+      currency,
+      currencyCode: createWalletDto.currencyCode,
+      isPrimary: createWalletDto.isPrimary || false,
+      balance: 0,
     });
 
     return this.walletRepository.save(wallet);
   }
 
   async findAll(userId: string): Promise<Wallet[]> {
-    return this.walletRepository.find({ where: { userId } });
+    return this.walletRepository.find({
+      where: { user: { id: userId } },
+      relations: ['currency'],
+    });
   }
 
   async findOne(id: string, userId: string): Promise<Wallet> {
     const wallet = await this.walletRepository.findOne({
-      where: { id, userId },
+      where: { id, user: { id: userId } },
+      relations: ['currency'],
     });
     if (!wallet) {
       throw new NotFoundException('Wallet not found');
@@ -62,7 +159,7 @@ export class WalletService {
     // If setting as primary, unset any other primary wallets
     if (updateWalletDto.isPrimary) {
       await this.walletRepository.update(
-        { userId, isPrimary: true },
+        { user: { id: userId }, isPrimary: true },
         { isPrimary: false },
       );
     }

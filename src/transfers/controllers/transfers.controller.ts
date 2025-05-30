@@ -1,12 +1,15 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
 import { CreateScheduledTransferDto } from '../dto/create-scheduled-transfer.dto';
 import { UpdateTransferDto } from '../dto/update-transfer.dto';
 import { ScheduledTransfersService } from '../providers/transfers.service';
+import { AuthGuard } from '@nestjs/passport';
+import { LimitsGuard } from '../guards/limits.guard';
 
 @Controller('transfers')
 export class TransfersController {
   constructor(private readonly transfersService: ScheduledTransfersService) {}
 
+  @UseGuards(AuthGuard, LimitsGuard)
   @Post()
   create(@Body() createScheduledTransferDto: CreateScheduledTransferDto) {
     // TODO: Replace 'user-123' with the actual user ID from the authenticated request context

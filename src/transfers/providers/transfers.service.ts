@@ -7,7 +7,7 @@ import {
   ConflictException,
 } from "@nestjs/common"
 import { InjectRepository } from "@nestjs/typeorm"
-import { Repository, LessThanOrEqual } from "typeorm"
+import { Repository, LessThanOrEqual, Between } from "typeorm"
 import { Cron, CronExpression } from "@nestjs/schedule"
 import { EventEmitter2 } from "@nestjs/event-emitter"
 import { ScheduledTransfer, ScheduledTransferStatus } from "../entities/scheduled-transfer.entity"
@@ -33,6 +33,21 @@ export class ScheduledTransfersService {
     private readonly userService: UserService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
+
+  async getTodayTotal(userId: string): Promise<number> {
+    const today = new Date();
+    const start = new Date(today.setHours(0, 0, 0, 0));
+    const end = new Date(today.setHours(23, 59, 59, 999));
+
+    const transfers = await this.scheduledTransferRepository.find({
+      where: {
+        userId,
+        createdAt: Between(start, end),
+      },
+    });
+
+    return transfers.reduce((sum, tx) => sum + tx.amount, 0);
+  }
 
   /**
    * Create a new scheduled transfer

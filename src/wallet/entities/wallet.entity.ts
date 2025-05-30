@@ -27,4 +27,5 @@ export class Wallet {
 
     @UpdateDateColumn()
     updatedAt: Date;
+    status: string;
 } 

@@ -20,6 +20,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { SupportTicketsModule } from './support-ticket/support-ticket.module';
 import { NotificationPreferencesModule } from './notification-preferences/notification-preferences.module';
 import databaseConfig from './config/database.config';
+import { ScheduledTransfersModule } from './transfers/transfers.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import databaseConfig from './config/database.config';
     AnnouncementsModule,
     SupportTicketsModule,
     NotificationPreferencesModule,
+    ScheduledTransfersModule,
   ],
   controllers: [AppController],
   providers: [

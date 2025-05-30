@@ -1,23 +1,26 @@
 import {
-  Column,
   Entity,
   PrimaryGeneratedColumn,
+  Column,
   CreateDateColumn,
 } from 'typeorm';
 
 @Entity('audit_logs')
 export class AuditLog {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column()
   userId: string;
 
-  @Column()
+  @Column({ nullable: true })
   ipAddress: string;
 
   @Column()
   action: string;
+
+  @Column('jsonb', { nullable: true })
+  details: Record<string, any>;
 
   @CreateDateColumn()
   timestamp: Date;

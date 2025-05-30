@@ -3,13 +3,25 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuditLog } from './entities/audit.entity';
 
-
 @Injectable()
 export class AuditService {
   constructor(
     @InjectRepository(AuditLog)
     private readonly auditRepo: Repository<AuditLog>,
   ) {}
+
+  public async create(data: {
+    userId: string;
+    action: string;
+    details?: Record<string, any>;
+  }): Promise<AuditLog> {
+    const audit = this.auditRepo.create({
+      userId: data.userId,
+      action: data.action,
+      details: data.details,
+    });
+    return this.auditRepo.save(audit);
+  }
 
   public async logAction(
     userId: string,

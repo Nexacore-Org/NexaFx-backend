@@ -1,30 +1,38 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  OneToOne,
+  JoinColumn,
+} from 'typeorm';
 import { User } from '../../user/entities/user.entity';
 
 @Entity('wallets')
 export class Wallet {
-    @PrimaryGeneratedColumn('uuid')
-    id: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-    @Column()
-    userId: string;
+  @Column()
+  userId: string;
 
-    @OneToOne(() => User)
-    @JoinColumn({ name: 'userId' })
-    user: User;
+  @OneToOne(() => User)
+  @JoinColumn({ name: 'userId' })
+  user: User;
 
-    @Column({ nullable: true })
-    stellarAddress: string;
+  @Column({ nullable: true })
+  stellarAddress: string;
 
-    @Column({ nullable: true })
-    metamaskAddress: string;
+  @Column({ nullable: true })
+  metamaskAddress: string;
 
-    @Column({ default: false })
-    isPrimary: boolean;
+  @Column({ default: false })
+  isPrimary: boolean;
 
-    @CreateDateColumn()
-    createdAt: Date;
+  @CreateDateColumn()
+  createdAt: Date;
 
-    @UpdateDateColumn()
-    updatedAt: Date;
-} 
+  @UpdateDateColumn()
+  updatedAt: Date;
+}

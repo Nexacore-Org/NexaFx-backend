@@ -84,7 +84,6 @@ export class User {
   @Column({ nullable: true })
   walletAddress: string;
 
-  // @Column({ default: () => `'${uuidv4()}'` })
   @Column()
   walletNonce: string;
 
@@ -97,6 +96,3 @@ export class User {
   @UpdateDateColumn()
   updatedAt: Date;
 }
-// function uuidv4() {
-//   throw new Error('Function not implemented.');
-// }

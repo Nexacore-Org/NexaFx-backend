@@ -1,14 +1,14 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import * as rax from 'retry-axios';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 
 @Injectable()
-export class HorizonService {
+export class HorizonService implements OnModuleInit {
   private readonly logger = new Logger(HorizonService.name);
   private readonly horizonUrl: string | undefined;
+  private rax: any;
 
   constructor(
     private readonly configService: ConfigService,
@@ -17,10 +17,15 @@ export class HorizonService {
     this.horizonUrl = this.configService.get<string>('STELLAR_HORIZON_URL');
   }
 
+  // Load retry-axios dynamically since it's an ES module
+  async onModuleInit() {
+    const module = await import('retry-axios');
+    this.rax = module.default || module;
+    this.rax.attach();
+  }
+
   private async get(path: string | undefined) {
     const url = `${this.horizonUrl}${path}`;
-
-    const interceptorId = rax.attach(); // attach retry
 
     try {
       const response = await axios.get(url, {

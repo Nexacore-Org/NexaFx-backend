@@ -79,4 +79,39 @@ export class WalletService {
   async getWalletBalances(accountId: string) {
     return this.horizonService.getAccountBalances(accountId);
   }
+
+  /**
+   * Aggregate wallet balances for all wallets of a user across all supported currencies.
+   * Returns an array of { currency, balance, locked? }
+   */
+  async getUserBalances(userId: string) {
+    // Get all wallets for the user
+    const wallets = await this.walletRepository.find({ where: { userId } });
+    if (!wallets.length) return [];
+
+    // Explicitly type the balances array
+    const balances: Array<{
+      currency: string;
+      balance: string;
+      locked: string;
+      type: string;
+      walletId: string;
+    }> = [];
+    for (const wallet of wallets) {
+      if (wallet.stellarAddress) {
+        const stellarBalances = await this.getWalletBalances(wallet.stellarAddress);
+        for (const b of stellarBalances as any[]) {
+          balances.push({
+            currency: b.asset_code || b.asset_type,
+            balance: b.balance,
+            locked: b.locked || '0', // If locked is available, otherwise 0
+            type: 'stellar',
+            walletId: wallet.id,
+          });
+        }
+      }
+      // Add similar logic for metamaskAddress or other currencies if needed
+    }
+    return balances;
+  }
 }

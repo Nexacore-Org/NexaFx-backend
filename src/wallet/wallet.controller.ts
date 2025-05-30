@@ -82,4 +82,22 @@ export class WalletController {
   remove(@Request() req, @Param('id') id: string) {
     return this.walletService.remove(id, req.user.id);
   }
+
+  /**
+   * Get wallet balances across all supported currencies for the current user
+   */
+  @Get('balances')
+  @ApiOperation({
+    summary:
+      'Get wallet balances across all supported currencies for the current user',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns wallet balances per currency',
+    type: Object,
+    isArray: true,
+  })
+  async getBalances(@Request() req) {
+    return this.walletService.getUserBalances(req.user.id);
+  }
 }

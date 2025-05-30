@@ -132,4 +132,65 @@ describe('WalletService', () => {
             expect(mockRepository.remove).toHaveBeenCalledWith(mockWallet);
         });
     });
-}); 
+
+    describe('getUserBalances', () => {
+        let service: WalletService;
+        let repository: any;
+        let horizonService: any;
+
+        beforeEach(() => {
+            repository = {
+                find: jest.fn(),
+            };
+            horizonService = {
+                getAccountBalances: jest.fn(),
+            };
+            service = new WalletService(repository, horizonService);
+        });
+
+        it('should return an empty array if user has no wallets', async () => {
+            repository.find.mockResolvedValue([]);
+            const result = await service.getUserBalances('user1');
+            expect(result).toEqual([]);
+        });
+
+        it('should return balances for a single stellar wallet', async () => {
+            const wallet = { id: 'w1', userId: 'user1', stellarAddress: 'GABC', metamaskAddress: null };
+            repository.find.mockResolvedValue([wallet]);
+            horizonService.getAccountBalances.mockResolvedValue([
+                { asset_code: 'USD', balance: '100', locked: '10' },
+                { asset_type: 'native', balance: '50' },
+            ]);
+            const result = await service.getUserBalances('user1');
+            expect(result).toEqual([
+                { currency: 'USD', balance: '100', locked: '10', type: 'stellar', walletId: 'w1' },
+                { currency: 'native', balance: '50', locked: '0', type: 'stellar', walletId: 'w1' },
+            ]);
+        });
+
+        it('should aggregate balances for multiple wallets', async () => {
+            const wallets = [
+                { id: 'w1', userId: 'user1', stellarAddress: 'GABC', metamaskAddress: null },
+                { id: 'w2', userId: 'user1', stellarAddress: 'GDEF', metamaskAddress: null },
+            ];
+            repository.find.mockResolvedValue(wallets);
+            horizonService.getAccountBalances
+                .mockResolvedValueOnce([{ asset_code: 'USD', balance: '100' }])
+                .mockResolvedValueOnce([{ asset_code: 'EUR', balance: '200' }]);
+            const result = await service.getUserBalances('user1');
+            expect(result).toEqual([
+                { currency: 'USD', balance: '100', locked: '0', type: 'stellar', walletId: 'w1' },
+                { currency: 'EUR', balance: '200', locked: '0', type: 'stellar', walletId: 'w2' },
+            ]);
+        });
+
+        it('should skip wallets without stellarAddress', async () => {
+            const wallets = [
+                { id: 'w1', userId: 'user1', stellarAddress: null, metamaskAddress: null },
+            ];
+            repository.find.mockResolvedValue(wallets);
+            const result = await service.getUserBalances('user1');
+            expect(result).toEqual([]);
+        });
+    });
+});

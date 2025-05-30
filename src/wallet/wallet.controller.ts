@@ -8,6 +8,7 @@ import {
   Delete,
   UseGuards,
   Request,
+  ParseIntPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -55,7 +56,7 @@ export class WalletController {
   @ApiOperation({ summary: 'Get a specific wallet' })
   @ApiResponse({ status: 200, description: 'Return the wallet', type: Wallet })
   @ApiResponse({ status: 404, description: 'Wallet not found' })
-  findOne(@Request() req, @Param('id') id: string) {
+  findOne(@Request() req, @Param('id', ParseIntPipe) id: number) {
     return this.walletService.findOne(id, req.user.id);
   }
 
@@ -69,7 +70,7 @@ export class WalletController {
   @ApiResponse({ status: 404, description: 'Wallet not found' })
   update(
     @Request() req,
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Body() updateWalletDto: UpdateWalletDto,
   ) {
     return this.walletService.update(id, req.user.id, updateWalletDto);
@@ -79,7 +80,7 @@ export class WalletController {
   @ApiOperation({ summary: 'Delete a wallet' })
   @ApiResponse({ status: 200, description: 'Wallet deleted successfully' })
   @ApiResponse({ status: 404, description: 'Wallet not found' })
-  remove(@Request() req, @Param('id') id: string) {
+  remove(@Request() req, @Param('id', ParseIntPipe) id: number) {
     return this.walletService.remove(id, req.user.id);
   }
 

@@ -8,6 +8,7 @@ import {
 } from 'typeorm';
 import { Token } from '../../auth/entities/token.entity';
 import { Notifications } from 'src/notifications/entities/notification.entity';
+import { ExternalWallet } from 'src/wallet/entities/external-wallet.entity';
 
 export enum AccountType {
   ALL = 'All',
@@ -87,6 +88,10 @@ export class User {
   // @Column({ default: () => `'${uuidv4()}'` })
   @Column()
   walletNonce: string;
+
+  @Column()
+  @OneToMany(() => ExternalWallet, (externalWallets) => externalWallets.user)
+  externalWallets: string[];
 
   @Column({ default: true })
   isActive: boolean;

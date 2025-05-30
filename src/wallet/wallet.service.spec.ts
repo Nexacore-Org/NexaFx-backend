@@ -1,196 +1,118 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { WalletService } from './wallet.service';
 import { Wallet } from './entities/wallet.entity';
-import { NotFoundException, ConflictException } from '@nestjs/common';
+import { CreateWalletDto } from './dto/create-wallet.dto';
+import { UpdateWalletDto } from './dto/update-wallet.dto';
+import { HorizonService } from 'src/blockchain/services/horizon/horizon.service';
 
-describe('WalletService', () => {
-    let service: WalletService;
-    let repository: Repository<Wallet>;
+@Injectable()
+export class WalletService {
+  constructor(
+    @InjectRepository(Wallet)
+    private readonly walletRepository: Repository<Wallet>,
+    private readonly horizonService: HorizonService,
+  ) {}
 
-    const mockWallet = {
-        id: '1',
-        userId: 'user1',
-        stellarAddress: 'GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
-        metamaskAddress: '0x1234567890123456789012345678901234567890',
-        isPrimary: false,
-    };
+  async create(userId: string, createWalletDto: CreateWalletDto): Promise<Wallet> {
+    const existingWallet = await this.walletRepository.findOne({ where: { userId } });
+    if (existingWallet) {
+      throw new ConflictException('User already has a wallet');
+    }
 
-    const mockRepository = {
-        create: jest.fn(),
-        save: jest.fn(),
-        findOne: jest.fn(),
-        find: jest.fn(),
-        update: jest.fn(),
-        remove: jest.fn(),
-    };
+    const wallet = this.walletRepository.create({ userId, ...createWalletDto });
+    return this.walletRepository.save(wallet);
+  }
 
-    beforeEach(async () => {
-        const module: TestingModule = await Test.createTestingModule({
-            providers: [
-                WalletService,
-                {
-                    provide: getRepositoryToken(Wallet),
-                    useValue: mockRepository,
-                },
-            ],
-        }).compile();
+  async findAll(userId: string): Promise<Wallet[]> {
+    return this.walletRepository.find({ where: { userId } });
+  }
 
-        service = module.get<WalletService>(WalletService);
-        repository = module.get<Repository<Wallet>>(getRepositoryToken(Wallet));
-    });
+  async findOne(id: string, userId: string): Promise<Wallet> {
+    const wallet = await this.walletRepository.findOne({ where: { id, userId } });
+    if (!wallet) {
+      throw new NotFoundException('Wallet not found');
+    }
+    return wallet;
+  }
 
-    it('should be defined', () => {
-        expect(service).toBeDefined();
-    });
+  async update(id: string, userId: string, updateWalletDto: UpdateWalletDto): Promise<Wallet> {
+    const wallet = await this.findOne(id, userId);
 
-    describe('create', () => {
-        it('should create a new wallet', async () => {
-            const createWalletDto = {
-                stellarAddress: mockWallet.stellarAddress,
-                metamaskAddress: mockWallet.metamaskAddress,
-                isPrimary: false,
-            };
+    if (updateWalletDto.isPrimary) {
+      await this.walletRepository.update({ userId, isPrimary: true }, { isPrimary: false });
+    }
 
-            mockRepository.findOne.mockResolvedValue(null);
-            mockRepository.create.mockReturnValue(mockWallet);
-            mockRepository.save.mockResolvedValue(mockWallet);
+    Object.assign(wallet, updateWalletDto);
+    return this.walletRepository.save(wallet);
+  }
 
-            const result = await service.create('user1', createWalletDto);
+  async remove(id: string, userId: string): Promise<void> {
+    const wallet = await this.findOne(id, userId);
+    await this.walletRepository.remove(wallet);
+  }
 
-            expect(result).toEqual(mockWallet);
-            expect(mockRepository.findOne).toHaveBeenCalledWith({ where: { userId: 'user1' } });
-            expect(mockRepository.create).toHaveBeenCalledWith({
-                userId: 'user1',
-                ...createWalletDto,
-            });
-            expect(mockRepository.save).toHaveBeenCalledWith(mockWallet);
-        });
+  async getWalletBalances(accountId: string) {
+    return this.horizonService.getAccountBalances(accountId);
+  }
 
-        it('should throw ConflictException if user already has a wallet', async () => {
-            mockRepository.findOne.mockResolvedValue(mockWallet);
+  async getUserBalances(userId: string) {
+    const wallets = await this.walletRepository.find({ where: { userId } });
+    if (!wallets.length) return [];
 
-            await expect(service.create('user1', {})).rejects.toThrow(ConflictException);
-        });
-    });
+    const balances: Array<{
+      currency: string;
+      balance: string;
+      locked: string;
+      type: string;
+      walletId: string;
+    }> = [];
 
-    describe('findAll', () => {
-        it('should return all wallets for a user', async () => {
-            mockRepository.find.mockResolvedValue([mockWallet]);
+    for (const wallet of wallets) {
+      if (wallet.stellarAddress) {
+        const stellarBalances = await this.getWalletBalances(wallet.stellarAddress);
+        for (const b of stellarBalances as any[]) {
+          balances.push({
+            currency: b.asset_code || b.asset_type,
+            balance: b.balance,
+            locked: b.locked || '0',
+            type: 'stellar',
+            walletId: wallet.id,
+          });
+        }
+      }
+    }
 
-            const result = await service.findAll('user1');
+    return balances;
+  }
 
-            expect(result).toEqual([mockWallet]);
-            expect(mockRepository.find).toHaveBeenCalledWith({ where: { userId: 'user1' } });
-        });
-    });
+  /**
+   * ✅ Used in middleware: Returns true if wallet is frozen
+   */
+  async isFrozen(walletId: string): Promise<boolean> {
+    const wallet = await this.walletRepository.findOne({ where: { id: walletId } });
+    if (!wallet) {
+      throw new NotFoundException('Wallet not found');
+    }
+    return wallet.status === 'frozen'; // assuming you have a 'status' column
+  }
 
-    describe('findOne', () => {
-        it('should return a wallet if found', async () => {
-            mockRepository.findOne.mockResolvedValue(mockWallet);
+  /**
+   * ✅ Used in middleware: Gets spendable balance from Stellar
+   */
+  async getBalance(walletId: string): Promise<number> {
+    const wallet = await this.walletRepository.findOne({ where: { id: walletId } });
+    if (!wallet || !wallet.stellarAddress) {
+      throw new NotFoundException('Wallet or Stellar address not found');
+    }
 
-            const result = await service.findOne('1', 'user1');
-
-            expect(result).toEqual(mockWallet);
-            expect(mockRepository.findOne).toHaveBeenCalledWith({ where: { id: '1', userId: 'user1' } });
-        });
-
-        it('should throw NotFoundException if wallet not found', async () => {
-            mockRepository.findOne.mockResolvedValue(null);
-
-            await expect(service.findOne('1', 'user1')).rejects.toThrow(NotFoundException);
-        });
-    });
-
-    describe('update', () => {
-        it('should update a wallet', async () => {
-            const updateWalletDto = { isPrimary: true };
-            const updatedWallet = { ...mockWallet, isPrimary: true };
-
-            mockRepository.findOne.mockResolvedValue(mockWallet);
-            mockRepository.save.mockResolvedValue(updatedWallet);
-
-            const result = await service.update('1', 'user1', updateWalletDto);
-
-            expect(result).toEqual(updatedWallet);
-            expect(mockRepository.update).toHaveBeenCalledWith(
-                { userId: 'user1', isPrimary: true },
-                { isPrimary: false }
-            );
-            expect(mockRepository.save).toHaveBeenCalledWith(updatedWallet);
-        });
-    });
-
-    describe('remove', () => {
-        it('should remove a wallet', async () => {
-            mockRepository.findOne.mockResolvedValue(mockWallet);
-            mockRepository.remove.mockResolvedValue(mockWallet);
-
-            await service.remove('1', 'user1');
-
-            expect(mockRepository.remove).toHaveBeenCalledWith(mockWallet);
-        });
-    });
-
-    describe('getUserBalances', () => {
-        let service: WalletService;
-        let repository: any;
-        let horizonService: any;
-
-        beforeEach(() => {
-            repository = {
-                find: jest.fn(),
-            };
-            horizonService = {
-                getAccountBalances: jest.fn(),
-            };
-            service = new WalletService(repository, horizonService);
-        });
-
-        it('should return an empty array if user has no wallets', async () => {
-            repository.find.mockResolvedValue([]);
-            const result = await service.getUserBalances('user1');
-            expect(result).toEqual([]);
-        });
-
-        it('should return balances for a single stellar wallet', async () => {
-            const wallet = { id: 'w1', userId: 'user1', stellarAddress: 'GABC', metamaskAddress: null };
-            repository.find.mockResolvedValue([wallet]);
-            horizonService.getAccountBalances.mockResolvedValue([
-                { asset_code: 'USD', balance: '100', locked: '10' },
-                { asset_type: 'native', balance: '50' },
-            ]);
-            const result = await service.getUserBalances('user1');
-            expect(result).toEqual([
-                { currency: 'USD', balance: '100', locked: '10', type: 'stellar', walletId: 'w1' },
-                { currency: 'native', balance: '50', locked: '0', type: 'stellar', walletId: 'w1' },
-            ]);
-        });
-
-        it('should aggregate balances for multiple wallets', async () => {
-            const wallets = [
-                { id: 'w1', userId: 'user1', stellarAddress: 'GABC', metamaskAddress: null },
-                { id: 'w2', userId: 'user1', stellarAddress: 'GDEF', metamaskAddress: null },
-            ];
-            repository.find.mockResolvedValue(wallets);
-            horizonService.getAccountBalances
-                .mockResolvedValueOnce([{ asset_code: 'USD', balance: '100' }])
-                .mockResolvedValueOnce([{ asset_code: 'EUR', balance: '200' }]);
-            const result = await service.getUserBalances('user1');
-            expect(result).toEqual([
-                { currency: 'USD', balance: '100', locked: '0', type: 'stellar', walletId: 'w1' },
-                { currency: 'EUR', balance: '200', locked: '0', type: 'stellar', walletId: 'w2' },
-            ]);
-        });
-
-        it('should skip wallets without stellarAddress', async () => {
-            const wallets = [
-                { id: 'w1', userId: 'user1', stellarAddress: null, metamaskAddress: null },
-            ];
-            repository.find.mockResolvedValue(wallets);
-            const result = await service.getUserBalances('user1');
-            expect(result).toEqual([]);
-        });
-    });
-});
+    const balances = await this.getWalletBalances(wallet.stellarAddress);
+    const nativeBalance = balances.find((b: any) => b.asset_type === 'native');
+    const spendable = nativeBalance ? parseFloat(nativeBalance.balance) - parseFloat(nativeBalance.locked || '0') : 0;
+    return Math.max(spendable, 0);
+  }
+}

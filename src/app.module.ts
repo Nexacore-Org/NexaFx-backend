@@ -21,6 +21,8 @@ import { SupportTicketsModule } from './support-ticket/support-ticket.module';
 import { NotificationPreferencesModule } from './notification-preferences/notification-preferences.module';
 import databaseConfig from './config/database.config';
 import { ScheduledTransfersModule } from './transfers/transfers.module';
+import { BlacklistModule } from './blacklist/blacklist.module';
+import { RatelockModule } from './ratelock/ratelock.module';
 
 @Module({
   imports: [
@@ -67,6 +69,8 @@ import { ScheduledTransfersModule } from './transfers/transfers.module';
     SupportTicketsModule,
     NotificationPreferencesModule,
     ScheduledTransfersModule,
+    BlacklistModule,
+    RatelockModule,
   ],
   controllers: [AppController],
   providers: [

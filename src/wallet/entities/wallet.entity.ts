@@ -2,29 +2,30 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
-  ManyToOne,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToOne,
+  JoinColumn,
 } from 'typeorm';
 import { User } from '../../user/entities/user.entity';
-import { Currency } from '../../currencies/entities/currency.entity';
 
 @Entity('wallets')
 export class Wallet {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
-  @ManyToOne(() => User, (user) => user.wallets)
-  user: User;
-
-  @ManyToOne(() => Currency)
-  currency: Currency;
+  @PrimaryGeneratedColumn()
+  id: number;
 
   @Column()
-  currencyCode: string;
+  userId: string;
 
-  @Column('decimal', { precision: 18, scale: 8, default: 0 })
-  balance: number;
+  @OneToOne(() => User)
+  @JoinColumn({ name: 'userId' })
+  user: User;
+
+  @Column({ nullable: true })
+  stellarAddress: string;
+
+  @Column({ nullable: true })
+  metamaskAddress: string;
 
   @Column({ default: false })
   isPrimary: boolean;

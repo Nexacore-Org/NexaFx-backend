@@ -1,11 +1,11 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
-import { RatelockService } from './ratelock.service';
+import { RateLockService } from './ratelock.service'; 
 import { CreateRatelockDto } from './dto/create-ratelock.dto';
 import { UpdateRatelockDto } from './dto/update-ratelock.dto';
 
 @Controller('ratelock')
 export class RatelockController {
-  constructor(private readonly ratelockService: RatelockService) {}
+  constructor(private readonly ratelockService: RateLockService) {}
 
   @Post()
   create(@Body() createRatelockDto: CreateRatelockDto) {

@@ -20,9 +20,9 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { SupportTicketsModule } from './support-ticket/support-ticket.module';
 import { NotificationPreferencesModule } from './notification-preferences/notification-preferences.module';
 import databaseConfig from './config/database.config';
-import { ScheduledTransfersModule } from './transfers/transfers.module';
+// import { ScheduledTransferModule } from './scheduled-transfers/scheduled-transfers.module';
 import { BlacklistModule } from './blacklist/blacklist.module';
-import { RatelockModule } from './ratelock/ratelock.module';
+import { RateLockModule } from './ratelock/ratelock.module';
 
 @Module({
   imports: [
@@ -68,9 +68,9 @@ import { RatelockModule } from './ratelock/ratelock.module';
     AnnouncementsModule,
     SupportTicketsModule,
     NotificationPreferencesModule,
-    ScheduledTransfersModule,
+    // ScheduledTransfersModule,
     BlacklistModule,
-    RatelockModule,
+    RateLockModule,
   ],
   controllers: [AppController],
   providers: [

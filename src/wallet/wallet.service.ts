@@ -14,6 +14,12 @@ import { HorizonService } from 'src/blockchain/services/horizon/horizon.service'
 
 @Injectable()
 export class WalletService {
+  isFrozen(recipientWallet: any) {
+       throw new Error('Method not implemented.');
+  }
+  getBalance(senderWallet: any) {
+       throw new Error('Method not implemented.');
+  }
   constructor(
     @InjectRepository(Wallet)
     private readonly walletRepository: Repository<Wallet>,

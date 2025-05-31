@@ -32,6 +32,6 @@ export class TransfersModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
       .apply(TransferValidationMiddleware)
-      .forRoutes('transfers/middleware/transfer-validation.middleware.ts', 'transfers/scheduled-transfers.controller.ts'); 
+      .forRoutes('transfers/middleware/transfer-validation.middleware.ts'); 
   }
 }

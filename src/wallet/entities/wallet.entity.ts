@@ -33,6 +33,9 @@ export class Wallet {
   @CreateDateColumn()
   createdAt: Date;
 
-  @UpdateDateColumn()
-  updatedAt: Date;
-}
+
+    @UpdateDateColumn()
+    updatedAt: Date;
+    status: string;
+} 
+

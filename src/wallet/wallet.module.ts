@@ -6,11 +6,13 @@ import { Wallet } from './entities/wallet.entity';
 import { ExternalWalletsController } from './external-wallet.controller';
 import { ExternalWalletsService } from './external-wallet.service';
 import { ExternalWallet } from './entities/external-wallet.entity';
+import { User } from '../user/entities/user.entity';
+import { Currency } from '../currencies/entities/currency.entity';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([Wallet, ExternalWallet])],
-    controllers: [WalletController, ExternalWalletsController],
-    providers: [WalletService, ExternalWalletsService],
-    exports: [WalletService],
+  imports: [TypeOrmModule.forFeature([Wallet, ExternalWallet, User, Currency])],
+  controllers: [WalletController, ExternalWalletsController],
+  providers: [WalletService, ExternalWalletsService],
+  exports: [WalletService],
 })
-export class WalletModule {} 
+export class WalletModule {}

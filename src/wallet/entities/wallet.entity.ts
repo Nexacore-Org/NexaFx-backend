@@ -4,12 +4,15 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  OneToOne,
+  ManyToOne,
   JoinColumn,
+  Unique,
 } from 'typeorm';
 import { User } from '../../user/entities/user.entity';
+import { Currency } from '../../currencies/entities/currency.entity';
 
 @Entity('wallets')
+@Unique(['userId', 'currencyId']) // Prevent duplicate wallets per user per currency
 export class Wallet {
   @PrimaryGeneratedColumn()
   id: number;
@@ -17,9 +20,16 @@ export class Wallet {
   @Column()
   userId: string;
 
-  @OneToOne(() => User)
+  @ManyToOne(() => User)
   @JoinColumn({ name: 'userId' })
   user: User;
+
+  @Column()
+  currencyId: string;
+
+  @ManyToOne(() => Currency)
+  @JoinColumn({ name: 'currencyId' })
+  currency: Currency;
 
   @Column({ nullable: true })
   stellarAddress: string;
@@ -30,12 +40,12 @@ export class Wallet {
   @Column({ default: false })
   isPrimary: boolean;
 
+  @Column({ default: 'active' })
+  status: string;
+
   @CreateDateColumn()
   createdAt: Date;
 
-
-    @UpdateDateColumn()
-    updatedAt: Date;
-    status: string;
-} 
-
+  @UpdateDateColumn()
+  updatedAt: Date;
+}

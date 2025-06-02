@@ -2,7 +2,11 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Currency } from '../currencies/entities/currency.entity';
-import { SimulateConversionDto, ConversionSimulationResponse } from '../currencies/dto/simulate-conversion.dto';
+import {
+  SimulateConversionDto,
+  ConversionSimulationResponse,
+} from '../currencies/dto/simulate-conversion.dto';
+import { WalletService } from '../wallet/wallet.service';
 
 interface RateLock {
   rate: number;
@@ -18,13 +22,20 @@ export class ConversionsService {
   constructor(
     @InjectRepository(Currency)
     private readonly currencyRepository: Repository<Currency>,
+    private readonly walletService: WalletService, // Add wallet service
   ) {}
 
-  private generateRateLockKey(fromCurrency: string, toCurrency: string): string {
+  private generateRateLockKey(
+    fromCurrency: string,
+    toCurrency: string,
+  ): string {
     return `${fromCurrency}-${toCurrency}`;
   }
 
-  private getLockedRate(fromCurrency: string, toCurrency: string): number | null {
+  private getLockedRate(
+    fromCurrency: string,
+    toCurrency: string,
+  ): number | null {
     const key = this.generateRateLockKey(fromCurrency, toCurrency);
     const lock = this.rateLocks.get(key);
 
@@ -39,10 +50,14 @@ export class ConversionsService {
     return lock.rate;
   }
 
-  private setRateLock(fromCurrency: string, toCurrency: string, rate: number): void {
+  private setRateLock(
+    fromCurrency: string,
+    toCurrency: string,
+    rate: number,
+  ): void {
     const key = this.generateRateLockKey(fromCurrency, toCurrency);
     const now = new Date();
-    
+
     this.rateLocks.set(key, {
       rate,
       timestamp: now,
@@ -50,7 +65,10 @@ export class ConversionsService {
     });
   }
 
-  private calculateFees(amount: number, currencyType: string): { amount: number; percentage: number } {
+  private calculateFees(
+    amount: number,
+    currencyType: string,
+  ): { amount: number; percentage: number } {
     // Fee structure based on currency type and amount
     let feePercentage: number;
 
@@ -78,8 +96,17 @@ export class ConversionsService {
 
   async simulateConversion(
     simulateConversionDto: SimulateConversionDto,
+    userId?: string, // Add optional userId for wallet creation
   ): Promise<ConversionSimulationResponse> {
     const { fromCurrency, toCurrency, amount } = simulateConversionDto;
+
+    // Auto-create wallets if userId is provided
+    if (userId) {
+      await Promise.all([
+        this.walletService.getOrCreateWalletForConversion(userId, fromCurrency),
+        this.walletService.getOrCreateWalletForConversion(userId, toCurrency),
+      ]);
+    }
 
     // Get both currencies
     const [sourceCurrency, targetCurrency] = await Promise.all([
@@ -92,7 +119,9 @@ export class ConversionsService {
     }
 
     if (!sourceCurrency.rate || !targetCurrency.rate) {
-      throw new BadRequestException('Exchange rates not available for one or both currencies');
+      throw new BadRequestException(
+        'Exchange rates not available for one or both currencies',
+      );
     }
 
     // Check for existing rate lock
@@ -121,7 +150,9 @@ export class ConversionsService {
       exchangeRate,
       fees,
       timestamp: new Date(),
-      rateLockExpiresAt: this.rateLocks.get(this.generateRateLockKey(fromCurrency, toCurrency))?.expiresAt,
+      rateLockExpiresAt: this.rateLocks.get(
+        this.generateRateLockKey(fromCurrency, toCurrency),
+      )?.expiresAt,
     };
   }
-} 
+}

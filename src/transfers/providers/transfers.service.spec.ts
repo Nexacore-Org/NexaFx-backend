@@ -281,4 +281,36 @@ describe("ScheduledTransfersService", () => {
       expect(executeSpy).toHaveBeenCalledTimes(2)
     })
   })
+
+  describe("cancelScheduledTransfer", () => {
+    it("should throw NotFoundException if transfer does not exist", async () => {
+      mockRepository.findOne.mockResolvedValueOnce(null)
+      await expect(service.cancelScheduledTransfer("non-existent", "user-123")).rejects.toThrow(NotFoundException)
+    })
+
+    it("should throw ConflictException if status is not pending", async () => {
+      mockRepository.findOne.mockResolvedValueOnce({
+        ...mockScheduledTransfer,
+        status: ScheduledTransferStatus.EXECUTED,
+      })
+      await expect(service.cancelScheduledTransfer("transfer-123", "user-123")).rejects.toThrow(ConflictException)
+    })
+
+    it("should cancel a pending transfer and set status to cancelled", async () => {
+      mockRepository.findOne.mockResolvedValueOnce({
+        ...mockScheduledTransfer,
+        status: ScheduledTransferStatus.PENDING,
+      })
+      mockRepository.save.mockImplementationOnce(async (transfer) => transfer)
+      const result = await service.cancelScheduledTransfer("transfer-123", "user-123", "User requested cancellation")
+      expect(result.status).toBe(ScheduledTransferStatus.CANCELLED)
+      expect(result.failureReason).toBe("User requested cancellation")
+      expect(repository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: ScheduledTransferStatus.CANCELLED,
+          failureReason: "User requested cancellation",
+        })
+      )
+    })
+  })
 })

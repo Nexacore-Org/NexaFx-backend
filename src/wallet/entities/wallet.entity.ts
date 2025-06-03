@@ -1,30 +1,51 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
+  Unique,
+} from 'typeorm';
 import { User } from '../../user/entities/user.entity';
+import { Currency } from '../../currencies/entities/currency.entity';
 
 @Entity('wallets')
+@Unique(['userId', 'currencyId']) // Prevent duplicate wallets per user per currency
 export class Wallet {
-    @PrimaryGeneratedColumn('uuid')
-    id: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-    @Column()
-    userId: string;
+  @Column()
+  userId: string;
 
-    @OneToOne(() => User)
-    @JoinColumn({ name: 'userId' })
-    user: User;
+  @ManyToOne(() => User)
+  @JoinColumn({ name: 'userId' })
+  user: User;
 
-    @Column({ nullable: true })
-    stellarAddress: string;
+  @Column()
+  currencyId: string;
 
-    @Column({ nullable: true })
-    metamaskAddress: string;
+  @ManyToOne(() => Currency)
+  @JoinColumn({ name: 'currencyId' })
+  currency: Currency;
 
-    @Column({ default: false })
-    isPrimary: boolean;
+  @Column({ nullable: true })
+  stellarAddress: string;
 
-    @CreateDateColumn()
-    createdAt: Date;
+  @Column({ nullable: true })
+  metamaskAddress: string;
 
-    @UpdateDateColumn()
-    updatedAt: Date;
-} 
+  @Column({ default: false })
+  isPrimary: boolean;
+
+  @Column({ default: 'active' })
+  status: string;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+}

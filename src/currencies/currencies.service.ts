@@ -2,12 +2,15 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Currency } from './entities/currency.entity';
 import { Repository } from 'typeorm';
 import { CreateCurrencyDto } from './dto/create-currency.dto';
 import { UpdateCurrencyDto } from './dto/update-currency.dto';
+import { SimulateConversionDto, ConversionSimulationResponse } from './dto/simulate-conversion.dto';
+
 @Injectable()
 export class CurrenciesService {
   constructor(
@@ -58,5 +61,45 @@ export class CurrenciesService {
     if (result.affected === 0) {
       throw new NotFoundException(`Currency with code ${code} not found`);
     }
+  }
+
+  async simulateConversion(
+    simulateConversionDto: SimulateConversionDto,
+  ): Promise<ConversionSimulationResponse> {
+    const { fromCurrency, toCurrency, amount } = simulateConversionDto;
+
+    // Get both currencies
+    const [sourceCurrency, targetCurrency] = await Promise.all([
+      this.findOne(fromCurrency),
+      this.findOne(toCurrency),
+    ]);
+
+    if (!sourceCurrency.rate || !targetCurrency.rate) {
+      throw new BadRequestException('Exchange rates not available for one or both currencies');
+    }
+
+    // Calculate exchange rate
+    const exchangeRate = targetCurrency.rate / sourceCurrency.rate;
+
+    // Calculate base conversion amount
+    const baseAmount = amount * exchangeRate;
+
+    // Calculate fees (example: 0.5% fee)
+    const feePercentage = 0.005; // 0.5%
+    const feeAmount = baseAmount * feePercentage;
+    const finalAmount = baseAmount - feeAmount;
+
+    return {
+      fromCurrency: sourceCurrency.code,
+      toCurrency: targetCurrency.code,
+      inputAmount: amount,
+      outputAmount: finalAmount,
+      exchangeRate,
+      fees: {
+        amount: feeAmount,
+        percentage: feePercentage * 100, // Convert to percentage
+      },
+      timestamp: new Date(),
+    };
   }
 }

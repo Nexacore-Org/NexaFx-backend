@@ -419,4 +419,20 @@ export class ScheduledTransfersService {
 
     return this.executeTransfer(transfer);
   }
+
+  /**
+   * Cancel a scheduled transfer by txnId and userId
+   */
+  async cancelScheduledTransfer(txnId: string, userId: string, reason?: string): Promise<ScheduledTransfer> {
+    const transfer = await this.findOne(txnId, userId);
+    if (transfer.status !== ScheduledTransferStatus.PENDING) {
+      throw new ConflictException(`Cannot cancel a transfer that is already ${transfer.status.toLowerCase()}`);
+    }
+    transfer.status = ScheduledTransferStatus.CANCELLED;
+    if (reason) {
+      transfer.failureReason = reason;
+    }
+    return this.scheduledTransferRepository.save(transfer);
+  }
 }
+

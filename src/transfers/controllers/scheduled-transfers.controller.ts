@@ -156,4 +156,21 @@ export class ScheduledTransfersController {
   async getStats(@Request() req) {
     return this.scheduledTransfersService.getStats(req.user.id);
   }
+
+  // PATCH /scheduled-transfers/cancel/:txnId - Cancel a pending scheduled transfer (user must own and transfer must be pending)
+  @Patch('cancel/:txnId')
+  @ApiOperation({ summary: 'Cancel a pending scheduled transfer' })
+  @ApiParam({ name: 'txnId', description: 'Scheduled transfer ID' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Transfer cancelled successfully', type: ScheduledTransferResponseDto })
+  @ApiResponse({ status: HttpStatus.CONFLICT, description: 'Cannot cancel a non-pending transfer' })
+  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Scheduled transfer not found' })
+  @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'User does not have permission to cancel this transfer' })
+  async cancelScheduledTransfer(
+    @Request() req,
+    @Param('txnId', ParseUUIDPipe) txnId: string,
+    @Body('reason') reason?: string
+  ): Promise<ScheduledTransferResponseDto> {
+    const transfer = await this.scheduledTransfersService.cancelScheduledTransfer(txnId, req.user.id, reason);
+    return new ScheduledTransferResponseDto();
+  }
 }

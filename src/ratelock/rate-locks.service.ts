@@ -88,4 +88,11 @@ export class RateLocksService {
       expiresAt: LessThan(new Date()),
     });
   }
+
+  async cleanupExpiredLocks(beforeDate: Date): Promise<number> {
+    const result = await this.rateLockRepository.delete({
+      expiresAt: LessThan(beforeDate),
+    });
+    return result.affected || 0;
+  }
 }

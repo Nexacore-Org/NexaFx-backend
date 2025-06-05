@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { RateLockEntity } from './rate-locks.entity';
+import { RateLockEntity } from '../rate-locks/rate-locks.entity';
 import { RateLocksService } from './rate-locks.service';
 import { Repository } from 'typeorm';
 import { ConflictException } from '@nestjs/common';
@@ -22,20 +22,27 @@ describe('RateLocksService', () => {
     }).compile();
 
     service = module.get<RateLocksService>(RateLocksService);
-    repo = module.get<Repository<RateLockEntity>>(getRepositoryToken(RateLockEntity));
+    repo = module.get<Repository<RateLockEntity>>(
+      getRepositoryToken(RateLockEntity),
+    );
   });
 
   describe('createRateLock', () => {
     it('should throw if active lock exists', async () => {
       jest.spyOn(repo, 'findOne').mockResolvedValueOnce({} as RateLockEntity);
-      await expect(service.createRateLock('user1', 'USD/EUR', 1.1)).rejects.toThrow(ConflictException);
+      await expect(
+        service.createRateLock('user1', 'USD/EUR', 1.1),
+      ).rejects.toThrow(ConflictException);
     });
 
     it('should create a new rate lock', async () => {
       jest.spyOn(repo, 'findOne').mockResolvedValueOnce(null);
-     const saveSpy = jest
-  .spyOn(repo, 'save')
-  .mockImplementation(async (entity: DeepPartial<RateLockEntity>) => entity as RateLockEntity);
+      const saveSpy = jest
+        .spyOn(repo, 'save')
+        .mockImplementation(
+          async (entity: DeepPartial<RateLockEntity>) =>
+            entity as RateLockEntity,
+        );
 
       const result = await service.createRateLock('user1', 'USD/EUR', 1.1);
       expect(saveSpy).toHaveBeenCalled();

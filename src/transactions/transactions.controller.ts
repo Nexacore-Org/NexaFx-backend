@@ -11,10 +11,10 @@ import {
     ConflictException,
     ForbiddenException,
   } from '@nestjs/common';
-import { JwtAuthGuard } from 'src/auth/guard/jwt.auth.guard';
-import { Roles } from 'src/common/decorators/roles.decorators';
-import { RolesGuard } from 'src/common/guards/roles.guard';
-import { UserRole } from 'src/user/entities/user.entity';
+import { JwtAuthGuard } from '../auth/guard/jwt.auth.guard';
+import { Roles } from '../common/decorators/roles.decorators';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { UserRole } from '../user/entities/user.entity';
   import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, ApiQuery } from '@nestjs/swagger';
   import { TransactionsService } from './transactions.service';
   import { CreateTransactionDto } from './dto/create-transaction.dto';

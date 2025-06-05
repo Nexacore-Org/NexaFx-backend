@@ -6,7 +6,12 @@ describe('AuthService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [AuthService],
+      providers: [
+        AuthService,
+        { provide: require('../../user/user.service').UserService, useValue: {} },
+        { provide: require('@nestjs/jwt').JwtService, useValue: {} },
+        { provide: require('./passwod.hashing.service').BcryptPasswordHashingService, useValue: {} },
+      ],
     }).compile();
 
     service = module.get<AuthService>(AuthService);

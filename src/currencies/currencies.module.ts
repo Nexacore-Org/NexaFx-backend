@@ -5,7 +5,10 @@ import { CurrenciesService } from './currencies.service';
 import { CurrenciesController } from './currencies.controller';
 import { Currency } from './entities/currency.entity';
 import { RateFetcherService } from './services/rate-fetcher.service';
+feat/rates-endpoint-fx-rate-fee
+
 import { AuditModule } from 'src/audit/audit.module';
+main
 
 @Module({
   imports: [

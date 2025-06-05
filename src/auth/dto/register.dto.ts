@@ -1,5 +1,5 @@
 import { IsEmail, IsEnum, IsNotEmpty, IsString, MinLength } from 'class-validator';
-import { AccountType } from 'src/user/entities/user.entity';
+import { AccountType } from '../../user/entities/user.entity';
 
 export class RegisterDto {
   @IsString()

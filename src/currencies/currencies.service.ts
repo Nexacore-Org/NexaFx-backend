@@ -34,8 +34,9 @@ export class CurrenciesService {
   }
 
   async findOne(code: string): Promise<Currency> {
+    // Always lookup by uppercase code for case-insensitivity
     const currency = await this.currencyRepository.findOne({
-      where: { code },
+      where: { code: code.toUpperCase() },
     });
     if (!currency) {
       throw new NotFoundException(`Currency with code ${code} does not exist`);

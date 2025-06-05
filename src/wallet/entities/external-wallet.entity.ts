@@ -1,6 +1,14 @@
 import { User } from 'src/user/entities/user.entity';
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
-// import { User } from '../../users/entities/user.entity'; 
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  CreateDateColumn,
+  UpdateDateColumn,
+  Index,
+} from 'typeorm';
+// import { User } from '../../users/entities/user.entity';
 
 @Entity('external_wallets')
 @Index(['userId', 'address'], { unique: true })
@@ -36,7 +44,9 @@ export class ExternalWallet {
   @Column({ type: 'uuid' })
   userId: string;
 
-  @ManyToOne(() => User, (user) => user.externalWallets, { onDelete: 'CASCADE' })
+  @ManyToOne(() => User, (user) => user.externalWallets, {
+    onDelete: 'CASCADE',
+  })
   user: User;
 
   @CreateDateColumn()

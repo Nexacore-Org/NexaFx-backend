@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %></title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .header {
+      background-color: #e74c3c;
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+    .content {
+      padding: 20px;
+      background-color: #f9f9f9;
+    }
+    .footer {
+      text-align: center;
+      padding: 20px;
+      font-size: 12px;
+      color: #666;
+    }
+    .button {
+      display: inline-block;
+      background-color: #e74c3c;
+      color: white;
+      text-decoration: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      margin-top: 20px;
+    }
+    .details {
+      background-color: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 15px;
+      margin-top: 20px;
+    }
+    .details-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #eee;
+    }
+    .details-row:last-child {
+      border-bottom: none;
+    }
+    .alert {
+      background-color: #ffebee;
+      border-left: 4px solid #e74c3c;
+      padding: 15px;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1><%= appName %></h1>
+    </div>
+    <div class="content">
+      <h2><%= title %></h2>
+      <p><%= content %></p>
+      
+      <div class="alert">
+        <p>Don't worry, your funds are safe. Our team has been notified and is working to resolve this issue.</p>
+      </div>
+      
+      <div class="details">
+        <div class="details-row">
+          <strong>Transaction ID:</strong>
+          <span><%= transactionId %></span>
+        </div>
+        <div class="details-row">
+          <strong>Asset:</strong>
+          <span><%= asset %></span>
+        </div>
+        <div class="details-row">
+          <strong>Amount:</strong>
+          <span><%= amount %></span>
+        </div>
+        <div class="details-row">
+          <strong>Error:</strong>
+          <span><%= reason %></span>
+        </div>
+        <div class="details-row">
+          <strong>Date:</strong>
+          <span><%= new Date().toLocaleString() %></span>
+        </div>
+      </div>
+      
+      <a href="<%= process.env.APP_URL %>/support" class="button">Contact Support</a>
+    </div>
+    <div class="footer">
+      <p>This is an automated message, please do not reply to this email.</p>
+      <p>If you need assistance, please contact our support team at <%= supportEmail %></p>
+      <p>&copy; <%= new Date().getFullYear() %> <%= appName %>. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>

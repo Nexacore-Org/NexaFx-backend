@@ -155,4 +155,23 @@ export class ConversionsService {
       )?.expiresAt,
     };
   }
+
+  // async convertWithRateLock(
+  //   userId: string,
+  //   pair: string,
+  //   amount: number,
+  //   lockedRate: number,
+  // ): Promise<number> {
+  //   const isValid = await this.rateLocksService.validateRateLock(
+  //     userId,
+  //     pair,
+  //     lockedRate,
+  //   );
+
+  //   if (!isValid) {
+  //     throw new BadRequestException('Invalid or expired rate lock.');
+  //   }
+
+  //   return amount * lockedRate;
+  // }
 }

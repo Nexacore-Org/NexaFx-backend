@@ -24,6 +24,7 @@ import databaseConfig from './config/database.config';
 import { BlacklistModule } from './blacklist/blacklist.module';
 import { RateLockModule } from './ratelock/ratelock.module';
 import { WalletModule } from './wallet/wallet.module';
+import { RateLocksCron } from './ratelock/rate-locks.cron';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { WalletModule } from './wallet/wallet.module';
     // ScheduledTransfersModule,
     BlacklistModule,
     RateLockModule,
+    RateLocksCron,
   ],
   controllers: [AppController],
   providers: [

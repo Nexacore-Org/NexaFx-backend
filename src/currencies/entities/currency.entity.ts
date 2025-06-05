@@ -1,4 +1,11 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, Unique } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  Unique,
+} from 'typeorm';
 import { CurrencyType } from '../enum/currencyType.enum';
 
 @Entity()
@@ -22,8 +29,11 @@ export class Currency {
   @Column({ type: 'enum', enum: CurrencyType })
   type: CurrencyType;
 
-  @Column({ type: 'decimal', nullable: true })
-  exchangeRate?: number;
+  @Column({ type: 'decimal', precision: 18, scale: 8, nullable: true })
+  rate?: number;
+
+  @Column({ type: 'timestamp', nullable: true })
+  lastUpdated?: Date;
 
   @Column({ default: true })
   isActive: boolean;

@@ -3,10 +3,12 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { CurrenciesService } from './currencies.service';
 import { CurrenciesController } from './currencies.controller';
 import { Currency } from './entities/currency.entity';
+import { RateFetcherService } from './services/rate-fetcher.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Currency])],
   controllers: [CurrenciesController],
-  providers: [CurrenciesService],
+  providers: [CurrenciesService, RateFetcherService],
+  exports: [CurrenciesService, RateFetcherService],
 })
 export class CurrenciesModule {}

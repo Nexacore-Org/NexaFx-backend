@@ -23,6 +23,7 @@ import databaseConfig from './config/database.config';
 // import { ScheduledTransferModule } from './scheduled-transfers/scheduled-transfers.module';
 import { BlacklistModule } from './blacklist/blacklist.module';
 import { RateLockModule } from './ratelock/ratelock.module';
+import { WalletModule } from './wallet/wallet.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { RateLockModule } from './ratelock/ratelock.module';
     AnnouncementsModule,
     SupportTicketsModule,
     NotificationPreferencesModule,
+    WalletModule,
     // ScheduledTransfersModule,
     BlacklistModule,
     RateLockModule,

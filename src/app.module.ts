@@ -25,6 +25,7 @@ import { BlacklistModule } from './blacklist/blacklist.module';
 import { RateLockModule } from './ratelock/ratelock.module';
 import { WalletModule } from './wallet/wallet.module';
 import { RateLocksCron } from './ratelock/rate-locks.cron';
+import { ProfilePictureModule } from './profile-picture/profile-picture.module';
 
 @Module({
   imports: [
@@ -75,6 +76,7 @@ import { RateLocksCron } from './ratelock/rate-locks.cron';
     BlacklistModule,
     RateLockModule,
     RateLocksCron,
+    ProfilePictureModule,
   ],
   controllers: [AppController],
   providers: [

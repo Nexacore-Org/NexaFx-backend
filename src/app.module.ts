@@ -6,7 +6,6 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { KycModule } from './kyc/kyc.module';
-feat/rates-endpoint-fx-rate-fee
 import { KycVerification } from './kyc/entities/kyc.entity';
 import { RatesModule } from './rates/rates.module';
 
@@ -29,7 +28,6 @@ import { BlacklistModule } from './blacklist/blacklist.module';
 import { RateLockModule } from './ratelock/ratelock.module';
 import { WalletModule } from './wallet/wallet.module';
 import { RateLocksCron } from './ratelock/rate-locks.cron';
-main
 
 @Module({
   imports: [
@@ -65,7 +63,6 @@ main
     UserModule,
     AuthModule,
     KycModule,
-feat/rates-endpoint-fx-rate-fee
     RatesModule,
 
     BlockchainModule,
@@ -95,7 +92,6 @@ feat/rates-endpoint-fx-rate-fee
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
-main
   ],
   exports: [AppService],
 })

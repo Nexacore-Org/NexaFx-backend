@@ -36,12 +36,12 @@ export class RatesService {
     if (typeof amount !== 'number' || isNaN(amount) || amount <= 0) {
       throw new BadRequestException('Amount must be a positive number');
     }
-    if (src.exchangeRate == null || tgt.exchangeRate == null) {
+    if (src.rate == null || tgt.rate == null) {
       throw new BadRequestException(
         'Exchange rate not set for source or target currency',
       );
     }
-    const rate = Number(tgt.exchangeRate) / Number(src.exchangeRate);
+    const rate = Number(tgt.rate) / Number(src.rate);
     const grossAmount = amount * rate;
     const feeRate = this.configService.get<number>('RATE_FEE_PERCENTAGE', 0.005);
     const fee = grossAmount * feeRate;

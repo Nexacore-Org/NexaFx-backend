@@ -1,31 +1,11 @@
-feat/rates-endpoint-fx-rate-fee
 import { 
-    Controller, Get, Post, Req, 
-    Body, 
-    Patch, 
-    Param, 
-    Delete, 
-    UseGuards, 
-    Request, 
-    HttpStatus,
-    Query,
-    ConflictException,
-    ForbiddenException,
-  } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/guard/jwt.auth.guard';
-import { Roles } from '../common/decorators/roles.decorators';
-import { RolesGuard } from '../common/guards/roles.guard';
-import { UserRole } from '../user/entities/user.entity';
-  import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, ApiQuery } from '@nestjs/swagger';
-  import { TransactionsService } from './transactions.service';
-  import { CreateTransactionDto } from './dto/create-transaction.dto';
-  import { UpdateTransactionDto } from './dto/update-transaction.dto';
-  import { QueryTransactionDto } from './dto/query-transaction.dto';
-  import { Transaction } from './entities/transaction.entity';
-  import { TransactionType } from './enums/transaction-type.enum';
-  import { TransactionStatus } from './enums/transaction-status.enum';
-  
-  @ApiTags('transactions')
+  Controller, Get, Post, Req, 
+  Body, 
+  Patch, 
+  Param, 
+  Delete, 
+  UseGuards, 
+  Request, 
   @ApiBearerAuth()
 
 /* eslint-disable @typescript-eslint/no-unsafe-argument */

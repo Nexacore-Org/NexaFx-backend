@@ -4,11 +4,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-feat/rates-endpoint-fx-rate-fee
-import { UserService } from '../../user/user.service';
-
 import { UserService } from 'src/user/providers/user.service';
-main
 import { RegisterDto } from '../dto/register.dto';
 import { LoginDto } from '../dto/login.dto';
 import { BcryptPasswordHashingService } from './bcrypt-password-hashing.service';

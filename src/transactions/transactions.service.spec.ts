@@ -1,4 +1,3 @@
-feat/rates-endpoint-fx-rate-fee
 describe('TransactionsService', () => {
   it('should pass dummy test', () => {
     expect(true).toBe(true);
@@ -104,4 +103,4 @@ describe('TransactionsService', () => {
     await expect(service.createTransaction(createTransactionDto)).rejects.toThrow('Currency not found.');
   });
 });
-main
+

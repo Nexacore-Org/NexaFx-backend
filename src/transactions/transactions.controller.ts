@@ -1,13 +1,3 @@
-import { 
-  Controller, Get, Post, Req, 
-  Body, 
-  Patch, 
-  Param, 
-  Delete, 
-  UseGuards, 
-  Request, 
-  @ApiBearerAuth()
-
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable prettier/prettier */
 import {
@@ -71,8 +61,7 @@ export class TransactionsController {
   }
   constructor(private readonly transactionsService: TransactionsService) {}
 
-main
-  @UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard)
   @Get('user')
   async getUserTransactions(
     @Request() req,

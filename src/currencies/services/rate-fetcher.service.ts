@@ -22,12 +22,12 @@ export class RateFetcherService implements OnModuleInit {
     private readonly configService: ConfigService,
   ) {
     // Check if we're in development mode (no API keys)
-    const hasApiKeys = 
+    const hasApiKeys =
       this.configService.get('OPENEXCHANGERATES_API_KEY') &&
       this.configService.get('COINGECKO_API_KEY');
-    
+
     this.isDevelopment = !hasApiKeys;
-    
+
     if (this.isDevelopment) {
       this.logger.warn(
         'Running in development mode with mock rates. Add API keys to .env file for live rates.',
@@ -45,13 +45,15 @@ export class RateFetcherService implements OnModuleInit {
       });
 
       // Configure retry logic for both clients
-      [this.openExchangeRatesClient, this.coingeckoClient].forEach(client => {
+      [this.openExchangeRatesClient, this.coingeckoClient].forEach((client) => {
         axiosRetry(client, {
           retries: this.configService.get('API_MAX_RETRIES'),
           retryDelay: axiosRetry.exponentialDelay,
           retryCondition: (error) => {
-            return axiosRetry.isNetworkOrIdempotentRequestError(error) ||
-              error.response?.status === 429; // Rate limit error
+            return (
+              axiosRetry.isNetworkOrIdempotentRequestError(error) ||
+              error.response?.status === 429
+            ); // Rate limit error
           },
         });
       });
@@ -71,10 +73,7 @@ export class RateFetcherService implements OnModuleInit {
       if (this.isDevelopment) {
         await this.updateMockRates();
       } else {
-        await Promise.all([
-          this.updateFiatRates(),
-          this.updateCryptoRates(),
-        ]);
+        await Promise.all([this.updateFiatRates(), this.updateCryptoRates()]);
       }
       this.logger.log('Exchange rates updated successfully');
     } catch (error) {
@@ -144,7 +143,7 @@ export class RateFetcherService implements OnModuleInit {
   private async updateCurrencyRate(code: string, rate: number) {
     await this.currencyRepository.update(
       { code },
-      { 
+      {
         rate,
         lastUpdated: new Date(),
       },
@@ -191,9 +190,9 @@ export class RateFetcherService implements OnModuleInit {
       });
 
       const cryptoMapping = {
-        'bitcoin': 'BTC',
-        'ethereum': 'ETH',
-        'tether': 'USDT',
+        bitcoin: 'BTC',
+        ethereum: 'ETH',
+        tether: 'USDT',
       };
 
       const currencies = await this.currencyRepository.find({
@@ -201,8 +200,9 @@ export class RateFetcherService implements OnModuleInit {
       });
 
       for (const currency of currencies) {
-        const cryptoId = Object.entries(cryptoMapping)
-          .find(([_, code]) => code === currency.code)?.[0];
+        const cryptoId = Object.entries(cryptoMapping).find(
+          ([_, code]) => code === currency.code,
+        )?.[0];
 
         if (cryptoId && response.data[cryptoId]) {
           await this.currencyRepository.update(currency.id, {
@@ -239,7 +239,9 @@ export class RateFetcherService implements OnModuleInit {
       ]);
 
       if (!fromRate || !toRate) {
-        this.logger.warn(`Unable to find rates for ${fromCurrency} or ${toCurrency}`);
+        this.logger.warn(
+          `Unable to find rates for ${fromCurrency} or ${toCurrency}`,
+        );
         return null;
       }
 
@@ -259,12 +261,15 @@ export class RateFetcherService implements OnModuleInit {
         where: { isActive: true },
       });
 
-      return currencies.reduce((acc, curr) => {
-        if (curr.rate) {
-          acc[curr.code] = curr.rate;
-        }
-        return acc;
-      }, {} as Record<string, number>);
+      return currencies.reduce(
+        (acc, curr) => {
+          if (curr.rate) {
+            acc[curr.code] = curr.rate;
+          }
+          return acc;
+        },
+        {} as Record<string, number>,
+      );
     } catch (error) {
       this.logger.error('Failed to fetch all current rates', error.stack);
       return {};

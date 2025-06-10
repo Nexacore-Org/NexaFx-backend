@@ -6,6 +6,9 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { KycModule } from './kyc/kyc.module';
+import { KycVerification } from './kyc/entities/kyc.entity';
+import { RatesModule } from './rates/rates.module';
+
 import { CurrenciesModule } from './currencies/currencies.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { AuditInterceptor } from './common/interceptors/audit/audit.interceptor';
@@ -60,6 +63,8 @@ import { RateLocksCron } from './ratelock/rate-locks.cron';
     UserModule,
     AuthModule,
     KycModule,
+    RatesModule,
+
     BlockchainModule,
     TransactionsModule,
     CurrenciesModule,

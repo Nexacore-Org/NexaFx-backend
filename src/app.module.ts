@@ -6,6 +6,9 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { KycModule } from './kyc/kyc.module';
+import { KycVerification } from './kyc/entities/kyc.entity';
+import { RatesModule } from './rates/rates.module';
+
 import { CurrenciesModule } from './currencies/currencies.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { AuditInterceptor } from './common/interceptors/audit/audit.interceptor';
@@ -26,6 +29,8 @@ import { RateLockModule } from './ratelock/ratelock.module';
 import { WalletModule } from './wallet/wallet.module';
 import { RateLocksCron } from './ratelock/rate-locks.cron';
 import { ProfilePictureModule } from './profile-picture/profile-picture.module';
+import { EmailService } from './common/utils/email.service';
+
 
 @Module({
   imports: [
@@ -61,6 +66,8 @@ import { ProfilePictureModule } from './profile-picture/profile-picture.module';
     UserModule,
     AuthModule,
     KycModule,
+    RatesModule,
+
     BlockchainModule,
     TransactionsModule,
     CurrenciesModule,
@@ -89,7 +96,8 @@ import { ProfilePictureModule } from './profile-picture/profile-picture.module';
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
+    EmailService,
   ],
-  exports: [AppService],
+  exports: [AppService, EmailService],
 })
 export class AppModule {}

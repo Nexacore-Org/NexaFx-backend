@@ -61,7 +61,7 @@ export class TransactionsController {
   }
   constructor(private readonly transactionsService: TransactionsService) {}
 
-  @UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard)
   @Get('user')
   async getUserTransactions(
     @Request() req,

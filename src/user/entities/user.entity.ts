@@ -99,6 +99,9 @@ export class User {
   @Column({ default: true })
   isActive: boolean;
 
+  @Column({ nullable: true })
+  refreshToken?: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

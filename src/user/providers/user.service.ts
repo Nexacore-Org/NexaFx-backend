@@ -70,4 +70,18 @@ export class UserService {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
   }
+
+  async updateRefreshToken(userId: number, hashedToken: string): Promise<void> {
+    await this.userRepository.update(userId, {
+      refreshToken: hashedToken,
+    });
+  }
+
+  async findById(id: number): Promise<User> {
+    const user = await this.userRepository.findOneBy({ id: String(id) });
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+    return user;
+  }
 }

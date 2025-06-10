@@ -1,6 +1,8 @@
 import {
   ConflictException,
+  HttpException,
   Injectable,
+  InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -13,6 +15,10 @@ import { Repository } from 'typeorm';
 import { User } from 'src/user/entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ethers } from 'ethers';
+import { randomInt } from 'crypto';
+import { Otp } from 'src/user/entities/otp.entity';
+import { EmailService } from 'src/common/utils/email.service';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class AuthService {
@@ -20,7 +26,9 @@ export class AuthService {
     private readonly usersService: UserService,
     private readonly jwtService: JwtService,
     private readonly passwordService: BcryptPasswordHashingService,
+    private readonly emailService: EmailService,
     @InjectRepository(User) private userRepo: Repository<User>,
+    @InjectRepository(Otp) private otpRepo: Repository<Otp>,
   ) {}
 
   //Register User
@@ -96,8 +104,73 @@ export class AuthService {
     }
   }
 
+  // generating otp
+
+  public async reuestOtp(email: string) {
+    try {
+      const user = await this.usersService.findOne(email);
+      if (!user) throw new ConflictException('invalid user does not exist');
+      const otp = this.generateOtp();
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+      await this.otpRepo.save({ email, code: otp, expiresAt });
+      await this.emailService.sendOtpEmail(email, otp);
+    } catch (error) {
+      // Re-throw known exceptions
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      // Handle unexpected errors
+      throw new InternalServerErrorException('Failed to generate and send OTP');
+    }
+  }
+  // verifying otp
+  async verifyOtp(email: string, code: string): Promise<boolean> {
+    try {
+      const record = await this.otpRepo.findOneBy({ email, code });
+
+      if (!record) {
+        return false; // OTP not found
+      }
+
+      const isExpired = record.expiresAt.getTime() < Date.now();
+
+      if (isExpired) {
+        await this.otpRepo.delete({ email, code }); // cleanup
+        return false; // OTP expired
+      }
+
+      await this.otpRepo.delete({ email, code }); // one-time use
+      return true;
+    } catch (error) {
+      console.error('Error verifying OTP:', error);
+      throw new InternalServerErrorException(
+        'Could not verify OTP at this time.',
+      );
+    }
+  }
+
   //Logout (No DB token storage, so just return message)
   public async logout() {
     return { message: 'Logged out successfully' };
+  }
+
+  generateOtp(): string {
+    return String(randomInt(100000, 999999));
+  }
+  generateAccessToken(user: User): string {
+    return this.jwtService.sign({ sub: user.id }, { expiresIn: '1h' });
+  }
+
+  generateRefreshToken(user: User): string {
+    return this.jwtService.sign(
+      { sub: user.id },
+      { expiresIn: '3d', secret: process.env.REFRESH_TOKEN_SECRET },
+    );
+  }
+
+  async storeRefreshToken(userId: number, token: string) {
+    const hash = await bcrypt.hash(token, 10);
+    await this.usersService.updateRefreshToken(Number(userId), hash);
   }
 }

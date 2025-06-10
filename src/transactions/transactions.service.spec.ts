@@ -1,3 +1,9 @@
+describe('TransactionsService', () => {
+  it('should pass dummy test', () => {
+    expect(true).toBe(true);
+  });
+});
+
 import { Test, TestingModule } from '@nestjs/testing';
 import { TransactionsService } from './transactions.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -97,3 +103,4 @@ describe('TransactionsService', () => {
     await expect(service.createTransaction(createTransactionDto)).rejects.toThrow('Currency not found.');
   });
 });
+

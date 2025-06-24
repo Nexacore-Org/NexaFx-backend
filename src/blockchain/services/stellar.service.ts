@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as stellarSdk from 'stellar-sdk';
+import * as stellarSdk from '@stellar/stellar-sdk';
 
 @Injectable()
 export class StellarService {

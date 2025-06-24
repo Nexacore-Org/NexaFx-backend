@@ -17,5 +17,6 @@
     "noImplicitAny": false,
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false
-  }
+  },
+  "exclude": ["**/*.spec.ts", "**/*.test.ts", "test", "tests", "dist"]
 }

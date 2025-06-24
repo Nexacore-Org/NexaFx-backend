@@ -57,8 +57,6 @@ export class User {
   @Column({ nullable: true })
   profilePicture: string;
 
-  @Column({ nullable: true })
-  bio: string;
 
   @OneToMany(() => Notifications, (notification) => notification.user)
   notification: Notifications;
@@ -84,10 +82,6 @@ export class User {
   @Column({ nullable: true })
   walletAddress: string;
 
-  // @Column({ default: () => `'${uuidv4()}'` })
-  @Column()
-  walletNonce: string;
-
   @Column({ default: true })
   isActive: boolean;
 
@@ -97,6 +91,4 @@ export class User {
   @UpdateDateColumn()
   updatedAt: Date;
 }
-// function uuidv4() {
-//   throw new Error('Function not implemented.');
-// }
+

@@ -5,7 +5,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
-import { KycModule } from './kyc/kyc.module';
 import { CurrenciesModule } from './currencies/currencies.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { AuditInterceptor } from './common/interceptors/audit/audit.interceptor';
@@ -17,7 +16,6 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { FeeModule } from './fees/fee.module';
 import { NotificationsModule } from './notifications/notifications.module';
-import { SupportTicketsModule } from './support-ticket/support-ticket.module';
 import { NotificationPreferencesModule } from './notification-preferences/notification-preferences.module';
 import databaseConfig from './config/database.config';
 
@@ -54,7 +52,6 @@ import databaseConfig from './config/database.config';
     }),
     UserModule,
     AuthModule,
-    KycModule,
     BlockchainModule,
     TransactionsModule,
     CurrenciesModule,
@@ -63,7 +60,6 @@ import databaseConfig from './config/database.config';
     AdminModule,
     FeeModule,
     AnnouncementsModule,
-    SupportTicketsModule,
     NotificationPreferencesModule,
   ],
   controllers: [AppController],

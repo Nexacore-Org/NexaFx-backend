@@ -13,8 +13,8 @@ export class FeeService {
   ) {}
 
   async calculateFee(params: {
-    userAccountType: AccountType; // Personal | Business
-    transactionType: TransactionType; // Buy | Sell | Swap | Transfer
+    userAccountType: AccountType;
+    transactionType: TransactionType; 
     amount: number;
     currencyId: string;
   }): Promise<{

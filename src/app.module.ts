@@ -5,10 +5,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
-import { KycModule } from './kyc/kyc.module';
-import { KycVerification } from './kyc/entities/kyc.entity';
 import { RatesModule } from './rates/rates.module';
-
 import { CurrenciesModule } from './currencies/currencies.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { AuditInterceptor } from './common/interceptors/audit/audit.interceptor';
@@ -20,17 +17,12 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { FeeModule } from './fees/fee.module';
 import { NotificationsModule } from './notifications/notifications.module';
-import { SupportTicketsModule } from './support-ticket/support-ticket.module';
 import { NotificationPreferencesModule } from './notification-preferences/notification-preferences.module';
 import databaseConfig from './config/database.config';
 // import { ScheduledTransferModule } from './scheduled-transfers/scheduled-transfers.module';
-import { BlacklistModule } from './blacklist/blacklist.module';
-import { RateLockModule } from './ratelock/ratelock.module';
-import { WalletModule } from './wallet/wallet.module';
-import { RateLocksCron } from './ratelock/rate-locks.cron';
+import { RateLocksCron } from './transactions/rate-locks.cron';
 import { ProfilePictureModule } from './profile-picture/profile-picture.module';
 import { EmailService } from './common/utils/email.service';
-
 
 @Module({
   imports: [
@@ -65,9 +57,7 @@ import { EmailService } from './common/utils/email.service';
     }),
     UserModule,
     AuthModule,
-    KycModule,
     RatesModule,
-
     BlockchainModule,
     TransactionsModule,
     CurrenciesModule,
@@ -76,12 +66,8 @@ import { EmailService } from './common/utils/email.service';
     AdminModule,
     FeeModule,
     AnnouncementsModule,
-    SupportTicketsModule,
     NotificationPreferencesModule,
-    WalletModule,
     // ScheduledTransfersModule,
-    BlacklistModule,
-    RateLockModule,
     RateLocksCron,
     ProfilePictureModule,
   ],

@@ -3,19 +3,15 @@ import {
   Post,
   Body,
   UseGuards,
-  Request,
   Req,
   Res,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { AuthService } from './services/auth.service';
-import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh.token.dto';
-import { JwtAuthGuard } from './guard/jwt.auth.guard';
 import { ThrottleAuth } from 'src/common/decorators/throttle-auth.decorators';
-import { LinkWalletDto } from './dto/link-wallet.dto';
 import { UserService } from 'src/user/providers/user.service';
 import { JwtRefreshGuard } from './guard/jwt.refresh.guard';
 
@@ -27,30 +23,9 @@ export class AuthController {
     private readonly userService: UserService,
   ) {}
 
-  //Register Route
-  @Post('register')
-  async register(@Body() registerDto: RegisterDto) {
-    return this.authService.register(registerDto);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Post('link-wallet')
-  async linkWallet(@Body() dto: LinkWalletDto, @Req() req) {
-    const user = req.user;
-    const updatedUser = await this.authService.linkWallet(
-      user.id,
-      dto.walletAddress,
-      dto.signature,
-    );
-    return {
-      message: 'Wallet linked successfully',
-      walletAddress: updatedUser.walletAddress,
-    };
-  }
-
   //Login Route
   @Post('login')
-  async login(@Body() loginDto: LoginDto) {
+  login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
   }
 
@@ -62,15 +37,8 @@ export class AuthController {
 
   //Logout Route (No DB token storage, so just a message)
   @Post('logout')
-  async logout() {
+  logout() {
     return this.authService.logout();
-  }
-
-  //Protected Route Example
-  @Post('profile')
-  @UseGuards(JwtAuthGuard)
-  getProfile(@Request() req) {
-    return req.user;
   }
 
   @Post('reuest-otp')
@@ -105,7 +73,7 @@ export class AuthController {
 
   @UseGuards(JwtRefreshGuard)
   @Post('refresh')
-  async refreshtoken(@Req() req, @Res({ passthrough: true }) res: Response) {
+   refreshtoken(@Req() req, @Res({ passthrough: true }) res: Response) {
     const user = req.user;
     const accessToken = this.authService.generateAccessToken(user);
     res.json({ accessToken });

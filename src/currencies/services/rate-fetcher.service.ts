@@ -23,8 +23,8 @@ export class RateFetcherService implements OnModuleInit {
   ) {
     // Check if we're in development mode (no API keys)
     const hasApiKeys =
-      this.configService.get('OPENEXCHANGERATES_API_KEY') &&
-      this.configService.get('COINGECKO_API_KEY');
+      this.configService.get<string>('OPENEXCHANGERATES_API_KEY') &&
+      this.configService.get<string>('COINGECKO_API_KEY');
 
     this.isDevelopment = !hasApiKeys;
 
@@ -48,7 +48,7 @@ export class RateFetcherService implements OnModuleInit {
       [this.openExchangeRatesClient, this.coingeckoClient].forEach((client) => {
         axiosRetry(client, {
           retries: this.configService.get('API_MAX_RETRIES'),
-          retryDelay: axiosRetry.exponentialDelay,
+          retryDelay: (...args) => axiosRetry.exponentialDelay(...args),
           retryCondition: (error) => {
             return (
               axiosRetry.isNetworkOrIdempotentRequestError(error) ||
@@ -154,9 +154,9 @@ export class RateFetcherService implements OnModuleInit {
     try {
       const response = await this.openExchangeRatesClient.get('/latest.json', {
         params: {
-          app_id: this.configService.get('OPENEXCHANGERATES_API_KEY'),
-          base: 'USD',
-          symbols: 'NGN,EUR,GBP',
+          app_id: this.configService.get<string>('OPENEXCHANGERATES_API_KEY'),
+          base: 'NGN',
+          symbols: 'USD,EUR,GBP',
         },
       });
 

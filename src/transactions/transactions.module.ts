@@ -10,10 +10,12 @@ import { UserModule } from 'src/user/user.module';
 import { FeeModule } from 'src/fees/fee.module';
 import { Currency } from 'src/currencies/entities/currency.entity';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { RateLock } from './entities/ratelock.entity';
+import { RateLocksService } from './rate-locks.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Transaction, Currency]),
+    TypeOrmModule.forFeature([Transaction, Currency, RateLock]),
     UserModule,
     FeeModule,
     BlockchainModule,
@@ -21,7 +23,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     EventEmitterModule.forRoot(),
   ],
   controllers: [TransactionsController],
-  providers: [TransactionsService],
+  providers: [TransactionsService, RateLocksService],
   exports: [TransactionsService],
 })
 export class TransactionsModule {}

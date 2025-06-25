@@ -10,6 +10,7 @@ import { AuthService } from './services/auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { UserModule } from 'src/user/user.module';
 import { BcryptPasswordHashingService } from './services/bcrypt-password-hashing.service';
+import { PasswordHashingService } from './services/passwod.hashing.service';
 
 @Module({
   imports: [
@@ -18,14 +19,21 @@ import { BcryptPasswordHashingService } from './services/bcrypt-password-hashing
     UserModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
+      useFactory: (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_SECRET', 'your-secret-key'),
         signOptions: { expiresIn: '1h' },
       }),
       inject: [ConfigService],
     }),
   ],
-  providers: [AuthService, JwtStrategy, BcryptPasswordHashingService],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    {
+      provide: PasswordHashingService,
+      useClass: BcryptPasswordHashingService,
+    },
+  ],
   controllers: [AuthController],
   exports: [JwtModule],
 })

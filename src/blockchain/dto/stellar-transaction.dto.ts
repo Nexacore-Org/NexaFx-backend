@@ -1,4 +1,10 @@
-import { IsString, IsOptional, IsNumber, IsNotEmpty, Matches } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsNotEmpty,
+  Matches,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class StellarTransactionDto {
@@ -8,8 +14,9 @@ export class StellarTransactionDto {
   })
   @IsString()
   @IsNotEmpty()
-  @Matches(/^G[A-Z0-9]{55}$/, { 
-    message: 'Destination address must be a valid Stellar public key (starts with G and 56 characters long)' 
+  @Matches(/^G[A-Z0-9]{55}$/, {
+    message:
+      'Destination address must be a valid Stellar public key (starts with G and 56 characters long)',
   })
   destinationAddress: string;
 
@@ -22,7 +29,8 @@ export class StellarTransactionDto {
   amount: string;
 
   @ApiProperty({
-    description: "Asset to send (XLM for native token or 'CODE:ISSUER' format for other assets)",
+    description:
+      "Asset to send (XLM for native token or 'CODE:ISSUER' format for other assets)",
     example: 'XLM',
   })
   @IsString()
@@ -53,8 +61,9 @@ export class StellarAccountDto {
   })
   @IsString()
   @IsNotEmpty()
-  @Matches(/^G[A-Z0-9]{55}$/, { 
-    message: 'Address must be a valid Stellar public key (starts with G and 56 characters long)' 
+  @Matches(/^G[A-Z0-9]{55}$/, {
+    message:
+      'Address must be a valid Stellar public key (starts with G and 56 characters long)',
   })
   address: string;
 }

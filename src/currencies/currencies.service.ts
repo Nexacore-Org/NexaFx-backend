@@ -9,7 +9,10 @@ import { Currency } from './entities/currency.entity';
 import { Repository } from 'typeorm';
 import { CreateCurrencyDto } from './dto/create-currency.dto';
 import { UpdateCurrencyDto } from './dto/update-currency.dto';
-import { SimulateConversionDto, ConversionSimulationResponse } from './dto/simulate-conversion.dto';
+import {
+  SimulateConversionDto,
+  ConversionSimulationResponse,
+} from './dto/simulate-conversion.dto';
 
 @Injectable()
 export class CurrenciesService {
@@ -76,7 +79,9 @@ export class CurrenciesService {
     ]);
 
     if (!sourceCurrency.rate || !targetCurrency.rate) {
-      throw new BadRequestException('Exchange rates not available for one or both currencies');
+      throw new BadRequestException(
+        'Exchange rates not available for one or both currencies',
+      );
     }
 
     // Calculate exchange rate

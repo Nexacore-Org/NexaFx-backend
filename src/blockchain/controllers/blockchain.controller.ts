@@ -9,15 +9,12 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
-import {
-  AssetBalance,
-  StellarService,
-  StellarTransactionResult,
-} from '../services/stellar.service';
+import { StellarService } from '../services/stellar.service';
 import {
   StellarAccountDto,
   StellarTransactionDto,
 } from '../dto/stellar-transaction.dto';
+import { AssetBalance, StellarTransactionResult } from '../dto/stellar.dto';
 
 @ApiTags('blockchain')
 @Controller('blockchain/stellar')

@@ -20,9 +20,8 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { NotificationPreferencesModule } from './notification-preferences/notification-preferences.module';
 import databaseConfig from './config/database.config';
 // import { ScheduledTransferModule } from './scheduled-transfers/scheduled-transfers.module';
-import { RateLocksCron } from './transactions/rate-locks.cron';
 import { ProfilePictureModule } from './profile-picture/profile-picture.module';
-import { EmailService } from './common/utils/email.service';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
@@ -67,9 +66,8 @@ import { EmailService } from './common/utils/email.service';
     FeeModule,
     AnnouncementsModule,
     NotificationPreferencesModule,
-    // ScheduledTransfersModule,
-    RateLocksCron,
     ProfilePictureModule,
+    MailModule,
   ],
   controllers: [AppController],
   providers: [
@@ -82,8 +80,7 @@ import { EmailService } from './common/utils/email.service';
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
-    EmailService,
   ],
-  exports: [AppService, EmailService],
+  exports: [AppService],
 })
 export class AppModule {}

@@ -4,7 +4,6 @@ import { Repository } from 'typeorm';
 import { CreateNotificationDto } from '../dto/create-notification.dto';
 import { Notifications } from '../entities/notification.entity';
 import { NotificationChannel } from '../enum/notificationChannel.enum';
-import { EmailService } from './email.service';
 import { NotificationType } from '../enum/notificationType.enum';
 import { UserService } from 'src/user/providers/user.service';
 import { OnEvent } from '@nestjs/event-emitter';
@@ -13,6 +12,7 @@ import {
   TransactionFailedEvent,
   WalletUpdatedEvent,
 } from '../interfacs/notifications.interfcaes';
+import { MailService } from 'src/mail/mail.service';
 
 @Injectable()
 export class NotificationsService {
@@ -21,7 +21,7 @@ export class NotificationsService {
   constructor(
     @InjectRepository(Notifications)
     private readonly notificationRepository: Repository<Notifications>,
-    private readonly emailService: EmailService,
+    private readonly emailService: MailService,
     private readonly userService: UserService,
   ) {}
 
@@ -124,12 +124,17 @@ export class NotificationsService {
 
     const templateName = this.getTemplateForNotificationType(type);
 
-    await this.emailService.sendEmail(userEmail, title, templateName, {
-      title,
-      content,
-      ...metadata,
-      appName: process.env.APP_NAME || 'Your Platform',
-      supportEmail: process.env.SUPPORT_EMAIL || 'support@example.com',
+    await this.emailService.sendEmail({
+      to: userEmail,
+      subject: title,
+      templateName,
+      context: {
+        title,
+        content,
+        ...metadata,
+        appName: process.env.APP_NAME || 'Your Platform',
+        supportEmail: process.env.SUPPORT_EMAIL || 'support@example.com',
+      },
     });
   }
 

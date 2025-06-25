@@ -1,4 +1,4 @@
-import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
 import { EventEmitterModule } from '@nestjs/event-emitter';
@@ -8,8 +8,6 @@ import { CurrenciesModule } from '../currencies/currencies.module';
 import { FeeModule } from '../fees/fee.module';
 import { UserModule } from '../user/user.module';
 import { ScheduledTransfersController } from './controllers/scheduled-transfers.controller';
-import { ScheduledTransfersService } from './providers/transfers.service';
-import { TransferValidationMiddleware } from './middleware/transfer-validation.middleware';
 
 @Module({
   imports: [
@@ -22,13 +20,7 @@ import { TransferValidationMiddleware } from './middleware/transfer-validation.m
     UserModule,
   ],
   controllers: [ScheduledTransfersController],
-  providers: [ScheduledTransfersService],
-  exports: [ScheduledTransfersService],
+  providers: [],
+  exports: [],
 })
-export class TransfersModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer
-      .apply(TransferValidationMiddleware)
-      .forRoutes('transfers/middleware/transfer-validation.middleware.ts');
-  }
-}
+export class TransfersModule {}

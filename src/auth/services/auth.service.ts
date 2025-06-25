@@ -7,24 +7,24 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UserService } from 'src/user/providers/user.service';
-import { BcryptPasswordHashingService } from './bcrypt-password-hashing.service';
 import { Repository } from 'typeorm';
 import { User } from 'src/user/entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomInt } from 'crypto';
 import { Otp } from 'src/user/entities/otp.entity';
-import { EmailService } from 'src/common/utils/email.service';
 import * as bcrypt from 'bcrypt';
+import { PasswordHashingService } from './passwod.hashing.service';
+import { MailService } from 'src/mail/mail.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly usersService: UserService,
     private readonly jwtService: JwtService,
-    private readonly passwordService: BcryptPasswordHashingService,
-    private readonly emailService: EmailService,
-    @InjectRepository(User) private userRepo: Repository<User>,
-    @InjectRepository(Otp) private otpRepo: Repository<Otp>,
+    private readonly passwordService: PasswordHashingService,
+    private readonly emailService: MailService,
+    @InjectRepository(Otp)
+    private otpRepo: Repository<Otp>,
   ) {}
 
   // Validate User Credentials
@@ -40,7 +40,7 @@ export class AuthService {
   }
 
   //Login Method (Generate JWT tokens)
-  public login(user: any) {
+  public login(user: User) {
     const payload = { email: user.email, sub: user.id };
 
     return {
@@ -60,6 +60,7 @@ export class AuthService {
 
       return this.login(user); // Issue new tokens
     } catch (error) {
+      console.error('Refresh token error:', error);
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
   }
@@ -71,9 +72,14 @@ export class AuthService {
       const user = await this.usersService.findOne(email);
       if (!user) throw new ConflictException('invalid user does not exist');
       const otp = this.generateOtp();
-      const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+      const expiresAt = 10;
       await this.otpRepo.save({ email, code: otp, expiresAt });
-      await this.emailService.sendOtpEmail(email, otp);
+      await this.emailService.sendOtpEmail({
+        to: email,
+        otp,
+        userName: `${user.firstName} ${user.lastName}`,
+        expirationMinutes: expiresAt,
+      });
     } catch (error) {
       // Re-throw known exceptions
       if (error instanceof HttpException) {

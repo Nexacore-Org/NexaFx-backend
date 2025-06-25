@@ -13,6 +13,7 @@ export class RateLocksService {
   constructor(
     @InjectRepository(RateLock)
     private readonly rateLockRepository: Repository<RateLock>,
+    @InjectRepository(Currency)
     private readonly currencyRepository: Repository<Currency>,
   ) {}
 

@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   InternalServerErrorException,
+  UploadedFile,
 } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { ProfilePicture } from './entities/profile-picture.entity';
@@ -11,15 +12,18 @@ import { ProfilePictureResponseDto } from './dto/profile-picture-response.dto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Express } from 'express';
+import { Multer } from 'multer';
+import { InjectRepository } from '@nestjs/typeorm';
 
 @Injectable()
 export class ProfilePictureService {
   constructor(
+    @InjectRepository(ProfilePicture)
     private readonly profilePictureRepository: Repository<ProfilePicture>,
   ) {}
 
   async uploadProfilePicture(
-    file: Express.Multer.File,
+    @UploadedFile() file: Express.Multer.File | undefined,
     uploadDto: UploadProfilePictureDto,
   ): Promise<ProfilePictureResponseDto> {
     if (!file) {

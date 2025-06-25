@@ -68,9 +68,16 @@ export class MailService {
         html,
       });
 
-      this.logger.log(
-        `Email sent to ${options.to} with subject: ${options.subject}`,
-      );
+      if (process.env.NODE_ENV !== 'production') {
+        this.logger.warn(
+          `🚧 Email sending is disabled in ${process.env.NODE_ENV} mode`,
+        );
+        // return true;
+      }
+
+      // this.logger.log(
+      //   `Email sent to ${options.to} with subject: ${options.subject}`,
+      // );
       return true;
     } catch (error) {
       if (error instanceof Error) {

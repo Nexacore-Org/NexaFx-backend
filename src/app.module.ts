@@ -20,13 +20,9 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { NotificationPreferencesModule } from './notification-preferences/notification-preferences.module';
 import databaseConfig from './config/database.config';
 // import { ScheduledTransferModule } from './scheduled-transfers/scheduled-transfers.module';
-import { BlacklistModule } from './blacklist/blacklist.module';
-import { RateLockModule } from './ratelock/ratelock.module';
-import { WalletModule } from './wallet/wallet.module';
-import { RateLocksCron } from './ratelock/rate-locks.cron';
+import { RateLocksCron } from './transactions/rate-locks.cron';
 import { ProfilePictureModule } from './profile-picture/profile-picture.module';
 import { EmailService } from './common/utils/email.service';
-
 
 @Module({
   imports: [
@@ -71,10 +67,7 @@ import { EmailService } from './common/utils/email.service';
     FeeModule,
     AnnouncementsModule,
     NotificationPreferencesModule,
-    WalletModule,
     // ScheduledTransfersModule,
-    BlacklistModule,
-    RateLockModule,
     RateLocksCron,
     ProfilePictureModule,
   ],

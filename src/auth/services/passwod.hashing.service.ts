@@ -4,7 +4,10 @@ import { Injectable } from '@nestjs/common';
 @Injectable()
 export abstract class PasswordHashingService {
   abstract hashPassword(password: string): Promise<string>;
-  abstract comparePassword(plainPassword: string, hashedPassword: string): Promise<boolean>;
+  abstract comparePassword(
+    plainPassword: string,
+    hashedPassword: string,
+  ): Promise<boolean>;
 }
 
 @Injectable()
@@ -14,7 +17,10 @@ export class BcryptPasswordHashingService extends PasswordHashingService {
     return bcrypt.hash(password, salt);
   }
 
-  public async comparePassword(plainPassword: string, hashedPassword: string): Promise<boolean> {
+  public async comparePassword(
+    plainPassword: string,
+    hashedPassword: string,
+  ): Promise<boolean> {
     return bcrypt.compare(plainPassword, hashedPassword);
   }
 }

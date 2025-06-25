@@ -30,7 +30,10 @@ export class AuthService {
   // Validate User Credentials
   public async validateUser(email: string, password: string): Promise<any> {
     const user = await this.usersService.findOne(email);
-    if (user && (await this.passwordService.compare(password, user.password))) {
+    if (
+      user &&
+      (await this.passwordService.comparePassword(password, user.password))
+    ) {
       return user;
     }
     throw new UnauthorizedException('Invalid credentials');

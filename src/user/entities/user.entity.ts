@@ -8,8 +8,6 @@ import {
 } from 'typeorm';
 import { Token } from '../../auth/entities/token.entity';
 import { Notifications } from 'src/notifications/entities/notification.entity';
-import { ExternalWallet } from 'src/wallet/entities/external-wallet.entity';
-import { RateLock } from 'src/ratelock/entities/ratelock.entity';
 
 export enum AccountType {
   ALL = 'All',
@@ -86,12 +84,8 @@ export class User {
   @Column({ nullable: true })
   walletAddress: string;
 
-  // @Column()
-  @OneToMany(() => ExternalWallet, (externalWallets) => externalWallets.user)
-  externalWallets: ExternalWallet[];
-
-  @OneToMany(() => RateLock, (rateLock) => rateLock.user)
-  rateLocks: RateLock[];
+  @Column({ type: 'decimal', precision: 18, scale: 7, default: 0 })
+  balance: number;
 
   @Column({ default: true })
   isActive: boolean;

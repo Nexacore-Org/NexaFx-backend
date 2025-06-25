@@ -5,7 +5,10 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { ScheduledTransfersService } from '../providers/transfers.service';
-import { MAX_DAILY_LIMIT, MAX_TRANSACTION_LIMIT } from 'src/common/constants/transfer-limits';
+import {
+  MAX_DAILY_LIMIT,
+  MAX_TRANSACTION_LIMIT,
+} from 'src/common/constants/transfer-limits';
 
 @Injectable()
 export class LimitsGuard implements CanActivate {
@@ -17,12 +20,18 @@ export class LimitsGuard implements CanActivate {
     const user = request.user;
 
     if (amount > MAX_TRANSACTION_LIMIT) {
-      throw new ForbiddenException(`Exceeds per-transaction limit of ₦${MAX_TRANSACTION_LIMIT}`);
+      throw new ForbiddenException(
+        `Exceeds per-transaction limit of ₦${MAX_TRANSACTION_LIMIT}`,
+      );
     }
 
-    const totalTransferredToday = await this.transfersService.getTodayTotal(user.id);
-    if ((totalTransferredToday + amount) > MAX_DAILY_LIMIT) {
-      throw new ForbiddenException(`Exceeds daily transfer limit of ₦${MAX_DAILY_LIMIT}`);
+    const totalTransferredToday = await this.transfersService.getTodayTotal(
+      user.id,
+    );
+    if (totalTransferredToday + amount > MAX_DAILY_LIMIT) {
+      throw new ForbiddenException(
+        `Exceeds daily transfer limit of ₦${MAX_DAILY_LIMIT}`,
+      );
     }
 
     return true;

@@ -9,12 +9,14 @@ import { Token } from './entities/token.entity';
 import { AuthService } from './services/auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { UserModule } from 'src/user/user.module';
-import { BcryptPasswordHashingService } from './services/bcrypt-password-hashing.service';
 import { PasswordHashingService } from './services/passwod.hashing.service';
+import { BcryptPasswordHashingService } from './services/bcrypt-password-hashing.service';
+import { MailModule } from 'src/mail/mail.module';
+import { Otp } from 'src/user/entities/otp.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Token]),
+    TypeOrmModule.forFeature([User, Token, Otp]),
     PassportModule,
     UserModule,
     JwtModule.registerAsync({
@@ -25,6 +27,7 @@ import { PasswordHashingService } from './services/passwod.hashing.service';
       }),
       inject: [ConfigService],
     }),
+    MailModule,
   ],
   providers: [
     AuthService,

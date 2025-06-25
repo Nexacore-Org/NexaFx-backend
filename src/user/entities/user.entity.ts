@@ -8,6 +8,7 @@ import {
 } from 'typeorm';
 import { Token } from '../../auth/entities/token.entity';
 import { Notifications } from 'src/notifications/entities/notification.entity';
+import { RateLock } from 'src/transactions/entities/ratelock.entity';
 
 export enum AccountType {
   ALL = 'All',
@@ -80,6 +81,9 @@ export class User {
 
   @OneToMany(() => Token, (token) => token.user, { cascade: true })
   tokens: Token[];
+
+  @OneToMany(() => RateLock, (rateLock) => rateLock.user, { cascade: true })
+  rateLocks: RateLock[];
 
   @Column({ nullable: true })
   walletAddress: string;

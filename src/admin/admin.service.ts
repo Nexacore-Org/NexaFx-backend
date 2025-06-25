@@ -5,7 +5,6 @@ import { User } from '../user/entities/user.entity';
 import { Currency } from '../currencies/entities/currency.entity';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { UpdateAdminDto } from './dto/update-admin.dto';
-import { Wallet } from '../wallet/entities/wallet.entity';
 
 @Injectable()
 export class AdminService {
@@ -14,8 +13,6 @@ export class AdminService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(Currency)
     private readonly currencyRepository: Repository<Currency>,
-    @InjectRepository(Wallet)
-    private readonly walletRepository: Repository<Wallet>,
   ) {}
 
   async create(createAdminDto: CreateAdminDto) {

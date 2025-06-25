@@ -1,13 +1,9 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ThrottlerException } from '@nestjs/throttler';
-import {
-  BadRequestException,
-  HttpStatus,
-  ValidationPipe,
-} from '@nestjs/common';
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as cookieParser from 'cookie-parser';
+import { ThrottlerExceptionFilter } from './common/filters/throttler-exception.filters';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -36,27 +32,7 @@ async function bootstrap() {
   );
 
   // Add a global exception filter to handle throttler exceptions and add Retry-After headers
-  app.useGlobalFilters({
-    catch(exception: any, host: any) {
-      const ctx = host.switchToHttp();
-      const response = ctx.getResponse();
-
-      if (exception instanceof ThrottlerException) {
-        const retryAfter = Math.ceil(Number(exception.getResponse()) / 1000);
-
-        return response
-          .status(HttpStatus.TOO_MANY_REQUESTS)
-          .header('Retry-After', retryAfter.toString())
-          .json({
-            statusCode: HttpStatus.TOO_MANY_REQUESTS,
-            message: 'Too many requests, please try again later.',
-            retryAfter: retryAfter,
-          });
-      }
-
-      return exception;
-    },
-  });
+  app.useGlobalFilters(new ThrottlerExceptionFilter());
 
   app.setGlobalPrefix('api/v1');
 
@@ -82,6 +58,3 @@ async function bootstrap() {
   await app.listen(process.env.PORT ?? 3000);
 }
 bootstrap();
-function cookieParser(): any {
-  throw new Error('Function not implemented.');
-}

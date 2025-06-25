@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as stellarSdk from 'stellar-sdk';
+import * as stellarSdk from '@stellar/stellar-sdk';
+import {
+  StellarTransactionParams,
+  StellarTransactionResult,
+  AssetBalance,
+} from '../dto/stellar.dto';
+import { AxiosError } from 'axios';
 
 @Injectable()
 export class StellarService {
@@ -11,7 +17,10 @@ export class StellarService {
   private readonly sourceKeypair: stellarSdk.Keypair;
   private readonly sourcePublicKey: string;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    // private readonly currencyRateService: CurrencyRateService,
+  ) {
     // Initialize Stellar configuration
     const horizonUrl =
       this.configService.get<string>('STELLAR_HORIZON_URL') ||
@@ -124,11 +133,6 @@ export class StellarService {
     }
   }
 
-  /**
-   * Submit a signed transaction to the Stellar network
-   * @param signedTransactionXdr The signed transaction in XDR format
-   * @returns Transaction result
-   */
   async submitTransaction(
     signedTransactionXdr: string,
   ): Promise<StellarTransactionResult> {
@@ -177,11 +181,7 @@ export class StellarService {
       };
     }
   }
-  /**
-   * Send a complete Stellar transaction in one call
-   * @param params Transaction parameters
-   * @returns Transaction result
-   */
+
   async sendTransaction(
     params: StellarTransactionParams,
   ): Promise<StellarTransactionResult> {
@@ -189,102 +189,108 @@ export class StellarService {
       const signedXdr = await this.buildAndSignTransaction(params);
       return this.submitTransaction(signedXdr);
     } catch (error) {
-      this.logger.error(
-        `Failed to send transaction: ${error.message}`,
-        error.stack,
-      );
+      if (error instanceof Error) {
+        this.logger.error(
+          `Failed to send transaction: ${error.message}`,
+          error.stack,
+        );
+      }
       return {
         successful: false,
         errorCode: 'TRANSACTION_CREATION_FAILED',
-        errorMessage: error.message,
+        errorMessage: error instanceof Error ? error.message : '',
       };
     }
   }
 
-  /**
-   * Check if a Stellar account exists
-   * @param address The Stellar account address to check
-   * @returns Whether the account exists
-   */
   async accountExists(address: string): Promise<boolean> {
     try {
       await this.server.loadAccount(address);
       return true;
     } catch (error) {
-      if (error.response?.status === 404) {
-        return false;
+      if (error instanceof AxiosError) {
+        if (error.response?.status === 404) {
+          return false;
+        }
       }
       throw error;
     }
   }
 
-  /**
-   * Get account balance information
-   * @param address The Stellar account address
-   * @returns Account balances
-   */
   async getAccountBalances(address: string): Promise<AssetBalance[]> {
     try {
       const account = await this.server.loadAccount(address);
 
-      return account.balances.map((balance) => {
-        // Handle native XLM asset
-        if (balance.asset_type === 'native') {
-          return {
-            asset: 'XLM',
-            balance: balance.balance,
-            // Native XLM doesn't have a limit
-            limit: undefined,
-          };
-        }
+      return account.balances
+        .filter((balance) => balance.asset_type !== 'native')
+        .map((balance) => {
+          if ('asset_code' in balance && 'asset_issuer' in balance) {
+            return {
+              asset: `${balance.asset_code}:${balance.asset_issuer}`,
+              balance: balance.balance,
+              limit: balance.limit,
+            };
+          }
 
-        // Handle other assets
-        if ('asset_code' in balance && 'asset_issuer' in balance) {
           return {
-            asset: `${balance.asset_code}:${balance.asset_issuer}`,
+            asset: balance.asset_type,
             balance: balance.balance,
-            limit: balance.limit,
+            limit: 'limit' in balance ? balance.limit : undefined,
           };
-        }
-
-        // Handle liquidity pool shares or other balance types
-        return {
-          asset: balance.asset_type,
-          balance: balance.balance,
-          limit: 'limit' in balance ? balance.limit : undefined,
-        };
-      });
+        });
     } catch (error) {
-      this.logger.error(
-        `Failed to get account balances: ${error.message}`,
-        error.stack,
+      if (error instanceof Error) {
+        this.logger.error(
+          `Failed to get account balances: ${error.message}`,
+          error.stack,
+        );
+      }
+      throw new Error(
+        `Unable to fetch account balances: ${error instanceof Error ? error.message : ''}`,
       );
-      throw new Error(`Unable to fetch account balances: ${error.message}`);
     }
   }
-}
 
-// DTOs and Types
-export interface StellarTransactionParams {
-  destinationAddress: string;
-  amount: string | number;
-  asset: string; // 'XLM' for native token or 'CODE:ISSUER' for other assets
-  memo?: string;
-  timeout?: number; // Transaction timeout in seconds
-}
+  async getTotalBalanceNGN(address: string): Promise<number> {
+    try {
+      const balances = await this.getAccountBalances(address);
+      let total = 0;
 
-export interface StellarTransactionResult {
-  successful: boolean;
-  transactionHash?: string;
-  ledger?: number;
-  createdAt?: string;
-  resultXdr?: string;
-  errorCode?: string;
-  errorMessage?: string;
-}
+      // for (const { asset, balance } of balances) {
+      //   const rate = await this.currencyRateService.getRateToNGN(asset);
+      //   if (rate && balance) {
+      //     total += parseFloat(balance) * rate;
+      //   }
+      // }
 
-export interface AssetBalance {
-  asset: string;
-  balance: string;
-  limit?: string;
+      return total;
+    } catch (error) {
+      this.logger.error(`Failed to calculate total NGN balance`, error.stack);
+      return 0;
+    }
+  }
+
+  async getTokenBalanceByCode(
+    address: string,
+    tokenCode: string,
+  ): Promise<string | null> {
+    try {
+      const balances = await this.getAccountBalances(address);
+      const match = balances.find(
+        (b) =>
+          b.asset.startsWith(tokenCode + ':') ||
+          b.asset === tokenCode ||
+          b.asset === 'XLM',
+      );
+      return match?.balance || null;
+    } catch (error) {
+      if (error instanceof Error) {
+        this.logger.error(
+          `Failed to get token balance by code: ${error.message}`,
+          error.stack,
+        );
+      }
+      return null;
+    }
+  }
 }

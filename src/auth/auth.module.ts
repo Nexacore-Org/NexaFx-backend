@@ -7,12 +7,12 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from '../user/entities/user.entity';
 import { Token } from './entities/token.entity';
 import { AuthService } from './services/auth.service';
-import { JwtStrategy } from './strategies/jwt.strategy';
 import { UserModule } from 'src/user/user.module';
 import { PasswordHashingService } from './services/passwod.hashing.service';
 import { BcryptPasswordHashingService } from './services/bcrypt-password-hashing.service';
 import { MailModule } from 'src/mail/mail.module';
 import { Otp } from 'src/user/entities/otp.entity';
+import { JwtStrategy } from 'src/common/jwt/jwt.strategy';
 
 @Module({
   imports: [

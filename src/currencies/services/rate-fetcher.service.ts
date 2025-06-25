@@ -185,7 +185,6 @@ export class RateFetcherService implements OnModuleInit {
         params: {
           ids: 'bitcoin,ethereum,tether',
           vs_currencies: 'usd',
-          x_cg_demo_api_key: this.configService.get('COINGECKO_API_KEY'),
         },
       });
 

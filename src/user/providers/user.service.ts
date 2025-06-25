@@ -10,6 +10,7 @@ import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import * as bcrypt from 'bcrypt';
 import { FindUserByEmail } from './find-user.service';
+import { FindUserByPhone } from './find-user-by-phone.service';
 
 @Injectable()
 export class UserService {
@@ -17,6 +18,7 @@ export class UserService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly findUserByEmail: FindUserByEmail,
+    private readonly findUserByPhone: FindUserByPhone,
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<User> {
@@ -53,6 +55,10 @@ export class UserService {
     return await this.findUserByEmail.FindByEmail(email);
   }
 
+  async findOneByPhone(phoneNumber: string): Promise<User> {
+    return await this.findUserByPhone.FindByPhone(phoneNumber);
+  }
+
   async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
     const user = await this.findOne(id);
 
@@ -71,7 +77,7 @@ export class UserService {
     }
   }
 
-  async updateRefreshToken(userId: number, hashedToken: string): Promise<void> {
+  async updateRefreshToken(userId: string, hashedToken: string): Promise<void> {
     await this.userRepository.update(userId, {
       tokens: [{ refreshToken: hashedToken, isRevoked: false }],
     });
@@ -83,5 +89,15 @@ export class UserService {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
     return user;
+  }
+
+  async updateUserLoginInfo(
+    userId: string,
+    data: { refreshToken: string; lastLogin: Date },
+  ): Promise<void> {
+    await this.userRepository.update(userId, {
+      tokens: [{ refreshToken: data.refreshToken }],
+      lastLogin: data.lastLogin,
+    });
   }
 }

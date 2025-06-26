@@ -8,4 +8,5 @@ export default registerAs('database', () => ({
   password: process.env.DB_PASSWORD || 'password',
   database: process.env.DB_NAME || 'byteacademy',
   synchronize: process.env.DB_SYNCHRONIZE === 'true',
+  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
 }));

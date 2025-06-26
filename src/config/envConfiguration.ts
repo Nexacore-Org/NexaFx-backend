@@ -6,6 +6,7 @@ export default () => ({
     username: process.env.DB_USERNAME,
     password: process.env.DB_PASSWORD,
     name: process.env.DB_NAME,
+    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
   },
   jwt: {
     secret: process.env.JWT_SECRET,

@@ -49,6 +49,7 @@ import { MailModule } from './mail/mail.module';
         password: configService.get<string>('database.password'),
         database: configService.get<string>('database.database'),
         synchronize: configService.get<boolean>('database.synchronize'),
+        ssl: configService.get<boolean>('database.ssl'),
         autoLoadEntities: true,
         logging: false,
       }),

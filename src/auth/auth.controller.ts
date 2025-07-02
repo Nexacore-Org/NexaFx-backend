@@ -13,6 +13,8 @@ import { AuthService } from './services/auth.service';
 import { LoginDto } from './dto/login.dto';
 import { ThrottleAuth } from 'src/common/decorators/throttle-auth.decorators';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { InitiateSignupDto } from './dto/initiate-signup.dto';
+import { VerifySignupDto } from './dto/verify-signup.dto';
 
 @Controller('auth')
 @ThrottleAuth()
@@ -69,5 +71,17 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async requestOtp(@Body('email') email: string) {
     return this.authService.requestOtp(email);
+  }
+
+  @Post('initiate-signup')
+  @HttpCode(HttpStatus.OK)
+  async initiateSignup(@Body() dto: InitiateSignupDto) {
+    return this.authService.initiateSignup(dto);
+  }
+
+  @Post('verify-signup')
+  @HttpCode(HttpStatus.OK)
+  async verifySignup(@Body() dto: VerifySignupDto) {
+    return this.authService.verifySignup(dto);
   }
 }

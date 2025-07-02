@@ -12,6 +12,8 @@ import {
   ApiOperation,
   ApiResponse,
   ApiTags,
+  ApiBody,
+  ApiParam,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/auth/guard/jwt.auth.guard';
 import { AnnouncementsService } from './announcements.service';
@@ -29,6 +31,7 @@ export class AnnouncementsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new announcement (Admin only)' })
+  @ApiBody({ type: CreateAnnouncementDto, examples: { default: { value: { /* fill with example fields */ } } } })
   @ApiResponse({
     status: 201,
     description: 'Announcement created successfully',
@@ -55,6 +58,8 @@ export class AnnouncementsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update an announcement (Admin only)' })
+  @ApiParam({ name: 'id', description: 'Announcement ID' })
+  @ApiBody({ type: UpdateAnnouncementDto, examples: { default: { value: { /* fill with example fields */ } } } })
   @ApiResponse({
     status: 200,
     description: 'Announcement updated successfully',

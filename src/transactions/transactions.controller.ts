@@ -28,6 +28,7 @@ import {
   ApiResponse,
   ApiTags,
   ApiQuery,
+  ApiBody,
 } from '@nestjs/swagger';
 import { TransactionsService } from './transactions.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
@@ -87,6 +88,31 @@ export class TransactionsController {
   @ApiResponse({
     status: HttpStatus.CONFLICT,
     description: 'Transaction reference already exists',
+  })
+  @ApiBody({
+    type: CreateTransactionDto,
+    examples: {
+      default: {
+        summary: 'Create Transaction Example',
+        value: {
+          initiatorId: '123e4567-e89b-12d3-a456-426614174000',
+          receiverId: '987e6543-e21b-12d3-a456-426614174000',
+          type: 'TRANSFER',
+          amount: 100.5,
+          currencyId: '321e4567-e89b-12d3-a456-426614174000',
+          status: 'PENDING',
+          reference: 'TXN-2024-0001',
+          description: 'Payment for invoice #123',
+          metadata: { orderId: 'ORD-001', note: 'Urgent' },
+          sourceAccount: 'ACC-001',
+          destinationAccount: 'ACC-002',
+          feeAmount: 2.5,
+          feeCurrencyId: '321e4567-e89b-12d3-a456-426614174000',
+          processingDate: '2024-07-01T10:00:00Z',
+          completionDate: '2024-07-01T12:00:00Z',
+        },
+      },
+    },
   })
   async create(
     @Body() createTransactionDto: CreateTransactionDto,
@@ -182,6 +208,26 @@ export class TransactionsController {
     status: HttpStatus.CONFLICT,
     description: 'Transaction reference already exists',
   })
+  @ApiBody({
+    type: UpdateTransactionDto,
+    examples: {
+      default: {
+        summary: 'Update Transaction Example',
+        value: {
+          amount: 200.75,
+          description: 'Payment for invoice #456 (updated)',
+          reference: 'TXN-2024-0002',
+          metadata: { orderId: 'ORD-002', note: 'Updated note' },
+          sourceAccount: 'ACC-003',
+          destinationAccount: 'ACC-004',
+          feeAmount: 3.0,
+          feeCurrencyId: '321e4567-e89b-12d3-a456-426614174000',
+          processingDate: '2024-07-02T10:00:00Z',
+          completionDate: '2024-07-02T12:00:00Z',
+        },
+      },
+    },
+  })
   async update(
     @Param('id') id: string,
     @Body() updateTransactionDto: UpdateTransactionDto,
@@ -225,6 +271,21 @@ export class TransactionsController {
   @Patch(':id/status')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', example: 'COMPLETED' },
+      },
+      required: ['status'],
+    },
+    examples: {
+      default: {
+        summary: 'Update Transaction Status Example',
+        value: { status: 'COMPLETED' },
+      },
+    },
+  })
   updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateTransactionStatusDto,

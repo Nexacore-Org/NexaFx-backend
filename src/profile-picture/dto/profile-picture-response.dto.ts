@@ -1,33 +1,33 @@
 import { ApiProperty } from "@nestjs/swagger"
 
 export class ProfilePictureResponseDto {
-  @ApiProperty()
+  @ApiProperty({ example: '1' })
   id: string
 
-  @ApiProperty()
+  @ApiProperty({ example: '123e4567-e89b-12d3-a456-426614174000' })
   userId: string
 
-  @ApiProperty()
+  @ApiProperty({ example: 'profile_123.jpg' })
   fileName: string
 
-  @ApiProperty()
+  @ApiProperty({ example: 'profile.jpg' })
   originalName: string
 
-  @ApiProperty()
+  @ApiProperty({ example: 'https://example.com/profile_123.jpg' })
   fileUrl: string
 
-  @ApiProperty()
+  @ApiProperty({ example: 204800 })
   fileSize: number
 
-  @ApiProperty()
+  @ApiProperty({ example: 'image/jpeg' })
   mimeType: string
 
-  @ApiProperty()
+  @ApiProperty({ example: true })
   isActive: boolean
 
-  @ApiProperty()
+  @ApiProperty({ example: '2024-07-01T10:00:00Z' })
   createdAt: Date
 
-  @ApiProperty()
+  @ApiProperty({ example: '2024-07-01T10:00:00Z' })
   updatedAt: Date
 }

@@ -22,6 +22,7 @@ import databaseConfig from './config/database.config';
 // import { ScheduledTransferModule } from './scheduled-transfers/scheduled-transfers.module';
 import { ProfilePictureModule } from './profile-picture/profile-picture.module';
 import { MailModule } from './mail/mail.module';
+import { TransfersModule } from './transfers/transfers.module';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { MailModule } from './mail/mail.module';
     NotificationPreferencesModule,
     ProfilePictureModule,
     MailModule,
+    TransfersModule,
   ],
   controllers: [AppController],
   providers: [

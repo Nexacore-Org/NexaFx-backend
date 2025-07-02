@@ -4,6 +4,7 @@ import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as cookieParser from 'cookie-parser';
 import { ThrottlerExceptionFilter } from './common/filters/throttler-exception.filters';
+import { setupSwagger } from './swagger/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -36,16 +37,8 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api/v1');
 
-  // Swagger configuration (from feature/swagger-documentation)
-  const config = new DocumentBuilder()
-    .setTitle('NexaFx API')
-    .setDescription('API documentation for NexaFx platform')
-    .setVersion('1.0')
-    .addBearerAuth() // Enable JWT authentication in Swagger
-    .build();
-
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  // Swagger configuration
+  setupSwagger(app);
 
   // Enable CORS (from main)
   app.enableCors({

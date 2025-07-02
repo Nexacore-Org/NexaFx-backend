@@ -42,7 +42,7 @@ export class FeeController {
 
   @Post()
   @ApiOperation({ summary: 'Create a new fee rule' })
-  @ApiBody({ type: Object, examples: { default: { value: { /* fill with example fields */ } } } })
+  @ApiBody({ type: Object, examples: { default: { value: { name: 'Standard Fee', rate: 0.02, isActive: true } } } })
   @ApiResponse({ status: 201, description: 'Fee rule created', type: FeeRule })
   create(@Body() data: Partial<FeeRule>): Promise<FeeRule> {
     return this.feeService.create(data);
@@ -51,7 +51,7 @@ export class FeeController {
   @Put(':id')
   @ApiOperation({ summary: 'Update a fee rule' })
   @ApiParam({ name: 'id', description: 'Fee rule ID' })
-  @ApiBody({ type: Object, examples: { default: { value: { /* fill with example fields */ } } } })
+  @ApiBody({ type: Object, examples: { default: { value: { name: 'Updated Fee', rate: 0.03, isActive: false } } } })
   @ApiResponse({ status: 200, description: 'Fee rule updated', type: FeeRule })
   update(
     @Param('id') id: string,

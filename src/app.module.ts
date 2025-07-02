@@ -23,6 +23,7 @@ import databaseConfig from './config/database.config';
 import { ProfilePictureModule } from './profile-picture/profile-picture.module';
 import { MailModule } from './mail/mail.module';
 import { TransfersModule } from './transfers/transfers.module';
+import { ConversionsModule } from './conversions/conversions.module';
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { TransfersModule } from './transfers/transfers.module';
     ProfilePictureModule,
     MailModule,
     TransfersModule,
+    ConversionsModule,
   ],
   controllers: [AppController],
   providers: [

@@ -31,7 +31,21 @@ export class BlockchainController {
 
   @Post('transaction')
   @ApiOperation({ summary: 'Send a Stellar transaction' })
-  @ApiBody({ type: StellarTransactionDto, examples: { default: { value: { /* fill with example fields */ } } } })
+  @ApiBody({
+    type: StellarTransactionDto,
+    examples: {
+      default: {
+        summary: 'Stellar Transaction Example',
+        value: {
+          destinationAddress: 'GBWMCCCMGBIXNKVLVLUCDX3GKRKOYCPHDVZL6PBSBGJ7NNDRJRBTDWL7',
+          amount: '100.50',
+          asset: 'XLM',
+          memo: 'Payment for services',
+          timeout: 300
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 201, description: 'Transaction submitted successfully', type: Object })
   @ApiResponse({ status: 400, description: 'Bad request or transaction failed' })
   async sendTransaction(

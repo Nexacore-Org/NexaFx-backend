@@ -6,6 +6,7 @@ export function setupSwagger(app: INestApplication) {
     .setTitle('NexaFx API')
     .setDescription('API documentation for NexaFx platform')
     .setVersion('1.0')
+      .addServer('https://nexafx-backend.onrender.com - live server')
     .addBearerAuth()
     .build();
 

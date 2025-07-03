@@ -4,20 +4,23 @@ import { AccountType } from '../entities/user.entity';
 
 export class CreateUserDto {
     @ApiProperty({ example: 'John' })
+    @IsOptional()
     @IsString()
-    firstName: string;
+    firstName?: string;
 
     @ApiProperty({ example: 'Doe' })
+    @IsOptional()
     @IsString()
-    lastName: string;
+    lastName?: string;
 
     @ApiProperty({ example: 'john.doe@example.com' })
     @IsEmail()
     email: string;
 
     @ApiProperty({ enum: AccountType, example: AccountType.PERSONAL })
+    @IsOptional()
     @IsEnum(AccountType)
-    accountType: AccountType;
+    accountType?: AccountType;
 
     @ApiProperty({ example: 'StrongPassword123!' })
     @IsString()
@@ -33,7 +36,6 @@ export class CreateUserDto {
     dateOfBirth?: Date;
 
     @ApiPropertyOptional({ example: '+1234567890' })
-    @IsOptional()
     @IsString()
     phoneNumber?: string;
 

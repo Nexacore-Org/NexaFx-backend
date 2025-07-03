@@ -1,7 +1,7 @@
 import {
   Controller,
   Get,
-  Post,
+  // Post,
   Body,
   Patch,
   Param,
@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam } from '@nestjs/swagger';
 import { UserService } from './providers/user.service';
-import { CreateUserDto } from './dto/create-user.dto';
+// import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
 
@@ -18,13 +18,13 @@ import { User } from './entities/user.entity';
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
-  @Post()
-  @ApiOperation({ summary: 'Create a new user' })
-  @ApiBody({ type: CreateUserDto, examples: { default: { value: { firstName: 'John', lastName: 'Doe', email: 'john.doe@example.com', accountType: 'Personal', password: 'StrongPassword123!', phoneNumber: '+1234567890', address: '123 Main St, City, Country', profilePicture: 'https://example.com/profile.jpg', bio: 'A short bio about the user.' } } } })
-  @ApiResponse({ status: 201, description: 'User created', type: User })
-  create(@Body() createUserDto: CreateUserDto): Promise<User> {
-    return this.userService.create(createUserDto);
-  }
+//   @Post()
+//   @ApiOperation({ summary: 'Create a new user' })
+//   @ApiBody({ type: CreateUserDto, examples: { default: { value: { firstName: 'John', lastName: 'Doe', email: 'john.doe@example.com', accountType: 'Personal', password: 'StrongPassword123!', phoneNumber: '+1234567890', address: '123 Main St, City, Country', profilePicture: 'https://example.com/profile.jpg', bio: 'A short bio about the user.' } } } })
+//   @ApiResponse({ status: 201, description: 'User created', type: User })
+//   create(@Body() createUserDto: CreateUserDto): Promise<User> {
+//     return this.userService.create(createUserDto);
+//   }
 
   @Get()
   @ApiOperation({ summary: 'Get all users' })

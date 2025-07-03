@@ -43,7 +43,7 @@ describe('ConversionsController', () => {
     expect(() => controller.preview(dto)).toThrow(HttpException);
   });
 
-  // Edge case: expired rate lock (simulate by service override)
+  // Edge case: expired rate lock (simulate by service override--)
   it('should handle edge case: expired rate lock', () => {
     jest.spyOn(service, 'preview').mockImplementation(() => {
       throw new HttpException('Rate lock expired', 400);

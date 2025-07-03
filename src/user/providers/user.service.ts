@@ -21,23 +21,23 @@ export class UserService {
     private readonly findUserByPhone: FindUserByPhone,
   ) {}
 
-  async create(createUserDto: CreateUserDto): Promise<User> {
-    const existingUser = await this.userRepository.findOne({
-      where: { email: createUserDto.email },
-    });
+  // async create(createUserDto: CreateUserDto): Promise<User> {
+  //   const existingUser = await this.userRepository.findOne({
+  //     where: { email: createUserDto.email },
+  //   });
 
-    if (existingUser) {
-      throw new ConflictException('Email already exists');
-    }
+  //   if (existingUser) {
+  //     throw new ConflictException('Email already exists');
+  //   }
 
-    const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
-    const user = this.userRepository.create({
-      ...createUserDto,
-      password: hashedPassword,
-    });
+  //   const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
+  //   const user = this.userRepository.create({
+  //     ...createUserDto,
+  //     password: hashedPassword,
+  //   });
 
-    return this.userRepository.save(user);
-  }
+  //   return this.userRepository.save(user);
+  // }
 
   findAll(): Promise<User[]> {
     return this.userRepository.find();

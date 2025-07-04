@@ -339,10 +339,14 @@ export class AuthService {
 
   // Initiate secure sign-up
   async initiateSignup(dto: InitiateSignupDto) {
-    // Check if user already exists
-    const existing = await this.usersService.findOneByEmail(dto.email);
-    if (existing) {
+    // Check if user already exists by email or phone
+    const existingByEmail = await this.usersService.findOneByEmail(dto.email);
+    if (existingByEmail) {
       throw new ConflictException('Email already exists');
+    }
+    const existingByPhone = await this.usersService.findOneByPhone(dto.phone);
+    if (existingByPhone) {
+      throw new ConflictException('Phone number already exists');
     }
     // Generate OTP
     const otp = this.generateOtp();
@@ -351,12 +355,9 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(dto.password, 10);
     // Store in cache
     signupCache.set(dto.email, {
-      firstName: dto.firstName,
-      lastName: dto.lastName,
       email: dto.email,
       phone: dto.phone,
       password: hashedPassword,
-      accountType: dto.accountType,
       otp,
       expiresAt,
     });
@@ -397,12 +398,9 @@ export class AuthService {
     }
     // Create user
     const user = await this.usersService.create({
-      firstName: cached.firstName,
-      lastName: cached.lastName,
       email: cached.email,
       phoneNumber: cached.phone,
       password: cached.password,
-      accountType: cached.accountType,
     });
     // Set isVerified = true after creation
     user.isVerified = true;

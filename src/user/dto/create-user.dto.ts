@@ -2,17 +2,20 @@ import { IsString, IsEmail, IsEnum, IsOptional, IsDateString, MinLength, Matches
 import { AccountType } from '../entities/user.entity';
 
 export class CreateUserDto {
+    @IsOptional()
     @IsString()
-    firstName: string;
+    firstName?: string;
 
+    @IsOptional()
     @IsString()
-    lastName: string;
+    lastName?: string;
 
     @IsEmail()
     email: string;
 
+    @IsOptional()
     @IsEnum(AccountType)
-    accountType: AccountType;
+    accountType?: AccountType;
 
     @IsString()
     @MinLength(8)

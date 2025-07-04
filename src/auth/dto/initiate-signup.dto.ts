@@ -1,16 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsString, MinLength, IsPhoneNumber, IsEnum } from 'class-validator';
-import { AccountType } from 'src/user/entities/user.entity';
+import { IsEmail, IsString, MinLength, IsPhoneNumber } from 'class-validator';
 
 export class InitiateSignupDto {
-  @ApiProperty({ example: 'John' })
-  @IsString()
-  firstName: string;
-
-  @ApiProperty({ example: 'Doe' })
-  @IsString()
-  lastName: string;
-
   @ApiProperty({ example: 'user@example.com' })
   @IsEmail()
   email: string;
@@ -23,8 +14,4 @@ export class InitiateSignupDto {
   @IsString()
   @MinLength(8)
   password: string;
-
-  @ApiProperty({ enum: AccountType, example: AccountType.PERSONAL })
-  @IsEnum(AccountType)
-  accountType: AccountType;
 } 

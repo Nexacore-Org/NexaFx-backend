@@ -36,7 +36,6 @@ export class CreateUserDto {
     dateOfBirth?: Date;
 
     @ApiPropertyOptional({ example: '+1234567890' })
-    @IsOptional()
     @IsString()
     phoneNumber?: string;
 

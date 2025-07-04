@@ -24,6 +24,7 @@ import { ProfilePictureModule } from './profile-picture/profile-picture.module';
 import { MailModule } from './mail/mail.module';
 import { TransfersModule } from './transfers/transfers.module';
 import { ConversionsModule } from './conversions/conversions.module';
+import { WithdrawModule } from './withdraw/withdraw.module';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { ConversionsModule } from './conversions/conversions.module';
     MailModule,
     TransfersModule,
     ConversionsModule,
+    WithdrawModule,
   ],
   controllers: [AppController],
   providers: [

@@ -13,12 +13,14 @@ import { BcryptPasswordHashingService } from './services/bcrypt-password-hashing
 import { MailModule } from 'src/mail/mail.module';
 import { Otp } from 'src/user/entities/otp.entity';
 import { JwtStrategy } from 'src/common/jwt/jwt.strategy';
+import { ActivityLogModule } from 'src/activity-log/activity-log.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, Token, Otp]),
     PassportModule,
     UserModule,
+    ActivityLogModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({

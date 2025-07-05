@@ -26,6 +26,7 @@ import { TransfersModule } from './transfers/transfers.module';
 import { ConversionsModule } from './conversions/conversions.module';
 import { WithdrawModule } from './withdraw/withdraw.module';
 import { DepositModule } from './deposit/deposit.module';
+import { ConvertModule } from './convert/convert.module';
 
 @Module({
   imports: [
@@ -77,6 +78,7 @@ import { DepositModule } from './deposit/deposit.module';
     ConversionsModule,
     WithdrawModule,
     DepositModule,
+    ConvertModule,
   ],
   controllers: [AppController],
   providers: [

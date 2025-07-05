@@ -10,4 +10,4 @@ export enum NotificationType {
   TRANSACTION_FAILED = 'transaction_failed',
   DEPOSIT_CONFIRMED = 'deposit_confirmed',
   WITHDRAWAL_PROCESSED = 'withdrawal_processed',
-}
+DEPOSIT_PENDING = 'deposit_pending',}

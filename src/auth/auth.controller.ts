@@ -13,6 +13,9 @@ import { AuthService } from './services/auth.service';
 import { LoginDto } from './dto/login.dto';
 import { ThrottleAuth } from 'src/common/decorators/throttle-auth.decorators';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { InitiateSignupDto } from './dto/initiate-signup.dto';
+import { VerifySignupDto } from './dto/verify-signup.dto';
+import { ApiBody } from '@nestjs/swagger';
 
 @Controller('auth')
 @ThrottleAuth()
@@ -22,6 +25,15 @@ export class AuthController {
   // Step 1: Initial login - validate credentials and send OTP
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @ApiBody({
+    type: LoginDto,
+    examples: {
+      default: {
+        summary: 'Login Example',
+        value: { identifier: 'user@example.com', password: 'StrongPassword123!' },
+      },
+    },
+  })
   async initiateLogin(@Body() loginDto: LoginDto) {
     return this.authService.initiateLogin(loginDto);
   }
@@ -29,6 +41,15 @@ export class AuthController {
   // Step 2: Verify OTP and complete login
   @Post('verify-login')
   @HttpCode(HttpStatus.OK)
+  @ApiBody({
+    type: VerifyOtpDto,
+    examples: {
+      default: {
+        summary: 'Verify OTP Example',
+        value: { email: 'user@example.com', otpCode: '123456' },
+      },
+    },
+  })
   async completeLogin(
     @Body() verifyOtpDto: VerifyOtpDto,
     @Res({ passthrough: true }) response: Response,
@@ -67,7 +88,34 @@ export class AuthController {
   // Request OTP (for other purposes)
   @Post('request-otp')
   @HttpCode(HttpStatus.OK)
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        email: { type: 'string', example: 'user@example.com' },
+      },
+      required: ['email'],
+    },
+    examples: {
+      default: {
+        summary: 'Request OTP Example',
+        value: { email: 'user@example.com' },
+      },
+    },
+  })
   async requestOtp(@Body('email') email: string) {
     return this.authService.requestOtp(email);
+  }
+
+  @Post('initiate-signup')
+  @HttpCode(HttpStatus.OK)
+  async initiateSignup(@Body() dto: InitiateSignupDto) {
+    return this.authService.initiateSignup(dto);
+  }
+
+  @Post('verify-signup')
+  @HttpCode(HttpStatus.OK)
+  async verifySignup(@Body() dto: VerifySignupDto) {
+    return this.authService.verifySignup(dto);
   }
 }

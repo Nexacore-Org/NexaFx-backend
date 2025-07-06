@@ -4,6 +4,7 @@ import {
   Injectable,
   InternalServerErrorException,
   UnauthorizedException,
+  HttpStatus,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UserService } from 'src/user/providers/user.service';
@@ -17,6 +18,13 @@ import { MailService } from 'src/mail/mail.service';
 import { LoginDto } from '../dto/login.dto';
 import { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
+import { InitiateSignupDto } from '../dto/initiate-signup.dto';
+import { VerifySignupDto } from '../dto/verify-signup.dto';
+import * as bcrypt from 'bcrypt';
+
+// In-memory cache for demo; replace with Redis in production
+const signupCache = new Map();
+const otpAttempts = new Map();
 
 @Injectable()
 export class AuthService {
@@ -327,5 +335,79 @@ export class AuthService {
   async storeRefreshToken(userId: string, token: string) {
     const hash = await this.passwordService.hashPassword(token);
     await this.usersService.updateRefreshToken(userId, hash);
+  }
+
+  // Initiate secure sign-up
+  async initiateSignup(dto: InitiateSignupDto) {
+    // Check if user already exists by email or phone
+    const existingByEmail = await this.usersService.findOneByEmail(dto.email);
+    if (existingByEmail) {
+      throw new ConflictException('Email already exists');
+    }
+    const existingByPhone = await this.usersService.findOneByPhone(dto.phone);
+    if (existingByPhone) {
+      throw new ConflictException('Phone number already exists');
+    }
+    // Generate OTP
+    const otp = this.generateOtp();
+    const expiresAt = Date.now() + 10 * 60 * 1000;
+    // Hash password now for security
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+    // Store in cache
+    signupCache.set(dto.email, {
+      email: dto.email,
+      phone: dto.phone,
+      password: hashedPassword,
+      otp,
+      expiresAt,
+    });
+    otpAttempts.set(dto.email, 0);
+    // Send OTP via email
+    await this.emailService.sendOtpEmail({
+      to: dto.email,
+      otp,
+      userName: dto.email,
+      expirationMinutes: 10,
+    });
+    return { message: 'OTP sent to email', email: dto.email };
+  }
+
+  // Verify OTP and create user
+  async verifySignup(dto: VerifySignupDto) {
+    const cached = signupCache.get(dto.email);
+    if (!cached) {
+      throw new UnauthorizedException('No signup in progress or OTP expired');
+    }
+    // Check expiry
+    if (Date.now() > cached.expiresAt) {
+      signupCache.delete(dto.email);
+      otpAttempts.delete(dto.email);
+      throw new HttpException('OTP expired', HttpStatus.BAD_REQUEST);
+    }
+    // Check attempts
+    const attempts = otpAttempts.get(dto.email) || 0;
+    if (attempts >= 3) {
+      signupCache.delete(dto.email);
+      otpAttempts.delete(dto.email);
+      throw new UnauthorizedException('Too many OTP attempts');
+    }
+    // Validate OTP
+    if (dto.otp !== cached.otp) {
+      otpAttempts.set(dto.email, attempts + 1);
+      throw new UnauthorizedException('Invalid OTP');
+    }
+    // Create user
+    const user = await this.usersService.create({
+      email: cached.email,
+      phoneNumber: cached.phone,
+      password: cached.password,
+    });
+    // Set isVerified = true after creation
+    user.isVerified = true;
+    await this.usersService.update(user.id, user);
+    // Cleanup
+    signupCache.delete(dto.email);
+    otpAttempts.delete(dto.email);
+    return { message: 'User created successfully', userId: user.id };
   }
 }

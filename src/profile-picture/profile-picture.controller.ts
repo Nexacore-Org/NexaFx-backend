@@ -40,13 +40,15 @@ export class ProfilePictureController {
     schema: {
       type: 'object',
       properties: {
-        file: {
-          type: 'string',
-          format: 'binary',
-        },
-        userId: {
-          type: 'string',
-          format: 'uuid',
+        file: { type: 'string', format: 'binary' },
+        userId: { type: 'string', format: 'uuid' },
+      },
+    },
+    examples: {
+      default: {
+        value: {
+          file: '<binary>',
+          userId: '123e4567-e89b-12d3-a456-426614174000',
         },
       },
     },
@@ -66,7 +68,7 @@ export class ProfilePictureController {
 
   @Get('user/:userId/active')
   @ApiOperation({ summary: 'Get active profile picture for a user' })
-  @ApiParam({ name: 'userId', type: 'string', format: 'uuid' })
+  @ApiParam({ name: 'userId', type: 'string', format: 'uuid', description: 'User ID' })
   @ApiResponse({
     status: 200,
     description: 'Active profile picture retrieved successfully',
@@ -81,7 +83,7 @@ export class ProfilePictureController {
 
   @Get('user/:userId')
   @ApiOperation({ summary: 'Get all profile pictures for a user' })
-  @ApiParam({ name: 'userId', type: 'string', format: 'uuid' })
+  @ApiParam({ name: 'userId', type: 'string', format: 'uuid', description: 'User ID' })
   @ApiResponse({
     status: 200,
     description: 'Profile pictures retrieved successfully',
@@ -96,12 +98,9 @@ export class ProfilePictureController {
   @Delete(':id/user/:userId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a profile picture' })
-  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
-  @ApiParam({ name: 'userId', type: 'string', format: 'uuid' })
-  @ApiResponse({
-    status: 204,
-    description: 'Profile picture deleted successfully',
-  })
+  @ApiParam({ name: 'id', type: 'string', format: 'uuid', description: 'Profile Picture ID' })
+  @ApiParam({ name: 'userId', type: 'string', format: 'uuid', description: 'User ID' })
+  @ApiResponse({ status: 204, description: 'Profile picture deleted successfully' })
   @ApiResponse({ status: 404, description: 'Profile picture not found' })
   async deleteProfilePicture(
     @Param('id', ParseUUIDPipe) id: string,

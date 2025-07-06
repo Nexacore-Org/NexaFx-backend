@@ -12,7 +12,7 @@ export class CreateAdminDto {
 
   @ApiProperty({
     description: 'Admin password',
-    example: 'strongPassword123',
+    example: 'StrongAdminPass123!',
   })
   @IsString()
   @IsNotEmpty()

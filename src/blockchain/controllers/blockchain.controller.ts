@@ -8,7 +8,13 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiParam,
+  ApiBody,
+} from '@nestjs/swagger';
 import { StellarService } from '../services/stellar.service';
 import {
   StellarAccountDto,
@@ -16,7 +22,7 @@ import {
 } from '../dto/stellar-transaction.dto';
 import { AssetBalance, StellarTransactionResult } from '../dto/stellar.dto';
 
-@ApiTags('blockchain')
+@ApiTags('Blockchain')
 @Controller('blockchain/stellar')
 export class BlockchainController {
   private readonly logger = new Logger(BlockchainController.name);
@@ -25,20 +31,28 @@ export class BlockchainController {
 
   @Post('transaction')
   @ApiOperation({ summary: 'Send a Stellar transaction' })
-  @ApiResponse({
-    status: 201,
-    description: 'Transaction submitted successfully',
+  @ApiBody({
+    type: StellarTransactionDto,
+    examples: {
+      default: {
+        summary: 'Stellar Transaction Example',
+        value: {
+          destinationAddress: 'GBWMCCCMGBIXNKVLVLUCDX3GKRKOYCPHDVZL6PBSBGJ7NNDRJRBTDWL7',
+          amount: '100.50',
+          asset: 'XLM',
+          memo: 'Payment for services',
+          timeout: 300
+        },
+      },
+    },
   })
-  @ApiResponse({
-    status: 400,
-    description: 'Bad request or transaction failed',
-  })
+  @ApiResponse({ status: 201, description: 'Transaction submitted successfully', type: Object })
+  @ApiResponse({ status: 400, description: 'Bad request or transaction failed' })
   async sendTransaction(
     @Body() transactionDto: StellarTransactionDto,
   ): Promise<StellarTransactionResult> {
     try {
       const result = await this.stellarService.sendTransaction(transactionDto);
-
       if (!result.successful) {
         throw new HttpException(
           {
@@ -49,7 +63,6 @@ export class BlockchainController {
           HttpStatus.BAD_REQUEST,
         );
       }
-
       return result;
     } catch (error) {
       this.logger.error(
@@ -69,10 +82,7 @@ export class BlockchainController {
   @Get('account/:address/exists')
   @ApiOperation({ summary: 'Check if a Stellar account exists' })
   @ApiParam({ name: 'address', description: 'Stellar account address' })
-  @ApiResponse({
-    status: 200,
-    description: 'Returns whether the account exists',
-  })
+  @ApiResponse({ status: 200, description: 'Returns whether the account exists', type: Object })
   async checkAccountExists(
     @Param() params: StellarAccountDto,
   ): Promise<{ exists: boolean }> {

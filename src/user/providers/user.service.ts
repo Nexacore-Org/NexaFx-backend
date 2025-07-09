@@ -8,9 +8,9 @@ import { Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
-import * as bcrypt from 'bcrypt';
 import { FindUserByEmail } from './find-user.service';
 import { FindUserByPhone } from './find-user-by-phone.service';
+import { PasswordHashingService } from 'src/auth/services/passwod.hashing.service';
 
 @Injectable()
 export class UserService {
@@ -19,6 +19,7 @@ export class UserService {
     private readonly userRepository: Repository<User>,
     private readonly findUserByEmail: FindUserByEmail,
     private readonly findUserByPhone: FindUserByPhone,
+    private readonly passwordService: PasswordHashingService,
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<User> {
@@ -30,11 +31,7 @@ export class UserService {
       throw new ConflictException('Email already exists');
     }
 
-    const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
-    const user = this.userRepository.create({
-      ...createUserDto,
-      password: hashedPassword,
-    });
+    const user = this.userRepository.create(createUserDto);
 
     return this.userRepository.save(user);
   }
@@ -59,11 +56,21 @@ export class UserService {
     return await this.findUserByPhone.FindByPhone(phoneNumber);
   }
 
+  async findOneByEmailOptional(email: string): Promise<User | null> {
+    return this.findUserByEmail.FindByEmailOptional(email);
+  }
+
+  async findOneByPhoneOptional(phone: string): Promise<User | null> {
+    return this.findUserByPhone.FindByPhoneOptional(phone);
+  }
+
   async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
     const user = await this.findOne(id);
 
     if (updateUserDto.password) {
-      updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
+      updateUserDto.password = await this.passwordService.hashPassword(
+        updateUserDto.password,
+      );
     }
 
     Object.assign(user, updateUserDto);

@@ -10,12 +10,6 @@ import { Token } from '../../auth/entities/token.entity';
 import { Notifications } from 'src/notifications/entities/notification.entity';
 import { RateLock } from 'src/transactions/entities/ratelock.entity';
 
-export enum AccountType {
-  ALL = 'All',
-  PERSONAL = 'Personal',
-  BUSINESS = 'Business',
-}
-
 export enum UserRole {
   USER = 'User',
   ADMIN = 'Admin',
@@ -27,29 +21,22 @@ export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ nullable: true })
   firstName: string;
 
-  @Column()
+  @Column({ nullable: true })
   lastName: string;
 
   @Column({ unique: true })
   email: string;
 
-  @Column({
-    type: 'enum',
-    enum: AccountType,
-    default: AccountType.PERSONAL,
-  })
-  accountType: AccountType;
-
-  @Column()
+  @Column({ type: 'varchar', length: 255 })
   password: string;
 
   @Column({ nullable: true })
   dateOfBirth: Date;
 
-  @Column({ nullable: true })
+  @Column({ unique: true })
   phoneNumber: string;
 
   @Column({ nullable: true })

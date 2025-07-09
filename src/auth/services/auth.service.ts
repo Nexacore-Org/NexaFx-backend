@@ -17,10 +17,12 @@ import { Otp } from 'src/user/entities/otp.entity';
 import { PasswordHashingService } from './passwod.hashing.service';
 import { MailService } from 'src/mail/mail.service';
 import { LoginDto } from '../dto/login.dto';
-import { Response } from 'express';
+import { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { InitiateSignupDto } from '../dto/initiate-signup.dto';
 import { VerifySignupDto } from '../dto/verify-signup.dto';
+import { v4 as uuidv4 } from 'uuid';
+import { ActivityLogService } from 'src/activity-log/providers/activity-log.service';
 
 type userDetails = {
   email: string;
@@ -36,13 +38,13 @@ const otpAttempts = new Map<string, number>();
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly usersService: UserService,
+    @InjectRepository(User) private readonly usersService: UserService,
     private readonly jwtService: JwtService,
     private readonly passwordService: PasswordHashingService,
     private readonly emailService: MailService,
     private readonly configService: ConfigService,
-    @InjectRepository(Otp)
-    private otpRepo: Repository<Otp>,
+    private readonly activityLogService: ActivityLogService,
+    @InjectRepository(Otp) private otpRepo: Repository<Otp>,
   ) {}
 
   // Validate User Credentials (supports both email and phone)
@@ -108,7 +110,7 @@ export class AuthService {
   }
 
   // Step 1: Initial login - validate credentials and send OTP
-  public async initiateLogin(loginDto: LoginDto) {
+  public async initiateLogin(loginDto: LoginDto, request?: Request) {
     try {
       // Validate user credentials
       const user = await this.validateUser(
@@ -135,6 +137,20 @@ export class AuthService {
         expirationMinutes: 10,
       });
 
+      // Log login attempt
+      if (request) {
+        await this.activityLogService.logLoginActivity(
+          user.id,
+          request,
+          undefined,
+          {
+            loginMethod: 'OTP_INITIATE',
+            otpSent: true,
+            step: 'INITIATE',
+          },
+        );
+      }
+
       return {
         message: 'OTP sent successfully',
         email: user.email, // Return email for OTP verification step
@@ -153,12 +169,29 @@ export class AuthService {
     email: string,
     otpCode: string,
     response: Response,
+    request?: Request,
   ) {
     try {
       // Verify OTP
       const isOtpValid = await this.verifyOtp(email, otpCode);
 
       if (!isOtpValid) {
+        // Log failed OTP attempt
+        if (request) {
+          const user = await this.usersService.findOneByEmail(email);
+          if (user) {
+            await this.activityLogService.logLoginActivity(
+              user.id,
+              request,
+              undefined,
+              {
+                loginMethod: 'OTP_VERIFY',
+                otpVerified: false,
+                step: 'VERIFY_FAILED',
+              },
+            );
+          }
+        }
         throw new UnauthorizedException('Invalid or expired OTP');
       }
 
@@ -168,14 +201,50 @@ export class AuthService {
         throw new UnauthorizedException('User not found');
       }
 
+      // Generate session ID
+      const sessionId = uuidv4();
+
       // Generate tokens
-      const tokens = this.generateTokens(user);
+      const tokens = this.generateTokens(user, sessionId);
 
       // Set tokens as HTTP-only cookies
       this.setTokenCookies(response, tokens);
 
       // Update user's last login and refresh token in database
       await this.updateUserLoginInfo(user.id, tokens.refreshToken);
+
+      // Log successful login
+      if (request) {
+        await this.activityLogService.logLoginActivity(
+          user.id,
+          request,
+          sessionId,
+          {
+            loginMethod: '2FA',
+            otpVerified: true,
+            step: 'COMPLETE',
+            sessionId,
+          },
+        );
+
+        // Check for suspicious activity
+        const ipAddress = this.extractIpAddress(request);
+        const isSuspicious =
+          await this.activityLogService.checkSuspiciousActivity(
+            user.id,
+            ipAddress,
+          );
+
+        if (isSuspicious) {
+          // Send security alert email (if you have this method)
+          // await this.emailService.sendSecurityAlert(
+          //   user.email,
+          //   user.firstName,
+          //   ipAddress,
+          //   request.headers['user-agent'] || 'Unknown',
+          // );
+        }
+      }
 
       return {
         message: 'Login successful',
@@ -199,8 +268,12 @@ export class AuthService {
   }
 
   // Generate both access and refresh tokens
-  private generateTokens(user: User) {
-    const payload = { email: user.email, sub: user.id };
+  private generateTokens(user: User, sessionId?: string) {
+    const payload = {
+      email: user.email,
+      sub: user.id,
+      sessionId: sessionId || uuidv4(),
+    };
 
     return {
       accessToken: this.jwtService.sign(payload, {
@@ -252,12 +325,19 @@ export class AuthService {
   }
 
   // Refresh Token Method
-  public async refreshToken(token: string, response: Response) {
+  public async refreshToken(
+    token: string,
+    response: Response,
+    request?: Request,
+  ) {
     try {
-      const decoded = this.jwtService.verify<{ email: string; sub: number }>(
-        token,
-        { secret: process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET },
-      );
+      const decoded = this.jwtService.verify<{
+        email: string;
+        sub: number;
+        sessionId: string;
+      }>(token, {
+        secret: process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET,
+      });
 
       const user = await this.usersService.findOne(decoded.email);
       if (!user || !user.tokens?.[0]?.refreshToken) {
@@ -274,13 +354,27 @@ export class AuthService {
       }
 
       // Generate new tokens
-      const tokens = this.generateTokens(user);
+      const tokens = this.generateTokens(user, decoded.sessionId);
 
       // Set new tokens as cookies
       this.setTokenCookies(response, tokens);
 
       // Update stored refresh token
       await this.updateUserLoginInfo(user.id, tokens.refreshToken);
+
+      // Log token refresh activity
+      if (request) {
+        await this.activityLogService.logLoginActivity(
+          user.id,
+          request,
+          decoded.sessionId,
+          {
+            loginMethod: 'TOKEN_REFRESH',
+            tokenRefreshed: true,
+            sessionId: decoded.sessionId,
+          },
+        );
+      }
 
       return {
         message: 'Tokens refreshed successfully',
@@ -344,8 +438,15 @@ export class AuthService {
     }
   }
 
-  // Logout - clear cookies
-  public logout(response: Response) {
+  // Logout - clear cookies and log activity
+  public logout(response: Response, request?: Request) {
+    // Log logout activity
+    if (request && request.user) {
+      const userId = request.user['id'];
+      const sessionId = request.user['sessionId'];
+      this.activityLogService.logLogoutActivity(userId, sessionId, request);
+    }
+
     response.clearCookie('refresh_token', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -358,6 +459,22 @@ export class AuthService {
   // Generate OTP
   private generateOtp(): string {
     return String(randomInt(100000, 999999));
+  }
+
+  // Extract IP address from request
+  private extractIpAddress(request: Request): string {
+    const forwarded = request.headers['x-forwarded-for'] as string;
+    const realIp = request.headers['x-real-ip'] as string;
+    const remoteAddress =
+      request.connection?.remoteAddress || request.socket?.remoteAddress;
+
+    if (forwarded) {
+      return forwarded.split(',')[0].trim();
+    }
+    if (realIp) {
+      return realIp;
+    }
+    return remoteAddress || 'Unknown';
   }
 
   // Legacy methods (keeping for backward compatibility)
@@ -378,7 +495,7 @@ export class AuthService {
   }
 
   // Initiate secure sign-up
-  async initiateSignup(dto: InitiateSignupDto) {
+  async initiateSignup(dto: InitiateSignupDto, request?: Request) {
     // Validate input data
     if (!dto.email || !dto.phone || !dto.password) {
       throw new BadRequestException('Email, phone, and password are required');
@@ -454,6 +571,19 @@ export class AuthService {
         throw new InternalServerErrorException('Failed to send OTP email');
       }
 
+      // Log signup initiation
+      if (request) {
+        await this.activityLogService.logActivity(
+          null,
+          request,
+          'SIGNUP_INITIATE',
+          {
+            email: dto.email,
+            phone: dto.phone,
+            otpSent: true,
+          },
+        );
+      }
       return {
         message: 'OTP sent to email successfully',
         email: dto.email,
@@ -499,6 +629,13 @@ export class AuthService {
       // Validate OTP
       if (dto.otp !== cached.otp) {
         otpAttempts.set(dto.email, attempts + 1);
+        // Log failed OTP attempt
+        // if (request) {
+        //   await this.activityLogService.logActivity(null, request, 'SIGNUP_OTP_FAILED', {
+        //     email: dto.email,
+        //     attempts: attempts + 1,
+        //   });
+        // }
         throw new UnauthorizedException('Invalid OTP');
       }
 
@@ -525,6 +662,19 @@ export class AuthService {
           maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         });
       }
+
+      //  // Generate session ID
+      // const sessionId = uuidv4();
+
+      // // Log successful signup
+      // if (request) {
+      //   await this.activityLogService.logLoginActivity(user.id, request, sessionId, {
+      //     loginMethod: 'SIGNUP',
+      //     accountCreated: true,
+      //     otpVerified: true,
+      //     sessionId,
+      //   });
+      // }
 
       // Update user's refresh token in database
       await this.updateUserLoginInfo(user.id, tokens.refreshToken);

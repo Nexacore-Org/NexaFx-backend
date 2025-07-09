@@ -31,4 +31,13 @@ export class FindUserByPhone {
 
     return user;
   }
+  public async FindByPhoneOptional(phone: string): Promise<User | null> {
+    try {
+      return await this.userRepository.findOneBy({ phoneNumber: phone });
+    } catch (error) {
+      throw new RequestTimeoutException(error, {
+        description: 'Could not fetch the User',
+      });
+    }
+  }
 }

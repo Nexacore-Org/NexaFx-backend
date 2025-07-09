@@ -6,7 +6,7 @@ export function setupSwagger(app: INestApplication) {
     .setTitle('NexaFx API')
     .setDescription('API documentation for NexaFx platform')
     .setVersion('1.0')
-      .addServer('https://nexafx-backend.onrender.com - live server')
+    // .addServer('https://nexafx-backend.onrender.com', 'Production Server')
     .addBearerAuth()
     .build();
 
@@ -20,4 +20,4 @@ export function setupSwagger(app: INestApplication) {
     },
     customSiteTitle: 'NexaFx API Docs',
   });
-} 
+}

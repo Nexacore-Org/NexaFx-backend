@@ -30,7 +30,10 @@ export class AuthController {
     examples: {
       default: {
         summary: 'Login Example',
-        value: { identifier: 'user@example.com', password: 'StrongPassword123!' },
+        value: {
+          identifier: 'user@example.com',
+          password: 'StrongPassword123!',
+        },
       },
     },
   })
@@ -115,7 +118,10 @@ export class AuthController {
 
   @Post('verify-signup')
   @HttpCode(HttpStatus.OK)
-  async verifySignup(@Body() dto: VerifySignupDto) {
-    return this.authService.verifySignup(dto);
+  async verifySignup(
+    @Body() dto: VerifySignupDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    return this.authService.verifySignup(dto, response);
   }
 }

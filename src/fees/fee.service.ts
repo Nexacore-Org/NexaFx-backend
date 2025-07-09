@@ -3,7 +3,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
 import { FeeRule } from './entities/fee.entity';
 import { TransactionType } from 'src/transactions/enums/transaction-type.enum';
-import { AccountType } from 'src/user/entities/user.entity';
 
 @Injectable()
 export class FeeService {
@@ -13,8 +12,7 @@ export class FeeService {
   ) {}
 
   async calculateFee(params: {
-    userAccountType: AccountType;
-    transactionType: TransactionType; 
+    transactionType: TransactionType;
     amount: number;
     currencyId: string;
   }): Promise<{
@@ -22,11 +20,10 @@ export class FeeService {
     appliedRule: FeeRule | null;
     feePercent: number;
   }> {
-    const { userAccountType, transactionType, amount, currencyId } = params;
+    const { transactionType, amount, currencyId } = params;
 
     const rule = await this.feeRuleRepo.findOne({
       where: {
-        appliesTo: userAccountType,
         transactionType: transactionType,
         currencyId: currencyId,
         isActive: true,
@@ -40,7 +37,6 @@ export class FeeService {
       // fallback rule (applies to ALL)
       const fallbackRule = await this.feeRuleRepo.findOne({
         where: {
-          appliesTo: AccountType.ALL,
           transactionType: transactionType,
           currencyId: currencyId,
           isActive: true,

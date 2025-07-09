@@ -95,7 +95,6 @@ export class TransactionsService {
     }
 
     const { feeAmount = 0, feePercent } = await this.feeService.calculateFee({
-      userAccountType: user.accountType,
       transactionType: type,
       amount,
       currencyId,

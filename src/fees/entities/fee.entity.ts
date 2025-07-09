@@ -1,6 +1,5 @@
 import { Currency } from 'src/currencies/entities/currency.entity';
 import { TransactionType } from 'src/transactions/enums/transaction-type.enum';
-import { AccountType } from 'src/user/entities/user.entity';
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -20,10 +19,6 @@ export class FeeRule {
   @Column({ type: 'enum', enum: TransactionType })
   @Index()
   transactionType: TransactionType;
-
-  @Column({ type: 'enum', enum: AccountType, default: AccountType.ALL })
-  @Index()
-  appliesTo: AccountType; // user account type
 
   @ManyToOne(() => Currency, { eager: true })
   @JoinColumn({ name: 'currencyId' })

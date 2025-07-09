@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -19,7 +19,7 @@ import { ActivityLogModule } from 'src/activity-log/activity-log.module';
   imports: [
     TypeOrmModule.forFeature([User, Token, Otp]),
     PassportModule,
-    UserModule,
+    forwardRef(() => UserModule),
     ActivityLogModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -40,6 +40,6 @@ import { ActivityLogModule } from 'src/activity-log/activity-log.module';
     },
   ],
   controllers: [AuthController],
-  exports: [JwtModule],
+  exports: [JwtModule, PasswordHashingService],
 })
 export class AuthModule {}

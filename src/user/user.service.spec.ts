@@ -3,7 +3,6 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserService } from './providers/user.service';
 import { User } from './entities/user.entity';
-import { AccountType } from './entities/user.entity';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 
@@ -61,7 +60,6 @@ describe('UserService', () => {
       firstName: 'John',
       lastName: 'Doe',
       email: 'john@example.com',
-      accountType: AccountType.PERSONAL,
       password: 'Password123!',
       dateOfBirth: new Date('1990-01-01'),
       phoneNumber: '1234567890',

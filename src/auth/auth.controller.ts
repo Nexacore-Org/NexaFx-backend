@@ -84,8 +84,11 @@ export class AuthController {
   // Logout
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  logout(@Res({ passthrough: true }) response: Response) {
-    return this.authService.logout(response);
+  logout(
+    @Res({ passthrough: true }) response: Response,
+    @Req() request: Request,
+  ) {
+    return this.authService.logout(response, request);
   }
 
   // Request OTP (for other purposes)
@@ -121,7 +124,8 @@ export class AuthController {
   async verifySignup(
     @Body() dto: VerifySignupDto,
     @Res({ passthrough: true }) response: Response,
+    @Req() request: Request,
   ) {
-    return this.authService.verifySignup(dto, response);
+    return this.authService.verifySignup(dto, response, request);
   }
 }

@@ -1,7 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import { ThrottlerExceptionFilter } from './common/filters/throttler-exception.filters';
 import { setupSwagger } from './swagger/swagger';

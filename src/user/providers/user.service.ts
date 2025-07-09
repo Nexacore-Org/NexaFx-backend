@@ -1,7 +1,8 @@
 import {
   Injectable,
-  ConflictException,
+  // ConflictException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -28,12 +29,21 @@ export class UserService {
     });
 
     if (existingUser) {
-      throw new ConflictException('Email already exists');
+      if (!existingUser.isVerified) {
+        // Update user with new password
+        existingUser.password = createUserDto.password;
+        existingUser.isVerified = true;
+        return this.userRepository.save(existingUser);
+      } else {
+        throw new BadRequestException('Email already exists and is verified');
+      }
     }
 
     const user = this.userRepository.create(createUserDto);
 
-    return this.userRepository.save(user);
+    const savedUser = await this.userRepository.save(user);
+
+    return savedUser;
   }
 
   findAll(): Promise<User[]> {
@@ -67,7 +77,11 @@ export class UserService {
   async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
     const user = await this.findOne(id);
 
-    if (updateUserDto.password) {
+    if (
+      updateUserDto.password &&
+      !updateUserDto.password.startsWith('$2b$') &&
+      !updateUserDto.password.startsWith('$2a$')
+    ) {
       updateUserDto.password = await this.passwordService.hashPassword(
         updateUserDto.password,
       );

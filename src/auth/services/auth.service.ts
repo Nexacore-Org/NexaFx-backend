@@ -38,7 +38,7 @@ const otpAttempts = new Map<string, number>();
 @Injectable()
 export class AuthService {
   constructor(
-    @InjectRepository(User) private readonly usersService: UserService,
+    private readonly usersService: UserService,
     private readonly jwtService: JwtService,
     private readonly passwordService: PasswordHashingService,
     private readonly emailService: MailService,
@@ -67,14 +67,12 @@ export class AuthService {
         throw new UnauthorizedException('Invalid credentials');
       }
 
-      // Debug logging (remove in production)
-      console.log('=== PASSWORD VALIDATION DEBUG ===');
-      console.log('User found:', user.email);
-      console.log('Stored password hash:', user.password);
-      console.log('Provided password:', password);
-      console.log('Password length:', password.length);
-      console.log('Hash length:', user.password.length);
-      console.log('Hash starts with $2b:', user.password.startsWith('$2b'));
+      if (user) {
+        console.log(
+          'LOGIN DEBUG: Existing user password hash in DB:',
+          user.password,
+        );
+      }
 
       // Check if password is not hashed (this shouldn't happen in production)
       if (
@@ -439,12 +437,16 @@ export class AuthService {
   }
 
   // Logout - clear cookies and log activity
-  public logout(response: Response, request?: Request) {
+  public async logout(response: Response, request?: Request) {
     // Log logout activity
     if (request && request.user) {
       const userId = request.user['id'];
       const sessionId = request.user['sessionId'];
-      this.activityLogService.logLogoutActivity(userId, sessionId, request);
+      await this.activityLogService.logLogoutActivity(
+        userId,
+        sessionId,
+        request,
+      );
     }
 
     response.clearCookie('refresh_token', {
@@ -495,7 +497,7 @@ export class AuthService {
   }
 
   // Initiate secure sign-up
-  async initiateSignup(dto: InitiateSignupDto, request?: Request) {
+  async initiateSignup(dto: InitiateSignupDto) {
     // Validate input data
     if (!dto.email || !dto.phone || !dto.password) {
       throw new BadRequestException('Email, phone, and password are required');
@@ -553,7 +555,6 @@ export class AuthService {
         console.error('error', error);
         throw new InternalServerErrorException('Failed to store signup data');
       }
-
       // Send OTP via email
       try {
         await this.emailService.sendOtpEmail({
@@ -571,19 +572,6 @@ export class AuthService {
         throw new InternalServerErrorException('Failed to send OTP email');
       }
 
-      // Log signup initiation
-      if (request) {
-        await this.activityLogService.logActivity(
-          null,
-          request,
-          'SIGNUP_INITIATE',
-          {
-            email: dto.email,
-            phone: dto.phone,
-            otpSent: true,
-          },
-        );
-      }
       return {
         message: 'OTP sent to email successfully',
         email: dto.email,
@@ -604,7 +592,11 @@ export class AuthService {
   }
 
   // Verify OTP and create user with tokens
-  async verifySignup(dto: VerifySignupDto, response?: Response) {
+  async verifySignup(
+    dto: VerifySignupDto,
+    response?: Response,
+    request?: Request,
+  ) {
     try {
       const cached = signupCache.get(dto.email);
       if (!cached) {
@@ -630,15 +622,23 @@ export class AuthService {
       if (dto.otp !== cached.otp) {
         otpAttempts.set(dto.email, attempts + 1);
         // Log failed OTP attempt
-        // if (request) {
-        //   await this.activityLogService.logActivity(null, request, 'SIGNUP_OTP_FAILED', {
-        //     email: dto.email,
-        //     attempts: attempts + 1,
-        //   });
-        // }
+        if (request) {
+          await this.activityLogService.logActivity(
+            null,
+            request,
+            'SIGNUP_OTP_FAILED',
+            {
+              email: dto.email,
+              attempts: attempts + 1,
+            },
+          );
+        }
         throw new UnauthorizedException('Invalid OTP');
       }
-
+      console.log(
+        'VERIFY SIGNUP: Cached password (already hashed):',
+        cached.password,
+      );
       // Create user with already hashed password
       const user = await this.usersService.create({
         email: cached.email,
@@ -648,7 +648,9 @@ export class AuthService {
 
       // Set isVerified = true after creation
       user.isVerified = true;
-      await this.usersService.update(user.id, user);
+      await this.usersService.update(user.id, {
+        isVerified: true,
+      });
 
       // Generate tokens
       const tokens = this.generateTokens(user);
@@ -663,18 +665,23 @@ export class AuthService {
         });
       }
 
-      //  // Generate session ID
-      // const sessionId = uuidv4();
+      // Generate session ID
+      const sessionId = uuidv4();
 
-      // // Log successful signup
-      // if (request) {
-      //   await this.activityLogService.logLoginActivity(user.id, request, sessionId, {
-      //     loginMethod: 'SIGNUP',
-      //     accountCreated: true,
-      //     otpVerified: true,
-      //     sessionId,
-      //   });
-      // }
+      // Log successful signup
+      if (request) {
+        await this.activityLogService.logLoginActivity(
+          user.id,
+          request,
+          sessionId,
+          {
+            loginMethod: 'SIGNUP',
+            accountCreated: true,
+            otpVerified: true,
+            sessionId,
+          },
+        );
+      }
 
       // Update user's refresh token in database
       await this.updateUserLoginInfo(user.id, tokens.refreshToken);

@@ -31,4 +31,13 @@ export class FindUserByEmail {
 
     return user;
   }
+  public async FindByEmailOptional(email: string): Promise<User | null> {
+    try {
+      return await this.userRepository.findOneBy({ email });
+    } catch (error) {
+      throw new RequestTimeoutException(error, {
+        description: 'Could not fetch the User',
+      });
+    }
+  }
 }

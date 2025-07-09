@@ -5,6 +5,7 @@ import {
   InternalServerErrorException,
   UnauthorizedException,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UserService } from 'src/user/providers/user.service';
@@ -20,11 +21,17 @@ import { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { InitiateSignupDto } from '../dto/initiate-signup.dto';
 import { VerifySignupDto } from '../dto/verify-signup.dto';
-import * as bcrypt from 'bcrypt';
 
+type userDetails = {
+  email: string;
+  phone: string;
+  password: string; // Store hashed password
+  otp: string;
+  expiresAt: number;
+};
 // In-memory cache for demo; replace with Redis in production
-const signupCache = new Map();
-const otpAttempts = new Map();
+const signupCache = new Map<string, userDetails>();
+const otpAttempts = new Map<string, number>();
 
 @Injectable()
 export class AuthService {
@@ -43,30 +50,61 @@ export class AuthService {
     identifier: string,
     password: string,
   ): Promise<User> {
-    // Check if identifier is email or phone number
-    const isEmail = identifier.includes('@');
+    try {
+      // Check if identifier is email or phone number
+      const isEmail = identifier.includes('@');
 
-    let user: User;
-    if (isEmail) {
-      user = await this.usersService.findOneByEmail(identifier);
-    } else {
-      user = await this.usersService.findOneByPhone(identifier);
-    }
+      let user: User;
+      if (isEmail) {
+        user = await this.usersService.findOneByEmail(identifier);
+      } else {
+        user = await this.usersService.findOneByPhone(identifier);
+      }
 
-    if (!user) {
+      if (!user) {
+        throw new UnauthorizedException('Invalid credentials');
+      }
+
+      // Debug logging (remove in production)
+      console.log('=== PASSWORD VALIDATION DEBUG ===');
+      console.log('User found:', user.email);
+      console.log('Stored password hash:', user.password);
+      console.log('Provided password:', password);
+      console.log('Password length:', password.length);
+      console.log('Hash length:', user.password.length);
+      console.log('Hash starts with $2b:', user.password.startsWith('$2b'));
+
+      // Check if password is not hashed (this shouldn't happen in production)
+      if (
+        !user.password.startsWith('$2b') &&
+        !user.password.startsWith('$2a')
+      ) {
+        console.error('WARNING: Password in database is not hashed!');
+        throw new UnauthorizedException('Invalid credentials - security issue');
+      }
+
+      const isValidPassword = await this.passwordService.comparePassword(
+        password,
+        user.password,
+      );
+
+      console.log('Password validation result:', isValidPassword);
+      console.log('=== END DEBUG ===');
+
+      if (!isValidPassword) {
+        throw new UnauthorizedException(
+          'Invalid credentials - password mismatch',
+        );
+      }
+
+      return user;
+    } catch (error) {
+      console.error('Validation error:', error);
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
       throw new UnauthorizedException('Invalid credentials');
     }
-
-    const isValidPassword = await this.passwordService.comparePassword(
-      password,
-      user.password,
-    );
-
-    if (!isValidPassword) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    return user;
   }
 
   // Step 1: Initial login - validate credentials and send OTP
@@ -141,6 +179,8 @@ export class AuthService {
 
       return {
         message: 'Login successful',
+        accessToken: tokens.accessToken,
+        // refreshToken: tokens.refreshToken,
         user: {
           id: user.id,
           email: user.email,
@@ -339,75 +379,177 @@ export class AuthService {
 
   // Initiate secure sign-up
   async initiateSignup(dto: InitiateSignupDto) {
-    // Check if user already exists by email or phone
-    const existingByEmail = await this.usersService.findOneByEmail(dto.email);
-    if (existingByEmail) {
-      throw new ConflictException('Email already exists');
+    // Validate input data
+    if (!dto.email || !dto.phone || !dto.password) {
+      throw new BadRequestException('Email, phone, and password are required');
     }
-    const existingByPhone = await this.usersService.findOneByPhone(dto.phone);
-    if (existingByPhone) {
-      throw new ConflictException('Phone number already exists');
+
+    try {
+      // Check if user already exists by email or phone
+      const existingByEmail = await this.usersService.findOneByEmailOptional(
+        dto.email,
+      );
+      if (existingByEmail) {
+        throw new ConflictException('Email already exists');
+      }
+
+      const existingByPhone = await this.usersService.findOneByPhoneOptional(
+        dto.phone,
+      );
+      if (existingByPhone) {
+        throw new ConflictException('Phone number already exists');
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(dto.email)) {
+        throw new BadRequestException('Invalid email format');
+      }
+
+      // Validate password strength
+      if (dto.password.length < 8) {
+        throw new BadRequestException(
+          'Password must be at least 8 characters long',
+        );
+      }
+
+      // Generate OTP
+      const otp = this.generateOtp();
+      const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+      // Hash password immediately for security
+      const hashedPassword = await this.passwordService.hashPassword(
+        dto.password,
+      );
+
+      // Store hashed password in cache
+      try {
+        signupCache.set(dto.email, {
+          email: dto.email,
+          phone: dto.phone,
+          password: hashedPassword, // Store hashed password
+          otp,
+          expiresAt,
+        });
+        otpAttempts.set(dto.email, 0);
+      } catch (error) {
+        console.error('error', error);
+        throw new InternalServerErrorException('Failed to store signup data');
+      }
+
+      // Send OTP via email
+      try {
+        await this.emailService.sendOtpEmail({
+          to: dto.email,
+          otp,
+          userName: dto.email,
+          expirationMinutes: 10,
+        });
+      } catch (error) {
+        console.error('error', error);
+
+        // Clean up cache if email sending fails
+        signupCache.delete(dto.email);
+        otpAttempts.delete(dto.email);
+        throw new InternalServerErrorException('Failed to send OTP email');
+      }
+
+      return {
+        message: 'OTP sent to email successfully',
+        email: dto.email,
+        expiresIn: '10 minutes',
+      };
+    } catch (error) {
+      if (
+        error instanceof ConflictException ||
+        error instanceof BadRequestException ||
+        error instanceof InternalServerErrorException
+      ) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        'An unexpected error occurred during signup',
+      );
     }
-    // Generate OTP
-    const otp = this.generateOtp();
-    const expiresAt = Date.now() + 10 * 60 * 1000;
-    // Hash password now for security
-    const hashedPassword = await bcrypt.hash(dto.password, 10);
-    // Store in cache
-    signupCache.set(dto.email, {
-      email: dto.email,
-      phone: dto.phone,
-      password: hashedPassword,
-      otp,
-      expiresAt,
-    });
-    otpAttempts.set(dto.email, 0);
-    // Send OTP via email
-    await this.emailService.sendOtpEmail({
-      to: dto.email,
-      otp,
-      userName: dto.email,
-      expirationMinutes: 10,
-    });
-    return { message: 'OTP sent to email', email: dto.email };
   }
 
-  // Verify OTP and create user
-  async verifySignup(dto: VerifySignupDto) {
-    const cached = signupCache.get(dto.email);
-    if (!cached) {
-      throw new UnauthorizedException('No signup in progress or OTP expired');
-    }
-    // Check expiry
-    if (Date.now() > cached.expiresAt) {
+  // Verify OTP and create user with tokens
+  async verifySignup(dto: VerifySignupDto, response?: Response) {
+    try {
+      const cached = signupCache.get(dto.email);
+      if (!cached) {
+        throw new UnauthorizedException('No signup in progress or OTP expired');
+      }
+
+      // Check expiry
+      if (Date.now() > cached.expiresAt) {
+        signupCache.delete(dto.email);
+        otpAttempts.delete(dto.email);
+        throw new HttpException('OTP expired', HttpStatus.BAD_REQUEST);
+      }
+
+      // Check attempts
+      const attempts = otpAttempts.get(dto.email) || 0;
+      if (attempts >= 3) {
+        signupCache.delete(dto.email);
+        otpAttempts.delete(dto.email);
+        throw new UnauthorizedException('Too many OTP attempts');
+      }
+
+      // Validate OTP
+      if (dto.otp !== cached.otp) {
+        otpAttempts.set(dto.email, attempts + 1);
+        throw new UnauthorizedException('Invalid OTP');
+      }
+
+      // Create user with already hashed password
+      const user = await this.usersService.create({
+        email: cached.email,
+        phoneNumber: cached.phone,
+        password: cached.password,
+      });
+
+      // Set isVerified = true after creation
+      user.isVerified = true;
+      await this.usersService.update(user.id, user);
+
+      // Generate tokens
+      const tokens = this.generateTokens(user);
+
+      // If response object is provided, set cookies
+      if (response) {
+        response.cookie('refresh_token', tokens.refreshToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'strict',
+          maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        });
+      }
+
+      // Update user's refresh token in database
+      await this.updateUserLoginInfo(user.id, tokens.refreshToken);
+
+      // Cleanup cache
       signupCache.delete(dto.email);
       otpAttempts.delete(dto.email);
-      throw new HttpException('OTP expired', HttpStatus.BAD_REQUEST);
+
+      return {
+        message: 'User created successfully',
+        userId: user.id,
+        accessToken: tokens.accessToken,
+        // refreshToken: tokens.refreshToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          phoneNumber: user.phoneNumber,
+          isVerified: user.isVerified,
+        },
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Signup verification failed');
     }
-    // Check attempts
-    const attempts = otpAttempts.get(dto.email) || 0;
-    if (attempts >= 3) {
-      signupCache.delete(dto.email);
-      otpAttempts.delete(dto.email);
-      throw new UnauthorizedException('Too many OTP attempts');
-    }
-    // Validate OTP
-    if (dto.otp !== cached.otp) {
-      otpAttempts.set(dto.email, attempts + 1);
-      throw new UnauthorizedException('Invalid OTP');
-    }
-    // Create user
-    const user = await this.usersService.create({
-      email: cached.email,
-      phoneNumber: cached.phone,
-      password: cached.password,
-    });
-    // Set isVerified = true after creation
-    user.isVerified = true;
-    await this.usersService.update(user.id, user);
-    // Cleanup
-    signupCache.delete(dto.email);
-    otpAttempts.delete(dto.email);
-    return { message: 'User created successfully', userId: user.id };
   }
 }

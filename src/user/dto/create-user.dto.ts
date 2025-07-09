@@ -1,14 +1,12 @@
 import {
   IsString,
   IsEmail,
-  IsEnum,
   IsOptional,
   IsDateString,
   MinLength,
   Matches,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { AccountType } from '../entities/user.entity';
 
 export class CreateUserDto {
   @ApiProperty({ example: 'John' })
@@ -24,11 +22,6 @@ export class CreateUserDto {
   @ApiProperty({ example: 'john.doe@example.com' })
   @IsEmail()
   email: string;
-
-  @ApiProperty({ enum: AccountType, example: AccountType.PERSONAL })
-  @IsOptional()
-  @IsEnum(AccountType)
-  accountType?: AccountType;
 
   @ApiProperty({ example: 'StrongPassword123!' })
   @IsString()

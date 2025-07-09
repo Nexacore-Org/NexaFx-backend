@@ -8,9 +8,16 @@ describe('AuthService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
-        { provide: require('../../user/user.service').UserService, useValue: {} },
+        {
+          provide: require('../../user/user.service').UserService,
+          useValue: {},
+        },
         { provide: require('@nestjs/jwt').JwtService, useValue: {} },
-        { provide: require('./passwod.hashing.service').BcryptPasswordHashingService, useValue: {} },
+        {
+          provide: require('./passwod.hashing.service')
+            .BcryptPasswordHashingService,
+          useValue: {},
+        },
       ],
     }).compile();
 

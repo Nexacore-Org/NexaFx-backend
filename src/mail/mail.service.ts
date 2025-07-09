@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import * as sgMail from '@sendgrid/mail';
+import sgMail from '@sendgrid/mail';
 import * as ejs from 'ejs';
 import * as path from 'path';
 import * as fs from 'fs/promises';
@@ -55,7 +55,7 @@ export class MailService {
     }
 
     // Initialize SendGrid with API key
-    sgMail.setApiKey(process.env.SENDGRID_API_KEY!);
+    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
     // Uncomment the line below if you are sending mail using a regional EU subuser
     // sgMail.setDataResidency('eu');

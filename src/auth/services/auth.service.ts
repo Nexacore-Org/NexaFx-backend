@@ -246,14 +246,21 @@ export class AuthService {
 
       return {
         message: 'Login successful',
-        accessToken: tokens.accessToken,
-        // refreshToken: tokens.refreshToken,
+        tokens: {
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+        },
         user: {
           id: user.id,
           email: user.email,
           firstName: user.firstName,
           lastName: user.lastName,
           phone: user.phoneNumber,
+          role: user.role,
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+          pics: user.profilePicture,
+          address: user.address,
           // Add other user fields you want to return
         },
       };
@@ -692,14 +699,21 @@ export class AuthService {
 
       return {
         message: 'User created successfully',
-        userId: user.id,
-        accessToken: tokens.accessToken,
-        // refreshToken: tokens.refreshToken,
+        tokens: {
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+        },
         user: {
           id: user.id,
           email: user.email,
-          phoneNumber: user.phoneNumber,
-          isVerified: user.isVerified,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          phone: user.phoneNumber,
+          role: user.role,
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+          pics: user.profilePicture,
+          address: user.address,
         },
       };
     } catch (error) {

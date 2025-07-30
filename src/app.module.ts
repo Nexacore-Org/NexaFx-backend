@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Module } from '@nestjs/common';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
@@ -46,19 +47,25 @@ import { ActivityLogModule } from './activity-log/activity-log.module';
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        type: configService.get<'postgres'>('database.type'),
-        url: configService.get<string>('database.url'),
-        host: configService.get<string>('database.host'),
-        port: configService.get<number>('database.port'),
-        username: configService.get<string>('database.username'),
-        password: configService.get<string>('database.password'),
-        database: configService.get<string>('database.database'),
-        synchronize: configService.get<boolean>('database.synchronize'),
-        ssl: configService.get<boolean>('database.ssl'),
-        autoLoadEntities: true,
-        logging: false,
-      }),
+      useFactory: (configService: ConfigService) => {
+        const config = {
+          type: configService.get<'postgres'>('database.type'),
+          url: configService.get<string>('database.url'),
+          host: configService.get<string>('database.host'),
+          port: configService.get<number>('database.port'),
+          username: configService.get<string>('database.username'),
+          password: configService.get<string>('database.password'),
+          database: configService.get<string>('database.database'),
+          synchronize: configService.get<boolean>('database.synchronize'),
+          ssl: configService.get('database.ssl'),
+          autoLoadEntities: true,
+          logging: false,
+        };
+
+        // console.log('TypeORM DB Config:', config); // Add this
+
+        return config;
+      },
       inject: [ConfigService],
     }),
     UserModule,

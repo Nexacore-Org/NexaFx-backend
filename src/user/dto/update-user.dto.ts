@@ -28,4 +28,7 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
 
   @ApiPropertyOptional({ example: 'true' })
   isVerified?: boolean;
+
+  @ApiPropertyOptional({ example: 'Updated bio for the user.' })
+  lastLogin?: Date;
 }

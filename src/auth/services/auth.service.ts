@@ -23,6 +23,7 @@ import { InitiateSignupDto } from '../dto/initiate-signup.dto';
 import { VerifySignupDto } from '../dto/verify-signup.dto';
 import { v4 as uuidv4 } from 'uuid';
 import { ActivityLogService } from 'src/activity-log/providers/activity-log.service';
+import { Token } from '../entities/token.entity';
 
 type userDetails = {
   email: string;
@@ -45,6 +46,7 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly activityLogService: ActivityLogService,
     @InjectRepository(Otp) private otpRepo: Repository<Otp>,
+    @InjectRepository(Token) private tokenRepo: Repository<Token>,
   ) {}
 
   // Validate User Credentials (supports both email and phone)
@@ -131,7 +133,7 @@ export class AuthService {
       await this.emailService.sendOtpEmail({
         to: user.email,
         otp,
-        userName: `${user.firstName} ${user.lastName}`,
+        userName: `${user.firstName} ${user.lastName}, ${user.email} `,
         expirationMinutes: 10,
       });
 
@@ -209,7 +211,8 @@ export class AuthService {
       this.setTokenCookies(response, tokens);
 
       // Update user's last login and refresh token in database
-      await this.updateUserLoginInfo(user.id, tokens.refreshToken);
+      await this.usersService.update(user.id, { lastLogin: new Date() });
+      await this.saveRefreshToken(user, tokens.refreshToken, sessionId);
 
       // Log successful login
       if (request) {
@@ -302,12 +305,6 @@ export class AuthService {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
-
-    // Send access token in JSON response
-    response.status(200).json({
-      message: 'Login successful',
-      accessToken: tokens.accessToken,
     });
   }
 
@@ -690,8 +687,7 @@ export class AuthService {
         );
       }
 
-      // Update user's refresh token in database
-      await this.updateUserLoginInfo(user.id, tokens.refreshToken);
+      await this.saveRefreshToken(user, tokens.refreshToken, sessionId);
 
       // Cleanup cache
       signupCache.delete(dto.email);
@@ -717,10 +713,49 @@ export class AuthService {
         },
       };
     } catch (error) {
-      if (error instanceof HttpException) {
+      if (
+        error instanceof HttpException ||
+        error instanceof ConflictException ||
+        error instanceof BadRequestException ||
+        error instanceof InternalServerErrorException
+      ) {
         throw error;
       }
       throw new InternalServerErrorException('Signup verification failed');
+    }
+  }
+
+  private async saveRefreshToken(user: User, token: string, sessionId: string) {
+    const hashedRefreshToken = await this.passwordService.hashPassword(token);
+
+    // Calculate the new expiration date
+    const refreshTokenTtl: string =
+      (this.configService.get<string>('JWT_REFRESH_TOKEN_TTL') as string) ||
+      '7d';
+    const expiresInDays = parseInt(refreshTokenTtl, 10);
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + expiresInDays);
+
+    // Check if a token for this session already exists
+    const existingToken = await this.tokenRepo.findOneBy({
+      user: { id: user.id },
+      sessionId: sessionId,
+    });
+
+    if (existingToken) {
+      // If it exists, UPDATE it with the new hash and expiration
+      existingToken.refreshToken = hashedRefreshToken;
+      existingToken.expiresAt = expiresAt;
+      await this.tokenRepo.save(existingToken);
+    } else {
+      // If it does not exist, CREATE a new one
+      const newToken = this.tokenRepo.create({
+        refreshToken: hashedRefreshToken,
+        user,
+        expiresAt,
+        sessionId,
+      });
+      await this.tokenRepo.save(newToken);
     }
   }
 }

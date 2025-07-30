@@ -28,6 +28,9 @@ export class Token {
   userAgent: string;
 
   @Column({ nullable: true })
+  sessionId: string;
+
+  @Column({ nullable: true })
   ipAddress: string;
 
   @CreateDateColumn()

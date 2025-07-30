@@ -63,12 +63,12 @@ export class MailService {
     this.logger.log('SendGrid initialized successfully');
   }
 
-  async onModuleInit() {
+  onModuleInit() {
     // Test SendGrid connection on startup
-    await this.testSendGridConnection();
+    this.testSendGridConnection();
   }
 
-  private async testSendGridConnection(): Promise<void> {
+  private testSendGridConnection() {
     try {
       // SendGrid doesn't have a direct connection test, so we'll validate the API key format
       const apiKey = process.env.SENDGRID_API_KEY;

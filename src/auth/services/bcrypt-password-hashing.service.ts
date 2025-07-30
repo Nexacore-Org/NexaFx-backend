@@ -6,7 +6,6 @@ import { PasswordHashingService } from './passwod.hashing.service';
 export class BcryptPasswordHashingService extends PasswordHashingService {
   public async hashPassword(password: string): Promise<string> {
     const salt = await bcrypt.genSalt();
-    console.log('HASHING SERVICE CALLED:', password);
     return bcrypt.hash(password, salt);
   }
 

@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import sgMail from '@sendgrid/mail';
 import * as ejs from 'ejs';
 import * as path from 'path';
 import * as fs from 'fs/promises';
+import Mailgun from 'mailgun.js';
+import formData from 'form-data';
 
 interface SendEmailOptions {
   to: string;
@@ -29,82 +30,88 @@ interface EmailMessage {
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
+  // Initialize Mailgun client and domain
+  private mgClient: any;
+  private mailgunDomain: string;
 
   constructor() {
-    this.initializeSendGrid();
+    this.initializeMailgun();
   }
 
-  private initializeSendGrid() {
-    // Log environment variables for debugging (without exposing sensitive data)
-    // this.logger.debug('Environment variables:', {
-    //   SENDGRID_API_KEY: process.env.SENDGRID_API_KEY ? '***SET***' : 'NOT SET',
-    //   SENDGRID_FROM_EMAIL: process.env.SENDGRID_FROM_EMAIL,
-    //   SENDGRID_FROM_NAME: process.env.SENDGRID_FROM_NAME,
-    //   NODE_ENV: process.env.NODE_ENV,
-    // });
-
-    // Validate required environment variables
-    if (!process.env.SENDGRID_API_KEY) {
-      this.logger.error('SENDGRID_API_KEY is required!');
-      throw new Error('SendGrid API key is not configured');
+  private initializeMailgun() {
+    // Skip initialization during tests to avoid requiring env variables
+    if (process.env.NODE_ENV === 'test') {
+      this.logger.log('Skipping Mailgun initialization in test environment');
+      return;
     }
 
-    if (!process.env.SENDGRID_FROM_EMAIL) {
-      this.logger.error('SENDGRID_FROM_EMAIL is required!');
-      throw new Error('SendGrid from email is not configured');
+    // Validate required environment variables for Mailgun
+    if (!process.env.MAILGUN_API_KEY) {
+      this.logger.error('MAILGUN_API_KEY is required!');
+      throw new Error('Mailgun API key is not configured');
     }
 
-    // Initialize SendGrid with API key
-    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+    if (!process.env.MAILGUN_DOMAIN) {
+      this.logger.error('MAILGUN_DOMAIN is required!');
+      throw new Error('Mailgun domain is not configured');
+    }
 
-    // Uncomment the line below if you are sending mail using a regional EU subuser
-    // sgMail.setDataResidency('eu');
+    this.mailgunDomain = process.env.MAILGUN_DOMAIN!;
 
-    this.logger.log('SendGrid initialized successfully');
+    const mailgun = new Mailgun(formData);
+    this.mgClient = mailgun.client({
+      username: 'api',
+      key: process.env.MAILGUN_API_KEY!,
+      // Allow overriding base URL (e.g., EU region)
+      url: process.env.MAILGUN_API_BASE_URL || 'https://api.mailgun.net',
+    });
+
+    this.logger.log('Mailgun initialized successfully');
   }
 
   onModuleInit() {
-    // Test SendGrid connection on startup
-    this.testSendGridConnection();
+    // Test Mailgun connection on startup (basic env validation)
+    this.testMailgunConnection();
   }
 
-  private testSendGridConnection() {
+  private testMailgunConnection() {
     try {
-      // SendGrid doesn't have a direct connection test, so we'll validate the API key format
-      const apiKey = process.env.SENDGRID_API_KEY;
-
-      if (!apiKey) {
-        throw new Error('SendGrid API key is not set');
+      if (process.env.NODE_ENV === 'test') {
+        this.logger.log('Skipping Mailgun connection test in test environment');
+        return;
       }
 
-      if (!apiKey.startsWith('SG.')) {
-        throw new Error('Invalid SendGrid API key format');
+      const apiKey = process.env.MAILGUN_API_KEY;
+      const domain = process.env.MAILGUN_DOMAIN;
+
+      if (!apiKey || !domain) {
+        throw new Error('Mailgun API key or domain is not set');
       }
 
-      this.logger.log('SendGrid connection test passed');
+      // No direct connection test available; ensure API key format looks reasonable
+      if (!apiKey.startsWith('key-') && !apiKey.startsWith('MG.')) {
+        this.logger.warn('Mailgun API key format not recognized; proceeding anyway');
+      }
+
+      this.logger.log('Mailgun connection test passed');
     } catch (error) {
-      this.logger.error('SendGrid connection test failed:', error.message);
-      this.logger.error('Please check your SendGrid configuration');
+      this.logger.error('Mailgun connection test failed:', (error as any).message);
+      this.logger.error('Please check your Mailgun configuration');
     }
   }
 
-  async sendEmail(options: SendEmailOptions): Promise<boolean> {
+  async sendEmail(options: { to: string; subject: string; templateName: string; context: Record<string, any>; }): Promise<boolean> {
     try {
-      // In development, you can still send emails but with additional logging
-      // if (process.env.NODE_ENV === 'development') {
-      //   this.logger.log(`📧 Sending email in ${process.env.NODE_ENV} mode`);
-      //   this.logger.log(`To: ${options.to}`);
-      //   this.logger.log(`Subject: ${options.subject}`);
-      //   this.logger.log(`Template: ${options.templateName}`);
-      // }
+      // Skip sending in test or when explicitly disabled
+      if (
+        process.env.NODE_ENV === 'test' ||
+        process.env.SKIP_EMAIL_SENDING === 'true'
+      ) {
+        this.logger.warn('Email sending is disabled in this environment');
+        return true;
+      }
 
-      // If you want to skip email sending in development, uncomment this:
-      // if (process.env.NODE_ENV === 'development' && process.env.SKIP_EMAIL_SENDING === 'true') {
-      //   this.logger.warn('🚧 Email sending is disabled in development mode');
-      //   return true;
-      // }
-
-      const templatePath = path.join(
+      const templatePath = require('path').join(
         process.cwd(),
         'src/mail/templates',
         `${options.templateName}.ejs`,
@@ -112,51 +119,41 @@ export class MailService {
 
       // Check if template exists
       try {
-        await fs.access(templatePath);
+        await require('fs/promises').access(templatePath);
       } catch {
         this.logger.error(`Template file not found: ${templatePath}`);
         return false;
       }
 
-      const template = await fs.readFile(templatePath, 'utf8');
-      const html = ejs.render(template, options.context);
+      const template = await require('fs/promises').readFile(templatePath, 'utf8');
+      const html = require('ejs').render(template, options.context);
 
-      const msg: EmailMessage = {
-        to: options.to,
-        from: {
-          email: process.env.SENDGRID_FROM_EMAIL!,
-          name: process.env.SENDGRID_FROM_NAME || 'Your App',
-        },
+      const fromEmail = process.env.MAILGUN_FROM_EMAIL!;
+      const fromName = process.env.MAILGUN_FROM_NAME || 'Your App';
+
+      const result = await this.mgClient.messages.create(this.mailgunDomain, {
+        to: [options.to],
+        from: `${fromName} <${fromEmail}>`,
         subject: options.subject,
         html,
-      };
-
-      const result = await sgMail.send(msg);
+      });
 
       this.logger.log(
-        `Email sent successfully to ${options.to} with subject: ${options.subject}`,
+        `Email sent successfully to ${options.to} with subject: ${options.subject} (id: ${result?.id || 'n/a'})`,
       );
-
-      if (process.env.NODE_ENV === 'development') {
-        this.logger.debug(`SendGrid response status: ${result[0].statusCode}`);
-      }
 
       return true;
     } catch (error) {
-      this.logger.error(
-        `Failed to send email to ${options.to}: ${error.message}`,
-      );
-
-      // Log additional debugging information
-      if (error.response) {
-        this.logger.error(`SendGrid error response:`, error.response.body);
+      const err: any = error;
+      this.logger.error(`Failed to send email to ${options.to}: ${err?.message}`);
+      if (err?.status || err?.details) {
+        this.logger.error(`Mailgun error status: ${err.status}, details: ${JSON.stringify(err.details)}`);
       }
-
       return false;
     }
   }
 
-  async sendOtpEmail(options: SendOtpEmailOptions): Promise<boolean> {
+  async sendOtpEmail(options: { to: string; otp: string; userName?: string; expirationMinutes?: number; }): Promise<boolean> {
     const context = {
       otp: options.otp,
       userName: options.userName || 'User',
@@ -213,29 +210,30 @@ export class MailService {
   // Method to test email configuration
   async testEmailConfiguration(): Promise<boolean> {
     try {
-      // Test by attempting to send a test email to yourself
-      const testEmail = process.env.SENDGRID_FROM_EMAIL!;
+      if (process.env.NODE_ENV === 'test' || process.env.SKIP_EMAIL_SENDING === 'true') {
+        this.logger.log('Skipping real Mailgun send in test/disabled environment');
+        return true;
+      }
 
-      const msg: EmailMessage = {
-        to: testEmail,
-        from: {
-          email: process.env.SENDGRID_FROM_EMAIL!,
-          name: process.env.SENDGRID_FROM_NAME || 'Your App',
-        },
-        subject: 'SendGrid Configuration Test',
-        html: '<p>This is a test email to verify SendGrid configuration.</p>',
-      };
+      const testEmail = process.env.MAILGUN_FROM_EMAIL!;
+      const fromName = process.env.MAILGUN_FROM_NAME || 'Your App';
 
-      await sgMail.send(msg);
-      this.logger.log('SendGrid configuration test passed');
+      const result = await this.mgClient.messages.create(this.mailgunDomain, {
+        to: [testEmail],
+        from: `${fromName} <${process.env.MAILGUN_FROM_EMAIL!}>`,
+        subject: 'Mailgun Configuration Test',
+        html: '<p>This is a test email to verify Mailgun configuration.</p>',
+      });
+
+      this.logger.log(`Mailgun configuration test passed (id: ${result?.id || 'n/a'})`);
       return true;
     } catch (error) {
-      this.logger.error('SendGrid configuration test failed:', error.message);
+      this.logger.error('Mailgun configuration test failed:', (error as any)?.message);
       return false;
     }
   }
 
-  // Method to send bulk emails (useful for newsletters, notifications)
+  // Method to send bulk emails (simple sequential sending)
   async sendBulkEmails(
     emails: Array<{
       to: string;
@@ -245,62 +243,31 @@ export class MailService {
     }>,
   ): Promise<boolean> {
     try {
-      const messages: EmailMessage[] = [];
-
       for (const emailData of emails) {
-        const templatePath = path.join(
+        // Skip in test or when disabled
+        if (process.env.NODE_ENV === 'test' || process.env.SKIP_EMAIL_SENDING === 'true') {
+          continue;
+        }
+        const templatePath = require('path').join(
           process.cwd(),
           'src/mail/templates',
           `${emailData.templateName}.ejs`,
         );
+        const template = await require('fs/promises').readFile(templatePath, 'utf8');
+        const html = require('ejs').render(template, emailData.context);
 
-        const template = await fs.readFile(templatePath, 'utf8');
-        const html = ejs.render(template, emailData.context);
-
-        messages.push({
-          to: emailData.to,
-          from: {
-            email: process.env.SENDGRID_FROM_EMAIL!,
-            name: process.env.SENDGRID_FROM_NAME || 'Your App',
-          },
+        await this.mgClient.messages.create(this.mailgunDomain, {
+          to: [emailData.to],
+          from: `${process.env.MAILGUN_FROM_NAME || 'Your App'} <${process.env.MAILGUN_FROM_EMAIL!}>`,
           subject: emailData.subject,
           html,
         });
       }
 
-      await sgMail.send(messages);
-      this.logger.log(
-        `Bulk emails sent successfully to ${emails.length} recipients`,
-      );
       return true;
     } catch (error) {
-      this.logger.error(`Failed to send bulk emails: ${error.message}`);
+      this.logger.error('Failed to send bulk emails:', (error as any)?.message);
       return false;
     }
   }
-
-  //   const msg: EmailMessage = {
-  //   to: 'nexacore.org@gmail.com', // Change to your recipient
-  //   from: 'nexacore.org@gmail.com', // Change to your verified sender
-  //   subject: 'Sending with SendGrid is Fun',
-  //   text: 'and easy to do anywhere, even with Node.js',
-  //   html: '<strong>and easy to do anywhere, even with Node.js</strong>',
-  // };
-
-  // async function sendTestEmail(): Promise<void> {
-  //   try {
-  //     await sgMail.send(msg);
-  //     console.log('Email sent successfully');
-  //   } catch (error) {
-  //     console.error('Error sending email:', error);
-
-  //     // More detailed error logging
-  //     if (error.response) {
-  //       console.error('SendGrid error response:', error.response.body);
-  //     }
-  //   }
-  // }
-
-  // // Execute the function
-  // void sendTestEmail();
 }

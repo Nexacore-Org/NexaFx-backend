@@ -1,5 +1,5 @@
 import { plainToClass } from 'class-transformer';
-import { IsString, IsNumber, validateSync } from 'class-validator';
+import { IsString, IsNumber, validateSync, IsOptional } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 class EnvironmentVariables {
@@ -24,6 +24,36 @@ class EnvironmentVariables {
 
   @IsString()
   CONTRACT_ADDRESS: string;
+
+  // Mailgun
+  @IsString()
+  MAILGUN_API_KEY: string;
+
+  @IsString()
+  MAILGUN_DOMAIN: string;
+
+  @IsOptional()
+  @IsString()
+  MAILGUN_API_BASE_URL?: string;
+
+  @IsOptional()
+  @IsString()
+  MAILGUN_FROM_NAME?: string;
+
+  @IsString()
+  MAILGUN_FROM_EMAIL: string;
+
+  @IsOptional()
+  @IsString()
+  FRONTEND_URL?: string;
+
+  @IsOptional()
+  @IsString()
+  APP_NAME?: string;
+
+  @IsOptional()
+  @IsString()
+  SKIP_EMAIL_SENDING?: string;
 }
 
 export function validate(config: Record<string, unknown>) {

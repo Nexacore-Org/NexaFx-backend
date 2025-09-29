@@ -4,13 +4,13 @@ import {
   PrimaryGeneratedColumn,
   CreateDateColumn,
   UpdateDateColumn,
-  Index
+  Index,
 } from 'typeorm';
 
 export enum AnnouncementType {
   INFO = 'info',
   WARNING = 'warning',
-  CRITICAL = 'critical'
+  CRITICAL = 'critical',
 }
 
 @Entity('announcements')
@@ -27,7 +27,7 @@ export class Announcement {
   @Column({
     type: 'enum',
     enum: AnnouncementType,
-    default: AnnouncementType.INFO
+    default: AnnouncementType.INFO,
   })
   type: AnnouncementType;
 

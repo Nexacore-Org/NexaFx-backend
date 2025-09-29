@@ -29,7 +29,7 @@ describe('ConversionsModule', () => {
   it('should inject ConversionsService into ConversionsController', () => {
     const controller = module.get<ConversionsController>(ConversionsController);
     const service = module.get<ConversionsService>(ConversionsService);
-    
+
     expect(controller).toBeDefined();
     expect(service).toBeDefined();
   });
@@ -40,4 +40,4 @@ describe('ConversionsModule', () => {
       module.get<ConversionsService>(ConversionsService);
     }).not.toThrow();
   });
-}); 
+});

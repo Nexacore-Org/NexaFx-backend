@@ -24,9 +24,7 @@ describe('DepositController', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [DepositController],
-      providers: [
-        { provide: DepositService, useValue: mockService },
-      ],
+      providers: [{ provide: DepositService, useValue: mockService }],
     }).compile();
 
     controller = module.get<DepositController>(DepositController);
@@ -64,9 +62,14 @@ describe('DepositController', () => {
 
       service.createDeposit.mockResolvedValue(expectedResponse);
 
-      const result = await controller.createDeposit(createDepositDto, { user: mockUser });
+      const result = await controller.createDeposit(createDepositDto, {
+        user: mockUser,
+      });
 
-      expect(service.createDeposit).toHaveBeenCalledWith('user-123', createDepositDto);
+      expect(service.createDeposit).toHaveBeenCalledWith(
+        'user-123',
+        createDepositDto,
+      );
       expect(result).toEqual(expectedResponse);
     });
 
@@ -76,10 +79,13 @@ describe('DepositController', () => {
         amount: 100,
       };
 
-      service.createDeposit.mockRejectedValue(new BadRequestException('Invalid currency'));
+      service.createDeposit.mockRejectedValue(
+        new BadRequestException('Invalid currency'),
+      );
 
-      await expect(controller.createDeposit(createDepositDto, { user: mockUser }))
-        .rejects.toThrow(BadRequestException);
+      await expect(
+        controller.createDeposit(createDepositDto, { user: mockUser }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -104,7 +110,8 @@ describe('DepositController', () => {
           {
             type: DepositMethod.DIRECT_TOPUP,
             name: 'Direct top-up',
-            description: 'Top up your wallet directly using your mobile wallet or bank-linked options.',
+            description:
+              'Top up your wallet directly using your mobile wallet or bank-linked options.',
             fee: '0%',
             enabled: true,
           },
@@ -132,19 +139,27 @@ describe('DepositController', () => {
 
       service.generateWalletAddress.mockResolvedValue(expectedResponse);
 
-      const result = await controller.generateWalletAddress(currency, { user: mockUser });
+      const result = await controller.generateWalletAddress(currency, {
+        user: mockUser,
+      });
 
-      expect(service.generateWalletAddress).toHaveBeenCalledWith('user-123', currency);
+      expect(service.generateWalletAddress).toHaveBeenCalledWith(
+        'user-123',
+        currency,
+      );
       expect(result).toEqual(expectedResponse);
     });
 
     it('should handle invalid currency', async () => {
       const currency = 'INVALID';
 
-      service.generateWalletAddress.mockRejectedValue(new BadRequestException('Currency INVALID is not supported'));
+      service.generateWalletAddress.mockRejectedValue(
+        new BadRequestException('Currency INVALID is not supported'),
+      );
 
-      await expect(controller.generateWalletAddress(currency, { user: mockUser }))
-        .rejects.toThrow(BadRequestException);
+      await expect(
+        controller.generateWalletAddress(currency, { user: mockUser }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -205,7 +220,7 @@ describe('DepositController', () => {
         2,
         5,
         'COMPLETED',
-        'USDC'
+        'USDC',
       );
 
       expect(service.getDepositHistory).toHaveBeenCalledWith('user-123', {
@@ -237,19 +252,27 @@ describe('DepositController', () => {
 
       service.getDepositById.mockResolvedValue(expectedResponse);
 
-      const result = await controller.getDepositById(depositId, { user: mockUser });
+      const result = await controller.getDepositById(depositId, {
+        user: mockUser,
+      });
 
-      expect(service.getDepositById).toHaveBeenCalledWith(depositId, 'user-123');
+      expect(service.getDepositById).toHaveBeenCalledWith(
+        depositId,
+        'user-123',
+      );
       expect(result).toEqual(expectedResponse);
     });
 
     it('should handle deposit not found', async () => {
       const depositId = 'non-existent';
 
-      service.getDepositById.mockRejectedValue(new NotFoundException('Deposit not found'));
+      service.getDepositById.mockRejectedValue(
+        new NotFoundException('Deposit not found'),
+      );
 
-      await expect(controller.getDepositById(depositId, { user: mockUser }))
-        .rejects.toThrow(NotFoundException);
+      await expect(
+        controller.getDepositById(depositId, { user: mockUser }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -272,19 +295,27 @@ describe('DepositController', () => {
 
       service.confirmDeposit.mockResolvedValue(expectedResponse);
 
-      const result = await controller.confirmDeposit(depositId, { user: mockUser });
+      const result = await controller.confirmDeposit(depositId, {
+        user: mockUser,
+      });
 
-      expect(service.confirmDeposit).toHaveBeenCalledWith(depositId, 'user-123');
+      expect(service.confirmDeposit).toHaveBeenCalledWith(
+        depositId,
+        'user-123',
+      );
       expect(result).toEqual(expectedResponse);
     });
 
     it('should handle deposit not found for confirmation', async () => {
       const depositId = 'non-existent';
 
-      service.confirmDeposit.mockRejectedValue(new NotFoundException('Pending deposit not found'));
+      service.confirmDeposit.mockRejectedValue(
+        new NotFoundException('Pending deposit not found'),
+      );
 
-      await expect(controller.confirmDeposit(depositId, { user: mockUser }))
-        .rejects.toThrow(NotFoundException);
+      await expect(
+        controller.confirmDeposit(depositId, { user: mockUser }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

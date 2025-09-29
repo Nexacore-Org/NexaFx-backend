@@ -5,7 +5,7 @@ import { StellarService, StellarTransactionParams } from './stellar.service';
 // Mock the stellar-sdk module
 jest.mock('stellar-sdk', () => {
   const originalModule = jest.requireActual('stellar-sdk');
-  
+
   return {
     __esModule: true,
     ...originalModule,
@@ -15,19 +15,21 @@ jest.mock('stellar-sdk', () => {
           throw { response: { status: 404 } };
         }
         return Promise.resolve({
-          accountId: () => 'GBWMCCCMGBIXNKVLVLUCDX3GKRKOYCPHDVZL6PBSBGJ7NNDRJRBTDWL7',
+          accountId: () =>
+            'GBWMCCCMGBIXNKVLVLUCDX3GKRKOYCPHDVZL6PBSBGJ7NNDRJRBTDWL7',
           sequenceNumber: () => '123456789',
           incrementSequenceNumber: jest.fn(),
           balances: [
             { asset_type: 'native', balance: '100.5000000' },
-            { 
-              asset_type: 'credit_alphanum4', 
-              asset_code: 'USD', 
-              asset_issuer: 'GBWMCCCMGBIXNKVLVLUCDX3GKRKOYCPHDVZL6PBSBGJ7NNDRJRBTDWL7',
+            {
+              asset_type: 'credit_alphanum4',
+              asset_code: 'USD',
+              asset_issuer:
+                'GBWMCCCMGBIXNKVLVLUCDX3GKRKOYCPHDVZL6PBSBGJ7NNDRJRBTDWL7',
               balance: '50.0000000',
-              limit: '1000.0000000'
-            }
-          ]
+              limit: '1000.0000000',
+            },
+          ],
         });
       }),
       submitTransaction: jest.fn().mockImplementation((tx) => {
@@ -38,63 +40,66 @@ jest.mock('stellar-sdk', () => {
                 extras: {
                   result_codes: {
                     transaction: 'tx_failed',
-                    operations: ['op_underfunded']
+                    operations: ['op_underfunded'],
                   },
-                  result_xdr: 'failed_xdr'
-                }
-              }
-            }
+                  result_xdr: 'failed_xdr',
+                },
+              },
+            },
           };
         }
         return Promise.resolve({
           id: 'mock-transaction-id',
           ledger: 12345,
           created_at: '2025-04-27T12:00:00Z',
-          result_xdr: 'success_xdr'
+          result_xdr: 'success_xdr',
         });
-      })
+      }),
     })),
     Networks: {
       TESTNET: 'Test SDF Network ; September 2015',
-      PUBLIC: 'Public Global Stellar Network ; September 2015'
+      PUBLIC: 'Public Global Stellar Network ; September 2015',
     },
     Keypair: {
       fromSecret: jest.fn().mockReturnValue({
-        publicKey: () => 'GBWMCCCMGBIXNKVLVLUCDX3GKRKOYCPHDVZL6PBSBGJ7NNDRJRBTDWL7',
-        secret: () => 'mock-secret-key'
-      })
+        publicKey: () =>
+          'GBWMCCCMGBIXNKVLVLUCDX3GKRKOYCPHDVZL6PBSBGJ7NNDRJRBTDWL7',
+        secret: () => 'mock-secret-key',
+      }),
     },
     TransactionBuilder: {
       fromXDR: jest.fn().mockImplementation((xdr, network) => ({
-        _memo: { _value: xdr.includes('fail') ? 'fail' : 'success' }
-      }))
+        _memo: { _value: xdr.includes('fail') ? 'fail' : 'success' },
+      })),
     },
     Operation: {
-      payment: jest.fn()
+      payment: jest.fn(),
     },
     Asset: {
-      native: jest.fn()
+      native: jest.fn(),
     },
     Memo: {
-      text: jest.fn()
+      text: jest.fn(),
     },
     BASE_FEE: '100',
     StrKey: {
-      isValidEd25519PublicKey: jest.fn().mockImplementation(addr => addr !== 'INVALID_ADDRESS')
-    }
+      isValidEd25519PublicKey: jest
+        .fn()
+        .mockImplementation((addr) => addr !== 'INVALID_ADDRESS'),
+    },
   };
 });
 
 describe('StellarService', () => {
   let service: StellarService;
-  
+
   // Create a proper mock of ConfigService that matches the expected type
   const mockConfigService = {
     get: jest.fn((key: string) => {
       const config = {
-        'STELLAR_HORIZON_URL': 'https://horizon-testnet.stellar.org',
-        'STELLAR_NETWORK': 'testnet',
-        'STELLAR_SECRET_KEY': 'mock-secret-key'
+        STELLAR_HORIZON_URL: 'https://horizon-testnet.stellar.org',
+        STELLAR_NETWORK: 'testnet',
+        STELLAR_SECRET_KEY: 'mock-secret-key',
       };
       return config[key];
     }),
@@ -115,7 +120,7 @@ describe('StellarService', () => {
     expandVariables: jest.fn(),
     parseEnvFile: jest.fn(),
     parseEnvValue: jest.fn(),
-    processEnv: process.env
+    processEnv: process.env,
   } as unknown as ConfigService;
 
   beforeEach(async () => {
@@ -126,8 +131,8 @@ describe('StellarService', () => {
         StellarService,
         {
           provide: ConfigService,
-          useValue: mockConfigService
-        }
+          useValue: mockConfigService,
+        },
       ],
     }).compile();
 
@@ -159,22 +164,25 @@ describe('StellarService', () => {
 
   describe('sendTransaction', () => {
     const validTransactionParams: StellarTransactionParams = {
-      destinationAddress: 'GBWMCCCMGBIXNKVLVLUCDX3GKRKOYCPHDVZL6PBSBGJ7NNDRJRBTDWL7',
+      destinationAddress:
+        'GBWMCCCMGBIXNKVLVLUCDX3GKRKOYCPHDVZL6PBSBGJ7NNDRJRBTDWL7',
       amount: '10.5',
       asset: 'XLM',
-      memo: 'test payment'
+      memo: 'test payment',
     };
 
     it('should successfully send a transaction', async () => {
-      const buildAndSignSpy = jest.spyOn(service, 'buildAndSignTransaction')
+      const buildAndSignSpy = jest
+        .spyOn(service, 'buildAndSignTransaction')
         .mockResolvedValue('signed_xdr_success');
-      const submitSpy = jest.spyOn(service, 'submitTransaction')
+      const submitSpy = jest
+        .spyOn(service, 'submitTransaction')
         .mockResolvedValue({
           successful: true,
           transactionHash: 'mock-transaction-id',
           ledger: 12345,
           createdAt: '2025-04-27T12:00:00Z',
-          resultXdr: 'success_xdr'
+          resultXdr: 'success_xdr',
         });
 
       const result = await service.sendTransaction(validTransactionParams);
@@ -186,7 +194,8 @@ describe('StellarService', () => {
     });
 
     it('should handle transaction build errors', async () => {
-      jest.spyOn(service, 'buildAndSignTransaction')
+      jest
+        .spyOn(service, 'buildAndSignTransaction')
         .mockRejectedValue(new Error('Build error'));
 
       const result = await service.sendTransaction(validTransactionParams);
@@ -199,7 +208,9 @@ describe('StellarService', () => {
 
   describe('accountExists', () => {
     it('should return true if account exists', async () => {
-      const result = await service.accountExists('GBWMCCCMGBIXNKVLVLUCDX3GKRKOYCPHDVZL6PBSBGJ7NNDRJRBTDWL7');
+      const result = await service.accountExists(
+        'GBWMCCCMGBIXNKVLVLUCDX3GKRKOYCPHDVZL6PBSBGJ7NNDRJRBTDWL7',
+      );
       expect(result).toBe(true);
     });
 
@@ -211,18 +222,20 @@ describe('StellarService', () => {
 
   describe('getAccountBalances', () => {
     it('should return formatted account balances', async () => {
-      const balances = await service.getAccountBalances('GBWMCCCMGBIXNKVLVLUCDX3GKRKOYCPHDVZL6PBSBGJ7NNDRJRBTDWL7');
-      
+      const balances = await service.getAccountBalances(
+        'GBWMCCCMGBIXNKVLVLUCDX3GKRKOYCPHDVZL6PBSBGJ7NNDRJRBTDWL7',
+      );
+
       expect(balances).toHaveLength(2);
       expect(balances[0]).toEqual({
         asset: 'XLM',
         balance: '100.5000000',
-        limit: undefined
+        limit: undefined,
       });
       expect(balances[1]).toEqual({
         asset: 'USD:GBWMCCCMGBIXNKVLVLUCDX3GKRKOYCPHDVZL6PBSBGJ7NNDRJRBTDWL7',
         balance: '50.0000000',
-        limit: '1000.0000000'
+        limit: '1000.0000000',
       });
     });
   });

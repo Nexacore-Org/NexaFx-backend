@@ -27,4 +27,4 @@ export class ConversionSimulationResponse {
   };
   timestamp: Date;
   rateLockExpiresAt?: Date;
-} 
+}

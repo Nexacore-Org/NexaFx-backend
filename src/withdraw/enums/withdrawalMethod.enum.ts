@@ -1,4 +1,4 @@
 export enum WithdrawalMethod {
-  WALLET = "WALLET",
-  FIAT = "FIAT",
+  WALLET = 'WALLET',
+  FIAT = 'FIAT',
 }

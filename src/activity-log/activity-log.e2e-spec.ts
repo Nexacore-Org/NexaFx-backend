@@ -53,7 +53,9 @@ describe('ActivityLogController (e2e)', () => {
       .compile();
 
     app = moduleFixture.createNestApplication();
-    activityLogRepository = moduleFixture.get<Repository<ActivityLog>>(getRepositoryToken(ActivityLog));
+    activityLogRepository = moduleFixture.get<Repository<ActivityLog>>(
+      getRepositoryToken(ActivityLog),
+    );
 
     await app.init();
   });
@@ -64,7 +66,9 @@ describe('ActivityLogController (e2e)', () => {
 
   describe('/activity-logs/sessions (GET)', () => {
     it('should return user sessions', () => {
-      jest.spyOn(activityLogRepository, 'find').mockResolvedValue([mockActivityLog] as any);
+      jest
+        .spyOn(activityLogRepository, 'find')
+        .mockResolvedValue([mockActivityLog] as any);
 
       return request(app.getHttpServer())
         .get('/activity-logs/sessions')
@@ -94,7 +98,9 @@ describe('ActivityLogController (e2e)', () => {
 
   describe('/activity-logs/history (GET)', () => {
     it('should return activity history with default pagination', () => {
-      jest.spyOn(activityLogRepository, 'findAndCount').mockResolvedValue([[mockActivityLog], 1] as any);
+      jest
+        .spyOn(activityLogRepository, 'findAndCount')
+        .mockResolvedValue([[mockActivityLog], 1] as any);
 
       return request(app.getHttpServer())
         .get('/activity-logs/history')
@@ -110,7 +116,9 @@ describe('ActivityLogController (e2e)', () => {
     });
 
     it('should return activity history with custom pagination', () => {
-      jest.spyOn(activityLogRepository, 'findAndCount').mockResolvedValue([[], 0] as any);
+      jest
+        .spyOn(activityLogRepository, 'findAndCount')
+        .mockResolvedValue([[], 0] as any);
 
       return request(app.getHttpServer())
         .get('/activity-logs/history?page=2&limit=10')
@@ -133,7 +141,9 @@ describe('ActivityLogController (e2e)', () => {
         execute: jest.fn().mockResolvedValue({ affected: 2 }),
       };
 
-      jest.spyOn(activityLogRepository, 'createQueryBuilder').mockReturnValue(mockQueryBuilder as any);
+      jest
+        .spyOn(activityLogRepository, 'createQueryBuilder')
+        .mockReturnValue(mockQueryBuilder as any);
 
       return request(app.getHttpServer())
         .post('/activity-logs/logout-other-sessions')
@@ -142,7 +152,9 @@ describe('ActivityLogController (e2e)', () => {
         .expect((res) => {
           expect(res.body).toHaveProperty('message');
           expect(res.body).toHaveProperty('sessionsTerminated');
-          expect(res.body.message).toBe('Successfully logged out from other devices');
+          expect(res.body.message).toBe(
+            'Successfully logged out from other devices',
+          );
         });
     });
   });
@@ -157,7 +169,9 @@ describe('ActivityLogController (e2e)', () => {
         execute: jest.fn().mockResolvedValue({ affected: 3 }),
       };
 
-      jest.spyOn(activityLogRepository, 'createQueryBuilder').mockReturnValue(mockQueryBuilder as any);
+      jest
+        .spyOn(activityLogRepository, 'createQueryBuilder')
+        .mockReturnValue(mockQueryBuilder as any);
 
       return request(app.getHttpServer())
         .post('/activity-logs/logout-all-sessions')
@@ -166,7 +180,9 @@ describe('ActivityLogController (e2e)', () => {
         .expect((res) => {
           expect(res.body).toHaveProperty('message');
           expect(res.body).toHaveProperty('sessionsTerminated');
-          expect(res.body.message).toBe('Successfully logged out from all devices');
+          expect(res.body.message).toBe(
+            'Successfully logged out from all devices',
+          );
         });
     });
   });
@@ -181,7 +197,9 @@ describe('ActivityLogController (e2e)', () => {
         execute: jest.fn().mockResolvedValue({ affected: 1 }),
       };
 
-      jest.spyOn(activityLogRepository, 'createQueryBuilder').mockReturnValue(mockQueryBuilder as any);
+      jest
+        .spyOn(activityLogRepository, 'createQueryBuilder')
+        .mockReturnValue(mockQueryBuilder as any);
 
       return request(app.getHttpServer())
         .delete('/activity-logs/session/session-123')
@@ -196,7 +214,9 @@ describe('ActivityLogController (e2e)', () => {
 
   describe('/activity-logs/suspicious-check (GET)', () => {
     it('should return no suspicious activity', () => {
-      jest.spyOn(activityLogRepository, 'findOne').mockResolvedValue(mockActivityLog as any);
+      jest
+        .spyOn(activityLogRepository, 'findOne')
+        .mockResolvedValue(mockActivityLog as any);
       jest.spyOn(activityLogRepository, 'count').mockResolvedValue(5);
 
       return request(app.getHttpServer())
@@ -225,12 +245,16 @@ describe('ActivityLogController (e2e)', () => {
           expect(res.body).toHaveProperty('isSuspicious');
           expect(res.body).toHaveProperty('message');
           expect(res.body.isSuspicious).toBe(true);
-          expect(res.body.message).toBe('Suspicious activity detected. Please verify your account.');
+          expect(res.body.message).toBe(
+            'Suspicious activity detected. Please verify your account.',
+          );
         });
     });
 
     it('should handle different IP address sources', () => {
-      jest.spyOn(activityLogRepository, 'findOne').mockResolvedValue(mockActivityLog as any);
+      jest
+        .spyOn(activityLogRepository, 'findOne')
+        .mockResolvedValue(mockActivityLog as any);
       jest.spyOn(activityLogRepository, 'count').mockResolvedValue(5);
 
       return request(app.getHttpServer())
@@ -246,7 +270,9 @@ describe('ActivityLogController (e2e)', () => {
 
   describe('IP address extraction', () => {
     it('should extract IP from x-forwarded-for header', () => {
-      jest.spyOn(activityLogRepository, 'findOne').mockResolvedValue(mockActivityLog as any);
+      jest
+        .spyOn(activityLogRepository, 'findOne')
+        .mockResolvedValue(mockActivityLog as any);
       jest.spyOn(activityLogRepository, 'count').mockResolvedValue(5);
 
       return request(app.getHttpServer())
@@ -257,7 +283,9 @@ describe('ActivityLogController (e2e)', () => {
     });
 
     it('should extract IP from x-real-ip header', () => {
-      jest.spyOn(activityLogRepository, 'findOne').mockResolvedValue(mockActivityLog as any);
+      jest
+        .spyOn(activityLogRepository, 'findOne')
+        .mockResolvedValue(mockActivityLog as any);
       jest.spyOn(activityLogRepository, 'count').mockResolvedValue(5);
 
       return request(app.getHttpServer())
@@ -299,4 +327,4 @@ describe('ActivityLogController (e2e)', () => {
         .expect(401);
     });
   });
-}); 
+});

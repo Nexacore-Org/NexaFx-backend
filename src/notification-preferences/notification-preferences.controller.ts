@@ -85,4 +85,3 @@ export class NotificationPreferencesController {
     return this.preferencesService.update(req.user.id, updateDto);
   }
 }
-

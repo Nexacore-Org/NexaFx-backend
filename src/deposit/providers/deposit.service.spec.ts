@@ -10,7 +10,11 @@ import { CreateDepositDto } from '../dto/create-deposit.dto';
 import { DepositMethod } from '../enums/depositMethod.enum';
 import { TransactionType } from '../../transactions/enums/transaction-type.enum';
 import { TransactionStatus } from '../../transactions/enums/transaction-status.enum';
-import { BadRequestException, NotFoundException, InternalServerErrorException } from '@nestjs/common';
+import {
+  BadRequestException,
+  NotFoundException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 
 describe('DepositService', () => {
   let service: DepositService;
@@ -126,8 +130,12 @@ describe('DepositService', () => {
 
       const result = await service.createDeposit('user-123', createDepositDto);
 
-      expect(userRepository.findOne).toHaveBeenCalledWith({ where: { id: 'user-123' } });
-      expect(currencyRepository.findOne).toHaveBeenCalledWith({ where: { code: 'USDC' } });
+      expect(userRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 'user-123' },
+      });
+      expect(currencyRepository.findOne).toHaveBeenCalledWith({
+        where: { code: 'USDC' },
+      });
       expect(transactionRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
           initiatorId: 'user-123',
@@ -136,7 +144,7 @@ describe('DepositService', () => {
           amount: 100,
           currencyId: 'currency-123',
           status: TransactionStatus.PENDING,
-        })
+        }),
       );
       expect(transactionRepository.save).toHaveBeenCalled();
       expect(notificationsService.create).toHaveBeenCalled();
@@ -148,23 +156,26 @@ describe('DepositService', () => {
     it('should throw BadRequestException for invalid amount', async () => {
       const invalidDto = { ...createDepositDto, amount: 0 };
 
-      await expect(service.createDeposit('user-123', invalidDto))
-        .rejects.toThrow(BadRequestException);
+      await expect(
+        service.createDeposit('user-123', invalidDto),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw NotFoundException for non-existent user', async () => {
       userRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.createDeposit('non-existent', createDepositDto))
-        .rejects.toThrow(NotFoundException);
+      await expect(
+        service.createDeposit('non-existent', createDepositDto),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should throw BadRequestException for unsupported currency', async () => {
       userRepository.findOne.mockResolvedValue(mockUser as any);
       currencyRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.createDeposit('user-123', createDepositDto))
-        .rejects.toThrow(BadRequestException);
+      await expect(
+        service.createDeposit('user-123', createDepositDto),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should handle notification service errors gracefully', async () => {
@@ -172,7 +183,9 @@ describe('DepositService', () => {
       currencyRepository.findOne.mockResolvedValue(mockCurrency as any);
       transactionRepository.create.mockReturnValue(mockTransaction as any);
       transactionRepository.save.mockResolvedValue(mockTransaction as any);
-      notificationsService.create.mockRejectedValue(new Error('Notification service error'));
+      notificationsService.create.mockRejectedValue(
+        new Error('Notification service error'),
+      );
 
       const result = await service.createDeposit('user-123', createDepositDto);
 
@@ -190,7 +203,8 @@ describe('DepositService', () => {
           {
             type: DepositMethod.INSTANT,
             name: 'Instant Deposit',
-            description: 'Send crypto directly to your NexaFX wallet address. Just copy your address and make the transfer.',
+            description:
+              'Send crypto directly to your NexaFX wallet address. Just copy your address and make the transfer.',
             fee: '0%',
             enabled: true,
           },
@@ -204,7 +218,8 @@ describe('DepositService', () => {
           {
             type: DepositMethod.DIRECT_TOPUP,
             name: 'Direct top-up',
-            description: 'Top up your wallet directly using your mobile wallet or bank-linked options like Google pay etc',
+            description:
+              'Top up your wallet directly using your mobile wallet or bank-linked options like Google pay etc',
             fee: '0%',
             enabled: true,
           },
@@ -219,7 +234,9 @@ describe('DepositService', () => {
 
       const result = await service.generateWalletAddress('user-123', 'USDC');
 
-      expect(currencyRepository.findOne).toHaveBeenCalledWith({ where: { code: 'USDC' } });
+      expect(currencyRepository.findOne).toHaveBeenCalledWith({
+        where: { code: 'USDC' },
+      });
       expect(result).toHaveProperty('address');
       expect(result).toHaveProperty('qrCode');
       expect(result).toHaveProperty('currency', 'USDC');
@@ -229,8 +246,9 @@ describe('DepositService', () => {
     it('should throw BadRequestException for unsupported currency', async () => {
       currencyRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.generateWalletAddress('user-123', 'INVALID'))
-        .rejects.toThrow(BadRequestException);
+      await expect(
+        service.generateWalletAddress('user-123', 'INVALID'),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -246,16 +264,26 @@ describe('DepositService', () => {
         getManyAndCount: jest.fn().mockResolvedValue([[mockTransaction], 1]),
       };
 
-      transactionRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder as any);
+      transactionRepository.createQueryBuilder.mockReturnValue(
+        mockQueryBuilder as any,
+      );
 
       const result = await service.getDepositHistory('user-123', {
         page: 1,
         limit: 10,
       });
 
-      expect(transactionRepository.createQueryBuilder).toHaveBeenCalledWith('transaction');
-      expect(mockQueryBuilder.where).toHaveBeenCalledWith('transaction.initiatorId = :userId', { userId: 'user-123' });
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('transaction.type = :type', { type: TransactionType.DEPOSIT });
+      expect(transactionRepository.createQueryBuilder).toHaveBeenCalledWith(
+        'transaction',
+      );
+      expect(mockQueryBuilder.where).toHaveBeenCalledWith(
+        'transaction.initiatorId = :userId',
+        { userId: 'user-123' },
+      );
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'transaction.type = :type',
+        { type: TransactionType.DEPOSIT },
+      );
       expect(result).toHaveProperty('deposits');
       expect(result).toHaveProperty('pagination');
     });
@@ -271,7 +299,9 @@ describe('DepositService', () => {
         getManyAndCount: jest.fn().mockResolvedValue([[mockTransaction], 1]),
       };
 
-      transactionRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder as any);
+      transactionRepository.createQueryBuilder.mockReturnValue(
+        mockQueryBuilder as any,
+      );
 
       await service.getDepositHistory('user-123', {
         page: 1,
@@ -279,7 +309,10 @@ describe('DepositService', () => {
         status: 'COMPLETED',
       });
 
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('transaction.status = :status', { status: 'COMPLETED' });
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'transaction.status = :status',
+        { status: 'COMPLETED' },
+      );
     });
 
     it('should apply currency filter when provided', async () => {
@@ -293,7 +326,9 @@ describe('DepositService', () => {
         getManyAndCount: jest.fn().mockResolvedValue([[mockTransaction], 1]),
       };
 
-      transactionRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder as any);
+      transactionRepository.createQueryBuilder.mockReturnValue(
+        mockQueryBuilder as any,
+      );
 
       await service.getDepositHistory('user-123', {
         page: 1,
@@ -301,7 +336,10 @@ describe('DepositService', () => {
         currency: 'USDC',
       });
 
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('transaction.asset = :currency', { currency: 'USDC' });
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'transaction.asset = :currency',
+        { currency: 'USDC' },
+      );
     });
   });
 
@@ -309,7 +347,10 @@ describe('DepositService', () => {
     it('should return deposit by id', async () => {
       transactionRepository.findOne.mockResolvedValue(mockTransaction as any);
 
-      const result = await service.getDepositById('transaction-123', 'user-123');
+      const result = await service.getDepositById(
+        'transaction-123',
+        'user-123',
+      );
 
       expect(transactionRepository.findOne).toHaveBeenCalledWith({
         where: {
@@ -325,8 +366,9 @@ describe('DepositService', () => {
     it('should throw NotFoundException for non-existent deposit', async () => {
       transactionRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.getDepositById('non-existent', 'user-123'))
-        .rejects.toThrow(NotFoundException);
+      await expect(
+        service.getDepositById('non-existent', 'user-123'),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -343,10 +385,15 @@ describe('DepositService', () => {
         }),
       };
 
-      transactionRepository.findOne.mockResolvedValue(pendingTransaction as any);
+      transactionRepository.findOne.mockResolvedValue(
+        pendingTransaction as any,
+      );
       notificationsService.create.mockResolvedValue(undefined);
 
-      const result = await service.confirmDeposit('transaction-123', 'user-123');
+      const result = await service.confirmDeposit(
+        'transaction-123',
+        'user-123',
+      );
 
       expect(transactionRepository.findOne).toHaveBeenCalledWith({
         where: {
@@ -365,8 +412,9 @@ describe('DepositService', () => {
     it('should throw NotFoundException for non-existent pending deposit', async () => {
       transactionRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.confirmDeposit('non-existent', 'user-123'))
-        .rejects.toThrow(NotFoundException);
+      await expect(
+        service.confirmDeposit('non-existent', 'user-123'),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should handle notification service errors gracefully during confirmation', async () => {
@@ -381,10 +429,17 @@ describe('DepositService', () => {
         }),
       };
 
-      transactionRepository.findOne.mockResolvedValue(pendingTransaction as any);
-      notificationsService.create.mockRejectedValue(new Error('Notification service error'));
+      transactionRepository.findOne.mockResolvedValue(
+        pendingTransaction as any,
+      );
+      notificationsService.create.mockRejectedValue(
+        new Error('Notification service error'),
+      );
 
-      const result = await service.confirmDeposit('transaction-123', 'user-123');
+      const result = await service.confirmDeposit(
+        'transaction-123',
+        'user-123',
+      );
 
       expect(result).toBeDefined();
       expect(notificationsService.create).toHaveBeenCalled();
@@ -405,7 +460,9 @@ describe('DepositService', () => {
 
     describe('generateCryptoAddress', () => {
       it('should generate address for supported currencies', async () => {
-        const usdcAddress = await (service as any).generateCryptoAddress('USDC');
+        const usdcAddress = await (service as any).generateCryptoAddress(
+          'USDC',
+        );
         const btcAddress = await (service as any).generateCryptoAddress('BTC');
         const ethAddress = await (service as any).generateCryptoAddress('ETH');
 
@@ -431,11 +488,14 @@ describe('DepositService', () => {
       it('should throw InternalServerErrorException on QR generation failure', async () => {
         // Mock QRCode.toDataURL to throw an error
         jest.doMock('qrcode', () => ({
-          toDataURL: jest.fn().mockRejectedValue(new Error('QR generation failed')),
+          toDataURL: jest
+            .fn()
+            .mockRejectedValue(new Error('QR generation failed')),
         }));
 
-        await expect((service as any).generateQRCode('test-address'))
-          .rejects.toThrow(InternalServerErrorException);
+        await expect(
+          (service as any).generateQRCode('test-address'),
+        ).rejects.toThrow(InternalServerErrorException);
       });
     });
 
@@ -448,7 +508,9 @@ describe('DepositService', () => {
       });
 
       it('should return Unknown for unsupported currencies', () => {
-        expect((service as any).getNetworkForCurrency('UNKNOWN')).toBe('Unknown');
+        expect((service as any).getNetworkForCurrency('UNKNOWN')).toBe(
+          'Unknown',
+        );
       });
     });
 
@@ -457,7 +519,7 @@ describe('DepositService', () => {
         const result = (service as any).mapToDepositResponse(
           mockTransaction,
           'destination-address',
-          'qr-code-data'
+          'qr-code-data',
         );
 
         expect(result).toEqual({

@@ -1,72 +1,72 @@
-import { IsString, IsNumber, IsPositive, IsNotEmpty } from "class-validator"
-import { ApiProperty } from "@nestjs/swagger"
+import { IsString, IsNumber, IsPositive, IsNotEmpty } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class ConversionQuoteDto {
   @ApiProperty({
-    description: "Source currency code",
-    example: "NGN",
+    description: 'Source currency code',
+    example: 'NGN',
   })
   @IsString()
   @IsNotEmpty()
-  fromCurrency: string
+  fromCurrency: string;
 
   @ApiProperty({
-    description: "Target currency code",
-    example: "USDC",
+    description: 'Target currency code',
+    example: 'USDC',
   })
   @IsString()
   @IsNotEmpty()
-  toCurrency: string
+  toCurrency: string;
 
   @ApiProperty({
-    description: "Amount to convert",
+    description: 'Amount to convert',
     example: 25000,
   })
   @IsNumber()
   @IsPositive()
-  amount: number
+  amount: number;
 }
 
 export class ConversionQuoteResponseDto {
   @ApiProperty({
-    description: "Current exchange rate",
+    description: 'Current exchange rate',
     example: 1610,
   })
-  exchangeRate: number
+  exchangeRate: number;
 
   @ApiProperty({
-    description: "Amount that will be received",
+    description: 'Amount that will be received',
     example: 15.5,
   })
-  convertedAmount: number
+  convertedAmount: number;
 
   @ApiProperty({
-    description: "Transaction fee",
+    description: 'Transaction fee',
     example: 200,
   })
-  feeAmount: number
+  feeAmount: number;
 
   @ApiProperty({
-    description: "Fee currency",
-    example: "NGN",
+    description: 'Fee currency',
+    example: 'NGN',
   })
-  feeCurrency: string
+  feeCurrency: string;
 
   @ApiProperty({
-    description: "Total amount to be deducted (amount + fee)",
+    description: 'Total amount to be deducted (amount + fee)',
     example: 25200,
   })
-  totalDeduction: number
+  totalDeduction: number;
 
   @ApiProperty({
-    description: "Quote expiration time",
-    example: "2025-01-05T12:05:00Z",
+    description: 'Quote expiration time',
+    example: '2025-01-05T12:05:00Z',
   })
-  expiresAt: Date
+  expiresAt: Date;
 
   @ApiProperty({
-    description: "Quote ID for reference",
-    example: "quote_123456",
+    description: 'Quote ID for reference',
+    example: 'quote_123456',
   })
-  quoteId: string
+  quoteId: string;
 }

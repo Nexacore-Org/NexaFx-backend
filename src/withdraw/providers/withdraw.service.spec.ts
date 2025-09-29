@@ -56,25 +56,46 @@ describe('WithdrawService', () => {
       method: WithdrawalMethod.WALLET,
       description: 'desc',
     };
-    const withdrawal = { id: 'tx-1', ...dto, asset: 'USDC', status: TransactionStatus.PENDING, reference: 'ref', currency, currencyId: currency.id, feeAmount: 0, totalAmount: 100, destinationAccount: dto.destination, initiatorId: userId, createdAt: new Date() } as Transaction;
+    const withdrawal = {
+      id: 'tx-1',
+      ...dto,
+      asset: 'USDC',
+      status: TransactionStatus.PENDING,
+      reference: 'ref',
+      currency,
+      currencyId: currency.id,
+      feeAmount: 0,
+      totalAmount: 100,
+      destinationAccount: dto.destination,
+      initiatorId: userId,
+      createdAt: new Date(),
+    } as Transaction;
 
     it('should throw if amount <= 0', async () => {
-      await expect(service.createWithdrawal(userId, { ...dto, amount: 0 })).rejects.toThrow(BadRequestException);
+      await expect(
+        service.createWithdrawal(userId, { ...dto, amount: 0 }),
+      ).rejects.toThrow(BadRequestException);
     });
     it('should throw if user not found', async () => {
       userRepo.findOne.mockResolvedValue(null);
-      await expect(service.createWithdrawal(userId, dto)).rejects.toThrow(NotFoundException);
+      await expect(service.createWithdrawal(userId, dto)).rejects.toThrow(
+        NotFoundException,
+      );
     });
     it('should throw if currency not found', async () => {
       userRepo.findOne.mockResolvedValue(user);
       currencyRepo.findOne.mockResolvedValue(null);
-      await expect(service.createWithdrawal(userId, dto)).rejects.toThrow(BadRequestException);
+      await expect(service.createWithdrawal(userId, dto)).rejects.toThrow(
+        BadRequestException,
+      );
     });
     it('should throw if insufficient balance', async () => {
       userRepo.findOne.mockResolvedValue(user);
       currencyRepo.findOne.mockResolvedValue(currency);
       jest.spyOn<any, any>(service, 'getUserBalance').mockResolvedValue(50);
-      await expect(service.createWithdrawal(userId, dto)).rejects.toThrow(BadRequestException);
+      await expect(service.createWithdrawal(userId, dto)).rejects.toThrow(
+        BadRequestException,
+      );
     });
     it('should create withdrawal and send notifications', async () => {
       userRepo.findOne.mockResolvedValue(user);
@@ -87,14 +108,25 @@ describe('WithdrawService', () => {
       expect(transactionRepo.create).toHaveBeenCalled();
       expect(transactionRepo.save).toHaveBeenCalled();
       expect(notificationsService.create).toHaveBeenCalled();
-      expect(result).toMatchObject({ id: withdrawal.id, amount: withdrawal.amount, currency: withdrawal.asset, status: withdrawal.status });
+      expect(result).toMatchObject({
+        id: withdrawal.id,
+        amount: withdrawal.amount,
+        currency: withdrawal.asset,
+        status: withdrawal.status,
+      });
     });
   });
 
   describe('getWithdrawalHistory', () => {
     it('should return paginated withdrawal history', async () => {
       const userId = 'user-1';
-      const tx = { id: 'tx-1', asset: 'USDC', amount: 100, status: TransactionStatus.PENDING, createdAt: new Date() } as Transaction;
+      const tx = {
+        id: 'tx-1',
+        asset: 'USDC',
+        amount: 100,
+        status: TransactionStatus.PENDING,
+        createdAt: new Date(),
+      } as Transaction;
       transactionRepo.findAndCount.mockResolvedValue([[tx], 1]);
       const result = await service.getWithdrawalHistory(userId, 1, 10);
       expect(result.withdrawals.length).toBe(1);
@@ -105,13 +137,26 @@ describe('WithdrawService', () => {
   describe('getWithdrawalById', () => {
     it('should throw if withdrawal not found', async () => {
       transactionRepo.findOne.mockResolvedValue(null);
-      await expect(service.getWithdrawalById('id', 'user')).rejects.toThrow(NotFoundException);
+      await expect(service.getWithdrawalById('id', 'user')).rejects.toThrow(
+        NotFoundException,
+      );
     });
     it('should return withdrawal if found', async () => {
-      const tx = { id: 'tx-1', asset: 'USDC', amount: 100, status: TransactionStatus.PENDING, createdAt: new Date() } as Transaction;
+      const tx = {
+        id: 'tx-1',
+        asset: 'USDC',
+        amount: 100,
+        status: TransactionStatus.PENDING,
+        createdAt: new Date(),
+      } as Transaction;
       transactionRepo.findOne.mockResolvedValue(tx);
       const result = await service.getWithdrawalById('tx-1', 'user');
-      expect(result).toMatchObject({ id: tx.id, amount: tx.amount, currency: tx.asset, status: tx.status });
+      expect(result).toMatchObject({
+        id: tx.id,
+        amount: tx.amount,
+        currency: tx.asset,
+        status: tx.status,
+      });
     });
   });
 });

@@ -11,7 +11,7 @@ import { AuditModule } from 'src/audit/audit.module';
   imports: [
     TypeOrmModule.forFeature([Currency]),
     ScheduleModule.forRoot(),
-    AuditModule
+    AuditModule,
   ],
   controllers: [CurrenciesController],
   providers: [CurrenciesService, RateFetcherService],

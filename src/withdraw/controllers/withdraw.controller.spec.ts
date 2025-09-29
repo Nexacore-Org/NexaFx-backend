@@ -17,9 +17,7 @@ describe('WithdrawController', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [WithdrawController],
-      providers: [
-        { provide: WithdrawService, useValue: service },
-      ],
+      providers: [{ provide: WithdrawService, useValue: service }],
     }).compile();
 
     controller = module.get<WithdrawController>(WithdrawController);
@@ -32,8 +30,18 @@ describe('WithdrawController', () => {
   describe('createWithdrawal', () => {
     it('should call service and return result', async () => {
       const req = { user: { id: 'user-1' } };
-      const dto = { currency: 'USDC', amount: 100, destination: 'wallet', method: WithdrawalMethod.WALLET };
-      const response = { id: 'tx-1', amount: 100, currency: 'USDC', status: TransactionStatus.PENDING };
+      const dto = {
+        currency: 'USDC',
+        amount: 100,
+        destination: 'wallet',
+        method: WithdrawalMethod.WALLET,
+      };
+      const response = {
+        id: 'tx-1',
+        amount: 100,
+        currency: 'USDC',
+        status: TransactionStatus.PENDING,
+      };
       service.createWithdrawal.mockResolvedValue(response as any);
       const result = await controller.createWithdrawal(req, dto as any);
       expect(service.createWithdrawal).toHaveBeenCalledWith('user-1', dto);
@@ -47,7 +55,11 @@ describe('WithdrawController', () => {
       const response = { withdrawals: [], total: 0, page: 1, limit: 10 };
       service.getWithdrawalHistory.mockResolvedValue(response as any);
       const result = await controller.getWithdrawalHistory(req, 1, 10);
-      expect(service.getWithdrawalHistory).toHaveBeenCalledWith('user-1', 1, 10);
+      expect(service.getWithdrawalHistory).toHaveBeenCalledWith(
+        'user-1',
+        1,
+        10,
+      );
       expect(result).toBe(response);
     });
   });
@@ -55,7 +67,12 @@ describe('WithdrawController', () => {
   describe('getWithdrawalById', () => {
     it('should call service and return result', async () => {
       const req = { user: { id: 'user-1' } };
-      const response = { id: 'tx-1', amount: 100, currency: 'USDC', status: TransactionStatus.PENDING };
+      const response = {
+        id: 'tx-1',
+        amount: 100,
+        currency: 'USDC',
+        status: TransactionStatus.PENDING,
+      };
       service.getWithdrawalById.mockResolvedValue(response as any);
       const result = await controller.getWithdrawalById(req, 'tx-1');
       expect(service.getWithdrawalById).toHaveBeenCalledWith('tx-1', 'user-1');

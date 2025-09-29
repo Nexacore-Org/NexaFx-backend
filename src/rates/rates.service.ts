@@ -22,7 +22,9 @@ export class RatesService {
     target = target.trim().toUpperCase();
 
     if (source === target) {
-      throw new BadRequestException('Source and target currencies must be different');
+      throw new BadRequestException(
+        'Source and target currencies must be different',
+      );
     }
     let src = await this.currenciesService.findOne(source);
     if (!src) {
@@ -43,7 +45,10 @@ export class RatesService {
     }
     const rate = Number(tgt.rate) / Number(src.rate);
     const grossAmount = amount * rate;
-    const feeRate = this.configService.get<number>('RATE_FEE_PERCENTAGE', 0.005);
+    const feeRate = this.configService.get<number>(
+      'RATE_FEE_PERCENTAGE',
+      0.005,
+    );
     const fee = grossAmount * feeRate;
     const netAmount = grossAmount - fee;
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);

@@ -1,4 +1,3 @@
-
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -73,16 +72,16 @@ describe('AdminStatsService', () => {
     it('should return overview statistics', async () => {
       transactionRepository.count.mockResolvedValue(1250);
       userRepository.count.mockResolvedValue(450);
-      
+
       const queryBuilder = transactionRepository.createQueryBuilder();
-      queryBuilder.getRawOne.mockResolvedValue({ totalRevenue: 75000.50 });
+      queryBuilder.getRawOne.mockResolvedValue({ totalRevenue: 75000.5 });
       queryBuilder.getCount.mockResolvedValue(125);
 
       const result = await service.getOverviewStats();
 
       expect(result).toEqual({
         totalTransactions: 1250,
-        totalRevenue: 75000.50,
+        totalRevenue: 75000.5,
         totalUsers: 450,
         recentTransactions: 125,
         lastUpdated: expect.any(Date),
@@ -120,14 +119,14 @@ describe('AdminStatsService', () => {
           name: 'Bitcoin',
           code: 'BTC',
           transactionCount: 500,
-          totalVolume: 50000.00,
+          totalVolume: 50000.0,
         },
         {
           id: 2,
           name: 'Ethereum',
           code: 'ETH',
           transactionCount: 350,
-          totalVolume: 35000.00,
+          totalVolume: 35000.0,
         },
       ]);
     });
@@ -136,14 +135,17 @@ describe('AdminStatsService', () => {
   describe('getUserStats', () => {
     it('should return user statistics', async () => {
       userRepository.count.mockResolvedValue(450);
-      
+
       const queryBuilder = userRepository.createQueryBuilder();
       queryBuilder.getCount
-        .mockResolvedValueOnce(50)   // newUsers
-        .mockResolvedValueOnce(40);  // previousMonthUsers
-      
-      const transactionQueryBuilder = transactionRepository.createQueryBuilder();
-      transactionQueryBuilder.getRawOne.mockResolvedValue({ activeUserCount: '200' });
+        .mockResolvedValueOnce(50) // newUsers
+        .mockResolvedValueOnce(40); // previousMonthUsers
+
+      const transactionQueryBuilder =
+        transactionRepository.createQueryBuilder();
+      transactionQueryBuilder.getRawOne.mockResolvedValue({
+        activeUserCount: '200',
+      });
 
       const result = await service.getUserStats();
 

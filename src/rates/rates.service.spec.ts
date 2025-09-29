@@ -26,7 +26,11 @@ describe('RatesService', () => {
       .mockResolvedValueOnce({ exchangeRate: 2 })
       .mockResolvedValueOnce({ exchangeRate: 4 });
 
-    const result = await service.getRate({ source: 'SRC', target: 'TGT', amount: 5 });
+    const result = await service.getRate({
+      source: 'SRC',
+      target: 'TGT',
+      amount: 5,
+    });
     const expectedRate = 4 / 2;
     const gross = 5 * expectedRate;
     const expectedFee = gross * 0.005;
@@ -47,32 +51,35 @@ describe('RatesService', () => {
   });
 
   it('throws if source and target are the same', async () => {
-    await expect(service.getRate({ source: 'USD', target: 'usd', amount: 1 })).rejects.toThrow(
-      /Source and target currencies must be different/
-    );
+    await expect(
+      service.getRate({ source: 'USD', target: 'usd', amount: 1 }),
+    ).rejects.toThrow(/Source and target currencies must be different/);
   });
 
   it('throws if amount is invalid', async () => {
     currenciesService.findOne.mockResolvedValue({ exchangeRate: 1 });
-    await expect(service.getRate({ source: 'USD', target: 'EUR', amount: 0 })).rejects.toThrow(
-      /Amount must be a positive number/
-    );
-    await expect(service.getRate({ source: 'USD', target: 'EUR', amount: -5 })).rejects.toThrow(
-      /Amount must be a positive number/
-    );
-    await expect(service.getRate({ source: 'USD', target: 'EUR', amount: NaN })).rejects.toThrow(
-      /Amount must be a positive number/
-    );
+    await expect(
+      service.getRate({ source: 'USD', target: 'EUR', amount: 0 }),
+    ).rejects.toThrow(/Amount must be a positive number/);
+    await expect(
+      service.getRate({ source: 'USD', target: 'EUR', amount: -5 }),
+    ).rejects.toThrow(/Amount must be a positive number/);
+    await expect(
+      service.getRate({ source: 'USD', target: 'EUR', amount: NaN }),
+    ).rejects.toThrow(/Amount must be a positive number/);
   });
 
   it('is case-insensitive for currency codes', async () => {
-    currenciesService.findOne
-      .mockImplementation((code) => {
-        if (code === 'USD') return Promise.resolve({ exchangeRate: 2 });
-        if (code === 'NGN') return Promise.resolve({ exchangeRate: 10 });
-        return Promise.resolve(null);
-      });
-    const result = await service.getRate({ source: 'usd', target: 'ngn', amount: 1 });
+    currenciesService.findOne.mockImplementation((code) => {
+      if (code === 'USD') return Promise.resolve({ exchangeRate: 2 });
+      if (code === 'NGN') return Promise.resolve({ exchangeRate: 10 });
+      return Promise.resolve(null);
+    });
+    const result = await service.getRate({
+      source: 'usd',
+      target: 'ngn',
+      amount: 1,
+    });
     expect(result.rate).toBe(10 / 2);
   });
 
@@ -81,9 +88,9 @@ describe('RatesService', () => {
       if (code === 'USD') return Promise.resolve({ exchangeRate: 2 });
       return Promise.resolve(null);
     });
-    await expect(service.getRate({ source: 'XXX', target: 'USD', amount: 1 })).rejects.toThrow(
-      /Unsupported source currency: XXX/
-    );
+    await expect(
+      service.getRate({ source: 'XXX', target: 'USD', amount: 1 }),
+    ).rejects.toThrow(/Unsupported source currency: XXX/);
   });
 
   it('throws for unsupported target currency', async () => {
@@ -91,9 +98,9 @@ describe('RatesService', () => {
       if (code === 'USD') return Promise.resolve({ exchangeRate: 2 });
       return Promise.resolve(null);
     });
-    await expect(service.getRate({ source: 'USD', target: 'YYY', amount: 1 })).rejects.toThrow(
-      /Unsupported target currency: YYY/
-    );
+    await expect(
+      service.getRate({ source: 'USD', target: 'YYY', amount: 1 }),
+    ).rejects.toThrow(/Unsupported target currency: YYY/);
   });
 
   it('throws if exchangeRate missing', async () => {
@@ -101,8 +108,8 @@ describe('RatesService', () => {
       .mockResolvedValueOnce({ exchangeRate: null })
       .mockResolvedValueOnce({ exchangeRate: 1 });
 
-    await expect(service.getRate({ source: 'SRC', target: 'TGT' })).rejects.toThrow(
-      BadRequestException,
-    );
+    await expect(
+      service.getRate({ source: 'SRC', target: 'TGT' }),
+    ).rejects.toThrow(BadRequestException);
   });
 });

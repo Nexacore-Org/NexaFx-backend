@@ -14,7 +14,7 @@
 //     ttl: number,
 //   ): Promise<boolean> {
 //     const { originalUrl } = context.switchToHttp().getRequest();
-    
+
 //     // Apply stricter rate limits for critical routes
 //     if (originalUrl.includes('/auth/login')) {
 //       limit = 10; // 10 requests per minute

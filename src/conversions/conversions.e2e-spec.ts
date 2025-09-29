@@ -141,7 +141,9 @@ describe('ConversionsController (e2e)', () => {
         .expect(200)
         .expect((res) => {
           expect(res.body.amount).toBe(1000000);
-          expect(res.body.netAmount).toBe(res.body.amount * res.body.rate - res.body.fee);
+          expect(res.body.netAmount).toBe(
+            res.body.amount * res.body.rate - res.body.fee,
+          );
         });
     });
 
@@ -158,7 +160,9 @@ describe('ConversionsController (e2e)', () => {
         .expect(200)
         .expect((res) => {
           expect(res.body.amount).toBe(99.99);
-          expect(res.body.netAmount).toBe(res.body.amount * res.body.rate - res.body.fee);
+          expect(res.body.netAmount).toBe(
+            res.body.amount * res.body.rate - res.body.fee,
+          );
         });
     });
 
@@ -213,7 +217,7 @@ describe('ConversionsController (e2e)', () => {
           expect(Array.isArray(res.body.feeBreakdown)).toBe(true);
           expect(res.body.feeBreakdown.length).toBeGreaterThan(0);
 
-          res.body.feeBreakdown.forEach(fee => {
+          res.body.feeBreakdown.forEach((fee) => {
             expect(fee).toHaveProperty('type');
             expect(fee).toHaveProperty('value');
             expect(typeof fee.type).toBe('string');
@@ -222,7 +226,10 @@ describe('ConversionsController (e2e)', () => {
           });
 
           // Validate total fee matches breakdown
-          const totalFee = res.body.feeBreakdown.reduce((sum, fee) => sum + fee.value, 0);
+          const totalFee = res.body.feeBreakdown.reduce(
+            (sum, fee) => sum + fee.value,
+            0,
+          );
           expect(totalFee).toBe(res.body.fee);
         });
     });
@@ -257,7 +264,8 @@ describe('ConversionsController (e2e)', () => {
         .send(previewRequest)
         .expect(200)
         .expect((res) => {
-          const expectedNetAmount = res.body.amount * res.body.rate - res.body.fee;
+          const expectedNetAmount =
+            res.body.amount * res.body.rate - res.body.fee;
           expect(res.body.netAmount).toBe(expectedNetAmount);
         });
     });
@@ -287,4 +295,4 @@ describe('ConversionsController (e2e)', () => {
         .expect(200); // Current implementation doesn't validate currency IDs
     });
   });
-}); 
+});

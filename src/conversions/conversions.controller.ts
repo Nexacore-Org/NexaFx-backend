@@ -5,12 +5,7 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiBody,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { ConversionsService } from './conversions.service';
 
 class ConversionPreviewRequestDto {
@@ -40,11 +35,22 @@ export class ConversionsController {
   constructor(private readonly conversionsService: ConversionsService) {}
 
   @Post('preview')
-  @ApiOperation({ summary: 'Preview a currency conversion with locked rate and fee breakdown' })
+  @ApiOperation({
+    summary: 'Preview a currency conversion with locked rate and fee breakdown',
+  })
   @ApiBody({ type: ConversionPreviewRequestDto })
-  @ApiResponse({ status: 200, description: 'Detailed conversion preview', type: ConversionPreviewResponseDto })
-  @ApiResponse({ status: 400, description: 'Invalid input or expired rate lock' })
-  preview(@Body() dto: ConversionPreviewRequestDto): ConversionPreviewResponseDto {
+  @ApiResponse({
+    status: 200,
+    description: 'Detailed conversion preview',
+    type: ConversionPreviewResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid input or expired rate lock',
+  })
+  preview(
+    @Body() dto: ConversionPreviewRequestDto,
+  ): ConversionPreviewResponseDto {
     return this.conversionsService.preview(dto);
   }
-} 
+}

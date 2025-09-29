@@ -52,12 +52,16 @@ describe('FeeController (e2e)', () => {
   });
 
   it('should retrieve all fee rules', async () => {
-    const response = await request(app.getHttpServer()).get('/fees').expect(200);
+    const response = await request(app.getHttpServer())
+      .get('/fees')
+      .expect(200);
     expect(response.body.length).toBeGreaterThan(0);
   });
 
   it('should get one fee rule by ID', async () => {
-    const response = await request(app.getHttpServer()).get(`/fees/${id}`).expect(200);
+    const response = await request(app.getHttpServer())
+      .get(`/fees/${id}`)
+      .expect(200);
     expect(response.body.id).toBe(id);
   });
 

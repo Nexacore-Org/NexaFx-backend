@@ -30,4 +30,4 @@ describe('DepositModule', () => {
     const service = module.get<DepositService>(DepositService);
     expect(service).toBeDefined();
   });
-}); 
+});

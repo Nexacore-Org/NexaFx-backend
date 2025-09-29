@@ -34,7 +34,7 @@ describe('ActivityLogModule', () => {
   it('should inject ActivityLogService into ActivityLogController', () => {
     const controller = module.get<ActivityLogController>(ActivityLogController);
     const service = module.get<ActivityLogService>(ActivityLogService);
-    
+
     expect(controller).toBeDefined();
     expect(service).toBeDefined();
   });
@@ -45,4 +45,4 @@ describe('ActivityLogModule', () => {
       module.get<ActivityLogService>(ActivityLogService);
     }).not.toThrow();
   });
-}); 
+});

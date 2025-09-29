@@ -34,7 +34,10 @@ export class CreateTransactionDto {
   @IsUUID()
   currencyId: string;
 
-  @ApiPropertyOptional({ enum: TransactionStatus, example: TransactionStatus.PENDING })
+  @ApiPropertyOptional({
+    enum: TransactionStatus,
+    example: TransactionStatus.PENDING,
+  })
   @IsEnum(TransactionStatus)
   @IsOptional()
   status?: TransactionStatus;

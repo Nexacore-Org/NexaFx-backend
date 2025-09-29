@@ -32,7 +32,8 @@ describe('ActivityLogService', () => {
 
   const mockRequest = {
     headers: {
-      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'user-agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       'x-forwarded-for': '192.168.1.1',
       'x-real-ip': '192.168.1.1',
     },
@@ -100,7 +101,9 @@ describe('ActivityLogService', () => {
       repository.create.mockReturnValue(mockActivityLog as any);
       repository.save.mockRejectedValue(new Error('Database error'));
 
-      await expect(service.createActivityLog(createDto)).rejects.toThrow('Database error');
+      await expect(service.createActivityLog(createDto)).rejects.toThrow(
+        'Database error',
+      );
     });
   });
 
@@ -109,19 +112,24 @@ describe('ActivityLogService', () => {
       repository.create.mockReturnValue(mockActivityLog as any);
       repository.save.mockResolvedValue(mockActivityLog as any);
 
-      const result = await service.logLoginActivity('user-123', mockRequest, 'session-token-123');
+      const result = await service.logLoginActivity(
+        'user-123',
+        mockRequest,
+        'session-token-123',
+      );
 
       expect(repository.create).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 'user-123',
           ipAddress: '192.168.1.1',
-          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          userAgent:
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
           deviceType: 'Desktop',
           browser: 'Chrome 120.0.0.0',
           operatingSystem: 'Windows 10',
           sessionToken: 'session-token-123',
           activityType: 'LOGIN',
-        })
+        }),
       );
       expect(result).toEqual(mockActivityLog);
     });
@@ -131,12 +139,15 @@ describe('ActivityLogService', () => {
       repository.create.mockReturnValue(mockActivityLog as any);
       repository.save.mockResolvedValue(mockActivityLog as any);
 
-      const result = await service.logLoginActivity('user-123', requestWithoutUserAgent);
+      const result = await service.logLoginActivity(
+        'user-123',
+        requestWithoutUserAgent,
+      );
 
       expect(repository.create).toHaveBeenCalledWith(
         expect.objectContaining({
           userAgent: 'Unknown',
-        })
+        }),
       );
       expect(result).toEqual(mockActivityLog);
     });
@@ -180,7 +191,10 @@ describe('ActivityLogService', () => {
       await service.logLogoutActivity('user-123', undefined, mockRequest);
 
       expect(repository.createQueryBuilder).toHaveBeenCalled();
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('ipAddress = :ipAddress', { ipAddress: '192.168.1.1' });
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'ipAddress = :ipAddress',
+        { ipAddress: '192.168.1.1' },
+      );
     });
   });
 
@@ -229,9 +243,15 @@ describe('ActivityLogService', () => {
 
       repository.createQueryBuilder.mockReturnValue(mockQueryBuilder as any);
 
-      const result = await service.logoutOtherSessions('user-123', 'current-session');
+      const result = await service.logoutOtherSessions(
+        'user-123',
+        'current-session',
+      );
 
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('id != :currentSessionId', { currentSessionId: 'current-session' });
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'id != :currentSessionId',
+        { currentSessionId: 'current-session' },
+      );
       expect(result.message).toBe('Successfully logged out from other devices');
       expect(result.sessionsTerminated).toBe(2);
     });
@@ -296,7 +316,10 @@ describe('ActivityLogService', () => {
       repository.findOne.mockResolvedValue(mockActivityLog as any);
       repository.count.mockResolvedValue(5);
 
-      const result = await service.checkSuspiciousActivity('user-123', '192.168.1.1');
+      const result = await service.checkSuspiciousActivity(
+        'user-123',
+        '192.168.1.1',
+      );
 
       expect(result).toBe(false);
     });
@@ -305,7 +328,10 @@ describe('ActivityLogService', () => {
       repository.findOne.mockResolvedValue(null);
       repository.count.mockResolvedValue(5);
 
-      const result = await service.checkSuspiciousActivity('user-123', '10.0.0.1');
+      const result = await service.checkSuspiciousActivity(
+        'user-123',
+        '10.0.0.1',
+      );
 
       expect(result).toBe(true);
     });
@@ -314,7 +340,10 @@ describe('ActivityLogService', () => {
       repository.findOne.mockResolvedValue(mockActivityLog as any);
       repository.count.mockResolvedValue(15);
 
-      const result = await service.checkSuspiciousActivity('user-123', '192.168.1.1');
+      const result = await service.checkSuspiciousActivity(
+        'user-123',
+        '192.168.1.1',
+      );
 
       expect(result).toBe(true);
     });
@@ -376,7 +405,8 @@ describe('ActivityLogService', () => {
 
   describe('parseUserAgent', () => {
     it('should parse user agent successfully', () => {
-      const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+      const userAgent =
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
       const result = service['parseUserAgent'](userAgent);
 
@@ -399,14 +429,19 @@ describe('ActivityLogService', () => {
       repository.create.mockReturnValue(mockActivityLog as any);
       repository.save.mockResolvedValue(mockActivityLog as any);
 
-      const result = await service.logActivity('user-123', mockRequest, 'CUSTOM_ACTION', { custom: 'data' });
+      const result = await service.logActivity(
+        'user-123',
+        mockRequest,
+        'CUSTOM_ACTION',
+        { custom: 'data' },
+      );
 
       expect(repository.create).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 'user-123',
           activityType: 'CUSTOM_ACTION',
           metadata: { custom: 'data' },
-        })
+        }),
       );
       expect(result).toEqual(mockActivityLog);
     });
@@ -415,13 +450,17 @@ describe('ActivityLogService', () => {
       repository.create.mockReturnValue(mockActivityLog as any);
       repository.save.mockResolvedValue(mockActivityLog as any);
 
-      const result = await service.logActivity(null, mockRequest, 'ANONYMOUS_ACTION');
+      const result = await service.logActivity(
+        null,
+        mockRequest,
+        'ANONYMOUS_ACTION',
+      );
 
       expect(repository.create).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 'anonymous',
           activityType: 'ANONYMOUS_ACTION',
-        })
+        }),
       );
       expect(result).toEqual(mockActivityLog);
     });

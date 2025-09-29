@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, SelectQueryBuilder } from 'typeorm';
 import { CreateNotificationDto } from '../dto/create-notification.dto';
 import { Notifications } from '../entities/notification.entity';
 import { NotificationChannel } from '../enum/notificationChannel.enum';
@@ -13,6 +13,11 @@ import {
   WalletUpdatedEvent,
 } from '../interfacs/notifications.interfcaes';
 import { MailService } from 'src/mail/mail.service';
+import { GetAllNotificationsQueryDto } from '../dto/get-all-notifications-query.dto';
+import {
+  GetAllNotificationsResponseDto,
+  NotificationResponseDto,
+} from '../dto/get-all-notifications-response.dto';
 
 @Injectable()
 export class NotificationsService {
@@ -104,6 +109,128 @@ export class NotificationsService {
       where: { userId, isRead: false },
       order: { createdAt: 'DESC' },
     });
+  }
+
+  async getAllNotificationsForUser(
+    userId: string,
+    queryDto: GetAllNotificationsQueryDto,
+  ): Promise<GetAllNotificationsResponseDto> {
+    const {
+      page = 1,
+      limit = 10,
+      isRead,
+      type,
+      category,
+      priority,
+      fromDate,
+      toDate,
+      sortBy = 'createdAt',
+      sortOrder = 'DESC',
+      search,
+      relatedEntityType,
+    } = queryDto;
+
+    // Build the query
+    const queryBuilder: SelectQueryBuilder<Notifications> =
+      this.notificationRepository
+        .createQueryBuilder('notification')
+        .where('notification.userId = :userId', { userId });
+
+    // Apply filters
+    if (isRead !== undefined) {
+      queryBuilder.andWhere('notification.isRead = :isRead', { isRead });
+    }
+
+    if (type) {
+      queryBuilder.andWhere('notification.type = :type', { type });
+    }
+
+    if (category) {
+      queryBuilder.andWhere('notification.category = :category', { category });
+    }
+
+    if (priority) {
+      queryBuilder.andWhere('notification.priority = :priority', { priority });
+    }
+
+    if (relatedEntityType) {
+      queryBuilder.andWhere(
+        'notification.relatedEntityType = :relatedEntityType',
+        {
+          relatedEntityType,
+        },
+      );
+    }
+
+    if (fromDate) {
+      queryBuilder.andWhere('notification.createdAt >= :fromDate', {
+        fromDate: new Date(fromDate),
+      });
+    }
+
+    if (toDate) {
+      queryBuilder.andWhere('notification.createdAt <= :toDate', {
+        toDate: new Date(toDate),
+      });
+    }
+
+    if (search) {
+      queryBuilder.andWhere(
+        '(notification.title ILIKE :search OR notification.message ILIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    // Apply sorting
+    queryBuilder.orderBy(`notification.${sortBy}`, sortOrder);
+
+    // Get total count for pagination
+    const totalItems = await queryBuilder.getCount();
+
+    // Apply pagination
+    const skip = (page - 1) * limit;
+    queryBuilder.skip(skip).take(limit);
+
+    // Execute query
+    const notifications = await queryBuilder.getMany();
+
+    // Get summary statistics for the user
+    const [totalUnread, totalRead, lastNotification] = await Promise.all([
+      this.notificationRepository.count({
+        where: { userId, isRead: false },
+      }),
+      this.notificationRepository.count({
+        where: { userId, isRead: true },
+      }),
+      this.notificationRepository.findOne({
+        where: { userId },
+        order: { createdAt: 'DESC' },
+      }),
+    ]);
+
+    // Calculate pagination metadata
+    const totalPages = Math.ceil(totalItems / limit);
+    const hasPreviousPage = page > 1;
+    const hasNextPage = page < totalPages;
+
+    return {
+      notifications: notifications.map(
+        (notification) => new NotificationResponseDto(notification),
+      ),
+      meta: {
+        page,
+        limit,
+        totalItems,
+        totalPages,
+        hasPreviousPage,
+        hasNextPage,
+      },
+      summary: {
+        totalUnread,
+        totalRead,
+        lastNotificationDate: lastNotification?.createdAt,
+      },
+    };
   }
 
   private async sendEmailNotification(

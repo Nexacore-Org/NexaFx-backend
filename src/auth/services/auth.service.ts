@@ -689,6 +689,16 @@ export class AuthService {
 
       await this.saveRefreshToken(user, tokens.refreshToken, sessionId);
 
+      // Send welcome email (non-blocking) after successful signup verification
+      try {
+        await this.emailService.sendWelcomeEmail(
+          user.email,
+          user.firstName || user.email,
+        );
+      } catch (e) {
+        console.warn('Failed to send welcome email:', (e as any)?.message);
+      }
+
       // Cleanup cache
       signupCache.delete(dto.email);
       otpAttempts.delete(dto.email);

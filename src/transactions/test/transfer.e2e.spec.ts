@@ -22,31 +22,26 @@ describe('Transfer Flow (e2e)', () => {
   });
 
   it('/POST transfer - success', async () => {
-    const res = await request(app.getHttpServer())
-      .post('/transfers')
-      .send({
-        fromWalletId: 'valid-sender-id',
-        toWalletId: 'valid-recipient-id',
-        amount: 10,
-        rateLockId: 'valid-ratelock',
-      });
+    const res = await request(app.getHttpServer()).post('/transfers').send({
+      fromWalletId: 'valid-sender-id',
+      toWalletId: 'valid-recipient-id',
+      amount: 10,
+      rateLockId: 'valid-ratelock',
+    });
 
     expect(res.status).toBe(201);
     expect(res.body).toHaveProperty('transactionId');
   });
 
   it('/POST transfer - fail if blacklisted', async () => {
-    const res = await request(app.getHttpServer())
-      .post('/transfers')
-      .send({
-        fromWalletId: 'valid-sender-id',
-        toWalletId: 'blacklisted-wallet-id',
-        amount: 10,
-        rateLockId: 'valid-ratelock',
-      });
+    const res = await request(app.getHttpServer()).post('/transfers').send({
+      fromWalletId: 'valid-sender-id',
+      toWalletId: 'blacklisted-wallet-id',
+      amount: 10,
+      rateLockId: 'valid-ratelock',
+    });
 
     expect(res.status).toBe(403);
     expect(res.body.message).toContain('blacklisted');
   });
-
 });

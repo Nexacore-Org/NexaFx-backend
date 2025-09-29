@@ -9,7 +9,13 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBody,
+  ApiParam,
+} from '@nestjs/swagger';
 import { CurrenciesService } from './currencies.service';
 import { CreateCurrencyDto } from './dto/create-currency.dto';
 import { Currency } from './entities/currency.entity';
@@ -19,7 +25,10 @@ import { UserRole } from '../user/entities/user.entity';
 import { JwtAuthGuard } from '../auth/guard/jwt.auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuditInterceptor } from 'src/audit/audit.interceptor';
-import { SimulateConversionDto, ConversionSimulationResponse } from './dto/simulate-conversion.dto';
+import {
+  SimulateConversionDto,
+  ConversionSimulationResponse,
+} from './dto/simulate-conversion.dto';
 
 @ApiTags('Currencies')
 @Controller('currencies')
@@ -31,7 +40,16 @@ export class CurrenciesController {
   @Post()
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Create a new currency' })
-  @ApiBody({ type: CreateCurrencyDto, examples: { default: { value: { /* fill with example fields */ } } } })
+  @ApiBody({
+    type: CreateCurrencyDto,
+    examples: {
+      default: {
+        value: {
+          /* fill with example fields */
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 201, description: 'Currency created', type: Currency })
   create(@Body() createCurrencyDto: CreateCurrencyDto): Promise<Currency> {
     return this.currenciesService.create(createCurrencyDto);
@@ -40,7 +58,11 @@ export class CurrenciesController {
   @Get()
   @Roles(UserRole.ADMIN, UserRole.AUDITOR)
   @ApiOperation({ summary: 'Get all currencies' })
-  @ApiResponse({ status: 200, description: 'List of currencies', type: [Currency] })
+  @ApiResponse({
+    status: 200,
+    description: 'List of currencies',
+    type: [Currency],
+  })
   findAll() {
     return this.currenciesService.findAll();
   }
@@ -56,7 +78,16 @@ export class CurrenciesController {
   @Patch(':code')
   @ApiOperation({ summary: 'Update a currency' })
   @ApiParam({ name: 'code', description: 'Currency code' })
-  @ApiBody({ type: UpdateCurrencyDto, examples: { default: { value: { /* fill with example fields */ } } } })
+  @ApiBody({
+    type: UpdateCurrencyDto,
+    examples: {
+      default: {
+        value: {
+          /* fill with example fields */
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 200, description: 'Currency updated', type: Currency })
   update(
     @Param('code') code: string,
@@ -75,8 +106,21 @@ export class CurrenciesController {
 
   @Post('simulate-conversion')
   @ApiOperation({ summary: 'Simulate a currency conversion' })
-  @ApiBody({ type: SimulateConversionDto, examples: { default: { value: { /* fill with example fields */ } } } })
-  @ApiResponse({ status: 200, description: 'Conversion simulation result', type: ConversionSimulationResponse })
+  @ApiBody({
+    type: SimulateConversionDto,
+    examples: {
+      default: {
+        value: {
+          /* fill with example fields */
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Conversion simulation result',
+    type: ConversionSimulationResponse,
+  })
   async simulateConversion(
     @Body() simulateConversionDto: SimulateConversionDto,
   ): Promise<ConversionSimulationResponse> {

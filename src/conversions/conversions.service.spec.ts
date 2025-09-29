@@ -45,7 +45,9 @@ describe('ConversionsService', () => {
 
       // Validate calculations
       expect(result.netAmount).toBe(result.amount * result.rate - result.fee);
-      expect(result.feeBreakdown.reduce((sum, fee) => sum + fee.value, 0)).toBe(result.fee);
+      expect(result.feeBreakdown.reduce((sum, fee) => sum + fee.value, 0)).toBe(
+        result.fee,
+      );
     });
 
     it('should handle preview with rate lock ID', () => {
@@ -70,7 +72,9 @@ describe('ConversionsService', () => {
       };
 
       expect(() => service.preview(invalidInput)).toThrow(HttpException);
-      expect(() => service.preview(invalidInput)).toThrow('Amount must be positive');
+      expect(() => service.preview(invalidInput)).toThrow(
+        'Amount must be positive',
+      );
     });
 
     it('should throw HttpException for negative amount', () => {
@@ -80,7 +84,9 @@ describe('ConversionsService', () => {
       };
 
       expect(() => service.preview(invalidInput)).toThrow(HttpException);
-      expect(() => service.preview(invalidInput)).toThrow('Amount must be positive');
+      expect(() => service.preview(invalidInput)).toThrow(
+        'Amount must be positive',
+      );
     });
 
     it('should throw HttpException for very small negative amount', () => {
@@ -90,7 +96,9 @@ describe('ConversionsService', () => {
       };
 
       expect(() => service.preview(invalidInput)).toThrow(HttpException);
-      expect(() => service.preview(invalidInput)).toThrow('Amount must be positive');
+      expect(() => service.preview(invalidInput)).toThrow(
+        'Amount must be positive',
+      );
     });
 
     it('should handle different currency pairs', () => {
@@ -158,7 +166,7 @@ describe('ConversionsService', () => {
       expect(Array.isArray(result.feeBreakdown)).toBe(true);
       expect(result.feeBreakdown.length).toBeGreaterThan(0);
 
-      result.feeBreakdown.forEach(fee => {
+      result.feeBreakdown.forEach((fee) => {
         expect(fee).toHaveProperty('type');
         expect(fee).toHaveProperty('value');
         expect(typeof fee.type).toBe('string');
@@ -167,7 +175,10 @@ describe('ConversionsService', () => {
       });
 
       // Validate total fee matches breakdown
-      const totalFee = result.feeBreakdown.reduce((sum, fee) => sum + fee.value, 0);
+      const totalFee = result.feeBreakdown.reduce(
+        (sum, fee) => sum + fee.value,
+        0,
+      );
       expect(totalFee).toBe(result.fee);
     });
 
@@ -176,10 +187,12 @@ describe('ConversionsService', () => {
 
       expect(result.rateLockExpiresAt).toBeInstanceOf(Date);
       expect(result.rateLockExpiresAt.getTime()).toBeGreaterThan(Date.now());
-      
+
       // Rate lock should expire in the future (within reasonable time)
       const fiveMinutesFromNow = Date.now() + 5 * 60 * 1000;
-      expect(result.rateLockExpiresAt.getTime()).toBeLessThanOrEqual(fiveMinutesFromNow + 1000); // Allow 1 second tolerance
+      expect(result.rateLockExpiresAt.getTime()).toBeLessThanOrEqual(
+        fiveMinutesFromNow + 1000,
+      ); // Allow 1 second tolerance
     });
 
     it('should maintain consistent rate for same input', () => {
@@ -258,4 +271,4 @@ describe('ConversionsService', () => {
       expect(result).toHaveProperty('amount', 100);
     });
   });
-}); 
+});

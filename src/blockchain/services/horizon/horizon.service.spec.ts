@@ -13,8 +13,16 @@ describe('HorizonService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         HorizonService,
-        { provide: ConfigService, useValue: { get: jest.fn(() => 'https://horizon-testnet.stellar.org') } },
-        { provide: 'CACHE_MANAGER', useValue: { get: jest.fn(), set: jest.fn() } },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn(() => 'https://horizon-testnet.stellar.org'),
+          },
+        },
+        {
+          provide: 'CACHE_MANAGER',
+          useValue: { get: jest.fn(), set: jest.fn() },
+        },
       ],
     }).compile();
 
@@ -23,11 +31,11 @@ describe('HorizonService', () => {
   });
 
   it('should fetch account balances', async () => {
-    mockAxios.onGet('https://horizon-testnet.stellar.org/accounts/GA...').reply(200, {
-      balances: [
-        { asset_type: 'native', balance: '1000.0000000' },
-      ],
-    });
+    mockAxios
+      .onGet('https://horizon-testnet.stellar.org/accounts/GA...')
+      .reply(200, {
+        balances: [{ asset_type: 'native', balance: '1000.0000000' }],
+      });
 
     const balances = await service.getAccountBalances('GA...');
     expect(balances).toEqual([

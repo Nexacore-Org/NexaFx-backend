@@ -20,38 +20,60 @@ describe('RatesController (e2e)', () => {
     const module: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
-      .overrideProvider(getRepositoryToken(Transaction)).useValue({})
-      .overrideProvider(getRepositoryToken(Currency)).useValue({
+      .overrideProvider(getRepositoryToken(Transaction))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(Currency))
+      .useValue({
         findOne: jest.fn().mockImplementation(({ where }) => {
           const supported = ['USD', 'NGN', 'EUR', 'GBP', 'BTC', 'ETH', 'USDT'];
           const code = (where.code || '').toUpperCase();
           if (supported.includes(code)) {
-            return Promise.resolve({ code, exchangeRate: 1, lastUpdated: new Date() });
+            return Promise.resolve({
+              code,
+              exchangeRate: 1,
+              lastUpdated: new Date(),
+            });
           }
           return Promise.resolve(null);
-        })
+        }),
       })
-      .overrideProvider(getRepositoryToken(KycVerification)).useValue({})
-      .overrideProvider(getRepositoryToken(User)).useValue({})
-      .overrideProvider(getRepositoryToken(Token)).useValue({})
-      .overrideProvider(AuthService).useValue({})
-      .overrideProvider(UserService).useValue({})
-      .overrideProvider(JwtService).useValue({})
-      .overrideProvider(BcryptPasswordHashingService).useValue({})
-      .overrideProvider(require('../currencies/currencies.service').CurrenciesService).useValue({
+      .overrideProvider(getRepositoryToken(KycVerification))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(User))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(Token))
+      .useValue({})
+      .overrideProvider(AuthService)
+      .useValue({})
+      .overrideProvider(UserService)
+      .useValue({})
+      .overrideProvider(JwtService)
+      .useValue({})
+      .overrideProvider(BcryptPasswordHashingService)
+      .useValue({})
+      .overrideProvider(
+        require('../currencies/currencies.service').CurrenciesService,
+      )
+      .useValue({
         findOne: jest.fn().mockImplementation((code) => {
           const supported = ['USD', 'NGN', 'EUR', 'GBP', 'BTC', 'ETH', 'USDT'];
           const upper = (code || '').toUpperCase();
           if (supported.includes(upper)) {
-            return Promise.resolve({ code: upper, exchangeRate: 1, lastUpdated: new Date() });
+            return Promise.resolve({
+              code: upper,
+              exchangeRate: 1,
+              lastUpdated: new Date(),
+            });
           }
           return Promise.resolve(null);
-        })
+        }),
       })
       .compile();
 
     app = module.createNestApplication();
-    app.useGlobalPipes(new (require('@nestjs/common').ValidationPipe)({ transform: true }));
+    app.useGlobalPipes(
+      new (require('@nestjs/common').ValidationPipe)({ transform: true }),
+    );
     await app.init();
   });
 
@@ -59,7 +81,7 @@ describe('RatesController (e2e)', () => {
     return request(app.getHttpServer())
       .get('/rates')
       .query({ source: 'USD', target: 'NGN', amount: 2 })
-      .expect(res => {
+      .expect((res) => {
         if (res.status !== 200) {
           // Print the body for debugging
           // eslint-disable-next-line no-console
@@ -81,7 +103,9 @@ describe('RatesController (e2e)', () => {
       .query({ source: 'USD', target: 'usd', amount: 1 })
       .expect(400)
       .expect(({ body }) => {
-        expect(body.message).toMatch(/Source and target currencies must be different/);
+        expect(body.message).toMatch(
+          /Source and target currencies must be different/,
+        );
       });
   });
 
@@ -112,7 +136,9 @@ describe('RatesController (e2e)', () => {
       .expect(400)
       .expect(({ body }) => {
         expect(body.message).toEqual(
-          expect.arrayContaining([expect.stringMatching(/Amount must be a positive number/i)])
+          expect.arrayContaining([
+            expect.stringMatching(/Amount must be a positive number/i),
+          ]),
         );
       });
   });

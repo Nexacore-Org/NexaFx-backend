@@ -37,17 +37,25 @@ export class BlockchainController {
       default: {
         summary: 'Stellar Transaction Example',
         value: {
-          destinationAddress: 'GBWMCCCMGBIXNKVLVLUCDX3GKRKOYCPHDVZL6PBSBGJ7NNDRJRBTDWL7',
+          destinationAddress:
+            'GBWMCCCMGBIXNKVLVLUCDX3GKRKOYCPHDVZL6PBSBGJ7NNDRJRBTDWL7',
           amount: '100.50',
           asset: 'XLM',
           memo: 'Payment for services',
-          timeout: 300
+          timeout: 300,
         },
       },
     },
   })
-  @ApiResponse({ status: 201, description: 'Transaction submitted successfully', type: Object })
-  @ApiResponse({ status: 400, description: 'Bad request or transaction failed' })
+  @ApiResponse({
+    status: 201,
+    description: 'Transaction submitted successfully',
+    type: Object,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad request or transaction failed',
+  })
   async sendTransaction(
     @Body() transactionDto: StellarTransactionDto,
   ): Promise<StellarTransactionResult> {
@@ -82,7 +90,11 @@ export class BlockchainController {
   @Get('account/:address/exists')
   @ApiOperation({ summary: 'Check if a Stellar account exists' })
   @ApiParam({ name: 'address', description: 'Stellar account address' })
-  @ApiResponse({ status: 200, description: 'Returns whether the account exists', type: Object })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns whether the account exists',
+    type: Object,
+  })
   async checkAccountExists(
     @Param() params: StellarAccountDto,
   ): Promise<{ exists: boolean }> {

@@ -11,7 +11,9 @@ export class UpdateTransactionDto extends PartialType(CreateTransactionDto) {
   @ApiPropertyOptional({ example: 'TXN-2024-0002' })
   reference?: string;
 
-  @ApiPropertyOptional({ example: { orderId: 'ORD-002', note: 'Updated note' } })
+  @ApiPropertyOptional({
+    example: { orderId: 'ORD-002', note: 'Updated note' },
+  })
   metadata?: Record<string, any>;
 
   @ApiPropertyOptional({ example: 'ACC-003' })

@@ -7,7 +7,7 @@ import { Transaction } from '../../transactions/entities/transaction.entity';
 // Mock the stellar-sdk
 jest.mock('stellar-sdk', () => {
   const originalModule = jest.requireActual('stellar-sdk');
-  
+
   return {
     __esModule: true,
     ...originalModule,
@@ -19,24 +19,25 @@ jest.mock('stellar-sdk', () => {
           stream: jest.fn().mockImplementation((callbacks) => {
             // Store the callbacks for testing
             return {
-              close: jest.fn()
+              close: jest.fn(),
             };
-          })
+          }),
         }),
         transactions: jest.fn().mockReturnValue({
           transaction: jest.fn().mockReturnThis(),
           call: jest.fn().mockResolvedValue({
             ledger: 12345,
-            memo: 'test-memo'
-          })
-        })
-      }))
+            memo: 'test-memo',
+          }),
+        }),
+      })),
     },
     Keypair: {
       fromSecret: jest.fn().mockReturnValue({
-        publicKey: () => 'GBWMCCCMGBIXNKVLVLUCDX3GKRKOYCPHDVZL6PBSBGJ7NNDRJRBTDWL7'
-      })
-    }
+        publicKey: () =>
+          'GBWMCCCMGBIXNKVLVLUCDX3GKRKOYCPHDVZL6PBSBGJ7NNDRJRBTDWL7',
+      }),
+    },
   };
 });
 
@@ -47,7 +48,8 @@ describe('WebhookService', () => {
   const mockConfigService = {
     get: jest.fn((key) => {
       if (key === 'STELLAR_SECRET_KEY') return 'test-secret-key';
-      if (key === 'STELLAR_HORIZON_URL') return 'https://horizon-testnet.stellar.org';
+      if (key === 'STELLAR_HORIZON_URL')
+        return 'https://horizon-testnet.stellar.org';
       return null;
     }),
   };
@@ -81,7 +83,10 @@ describe('WebhookService', () => {
 
   describe('onModuleInit', () => {
     it('should start the payment event stream', async () => {
-      const startStreamSpy = jest.spyOn(service as any, 'startPaymentEventStream');
+      const startStreamSpy = jest.spyOn(
+        service as any,
+        'startPaymentEventStream',
+      );
       await service.onModuleInit();
       expect(startStreamSpy).toHaveBeenCalled();
     });
@@ -89,7 +94,10 @@ describe('WebhookService', () => {
 
   describe('onModuleDestroy', () => {
     it('should stop the payment event stream', () => {
-      const stopStreamSpy = jest.spyOn(service as any, 'stopPaymentEventStream');
+      const stopStreamSpy = jest.spyOn(
+        service as any,
+        'stopPaymentEventStream',
+      );
       service.onModuleDestroy();
       expect(stopStreamSpy).toHaveBeenCalled();
     });
@@ -97,11 +105,17 @@ describe('WebhookService', () => {
 
   describe('restartPaymentEventStream', () => {
     it('should restart the payment event stream', async () => {
-      const stopStreamSpy = jest.spyOn(service as any, 'stopPaymentEventStream');
-      const startStreamSpy = jest.spyOn(service as any, 'startPaymentEventStream');
-      
+      const stopStreamSpy = jest.spyOn(
+        service as any,
+        'stopPaymentEventStream',
+      );
+      const startStreamSpy = jest.spyOn(
+        service as any,
+        'startPaymentEventStream',
+      );
+
       const result = await service.restartPaymentEventStream();
-      
+
       expect(stopStreamSpy).toHaveBeenCalled();
       expect(startStreamSpy).toHaveBeenCalled();
       expect(result.success).toBe(true);

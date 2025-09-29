@@ -34,8 +34,12 @@ describe('TransactionsService', () => {
     }).compile();
 
     service = module.get<TransactionsService>(TransactionsService);
-    transactionRepo = module.get<Repository<Transaction>>(getRepositoryToken(Transaction));
-    currencyRepo = module.get<Repository<Currency>>(getRepositoryToken(Currency));
+    transactionRepo = module.get<Repository<Transaction>>(
+      getRepositoryToken(Transaction),
+    );
+    currencyRepo = module.get<Repository<Currency>>(
+      getRepositoryToken(Currency),
+    );
   });
 
   it('should calculate fee and total correctly when creating a transaction', async () => {
@@ -48,7 +52,7 @@ describe('TransactionsService', () => {
       description: 'Test transaction',
       sourceAccount: 'source-acc',
       destinationAccount: 'dest-acc',
-      reference: 'some-reference'
+      reference: 'some-reference',
     };
 
     const mockCurrency = {
@@ -56,7 +60,9 @@ describe('TransactionsService', () => {
       feePercentage: 0.02, // 2%
     } as Currency;
 
-    const saveMock = jest.spyOn(transactionRepo, 'save').mockImplementation(async (transaction: any) => ({
+    const saveMock = jest
+      .spyOn(transactionRepo, 'save')
+      .mockImplementation(async (transaction: any) => ({
         ...transaction,
         id: 'transaction-uuid', // simulate that the transaction got an ID after saving
         createdAt: new Date(),
@@ -94,13 +100,14 @@ describe('TransactionsService', () => {
       description: 'Missing currency test',
       sourceAccount: 'src-acc',
       destinationAccount: 'dst-acc',
-      reference: 'some-reference'
+      reference: 'some-reference',
     };
 
     jest.spyOn(currencyRepo, 'findOne').mockResolvedValue(null);
 
     // Act & Assert
-    await expect(service.createTransaction(createTransactionDto)).rejects.toThrow('Currency not found.');
+    await expect(
+      service.createTransaction(createTransactionDto),
+    ).rejects.toThrow('Currency not found.');
   });
 });
-

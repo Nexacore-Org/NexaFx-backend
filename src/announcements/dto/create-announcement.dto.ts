@@ -1,4 +1,11 @@
-import { IsString, IsEnum, IsDateString, IsNotEmpty, Length, Validate } from 'class-validator';
+import {
+  IsString,
+  IsEnum,
+  IsDateString,
+  IsNotEmpty,
+  Length,
+  Validate,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { AnnouncementType } from '../entities/announcement.entity';
 import { IsDateAfter } from '../validators/is-date-after.validator';
@@ -10,7 +17,10 @@ export class CreateAnnouncementDto {
   @Length(1, 255)
   title: string;
 
-  @ApiProperty({ example: 'The system will be down for maintenance from 12:00 AM to 2:00 AM UTC.' })
+  @ApiProperty({
+    example:
+      'The system will be down for maintenance from 12:00 AM to 2:00 AM UTC.',
+  })
   @IsNotEmpty()
   @IsString()
   message: string;

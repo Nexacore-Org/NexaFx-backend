@@ -1,5 +1,3 @@
-
-
 import { Test, TestingModule } from '@nestjs/testing';
 import { AdminStatsController } from './admin.stats.controller';
 import { AdminStatsService } from './admin.stats.service';
@@ -13,7 +11,7 @@ describe('AdminStatsController', () => {
 
   const mockOverviewStats: OverviewStatsDto = {
     totalTransactions: 1250,
-    totalRevenue: 75000.50,
+    totalRevenue: 75000.5,
     totalUsers: 450,
     recentTransactions: 125,
     lastUpdated: new Date(),
@@ -25,14 +23,14 @@ describe('AdminStatsController', () => {
       name: 'Bitcoin',
       code: 'BTC',
       transactionCount: 500,
-      totalVolume: 50000.00,
+      totalVolume: 50000.0,
     },
     {
       id: 2,
       name: 'Ethereum',
       code: 'ETH',
       transactionCount: 350,
-      totalVolume: 35000.00,
+      totalVolume: 35000.0,
     },
   ];
 

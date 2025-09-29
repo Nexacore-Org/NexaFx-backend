@@ -1,4 +1,3 @@
-
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -29,7 +28,7 @@ export class AdminStatsService {
       .createQueryBuilder('transaction')
       .select('SUM(transaction.amount)', 'totalRevenue')
       .getRawOne();
-    
+
     const totalRevenue = revenueResult.totalRevenue || 0;
 
     // Get total users count
@@ -38,7 +37,7 @@ export class AdminStatsService {
     // Get transactions in the last 30 days
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
+
     const recentTransactions = await this.transactionRepository
       .createQueryBuilder('transaction')
       .where('transaction.createdAt >= :thirtyDaysAgo', { thirtyDaysAgo })
@@ -49,7 +48,7 @@ export class AdminStatsService {
       totalRevenue,
       totalUsers,
       recentTransactions,
-      lastUpdated: new Date()
+      lastUpdated: new Date(),
     };
   }
 
@@ -69,13 +68,13 @@ export class AdminStatsService {
       .orderBy('totalVolume', 'DESC')
       .limit(5)
       .getRawMany();
-    
-    return topCurrencies.map(currency => ({
+
+    return topCurrencies.map((currency) => ({
       id: currency.currencyId,
       name: currency.currencyName,
       code: currency.currencyCode,
       transactionCount: parseInt(currency.transactionCount, 10),
-      totalVolume: parseFloat(currency.totalVolume)
+      totalVolume: parseFloat(currency.totalVolume),
     }));
   }
 
@@ -86,7 +85,7 @@ export class AdminStatsService {
     // Get new users in the last 30 days
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
+
     const newUsers = await this.userRepository
       .createQueryBuilder('user')
       .where('user.createdAt >= :thirtyDaysAgo', { thirtyDaysAgo })
@@ -95,13 +94,16 @@ export class AdminStatsService {
     // Calculate monthly growth rate
     const sixtyDaysAgo = new Date();
     sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-    
+
     const previousMonthUsers = await this.userRepository
       .createQueryBuilder('user')
-      .where('user.createdAt >= :sixtyDaysAgo AND user.createdAt < :thirtyDaysAgo', { 
-        sixtyDaysAgo, 
-        thirtyDaysAgo 
-      })
+      .where(
+        'user.createdAt >= :sixtyDaysAgo AND user.createdAt < :thirtyDaysAgo',
+        {
+          sixtyDaysAgo,
+          thirtyDaysAgo,
+        },
+      )
       .getCount();
 
     // Calculate growth rate (handle division by zero)
@@ -124,7 +126,7 @@ export class AdminStatsService {
       newUsers,
       growthRate,
       activeUsers: parseInt(activeUsers.activeUserCount, 10),
-      lastUpdated: new Date()
+      lastUpdated: new Date(),
     };
   }
 }

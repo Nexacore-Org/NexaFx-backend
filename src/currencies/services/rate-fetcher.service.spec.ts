@@ -20,10 +20,10 @@ describe('RateFetcherService', () => {
   const mockConfigService = {
     get: jest.fn().mockImplementation((key: string) => {
       const config = {
-        'API_TIMEOUT': 5000,
-        'API_MAX_RETRIES': 3,
-        'OPENEXCHANGERATES_API_KEY': 'test-key',
-        'COINGECKO_API_KEY': 'test-key',
+        API_TIMEOUT: 5000,
+        API_MAX_RETRIES: 3,
+        OPENEXCHANGERATES_API_KEY: 'test-key',
+        COINGECKO_API_KEY: 'test-key',
       };
       return config[key];
     }),

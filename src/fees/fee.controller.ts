@@ -9,7 +9,13 @@ import {
   Param,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBody,
+  ApiParam,
+} from '@nestjs/swagger';
 import { FeeService } from './fee.service';
 
 import { JwtAuthGuard } from 'src/auth/guard/jwt.auth.guard';
@@ -27,7 +33,11 @@ export class FeeController {
 
   @Get()
   @ApiOperation({ summary: 'Get all fee rules' })
-  @ApiResponse({ status: 200, description: 'List of fee rules', type: [FeeRule] })
+  @ApiResponse({
+    status: 200,
+    description: 'List of fee rules',
+    type: [FeeRule],
+  })
   async findAll(): Promise<FeeRule[]> {
     return await this.feeService.findAll();
   }
@@ -42,7 +52,12 @@ export class FeeController {
 
   @Post()
   @ApiOperation({ summary: 'Create a new fee rule' })
-  @ApiBody({ type: Object, examples: { default: { value: { name: 'Standard Fee', rate: 0.02, isActive: true } } } })
+  @ApiBody({
+    type: Object,
+    examples: {
+      default: { value: { name: 'Standard Fee', rate: 0.02, isActive: true } },
+    },
+  })
   @ApiResponse({ status: 201, description: 'Fee rule created', type: FeeRule })
   create(@Body() data: Partial<FeeRule>): Promise<FeeRule> {
     return this.feeService.create(data);
@@ -51,7 +66,12 @@ export class FeeController {
   @Put(':id')
   @ApiOperation({ summary: 'Update a fee rule' })
   @ApiParam({ name: 'id', description: 'Fee rule ID' })
-  @ApiBody({ type: Object, examples: { default: { value: { name: 'Updated Fee', rate: 0.03, isActive: false } } } })
+  @ApiBody({
+    type: Object,
+    examples: {
+      default: { value: { name: 'Updated Fee', rate: 0.03, isActive: false } },
+    },
+  })
   @ApiResponse({ status: 200, description: 'Fee rule updated', type: FeeRule })
   update(
     @Param('id') id: string,

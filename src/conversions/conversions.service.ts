@@ -25,7 +25,10 @@ interface ConversionPreviewResult {
 export class ConversionsService {
   preview(input: ConversionPreviewInput): ConversionPreviewResult {
     if (input.amount <= 0) {
-      throw new HttpException('Amount must be positive', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        'Amount must be positive',
+        HttpStatus.BAD_REQUEST,
+      );
     }
     // Placeholder: In real implementation, fetch rate, validate rate lock, calculate fees
     return {
@@ -42,4 +45,4 @@ export class ConversionsService {
       ],
     };
   }
-} 
+}

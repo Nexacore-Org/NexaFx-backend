@@ -11,7 +11,8 @@ describe('ActivityLogController', () => {
   const mockRequest = {
     user: mockUser,
     headers: {
-      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'user-agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       'x-forwarded-for': '192.168.1.1',
     },
     connection: { remoteAddress: '192.168.1.1' },
@@ -30,9 +31,7 @@ describe('ActivityLogController', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ActivityLogController],
-      providers: [
-        { provide: ActivityLogService, useValue: mockService },
-      ],
+      providers: [{ provide: ActivityLogService, useValue: mockService }],
     }).compile();
 
     controller = module.get<ActivityLogController>(ActivityLogController);
@@ -50,7 +49,8 @@ describe('ActivityLogController', () => {
           {
             id: 'session-123',
             ipAddress: '192.168.1.1',
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            userAgent:
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             deviceType: 'Desktop',
             browser: 'Chrome 120.0.0.0',
             operatingSystem: 'Windows 10',
@@ -70,14 +70,19 @@ describe('ActivityLogController', () => {
 
       const result = await controller.getUserSessions(mockRequest);
 
-      expect(service.getUserSessions).toHaveBeenCalledWith('user-123', 'session-123');
+      expect(service.getUserSessions).toHaveBeenCalledWith(
+        'user-123',
+        'session-123',
+      );
       expect(result).toEqual(expectedResponse);
     });
 
     it('should handle service errors gracefully', async () => {
       service.getUserSessions.mockRejectedValue(new Error('Database error'));
 
-      await expect(controller.getUserSessions(mockRequest)).rejects.toThrow('Database error');
+      await expect(controller.getUserSessions(mockRequest)).rejects.toThrow(
+        'Database error',
+      );
     });
   });
 
@@ -88,7 +93,8 @@ describe('ActivityLogController', () => {
           {
             id: 'activity-123',
             ipAddress: '192.168.1.1',
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            userAgent:
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             deviceType: 'Desktop',
             browser: 'Chrome 120.0.0.0',
             operatingSystem: 'Windows 10',
@@ -109,7 +115,11 @@ describe('ActivityLogController', () => {
 
       const result = await controller.getUserActivityHistory(mockRequest);
 
-      expect(service.getUserActivityHistory).toHaveBeenCalledWith('user-123', 1, 20);
+      expect(service.getUserActivityHistory).toHaveBeenCalledWith(
+        'user-123',
+        1,
+        20,
+      );
       expect(result).toEqual(expectedResponse);
     });
 
@@ -123,9 +133,17 @@ describe('ActivityLogController', () => {
 
       service.getUserActivityHistory.mockResolvedValue(expectedResponse);
 
-      const result = await controller.getUserActivityHistory(mockRequest, 2, 10);
+      const result = await controller.getUserActivityHistory(
+        mockRequest,
+        2,
+        10,
+      );
 
-      expect(service.getUserActivityHistory).toHaveBeenCalledWith('user-123', 2, 10);
+      expect(service.getUserActivityHistory).toHaveBeenCalledWith(
+        'user-123',
+        2,
+        10,
+      );
       expect(result).toEqual(expectedResponse);
     });
   });
@@ -141,14 +159,19 @@ describe('ActivityLogController', () => {
 
       const result = await controller.logoutOtherSessions(mockRequest);
 
-      expect(service.logoutOtherSessions).toHaveBeenCalledWith('user-123', 'session-123');
+      expect(service.logoutOtherSessions).toHaveBeenCalledWith(
+        'user-123',
+        'session-123',
+      );
       expect(result).toEqual(expectedResponse);
     });
 
     it('should handle service errors', async () => {
       service.logoutOtherSessions.mockRejectedValue(new Error('Logout failed'));
 
-      await expect(controller.logoutOtherSessions(mockRequest)).rejects.toThrow('Logout failed');
+      await expect(controller.logoutOtherSessions(mockRequest)).rejects.toThrow(
+        'Logout failed',
+      );
     });
   });
 
@@ -170,7 +193,9 @@ describe('ActivityLogController', () => {
     it('should handle service errors', async () => {
       service.logoutAllSessions.mockRejectedValue(new Error('Logout failed'));
 
-      await expect(controller.logoutAllSessions(mockRequest)).rejects.toThrow('Logout failed');
+      await expect(controller.logoutAllSessions(mockRequest)).rejects.toThrow(
+        'Logout failed',
+      );
     });
   });
 
@@ -181,7 +206,10 @@ describe('ActivityLogController', () => {
 
       const result = await controller.terminateSession(mockRequest, sessionId);
 
-      expect(service.logLogoutActivity).toHaveBeenCalledWith('user-123', sessionId);
+      expect(service.logLogoutActivity).toHaveBeenCalledWith(
+        'user-123',
+        sessionId,
+      );
       expect(result).toEqual({
         message: 'Session terminated successfully',
       });
@@ -189,9 +217,13 @@ describe('ActivityLogController', () => {
 
     it('should handle service errors', async () => {
       const sessionId = 'session-to-terminate';
-      service.logLogoutActivity.mockRejectedValue(new Error('Termination failed'));
+      service.logLogoutActivity.mockRejectedValue(
+        new Error('Termination failed'),
+      );
 
-      await expect(controller.terminateSession(mockRequest, sessionId)).rejects.toThrow('Termination failed');
+      await expect(
+        controller.terminateSession(mockRequest, sessionId),
+      ).rejects.toThrow('Termination failed');
     });
   });
 
@@ -201,7 +233,10 @@ describe('ActivityLogController', () => {
 
       const result = await controller.checkSuspiciousActivity(mockRequest);
 
-      expect(service.checkSuspiciousActivity).toHaveBeenCalledWith('user-123', '192.168.1.1');
+      expect(service.checkSuspiciousActivity).toHaveBeenCalledWith(
+        'user-123',
+        '192.168.1.1',
+      );
       expect(result).toEqual({
         isSuspicious: false,
         message: 'No suspicious activity detected',
@@ -213,7 +248,10 @@ describe('ActivityLogController', () => {
 
       const result = await controller.checkSuspiciousActivity(mockRequest);
 
-      expect(service.checkSuspiciousActivity).toHaveBeenCalledWith('user-123', '192.168.1.1');
+      expect(service.checkSuspiciousActivity).toHaveBeenCalledWith(
+        'user-123',
+        '192.168.1.1',
+      );
       expect(result).toEqual({
         isSuspicious: true,
         message: 'Suspicious activity detected. Please verify your account.',
@@ -224,7 +262,8 @@ describe('ActivityLogController', () => {
       const requestWithRealIp = {
         ...mockRequest,
         headers: {
-          'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'user-agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
           'x-real-ip': '10.0.0.1',
         },
       } as any;
@@ -233,14 +272,18 @@ describe('ActivityLogController', () => {
 
       await controller.checkSuspiciousActivity(requestWithRealIp);
 
-      expect(service.checkSuspiciousActivity).toHaveBeenCalledWith('user-123', '10.0.0.1');
+      expect(service.checkSuspiciousActivity).toHaveBeenCalledWith(
+        'user-123',
+        '10.0.0.1',
+      );
     });
 
     it('should handle missing IP headers', async () => {
       const requestWithoutIp = {
         ...mockRequest,
         headers: {
-          'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'user-agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         },
         connection: { remoteAddress: '127.0.0.1' },
       } as any;
@@ -249,7 +292,10 @@ describe('ActivityLogController', () => {
 
       await controller.checkSuspiciousActivity(requestWithoutIp);
 
-      expect(service.checkSuspiciousActivity).toHaveBeenCalledWith('user-123', '127.0.0.1');
+      expect(service.checkSuspiciousActivity).toHaveBeenCalledWith(
+        'user-123',
+        '127.0.0.1',
+      );
     });
   });
 

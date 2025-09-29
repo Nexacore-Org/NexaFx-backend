@@ -115,16 +115,18 @@ export class CustomThrottlerGuard extends ThrottlerGuard {
     );
 
     if (totalHits > limit) {
-      throw new ThrottlerException(await this.getErrorMessage(context, {
-        limit,
-        ttl,
-        totalHits,
-        key,
-        tracker: await this.getTracker(request),
-        timeToExpire: ttl,
-        isBlocked: true,
-        timeToBlockExpire: ttl
-      }));
+      throw new ThrottlerException(
+        await this.getErrorMessage(context, {
+          limit,
+          ttl,
+          totalHits,
+          key,
+          tracker: await this.getTracker(request),
+          timeToExpire: ttl,
+          isBlocked: true,
+          timeToBlockExpire: ttl,
+        }),
+      );
     }
 
     return true;

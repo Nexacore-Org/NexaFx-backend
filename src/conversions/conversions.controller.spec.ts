@@ -14,9 +14,7 @@ describe('ConversionsController', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ConversionsController],
-      providers: [
-        { provide: ConversionsService, useValue: mockService },
-      ],
+      providers: [{ provide: ConversionsService, useValue: mockService }],
     }).compile();
 
     controller = module.get<ConversionsController>(ConversionsController);
@@ -86,11 +84,16 @@ describe('ConversionsController', () => {
       };
 
       service.preview.mockImplementation(() => {
-        throw new HttpException('Amount must be positive', HttpStatus.BAD_REQUEST);
+        throw new HttpException(
+          'Amount must be positive',
+          HttpStatus.BAD_REQUEST,
+        );
       });
 
       expect(() => controller.preview(invalidRequest)).toThrow(HttpException);
-      expect(() => controller.preview(invalidRequest)).toThrow('Amount must be positive');
+      expect(() => controller.preview(invalidRequest)).toThrow(
+        'Amount must be positive',
+      );
     });
 
     it('should throw HttpException for negative amount', () => {
@@ -100,7 +103,10 @@ describe('ConversionsController', () => {
       };
 
       service.preview.mockImplementation(() => {
-        throw new HttpException('Amount must be positive', HttpStatus.BAD_REQUEST);
+        throw new HttpException(
+          'Amount must be positive',
+          HttpStatus.BAD_REQUEST,
+        );
       });
 
       expect(() => controller.preview(invalidRequest)).toThrow(HttpException);
@@ -116,8 +122,12 @@ describe('ConversionsController', () => {
         throw new HttpException('Rate lock expired', HttpStatus.BAD_REQUEST);
       });
 
-      expect(() => controller.preview(requestWithExpiredRateLock)).toThrow(HttpException);
-      expect(() => controller.preview(requestWithExpiredRateLock)).toThrow('Rate lock expired');
+      expect(() => controller.preview(requestWithExpiredRateLock)).toThrow(
+        HttpException,
+      );
+      expect(() => controller.preview(requestWithExpiredRateLock)).toThrow(
+        'Rate lock expired',
+      );
     });
 
     it('should handle invalid currency error', () => {
@@ -131,17 +141,28 @@ describe('ConversionsController', () => {
         throw new HttpException('Invalid currency', HttpStatus.BAD_REQUEST);
       });
 
-      expect(() => controller.preview(invalidCurrencyRequest)).toThrow(HttpException);
-      expect(() => controller.preview(invalidCurrencyRequest)).toThrow('Invalid currency');
+      expect(() => controller.preview(invalidCurrencyRequest)).toThrow(
+        HttpException,
+      );
+      expect(() => controller.preview(invalidCurrencyRequest)).toThrow(
+        'Invalid currency',
+      );
     });
 
     it('should handle service errors gracefully', () => {
       service.preview.mockImplementation(() => {
-        throw new HttpException('Internal server error', HttpStatus.INTERNAL_SERVER_ERROR);
+        throw new HttpException(
+          'Internal server error',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
       });
 
-      expect(() => controller.preview(validPreviewRequest)).toThrow(HttpException);
-      expect(() => controller.preview(validPreviewRequest)).toThrow('Internal server error');
+      expect(() => controller.preview(validPreviewRequest)).toThrow(
+        HttpException,
+      );
+      expect(() => controller.preview(validPreviewRequest)).toThrow(
+        'Internal server error',
+      );
     });
 
     it('should validate response structure', () => {
@@ -170,7 +191,7 @@ describe('ConversionsController', () => {
       expect(Array.isArray(result.feeBreakdown)).toBe(true);
 
       // Validate fee breakdown structure
-      result.feeBreakdown.forEach(fee => {
+      result.feeBreakdown.forEach((fee) => {
         expect(fee).toHaveProperty('type');
         expect(fee).toHaveProperty('value');
         expect(typeof fee.type).toBe('string');
@@ -246,4 +267,4 @@ describe('ConversionsController', () => {
       expect(result.netAmount).toBe(120.4877);
     });
   });
-}); 
+});

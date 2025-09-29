@@ -26,7 +26,9 @@ describe('NotificationPreferencesService', () => {
       ],
     }).compile();
 
-    service = module.get<NotificationPreferencesService>(NotificationPreferencesService);
+    service = module.get<NotificationPreferencesService>(
+      NotificationPreferencesService,
+    );
     repository = module.get<Repository<NotificationPreference>>(
       getRepositoryToken(NotificationPreference),
     );
@@ -70,7 +72,9 @@ describe('NotificationPreferencesService', () => {
       };
 
       jest.spyOn(repository, 'findOne').mockResolvedValue(null);
-      jest.spyOn(repository, 'create').mockReturnValue(mockDefaultPreferences as any);
+      jest
+        .spyOn(repository, 'create')
+        .mockReturnValue(mockDefaultPreferences as any);
       jest.spyOn(repository, 'save').mockResolvedValue({
         ...mockDefaultPreferences,
         id: '1',
@@ -79,7 +83,7 @@ describe('NotificationPreferencesService', () => {
       } as any);
 
       const result = await service.findByUserId(userId);
-      
+
       expect(repository.findOne).toHaveBeenCalledWith({ where: { userId } });
       expect(repository.create).toHaveBeenCalledWith(mockDefaultPreferences);
       expect(repository.save).toHaveBeenCalled();
@@ -92,7 +96,7 @@ describe('NotificationPreferencesService', () => {
     it('should update existing preferences', async () => {
       const userId = 'test-user-id';
       const updateDto = { notifyOnTx: false, emailEnabled: false };
-      
+
       const existingPreferences = {
         id: '1',
         userId,
@@ -104,7 +108,7 @@ describe('NotificationPreferencesService', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       };
-      
+
       const updatedPreferences = {
         ...existingPreferences,
         ...updateDto,
@@ -114,11 +118,12 @@ describe('NotificationPreferencesService', () => {
       jest.spyOn(repository, 'save').mockResolvedValue(updatedPreferences);
 
       const result = await service.update(userId, updateDto);
-      
+
       expect(repository.findOne).toHaveBeenCalledWith({ where: { userId } });
-      expect(repository.save).toHaveBeenCalledWith(expect.objectContaining(updateDto));
+      expect(repository.save).toHaveBeenCalledWith(
+        expect.objectContaining(updateDto),
+      );
       expect(result).toEqual(updatedPreferences);
     });
   });
 });
-

@@ -10,9 +10,15 @@ export class TopCurrencyDto {
   @ApiProperty({ description: 'Currency code', example: 'USD' })
   code: string;
 
-  @ApiProperty({ description: 'Number of transactions in this currency', example: 1500 })
+  @ApiProperty({
+    description: 'Number of transactions in this currency',
+    example: 1500,
+  })
   transactionCount: number;
 
-  @ApiProperty({ description: 'Total volume transacted in this currency', example: 1000000.5 })
+  @ApiProperty({
+    description: 'Total volume transacted in this currency',
+    example: 1000000.5,
+  })
   totalVolume: number;
 }

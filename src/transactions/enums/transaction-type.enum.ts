@@ -8,7 +8,6 @@ export enum TransactionType {
   SWAP = 'SWAP',
   BUY = 'BUY',
   SELL = 'SELL',
-  CONVERSION = "CONVERSION",
-  FEE = "FEE",
-  
+  CONVERSION = 'CONVERSION',
+  FEE = 'FEE',
 }

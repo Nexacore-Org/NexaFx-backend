@@ -67,9 +67,15 @@ describe('DepositController (e2e)', () => {
       .compile();
 
     app = moduleFixture.createNestApplication();
-    transactionRepository = moduleFixture.get<Repository<Transaction>>(getRepositoryToken(Transaction));
-    userRepository = moduleFixture.get<Repository<User>>(getRepositoryToken(User));
-    currencyRepository = moduleFixture.get<Repository<Currency>>(getRepositoryToken(Currency));
+    transactionRepository = moduleFixture.get<Repository<Transaction>>(
+      getRepositoryToken(Transaction),
+    );
+    userRepository = moduleFixture.get<Repository<User>>(
+      getRepositoryToken(User),
+    );
+    currencyRepository = moduleFixture.get<Repository<Currency>>(
+      getRepositoryToken(Currency),
+    );
 
     await app.init();
   });
@@ -103,8 +109,12 @@ describe('DepositController (e2e)', () => {
         updatedAt: new Date(),
       };
 
-      jest.spyOn(transactionRepository, 'create').mockReturnValue(mockTransaction as any);
-      jest.spyOn(transactionRepository, 'save').mockResolvedValue(mockTransaction as any);
+      jest
+        .spyOn(transactionRepository, 'create')
+        .mockReturnValue(mockTransaction as any);
+      jest
+        .spyOn(transactionRepository, 'save')
+        .mockResolvedValue(mockTransaction as any);
 
       return request(app.getHttpServer())
         .post('/deposit')
@@ -207,7 +217,9 @@ describe('DepositController (e2e)', () => {
         updatedAt: new Date(),
       };
 
-      jest.spyOn(transactionRepository, 'findOne').mockResolvedValue(mockTransaction as any);
+      jest
+        .spyOn(transactionRepository, 'findOne')
+        .mockResolvedValue(mockTransaction as any);
 
       return request(app.getHttpServer())
         .get('/deposit/transaction-123')
@@ -249,14 +261,19 @@ describe('DepositController (e2e)', () => {
         }),
       };
 
-      jest.spyOn(transactionRepository, 'findOne').mockResolvedValue(pendingTransaction as any);
+      jest
+        .spyOn(transactionRepository, 'findOne')
+        .mockResolvedValue(pendingTransaction as any);
 
       return request(app.getHttpServer())
         .post('/deposit/transaction-123/confirm')
         .expect(200)
         .expect((res) => {
           expect(res.body).toHaveProperty('id', 'transaction-123');
-          expect(res.body).toHaveProperty('status', TransactionStatus.COMPLETED);
+          expect(res.body).toHaveProperty(
+            'status',
+            TransactionStatus.COMPLETED,
+          );
         });
     });
 
@@ -268,4 +285,4 @@ describe('DepositController (e2e)', () => {
         .expect(404);
     });
   });
-}); 
+});

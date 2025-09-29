@@ -12,7 +12,9 @@ export class AnnouncementsService {
     private readonly announcementRepository: Repository<Announcement>,
   ) {}
 
-  async create(createAnnouncementDto: CreateAnnouncementDto): Promise<Announcement> {
+  async create(
+    createAnnouncementDto: CreateAnnouncementDto,
+  ): Promise<Announcement> {
     const announcement = this.announcementRepository.create({
       title: createAnnouncementDto.title,
       message: createAnnouncementDto.message,
@@ -36,7 +38,10 @@ export class AnnouncementsService {
     });
   }
 
-  async update(id: string, updateAnnouncementDto: UpdateAnnouncementDto): Promise<Announcement> {
+  async update(
+    id: string,
+    updateAnnouncementDto: UpdateAnnouncementDto,
+  ): Promise<Announcement> {
     const announcement = await this.announcementRepository.findOne({
       where: { id },
     });
@@ -66,7 +71,9 @@ export class AnnouncementsService {
   }
 
   async findOne(id: string): Promise<Announcement> {
-    const announcement = await this.announcementRepository.findOne({ where: { id } });
+    const announcement = await this.announcementRepository.findOne({
+      where: { id },
+    });
     if (!announcement) {
       throw new NotFoundException(`Announcement with ID ${id} not found`);
     }

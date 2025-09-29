@@ -23,7 +23,10 @@ export class CreateNotificationDto {
   @IsEnum(NotificationType)
   type: NotificationType;
 
-  @ApiPropertyOptional({ enum: NotificationCategory, example: NotificationCategory.INFO })
+  @ApiPropertyOptional({
+    enum: NotificationCategory,
+    example: NotificationCategory.INFO,
+  })
   @IsEnum(NotificationCategory)
   category?: NotificationCategory;
 
@@ -32,15 +35,23 @@ export class CreateNotificationDto {
   @Length(1, 255)
   title: string;
 
-  @ApiProperty({ example: 'The system will be down for maintenance at midnight.' })
+  @ApiProperty({
+    example: 'The system will be down for maintenance at midnight.',
+  })
   @IsString()
   message: string;
 
-  @ApiPropertyOptional({ enum: NotificationPriority, example: NotificationPriority.HIGH })
+  @ApiPropertyOptional({
+    enum: NotificationPriority,
+    example: NotificationPriority.HIGH,
+  })
   @IsEnum(NotificationPriority)
   priority?: NotificationPriority;
 
-  @ApiProperty({ enum: NotificationChannel, example: NotificationChannel.EMAIL })
+  @ApiProperty({
+    enum: NotificationChannel,
+    example: NotificationChannel.EMAIL,
+  })
   @IsEnum(NotificationChannel)
   channel: NotificationChannel;
 

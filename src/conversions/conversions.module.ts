@@ -6,4 +6,4 @@ import { ConversionsService } from './conversions.service';
   controllers: [ConversionsController],
   providers: [ConversionsService],
 })
-export class ConversionsModule {} 
+export class ConversionsModule {}

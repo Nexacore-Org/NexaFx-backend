@@ -28,7 +28,9 @@ describe('AnnouncementsService', () => {
     }).compile();
 
     service = module.get<AnnouncementsService>(AnnouncementsService);
-    repository = module.get<Repository<Announcement>>(getRepositoryToken(Announcement));
+    repository = module.get<Repository<Announcement>>(
+      getRepositoryToken(Announcement),
+    );
   });
 
   it('should be defined', () => {

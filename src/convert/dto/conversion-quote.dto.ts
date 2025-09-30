@@ -1,21 +1,26 @@
 import { IsString, IsNumber, IsPositive, IsNotEmpty } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsSupportedCurrency } from 'src/currencies/validators/supported-currency.validator';
 
 export class ConversionQuoteDto {
   @ApiProperty({
     description: 'Source currency code',
     example: 'NGN',
+    enum: ['NGN', 'USD'],
   })
   @IsString()
   @IsNotEmpty()
+  @IsSupportedCurrency()
   fromCurrency: string;
 
   @ApiProperty({
     description: 'Target currency code',
-    example: 'USDC',
+    example: 'USD',
+    enum: ['NGN', 'USD'],
   })
   @IsString()
   @IsNotEmpty()
+  @IsSupportedCurrency()
   toCurrency: string;
 
   @ApiProperty({

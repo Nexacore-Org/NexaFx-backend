@@ -15,6 +15,7 @@ import {
   ApiResponse,
   ApiBody,
   ApiParam,
+  ApiExcludeEndpoint,
 } from '@nestjs/swagger';
 import { CurrenciesService } from './currencies.service';
 import { CreateCurrencyDto } from './dto/create-currency.dto';
@@ -39,28 +40,16 @@ export class CurrenciesController {
   @UseInterceptors(AuditInterceptor)
   @Post()
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Create a new currency' })
-  @ApiBody({
-    type: CreateCurrencyDto,
-    examples: {
-      default: {
-        value: {
-          /* fill with example fields */
-        },
-      },
-    },
-  })
-  @ApiResponse({ status: 201, description: 'Currency created', type: Currency })
+  @ApiExcludeEndpoint()
   create(@Body() createCurrencyDto: CreateCurrencyDto): Promise<Currency> {
     return this.currenciesService.create(createCurrencyDto);
   }
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.AUDITOR)
-  @ApiOperation({ summary: 'Get all currencies' })
+  @ApiOperation({ summary: 'Get all supported currencies (NGN and USD)' })
   @ApiResponse({
     status: 200,
-    description: 'List of currencies',
+    description: 'List of supported currencies',
     type: [Currency],
   })
   findAll() {
@@ -68,27 +57,16 @@ export class CurrenciesController {
   }
 
   @Get(':code')
-  @ApiOperation({ summary: 'Get a currency by code' })
-  @ApiParam({ name: 'code', description: 'Currency code' })
+  @ApiOperation({ summary: 'Get a supported currency by code (NGN or USD)' })
+  @ApiParam({ name: 'code', description: 'Currency code (NGN or USD)' })
   @ApiResponse({ status: 200, description: 'Currency details', type: Currency })
   findOne(@Param('code') code: string) {
     return this.currenciesService.findOne(code);
   }
 
   @Patch(':code')
-  @ApiOperation({ summary: 'Update a currency' })
-  @ApiParam({ name: 'code', description: 'Currency code' })
-  @ApiBody({
-    type: UpdateCurrencyDto,
-    examples: {
-      default: {
-        value: {
-          /* fill with example fields */
-        },
-      },
-    },
-  })
-  @ApiResponse({ status: 200, description: 'Currency updated', type: Currency })
+  @Roles(UserRole.ADMIN)
+  @ApiExcludeEndpoint()
   update(
     @Param('code') code: string,
     @Body() updateCurrencyDto: UpdateCurrencyDto,
@@ -97,21 +75,22 @@ export class CurrenciesController {
   }
 
   @Delete(':code')
-  @ApiOperation({ summary: 'Delete a currency' })
-  @ApiParam({ name: 'code', description: 'Currency code' })
-  @ApiResponse({ status: 204, description: 'Currency deleted' })
+  @Roles(UserRole.ADMIN)
+  @ApiExcludeEndpoint()
   remove(@Param('code') code: string) {
     return this.currenciesService.remove(code);
   }
 
   @Post('simulate-conversion')
-  @ApiOperation({ summary: 'Simulate a currency conversion' })
+  @ApiOperation({ summary: 'Simulate a currency conversion between NGN and USD' })
   @ApiBody({
     type: SimulateConversionDto,
     examples: {
       default: {
         value: {
-          /* fill with example fields */
+          fromCurrency: 'NGN',
+          toCurrency: 'USD',
+          amount: 1000,
         },
       },
     },

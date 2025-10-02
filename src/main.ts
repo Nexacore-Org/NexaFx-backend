@@ -3,6 +3,7 @@ import { AppModule } from './app.module';
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import { ThrottlerExceptionFilter } from './common/filters/throttler-exception.filters';
+import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { setupSwagger } from './swagger/swagger';
 
 async function bootstrap() {
@@ -33,6 +34,7 @@ async function bootstrap() {
 
   // Add a global exception filter to handle throttler exceptions and add Retry-After headers
   app.useGlobalFilters(new ThrottlerExceptionFilter());
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   app.setGlobalPrefix('api/v1');
 

@@ -1,0 +1,14 @@
+{
+  "testnet": {
+    "network": "Stellar Testnet",
+    "rpcUrl": "https://soroban-testnet.stellar.org",
+    "networkPassphrase": "Test SDF Network ; September 2015",
+    "contractId": "CAP37IIFD2EZJKE3A25GKNO2SURW2K2PBPQJ2VLP6CL6YB5RDSCAWMIP",
+    "explorerUrl": "https://stellar.expert/explorer/testnet/contract/CAP37IIFD2EZJKE3A25GKNO2SURW2K2PBPQJ2VLP6CL6YB5RDSCAWMIP",
+    "notes": "Deployed via soroban CLI"
+  },
+  "metadata": {
+    "updatedAt": "2025-10-01T07:45:53+01:00",
+    "deployer": "deployment"
+  }
+}

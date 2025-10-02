@@ -20,9 +20,12 @@ import { FeeModule } from './fees/fee.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { NotificationPreferencesModule } from './notification-preferences/notification-preferences.module';
 import databaseConfig from './config/database.config';
+import configuration from './config/configuration';
+import { validationSchema } from './config/validation.schema';
 // import { ScheduledTransferModule } from './scheduled-transfers/scheduled-transfers.module';
 import { ProfilePictureModule } from './profile-picture/profile-picture.module';
 import { MailModule } from './mail/mail.module';
+import { CommonModule } from './common/common.module';
 import { TransfersModule } from './transfers/transfers.module';
 import { ConversionsModule } from './conversions/conversions.module';
 import { WithdrawModule } from './withdraw/withdraw.module';
@@ -35,7 +38,8 @@ import { ActivityLogModule } from './activity-log/activity-log.module';
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
-      load: [databaseConfig],
+      load: [databaseConfig, configuration],
+      validationSchema,
     }),
     ThrottlerModule.forRoot({
       throttlers: [
@@ -88,6 +92,7 @@ import { ActivityLogModule } from './activity-log/activity-log.module';
     DepositModule,
     ConvertModule,
     ActivityLogModule,
+    CommonModule,
   ],
   controllers: [AppController],
   providers: [

@@ -1,12 +1,15 @@
 import { IsNotEmpty, IsNumber, IsString, Min } from 'class-validator';
+import { IsSupportedCurrency } from '../validators/supported-currency.validator';
 
 export class SimulateConversionDto {
   @IsNotEmpty()
   @IsString()
+  @IsSupportedCurrency()
   fromCurrency: string;
 
   @IsNotEmpty()
   @IsString()
+  @IsSupportedCurrency()
   toCurrency: string;
 
   @IsNotEmpty()

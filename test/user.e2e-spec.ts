@@ -34,7 +34,7 @@ describe('UserController (e2e)', () => {
           port: process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 5432,
           username: process.env.DB_USERNAME || 'postgres',
           password: process.env.DB_PASSWORD || 'postgres',
-          database: process.env.DB_NAME || 'test_db',
+          database: process.env.DB_DATABASE || 'test_db',
           entities: [User],
           synchronize: true,
           dropSchema: true,

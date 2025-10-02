@@ -17,6 +17,9 @@ class EnvironmentVariables {
   DB_PASSWORD: string;
 
   @IsString()
+  DB_DATABASE: string;
+
+  @IsString()
   JWT_SECRET: string;
 
   @IsString()

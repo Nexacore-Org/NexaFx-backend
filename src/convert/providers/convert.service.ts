@@ -23,81 +23,23 @@ import { NotificationType } from 'src/notifications/enum/notificationType.enum';
 import { NotificationPriority } from 'src/notifications/enum/notificationPriority.enum';
 import { NotificationChannel } from 'src/notifications/enum/notificationChannel.enum';
 import { InjectRepository } from '@nestjs/typeorm';
+import {
+  SUPPORTED_CURRENCIES,
+  SupportedCurrency,
+  EXCHANGE_RATES,
+  getExchangeRate,
+  isSupportedCurrency,
+} from 'src/currencies/constants/supported-currencies';
 
 @Injectable()
 export class ConvertService {
   private readonly logger = new Logger(ConvertService.name);
 
-  // Supported currencies for conversion
-  private readonly supportedCurrencies = [
-    'NGN',
-    'USD',
-    'USDC',
-    'BTC',
-    'ETH',
-    'USDT',
-    'BNB',
-  ];
+  // Supported currencies for conversion - only NGN and USD
+  private readonly supportedCurrencies = SUPPORTED_CURRENCIES;
 
-  // Mock exchange rates (in production, fetch from external API)
-  private readonly exchangeRates = {
-    NGN: {
-      USD: 0.00062,
-      USDC: 0.00062,
-      BTC: 0.000000015,
-      ETH: 0.00000025,
-      USDT: 0.00062,
-      BNB: 0.0000009,
-    },
-    USD: {
-      NGN: 1610,
-      USDC: 1,
-      BTC: 0.000024,
-      ETH: 0.0004,
-      USDT: 1,
-      BNB: 0.0015,
-    },
-    USDC: {
-      NGN: 1610,
-      USD: 1,
-      BTC: 0.000024,
-      ETH: 0.0004,
-      USDT: 1,
-      BNB: 0.0015,
-    },
-    BTC: {
-      NGN: 67000000,
-      USD: 41600,
-      USDC: 41600,
-      ETH: 16.5,
-      USDT: 41600,
-      BNB: 62,
-    },
-    ETH: {
-      NGN: 4060000,
-      USD: 2520,
-      USDC: 2520,
-      BTC: 0.061,
-      USDT: 2520,
-      BNB: 3.8,
-    },
-    USDT: {
-      NGN: 1610,
-      USD: 1,
-      USDC: 1,
-      BTC: 0.000024,
-      ETH: 0.0004,
-      BNB: 0.0015,
-    },
-    BNB: {
-      NGN: 1073000,
-      USD: 667,
-      USDC: 667,
-      BTC: 0.016,
-      ETH: 0.26,
-      USDT: 667,
-    },
-  };
+  // Exchange rates for NGN and USD only
+  private readonly exchangeRates = EXCHANGE_RATES;
 
   constructor(
     @InjectRepository(Transaction)
@@ -324,8 +266,8 @@ export class ConvertService {
   async getExchangeRates(base?: string) {
     const baseCurrency = base || 'NGN';
 
-    if (!this.supportedCurrencies.includes(baseCurrency)) {
-      throw new BadRequestException('Unsupported base currency');
+    if (!isSupportedCurrency(baseCurrency)) {
+      throw new BadRequestException('Unsupported base currency. Only NGN and USD are supported');
     }
 
     return {
@@ -336,15 +278,15 @@ export class ConvertService {
   }
 
   private validateCurrencies(fromCurrency: string, toCurrency: string): void {
-    if (!this.supportedCurrencies.includes(fromCurrency)) {
+    if (!isSupportedCurrency(fromCurrency)) {
       throw new BadRequestException(
-        `Unsupported source currency: ${fromCurrency}`,
+        `Unsupported source currency: ${fromCurrency}. Only ${SUPPORTED_CURRENCIES.join(' and ')} are supported`,
       );
     }
 
-    if (!this.supportedCurrencies.includes(toCurrency)) {
+    if (!isSupportedCurrency(toCurrency)) {
       throw new BadRequestException(
-        `Unsupported target currency: ${toCurrency}`,
+        `Unsupported target currency: ${toCurrency}. Only ${SUPPORTED_CURRENCIES.join(' and ')} are supported`,
       );
     }
 
@@ -354,15 +296,7 @@ export class ConvertService {
   }
 
   private getExchangeRate(fromCurrency: string, toCurrency: string): number {
-    const rate = this.exchangeRates[fromCurrency]?.[toCurrency];
-
-    if (!rate) {
-      throw new BadRequestException(
-        `Exchange rate not available for ${fromCurrency} to ${toCurrency}`,
-      );
-    }
-
-    return rate;
+    return getExchangeRate(fromCurrency as SupportedCurrency, toCurrency as SupportedCurrency);
   }
 
   private calculateConvertedAmount(
@@ -373,18 +307,17 @@ export class ConvertService {
   }
 
   private calculateFee(currency: string, amount: number): number {
-    // Fee structure as shown in Figma: 200 NGN
+    // Fee structure: 200 NGN equivalent
     if (currency === 'NGN') {
       return 200;
     }
 
-    // Convert 200 NGN to other currencies
-    const ngnToTargetRate = this.exchangeRates['NGN'][currency];
-    if (ngnToTargetRate) {
-      return Math.round(200 * ngnToTargetRate * 100) / 100;
+    if (currency === 'USD') {
+      // Convert 200 NGN to USD (200 * 0.00062 = 0.124 USD)
+      return 0.124;
     }
 
-    return 0; // No fee if rate not found
+    return 0; // No fee for unsupported currencies
   }
 
   private async validateUserBalance(
@@ -403,15 +336,10 @@ export class ConvertService {
   }
 
   private getMockUserBalance(currency: string): number {
-    // Mock balances for testing
+    // Mock balances for testing - only NGN and USD
     const mockBalances = {
       NGN: 1000000,
       USD: 1000,
-      USDC: 1000,
-      BTC: 0.1,
-      ETH: 2,
-      USDT: 1000,
-      BNB: 10,
     };
 
     return mockBalances[currency] || 0;
@@ -488,11 +416,6 @@ export class ConvertService {
     const names = {
       NGN: 'Nigerian Naira',
       USD: 'US Dollar',
-      USDC: 'USD Coin',
-      BTC: 'Bitcoin',
-      ETH: 'Ethereum',
-      USDT: 'Tether',
-      BNB: 'Binance Coin',
     };
 
     return names[code] || code;
@@ -502,11 +425,6 @@ export class ConvertService {
     const symbols = {
       NGN: '₦',
       USD: '$',
-      USDC: 'USDC',
-      BTC: '₿',
-      ETH: 'Ξ',
-      USDT: '₮',
-      BNB: 'BNB',
     };
 
     return symbols[code] || code;

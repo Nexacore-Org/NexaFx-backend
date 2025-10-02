@@ -5,6 +5,7 @@ import { CurrenciesService } from './currencies.service';
 import { CurrenciesController } from './currencies.controller';
 import { Currency } from './entities/currency.entity';
 import { RateFetcherService } from './services/rate-fetcher.service';
+import { CurrencySeederService } from './services/currency-seeder.service';
 import { AuditModule } from 'src/audit/audit.module';
 
 @Module({
@@ -14,7 +15,7 @@ import { AuditModule } from 'src/audit/audit.module';
     AuditModule,
   ],
   controllers: [CurrenciesController],
-  providers: [CurrenciesService, RateFetcherService],
-  exports: [CurrenciesService, RateFetcherService],
+  providers: [CurrenciesService, RateFetcherService, CurrencySeederService],
+  exports: [CurrenciesService, RateFetcherService, CurrencySeederService],
 })
 export class CurrenciesModule {}

@@ -5,18 +5,23 @@ export default () => ({
   upload: {
     directory: process.env.UPLOAD_DIR || './uploads',
     maxFileSize: parseInt(process.env.MAX_FILE_SIZE || '5242880', 10),
-    allowedTypes:
-      process.env.ALLOWED_FILE_TYPES?.split(',') || [
-        'application/pdf',
-        'image/jpeg',
-        'image/png',
-      ],
+    allowedTypes: process.env.ALLOWED_FILE_TYPES?.split(',') || [
+      'application/pdf',
+      'image/jpeg',
+      'image/png',
+    ],
   },
 
   verification: {
-    codeExpiry: parseInt(process.env.PHONE_VERIFICATION_CODE_EXPIRY || '600000', 10),
+    codeExpiry: parseInt(
+      process.env.PHONE_VERIFICATION_CODE_EXPIRY || '600000',
+      10,
+    ),
     maxAttempts: parseInt(process.env.MAX_VERIFICATION_ATTEMPTS || '3', 10),
-    rateLimitWindow: parseInt(process.env.VERIFICATION_RATE_LIMIT_WINDOW || '3600000', 10),
+    rateLimitWindow: parseInt(
+      process.env.VERIFICATION_RATE_LIMIT_WINDOW || '3600000',
+      10,
+    ),
   },
 
   sms: {
@@ -29,5 +34,3 @@ export default () => ({
     url: process.env.FRONTEND_URL || 'http://localhost:3000',
   },
 });
-
-

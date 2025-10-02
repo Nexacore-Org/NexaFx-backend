@@ -19,16 +19,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Internal server error';
-    let errors: any = null;
+    let errors: Record<string, unknown> | null = null;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       const exceptionResponse = exception.getResponse();
-      if (typeof exceptionResponse === 'object') {
-        message = (exceptionResponse as any).message || message;
-        errors = (exceptionResponse as any).errors || null;
+      if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
+        const response = exceptionResponse as {
+          message?: string;
+          errors?: Record<string, unknown>;
+        };
+        message = response.message || message;
+        errors = response.errors || null;
       } else {
-        message = exceptionResponse as string;
+        message = exceptionResponse;
       }
     } else if (exception instanceof Error) {
       message = exception.message;
@@ -51,5 +55,3 @@ export class AllExceptionsFilter implements ExceptionFilter {
     response.status(status).json(errorResponse);
   }
 }
-
-

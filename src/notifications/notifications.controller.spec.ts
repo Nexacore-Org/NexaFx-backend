@@ -3,7 +3,11 @@ import { NotificationsController } from './notifications.controller';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { BadRequestException } from '@nestjs/common';
 import { NotificationsService } from './providers/notifications.service';
-import { GetAllNotificationsQueryDto, SortBy, SortOrder } from './dto/get-all-notifications-query.dto';
+import {
+  GetAllNotificationsQueryDto,
+  SortBy,
+  SortOrder,
+} from './dto/get-all-notifications-query.dto';
 import { GetAllNotificationsResponseDto } from './dto/get-all-notifications-response.dto';
 import { NotificationType } from './enum/notificationType.enum';
 import { NotificationCategory } from './enum/notificationCategory.enum';
@@ -86,8 +90,10 @@ describe('NotificationsController', () => {
 
     it('should throw BadRequestException if invalid data is provided', async () => {
       const createNotificationDto = new CreateNotificationDto();
-      
-      jest.spyOn(service, 'create').mockRejectedValueOnce(new BadRequestException('Invalid data'));
+
+      jest
+        .spyOn(service, 'create')
+        .mockRejectedValueOnce(new BadRequestException('Invalid data'));
 
       await expect(controller.create(createNotificationDto)).rejects.toThrow(
         BadRequestException,
@@ -165,7 +171,10 @@ describe('NotificationsController', () => {
     };
 
     it('should return all notifications for authenticated user', async () => {
-      const result = await controller.getAllNotifications(mockRequest, mockQueryDto);
+      const result = await controller.getAllNotifications(
+        mockRequest,
+        mockQueryDto,
+      );
 
       expect(result).toMatchObject({
         notifications: expect.any(Array),
@@ -191,7 +200,7 @@ describe('NotificationsController', () => {
 
     it('should handle pagination parameters', async () => {
       const paginationQuery = { ...mockQueryDto, page: 2, limit: 5 };
-      
+
       await controller.getAllNotifications(mockRequest, paginationQuery);
 
       expect(service.getAllNotificationsForUser).toHaveBeenCalledWith(
@@ -208,7 +217,7 @@ describe('NotificationsController', () => {
         category: NotificationCategory.SUCCESS,
         priority: NotificationPriority.HIGH,
       };
-      
+
       await controller.getAllNotifications(mockRequest, filterQuery);
 
       expect(service.getAllNotificationsForUser).toHaveBeenCalledWith(
@@ -223,7 +232,7 @@ describe('NotificationsController', () => {
         fromDate: '2023-01-01T00:00:00Z',
         toDate: '2023-12-31T23:59:59Z',
       };
-      
+
       await controller.getAllNotifications(mockRequest, dateRangeQuery);
 
       expect(service.getAllNotificationsForUser).toHaveBeenCalledWith(
@@ -237,7 +246,7 @@ describe('NotificationsController', () => {
         ...mockQueryDto,
         search: 'transaction',
       };
-      
+
       await controller.getAllNotifications(mockRequest, searchQuery);
 
       expect(service.getAllNotificationsForUser).toHaveBeenCalledWith(
@@ -252,7 +261,7 @@ describe('NotificationsController', () => {
         sortBy: SortBy.PRIORITY,
         sortOrder: SortOrder.ASC,
       };
-      
+
       await controller.getAllNotifications(mockRequest, sortQuery);
 
       expect(service.getAllNotificationsForUser).toHaveBeenCalledWith(
@@ -262,4 +271,3 @@ describe('NotificationsController', () => {
     });
   });
 });
-

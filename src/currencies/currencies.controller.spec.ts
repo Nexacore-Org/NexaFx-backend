@@ -3,6 +3,8 @@ import { CurrenciesController } from './currencies.controller';
 import { CurrenciesService } from './currencies.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Currency } from './entities/currency.entity';
+import { RateFetcherService } from './services/rate-fetcher.service';
+import { AuditService } from '../audit/audit.service';
 
 describe('CurrenciesController', () => {
   let controller: CurrenciesController;
@@ -20,6 +22,21 @@ describe('CurrenciesController', () => {
             findOne: jest.fn(),
             update: jest.fn(),
             remove: jest.fn(),
+          },
+        },
+        {
+          provide: RateFetcherService,
+          useValue: {
+            getApiHealthStatus: jest.fn(),
+            getCircuitBreakerStatus: jest.fn(),
+            resetCircuitBreaker: jest.fn(),
+            getFallbackRates: jest.fn(),
+          },
+        },
+        {
+          provide: AuditService,
+          useValue: {
+            logActivity: jest.fn(),
           },
         },
       ],

@@ -37,8 +37,7 @@ async function bootstrap() {
   app.useGlobalFilters(new ThrottlerExceptionFilter());
   app.useGlobalFilters(new AllExceptionsFilter());
 
-
-  app.use('/api/v1/fees', rateLimit({ windowMs: 60*1000, max: 30 }));
+  // app.use('/api/v1/fees', rateLimit({ windowMs: 60 * 1000, max: 30 }));
   app.setGlobalPrefix('api/v1');
 
   // Swagger configuration

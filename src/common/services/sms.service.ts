@@ -11,11 +11,15 @@ export class SmsService {
 
   constructor(private readonly configService: ConfigService) {
     this.apiKey = this.configService.get<string>('SMS_API_KEY');
-    this.senderName = this.configService.get<string>('SMS_SENDER_NAME') || 'NexaFX';
+    this.senderName =
+      this.configService.get<string>('SMS_SENDER_NAME') || 'NexaFX';
     this.apiUrl = this.configService.get<string>('SMS_API_URL');
   }
 
-  async sendVerificationCode(phoneNumber: string, code: string): Promise<boolean> {
+  async sendVerificationCode(
+    phoneNumber: string,
+    code: string,
+  ): Promise<boolean> {
     const message = `Your NexaFX verification code is: ${code}. This code expires in 10 minutes.`;
     try {
       if (!this.apiUrl || !this.apiKey) {
@@ -34,10 +38,10 @@ export class SmsService {
       });
       return Boolean((response.data as any)?.message_id);
     } catch (error: any) {
-      this.logger.error(`Error sending SMS to ${phoneNumber}: ${error?.message}`);
+      this.logger.error(
+        `Error sending SMS to ${phoneNumber}: ${error?.message}`,
+      );
       return false;
     }
   }
 }
-
-

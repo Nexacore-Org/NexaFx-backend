@@ -30,7 +30,6 @@ import {
   SimulateConversionDto,
   ConversionSimulationResponse,
 } from './dto/simulate-conversion.dto';
-import { ApiTags } from '@nestjs/swagger';
 import { NoneGuard } from 'src/common/guards/none.guard';
 
 @ApiTags('currencies')

@@ -30,10 +30,13 @@ import {
   SimulateConversionDto,
   ConversionSimulationResponse,
 } from './dto/simulate-conversion.dto';
+import { NoneGuard } from 'src/common/guards/none.guard';
 
-@ApiTags('Currencies')
+@ApiTags('currencies')
 @Controller('currencies')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(NoneGuard)
+// @UseGuards(JwtAuthGuard, RolesGuard)
+// @UseGuards(JwtAuthGuard, RolesGuard)
 export class CurrenciesController {
   constructor(private readonly currenciesService: CurrenciesService) {}
 

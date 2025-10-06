@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import { ThrottlerExceptionFilter } from './common/filters/throttler-exception.filters';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { setupSwagger } from './swagger/swagger';
+import rateLimit from 'express-rate-limit';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -36,6 +37,8 @@ async function bootstrap() {
   app.useGlobalFilters(new ThrottlerExceptionFilter());
   app.useGlobalFilters(new AllExceptionsFilter());
 
+
+  app.use('/api/v1/fees', rateLimit({ windowMs: 60*1000, max: 30 }));
   app.setGlobalPrefix('api/v1');
 
   // Swagger configuration

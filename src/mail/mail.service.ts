@@ -90,17 +90,27 @@ export class MailService {
 
       // No direct connection test available; ensure API key format looks reasonable
       if (!apiKey.startsWith('key-') && !apiKey.startsWith('MG.')) {
-        this.logger.warn('Mailgun API key format not recognized; proceeding anyway');
+        this.logger.warn(
+          'Mailgun API key format not recognized; proceeding anyway',
+        );
       }
 
       this.logger.log('Mailgun connection test passed');
     } catch (error) {
-      this.logger.error('Mailgun connection test failed:', (error as any).message);
+      this.logger.error(
+        'Mailgun connection test failed:',
+        (error as any).message,
+      );
       this.logger.error('Please check your Mailgun configuration');
     }
   }
 
-  async sendEmail(options: { to: string; subject: string; templateName: string; context: Record<string, any>; }): Promise<boolean> {
+  async sendEmail(options: {
+    to: string;
+    subject: string;
+    templateName: string;
+    context: Record<string, any>;
+  }): Promise<boolean> {
     try {
       // Skip sending in test or when explicitly disabled
       if (
@@ -125,7 +135,10 @@ export class MailService {
         return false;
       }
 
-      const template = await require('fs/promises').readFile(templatePath, 'utf8');
+      const template = await require('fs/promises').readFile(
+        templatePath,
+        'utf8',
+      );
       const html = require('ejs').render(template, options.context);
 
       const fromEmail = process.env.MAILGUN_FROM_EMAIL!;
@@ -145,15 +158,24 @@ export class MailService {
       return true;
     } catch (error) {
       const err: any = error;
-      this.logger.error(`Failed to send email to ${options.to}: ${err?.message}`);
+      this.logger.error(
+        `Failed to send email to ${options.to}: ${err?.message}`,
+      );
       if (err?.status || err?.details) {
-        this.logger.error(`Mailgun error status: ${err.status}, details: ${JSON.stringify(err.details)}`);
+        this.logger.error(
+          `Mailgun error status: ${err.status}, details: ${JSON.stringify(err.details)}`,
+        );
       }
       return false;
     }
   }
 
-  async sendOtpEmail(options: { to: string; otp: string; userName?: string; expirationMinutes?: number; }): Promise<boolean> {
+  async sendOtpEmail(options: {
+    to: string;
+    otp: string;
+    userName?: string;
+    expirationMinutes?: number;
+  }): Promise<boolean> {
     const context = {
       otp: options.otp,
       userName: options.userName || 'User',
@@ -210,8 +232,13 @@ export class MailService {
   // Method to test email configuration
   async testEmailConfiguration(): Promise<boolean> {
     try {
-      if (process.env.NODE_ENV === 'test' || process.env.SKIP_EMAIL_SENDING === 'true') {
-        this.logger.log('Skipping real Mailgun send in test/disabled environment');
+      if (
+        process.env.NODE_ENV === 'test' ||
+        process.env.SKIP_EMAIL_SENDING === 'true'
+      ) {
+        this.logger.log(
+          'Skipping real Mailgun send in test/disabled environment',
+        );
         return true;
       }
 
@@ -225,10 +252,15 @@ export class MailService {
         html: '<p>This is a test email to verify Mailgun configuration.</p>',
       });
 
-      this.logger.log(`Mailgun configuration test passed (id: ${result?.id || 'n/a'})`);
+      this.logger.log(
+        `Mailgun configuration test passed (id: ${result?.id || 'n/a'})`,
+      );
       return true;
     } catch (error) {
-      this.logger.error('Mailgun configuration test failed:', (error as any)?.message);
+      this.logger.error(
+        'Mailgun configuration test failed:',
+        (error as any)?.message,
+      );
       return false;
     }
   }
@@ -245,7 +277,10 @@ export class MailService {
     try {
       for (const emailData of emails) {
         // Skip in test or when disabled
-        if (process.env.NODE_ENV === 'test' || process.env.SKIP_EMAIL_SENDING === 'true') {
+        if (
+          process.env.NODE_ENV === 'test' ||
+          process.env.SKIP_EMAIL_SENDING === 'true'
+        ) {
           continue;
         }
         const templatePath = require('path').join(
@@ -253,7 +288,10 @@ export class MailService {
           'src/mail/templates',
           `${emailData.templateName}.ejs`,
         );
-        const template = await require('fs/promises').readFile(templatePath, 'utf8');
+        const template = await require('fs/promises').readFile(
+          templatePath,
+          'utf8',
+        );
         const html = require('ejs').render(template, emailData.context);
 
         await this.mgClient.messages.create(this.mailgunDomain, {

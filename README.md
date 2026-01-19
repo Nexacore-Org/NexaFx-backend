@@ -118,13 +118,13 @@ Guards are applied at controller and route levels using custom decorators and Ne
 
 ## 📁 Modules Overview
 
-| Module        | Description                                |
-| ------------- | ------------------------------------------ |
-| `auth`        | JWT login, registration, guards            |
-| `users`       | User CRUD, roles, profile                  |
-| `currencies`  | Supported fiat & crypto currencies         |
-| `transactions`| Track exchanges & conversions (CRUD)       |
-| `common`      | Utilities, global guards, DTOs             |
+| Module         | Description                          |
+| -------------- | ------------------------------------ |
+| `auth`         | JWT login, registration, guards      |
+| `users`        | User CRUD, roles, profile            |
+| `currencies`   | Supported fiat & crypto currencies   |
+| `transactions` | Track exchanges & conversions (CRUD) |
+| `common`       | Utilities, global guards, DTOs       |
 
 ---
 
@@ -173,8 +173,6 @@ chore(deps): upgrade Prisma to 5.0.0
 - [`nexafx-frontend`](https://github.com/Nexacore-Org/NexaFx-frontend) — Next.js UI
 - [`nexafx-contracts`](https://github.com/Nexacore-Org/NexaFx-contract) — Rust smart contracts on Stellar
 
-
-
 ## 📜 License
 
 MIT License. See `LICENSE` file.
@@ -182,6 +180,7 @@ MIT License. See `LICENSE` file.
 ## 📧 Contact
 
 For inquiries, discussions, or help, feel free to reach out to us:
+
 - 📬 Email: [contact@nexacore.org](mailto:nexacore.org@gmail.com)
 - 🗣️ Telegram: [https://t.me/NexaFx](https://t.me/+WkWO3kNnA-1mYzVk)
 - 🐛 Issues: Open an issue for feature requests or bug reports

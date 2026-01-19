@@ -3,7 +3,6 @@
     "module": "commonjs",
     "declaration": true,
     "removeComments": true,
-    "esModuleInterop": true,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "allowSyntheticDefaultImports": true,
@@ -17,8 +16,6 @@
     "forceConsistentCasingInFileNames": true,
     "noImplicitAny": false,
     "strictBindCallApply": false,
-    "noFallthroughCasesInSwitch": false,
-    "typeRoots": ["./node_modules/@types", "src/types"]
-  },
-  "exclude": ["**/*.spec.ts", "**/*.test.ts", "test", "tests", "dist"]
+    "noFallthroughCasesInSwitch": false
+  }
 }

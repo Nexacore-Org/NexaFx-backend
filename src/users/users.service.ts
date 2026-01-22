@@ -1,4 +1,8 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
@@ -92,7 +96,12 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    const { password: _, ...profile } = user;
+    return this.excludePassword(user);
+  }
+
+  private excludePassword(user: User): ProfileResponseDto {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password, ...profile } = user;
     return profile as ProfileResponseDto;
   }
 
@@ -120,8 +129,7 @@ export class UsersService {
     }
 
     const updatedUser = await this.findById(userId);
-    const { password: _, ...profile } = updatedUser!;
-    return profile as ProfileResponseDto;
+    return this.excludePassword(updatedUser!);
   }
 
   async deleteProfile(userId: string): Promise<void> {

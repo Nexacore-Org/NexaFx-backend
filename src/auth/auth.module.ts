@@ -20,7 +20,8 @@ import { TokensModule } from '../tokens/tokens.module';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
         const secret = configService.get<string>('JWT_SECRET');
-        const isProduction = configService.get<string>('NODE_ENV') === 'production';
+        const isProduction =
+          configService.get<string>('NODE_ENV') === 'production';
 
         if (!secret && isProduction) {
           throw new Error('JWT_SECRET must be set in production environment');
@@ -29,7 +30,7 @@ import { TokensModule } from '../tokens/tokens.module';
         return {
           secret: secret || 'default-secret-change-in-production',
           signOptions: {
-            expiresIn: (configService.get<string>('JWT_EXPIRES_IN') || '15m') as string,
+            expiresIn: configService.get<string>('JWT_EXPIRES_IN') || '15m',
           },
         } as any;
       },

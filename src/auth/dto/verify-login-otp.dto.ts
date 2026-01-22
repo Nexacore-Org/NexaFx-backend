@@ -15,4 +15,3 @@ export class VerifyLoginOtpDto {
   @Length(6, 6)
   otp: string;
 }
-

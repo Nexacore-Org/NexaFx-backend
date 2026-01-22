@@ -5,8 +5,6 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Index,
-  BeforeInsert,
-  BeforeUpdate,
 } from 'typeorm';
 import { Exclude } from 'class-transformer';
 

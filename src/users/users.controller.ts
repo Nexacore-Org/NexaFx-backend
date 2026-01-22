@@ -31,9 +31,14 @@ export class UsersController {
     description: 'User profile retrieved successfully',
     type: ProfileResponseDto,
   })
-  @ApiResponse({ status: 401, description: 'Unauthorized - Invalid or missing JWT token' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Invalid or missing JWT token',
+  })
   @ApiResponse({ status: 404, description: 'User not found' })
-  async getProfile(@Request() req: { user: { userId: string } }): Promise<ProfileResponseDto> {
+  async getProfile(
+    @Request() req: { user: { userId: string } },
+  ): Promise<ProfileResponseDto> {
     return this.usersService.getProfile(req.user.userId);
   }
 
@@ -46,7 +51,10 @@ export class UsersController {
     type: ProfileResponseDto,
   })
   @ApiResponse({ status: 400, description: 'Invalid request body' })
-  @ApiResponse({ status: 401, description: 'Unauthorized - Invalid or missing JWT token' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Invalid or missing JWT token',
+  })
   @ApiResponse({ status: 404, description: 'User not found' })
   async updateProfile(
     @Request() req: { user: { userId: string } },
@@ -68,9 +76,14 @@ export class UsersController {
       },
     },
   })
-  @ApiResponse({ status: 401, description: 'Unauthorized - Invalid or missing JWT token' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Invalid or missing JWT token',
+  })
   @ApiResponse({ status: 404, description: 'User not found' })
-  async deleteProfile(@Request() req: { user: { userId: string } }): Promise<{ message: string }> {
+  async deleteProfile(
+    @Request() req: { user: { userId: string } },
+  ): Promise<{ message: string }> {
     await this.usersService.deleteProfile(req.user.userId);
     return { message: 'Account deleted successfully' };
   }

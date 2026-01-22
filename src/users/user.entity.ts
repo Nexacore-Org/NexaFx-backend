@@ -26,6 +26,12 @@ export class User {
   @Index()
   email: string;
 
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  firstName: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  lastName: string | null;
+
   @Column({ type: 'varchar', length: 255 })
   @Exclude({ toPlainOnly: true })
   password: string;

@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User, UserRole } from './user.entity';
+import { UpdateProfileDto, ProfileResponseDto } from './dto';
 
 @Injectable()
 export class UsersService {
@@ -83,5 +84,52 @@ export class UsersService {
     }
 
     await this.userRepository.update(userId, { role });
+  }
+
+  async getProfile(userId: string): Promise<ProfileResponseDto> {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const { password: _, ...profile } = user;
+    return profile as ProfileResponseDto;
+  }
+
+  async updateProfile(
+    userId: string,
+    updateProfileDto: UpdateProfileDto,
+  ): Promise<ProfileResponseDto> {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const updateData: Partial<User> = {};
+
+    if (updateProfileDto.firstName !== undefined) {
+      updateData.firstName = updateProfileDto.firstName.trim();
+    }
+
+    if (updateProfileDto.lastName !== undefined) {
+      updateData.lastName = updateProfileDto.lastName.trim();
+    }
+
+    if (Object.keys(updateData).length > 0) {
+      await this.userRepository.update(userId, updateData);
+    }
+
+    const updatedUser = await this.findById(userId);
+    const { password: _, ...profile } = updatedUser!;
+    return profile as ProfileResponseDto;
+  }
+
+  async deleteProfile(userId: string): Promise<void> {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    await this.userRepository.delete(userId);
   }
 }

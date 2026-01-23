@@ -63,7 +63,8 @@ export class RefreshTokensService {
       },
     });
 
-    if (!stored) throw new UnauthorizedException('Invalid or expired refresh token');
+    if (!stored)
+      throw new UnauthorizedException('Invalid or expired refresh token');
     return stored;
   }
 

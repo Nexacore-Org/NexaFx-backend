@@ -1,4 +1,8 @@
-import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan, IsNull } from 'typeorm';
@@ -129,7 +133,11 @@ export class OtpsService {
     return parsed;
   }
 
-  private hashOtp(params: { userId: string; type: OtpType; otp: string }): string {
+  private hashOtp(params: {
+    userId: string;
+    type: OtpType;
+    otp: string;
+  }): string {
     // HMAC-based hashing gives constant-time validation without storing OTPs or bcrypt costs.
     return crypto
       .createHmac('sha256', this.getOtpSecret())

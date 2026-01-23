@@ -7,4 +7,3 @@ export class ForgotPasswordDto {
   @MaxLength(255)
   email: string;
 }
-

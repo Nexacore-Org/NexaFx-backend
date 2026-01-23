@@ -5,8 +5,6 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Index,
-  BeforeInsert,
-  BeforeUpdate,
 } from 'typeorm';
 import { Exclude } from 'class-transformer';
 
@@ -25,6 +23,12 @@ export class User {
   @Column({ type: 'varchar', length: 255, unique: true })
   @Index()
   email: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  firstName: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  lastName: string | null;
 
   @Column({ type: 'varchar', length: 255 })
   @Exclude({ toPlainOnly: true })

@@ -6,6 +6,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CurrenciesModule } from './currencies/currencies.module';
+import { CommonModule } from './common/common.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { User } from './users/user.entity';
 import { Otp } from './otps/otp.entity';
@@ -32,6 +33,7 @@ import { Currency } from './currencies/currency.entity';
       }),
       inject: [ConfigService],
     }),
+    CommonModule,
     AuthModule,
     CurrenciesModule,
   ],

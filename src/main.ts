@@ -2,6 +2,10 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+import { TransformResponseInterceptor } from './common/interceptors/transform-response.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -13,6 +17,15 @@ async function bootstrap() {
       transform: true,
       transformOptions: { enableImplicitConversion: true },
     }),
+  );
+
+  // Global Filters (order matters: specific before general)
+  app.useGlobalFilters(new HttpExceptionFilter(), new AllExceptionsFilter());
+
+  // Global Interceptors
+  app.useGlobalInterceptors(
+    new LoggingInterceptor(),
+    new TransformResponseInterceptor(),
   );
 
   const swaggerConfig = new DocumentBuilder()

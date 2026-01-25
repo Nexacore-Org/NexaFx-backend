@@ -1,6 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -28,10 +28,16 @@ async function bootstrap() {
     new TransformResponseInterceptor(),
   );
 
+  app.enableVersioning({
+    type: VersioningType.URI,
+    defaultVersion: '1',
+  });
+
   const swaggerConfig = new DocumentBuilder()
     .setTitle('NexaFX API')
-    .setDescription('Security-critical NexaFX backend API.')
-    .setVersion('1.0')
+    .setDescription('Web3 currency exchange backend')
+    .setVersion('v1')
+    .addTag('NexaFX')
     .addBearerAuth(
       {
         type: 'http',
@@ -43,7 +49,7 @@ async function bootstrap() {
     .build();
 
   const swaggerDoc = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('docs', app, swaggerDoc);
+  SwaggerModule.setup('api-docs', app, swaggerDoc);
 
   await app.listen(process.env.PORT ?? 3000);
 }

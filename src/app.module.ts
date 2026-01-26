@@ -6,6 +6,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CurrenciesModule } from './currencies/currencies.module';
+import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
 import { CommonModule } from './common/common.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { User } from './users/user.entity';
@@ -36,6 +37,7 @@ import { Currency } from './currencies/currency.entity';
     CommonModule,
     AuthModule,
     CurrenciesModule,
+    ExchangeRatesModule,
   ],
   controllers: [AppController],
   providers: [

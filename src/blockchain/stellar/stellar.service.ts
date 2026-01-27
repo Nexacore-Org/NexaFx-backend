@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import Server, {
   Keypair,
   TransactionBuilder,
@@ -24,6 +24,7 @@ import {
 export class StellarService {
   private server: any;
   private networkPassphrase: string;
+  private readonly logger = new Logger(StellarService.name);
 
   constructor() {
     const horizonUrl = process.env.STELLAR_HORIZON_URL;
@@ -38,6 +39,19 @@ export class StellarService {
 
     if (!this.networkPassphrase) {
       throw new Error(`Unsupported Stellar network: ${network}`);
+    }
+  }
+
+  /* -------------------- HEALTH CHECK -------------------- */
+
+  async checkConnectivity(): Promise<boolean> {
+    try {
+      // Fetches root info from Horizon server (lightweight check)
+      await this.server.server();
+      return true;
+    } catch (error: any) {
+      this.logger.error(`Stellar connectivity check failed: ${error.message}`);
+      return false;
     }
   }
 

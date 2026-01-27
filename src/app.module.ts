@@ -13,6 +13,7 @@ import { User } from './users/user.entity';
 import { Otp } from './otps/otp.entity';
 import { RefreshToken } from './tokens/refresh-token.entity';
 import { Currency } from './currencies/currency.entity';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { Currency } from './currencies/currency.entity';
     AuthModule,
     CurrenciesModule,
     ExchangeRatesModule,
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [

@@ -307,7 +307,6 @@ export class TransactionsService {
         this.logger.log(`Transaction still pending: ${transactionId}`);
         return transaction;
       }
-s
       await this.transactionRepository.save(transaction);
 
       return transaction;

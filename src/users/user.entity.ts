@@ -44,6 +44,15 @@ export class User {
   })
   role: UserRole;
 
+  @Column({ type: 'jsonb', nullable: true })
+  balances?: Record<string, number>;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  stellarAddress: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  stellarSecretKey: string | null;
+
   @CreateDateColumn({ type: 'timestamp with time zone' })
   createdAt: Date;
 

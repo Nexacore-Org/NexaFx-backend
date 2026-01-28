@@ -14,6 +14,7 @@ import { Otp } from './otps/otp.entity';
 import { RefreshToken } from './tokens/refresh-token.entity';
 import { Currency } from './currencies/currency.entity';
 import { HealthModule } from './health/health.module';
+import { AuditLogsModule } from './audit-logs/audit-logs.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { HealthModule } from './health/health.module';
     CurrenciesModule,
     ExchangeRatesModule,
     HealthModule,
+    AuditLogsModule,
   ],
   controllers: [AppController],
   providers: [

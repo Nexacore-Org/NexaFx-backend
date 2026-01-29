@@ -5,8 +5,10 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Index,
+  OneToMany,
 } from 'typeorm';
 import { Exclude } from 'class-transformer';
+import { Notification } from '../notifications/entities/notification.entity';
 
 export enum UserRole {
   USER = 'USER',
@@ -58,19 +60,12 @@ export class User {
   })
   role: UserRole;
 
-  @Column({ type: 'jsonb', nullable: true })
-  balances?: Record<string, number>;
-
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  stellarAddress: string | null;
-
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  stellarSecretKey: string | null;
-
   @CreateDateColumn({ type: 'timestamp with time zone' })
   createdAt: Date;
 
   @UpdateDateColumn({ type: 'timestamp with time zone' })
   updatedAt: Date;
+
+  @OneToMany(() => Notification, (notification) => notification.user)
   notifications: Notification[];
 }

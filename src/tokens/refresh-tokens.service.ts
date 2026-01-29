@@ -112,4 +112,9 @@ export class RefreshTokensService {
       .update(token)
       .digest('hex');
   }
+
+  async revokeRefreshToken(token: string): Promise<void> {
+    const tokenHash = this.hashRefreshToken(token);
+    await this.revokeToken(tokenHash);
+  }
 }

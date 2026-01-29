@@ -38,6 +38,10 @@ export class UsersService {
     await this.userRepository.delete(id);
   }
 
+  async updateByUserId(userId: string, updateData: Partial<User>): Promise<void> {
+    await this.userRepository.update(userId, updateData);
+  }
+
   async createUser(params: {
     email: string;
     password: string;

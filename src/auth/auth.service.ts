@@ -22,6 +22,8 @@ import { SignupDto } from './dto/signup.dto';
 import { VerifySignupOtpDto } from './dto/verify-signup-otp.dto';
 import { VerifySignupResponseDto } from './dto/signup-response.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 
 @Injectable()
 export class AuthService {
@@ -34,15 +36,28 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly stellarService: StellarService,
     private readonly encryptionService: EncryptionService,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
-  async login(loginDto: LoginDto): Promise<{ message: string }> {
+  async login(loginDto: LoginDto, ipAddress?: string, userAgent?: string): Promise<{ message: string }> {
     const user = await this.usersService.findByEmail(loginDto.email);
-    const genericMessage =
-      'If an account exists with this email, an OTP has been sent.';
+    const genericMessage = 'If an account exists with this email, an OTP has been sent.';
 
     if (!user || !user.isVerified) {
       await this.simulateProcessingDelay();
+
+      // Log failed login attempt
+      await this.auditLogsService.logAuthEvent(
+        undefined,
+        AuditAction.FAILED_LOGIN,
+        {
+          email: loginDto.email,
+          reason: 'User not found or not verified',
+          ip: ipAddress,
+          device: userAgent,
+        }
+      );
+
       return { message: genericMessage };
     }
 
@@ -50,8 +65,23 @@ export class AuthService {
       loginDto.password,
       user.password,
     );
+
     if (!isPasswordValid) {
       await this.simulateProcessingDelay();
+
+      // Log failed login attempt
+      await this.auditLogsService.logAuthEvent(
+        undefined,
+        AuditAction.FAILED_LOGIN,
+        {
+          email: loginDto.email,
+          reason: 'Invalid password',
+          ip: ipAddress,
+          device: userAgent,
+          userId: user.id,
+        }
+      );
+
       return { message: genericMessage };
     }
 
@@ -62,16 +92,40 @@ export class AuthService {
       otp,
     });
 
+    // Log successful login OTP sent
+    await this.auditLogsService.logAuthEvent(
+      user.id,
+      AuditAction.LOGIN,
+      {
+        method: 'email',
+        status: 'otp_sent',
+        ip: ipAddress,
+        device: userAgent,
+      }
+    );
+
     return { message: genericMessage };
   }
 
-  async verifyLoginOtp(verifyDto: VerifyLoginOtpDto): Promise<{
+  async verifyLoginOtp(verifyDto: VerifyLoginOtpDto, ipAddress?: string, userAgent?: string): Promise<{
     accessToken: string;
     refreshToken: string;
     expiresIn: number;
   }> {
     const user = await this.usersService.findByEmail(verifyDto.email);
     if (!user || !user.isVerified) {
+      // Log failed OTP verification
+      await this.auditLogsService.logAuthEvent(
+        undefined,
+        AuditAction.FAILED_LOGIN,
+        {
+          email: verifyDto.email,
+          reason: 'Invalid credentials for OTP verification',
+          ip: ipAddress,
+          device: userAgent,
+        }
+      );
+
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -89,6 +143,19 @@ export class AuthService {
     );
     const expiresIn = this.getAccessTokenExpirySeconds();
 
+    // Log successful login with OTP verification
+    await this.auditLogsService.logAuthEvent(
+      user.id,
+      AuditAction.LOGIN,
+      {
+        method: 'email',
+        status: 'success',
+        ip: ipAddress,
+        device: userAgent,
+        hasOtp: true,
+      }
+    );
+
     return {
       accessToken,
       refreshToken,
@@ -98,10 +165,11 @@ export class AuthService {
 
   async forgotPassword(
     forgotDto: ForgotPasswordDto,
+    ipAddress?: string,
+    userAgent?: string,
   ): Promise<{ message: string }> {
     const user = await this.usersService.findByEmail(forgotDto.email);
-    const genericMessage =
-      'If an account exists with this email, password reset instructions have been sent.';
+    const genericMessage = 'If an account exists with this email, password reset instructions have been sent.';
 
     if (!user || !user.isVerified) {
       await this.simulateProcessingDelay();
@@ -118,11 +186,24 @@ export class AuthService {
       otp,
     });
 
+    // Log password reset request
+    await this.auditLogsService.logAuthEvent(
+      user.id,
+      AuditAction.PASSWORD_RESET_REQUEST,
+      {
+        email: user.email,
+        ip: ipAddress,
+        device: userAgent,
+      }
+    );
+
     return { message: genericMessage };
   }
 
   async resetPassword(
     resetDto: ResetPasswordDto,
+    ipAddress?: string,
+    userAgent?: string,
   ): Promise<{ message: string }> {
     const user = await this.usersService.findByEmail(resetDto.email);
     if (!user || !user.isVerified) {
@@ -138,9 +219,19 @@ export class AuthService {
     await this.refreshTokensService.revokeAllUserTokens(user.id);
     await this.otpsService.invalidateAllUserOtps(user.id);
 
+    // Log password reset completion
+    await this.auditLogsService.logAuthEvent(
+      user.id,
+      AuditAction.PASSWORD_RESET_COMPLETE,
+      {
+        email: user.email,
+        ip: ipAddress,
+        device: userAgent,
+      }
+    );
+
     return {
-      message:
-        'Password has been reset successfully. Please login with your new password.',
+      message: 'Password has been reset successfully. Please login with your new password.',
     };
   }
 
@@ -148,8 +239,7 @@ export class AuthService {
     accessToken: string;
     expiresIn: number;
   }> {
-    const tokenEntity =
-      await this.refreshTokensService.validateRefreshToken(refreshToken);
+    const tokenEntity = await this.refreshTokensService.validateRefreshToken(refreshToken);
     const user = await this.usersService.findById(tokenEntity.userId);
 
     if (!user || !user.isVerified) {
@@ -199,7 +289,7 @@ export class AuthService {
     }
 
     // Generate Stellar wallet using blockchain module
-    const wallet = this.stellarService.generateWallet();
+    const wallet = await this.stellarService.generateWallet();
 
     // Encrypt the secret key
     const encryptedSecretKey = this.encryptionService.encrypt(wallet.secretKey);
@@ -299,6 +389,39 @@ export class AuthService {
     });
 
     return { message: genericMessage };
+  }
+
+  async logout(userId: string, tokenId?: string, ipAddress?: string, userAgent?: string): Promise<void> {
+    // If you have a logout endpoint that invalidates refresh tokens
+    if (tokenId) {
+      await this.refreshTokensService.revokeRefreshToken(tokenId);
+    }
+
+    // Log logout action
+    await this.auditLogsService.logAuthEvent(
+      userId,
+      AuditAction.LOGOUT,
+      {
+        tokenId,
+        ip: ipAddress,
+        device: userAgent,
+      }
+    );
+  }
+
+  async logoutAllDevices(userId: string, ipAddress?: string, userAgent?: string): Promise<void> {
+    await this.refreshTokensService.revokeAllUserTokens(userId);
+
+    // Log logout from all devices
+    await this.auditLogsService.logAuthEvent(
+      userId,
+      AuditAction.LOGOUT,
+      {
+        scope: 'all_devices',
+        ip: ipAddress,
+        device: userAgent,
+      }
+    );
   }
 
   private getAccessTokenExpirySeconds(): number {

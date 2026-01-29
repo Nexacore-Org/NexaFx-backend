@@ -9,6 +9,8 @@ export interface CreateTransactionParams {
   sourcePublicKey: string;
   operations: any[];
   memo?: string;
+  memoType?: string;
+  userId?: string; // Optional for audit logging
 }
 
 export interface VerifyTransactionResult {

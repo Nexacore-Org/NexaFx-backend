@@ -58,4 +58,5 @@ export class User {
 
   @UpdateDateColumn({ type: 'timestamp with time zone' })
   updatedAt: Date;
+  notifications: Notification[];
 }

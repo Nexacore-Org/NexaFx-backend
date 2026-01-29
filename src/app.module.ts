@@ -15,6 +15,7 @@ import { RefreshToken } from './tokens/refresh-token.entity';
 import { Currency } from './currencies/currency.entity';
 import { HealthModule } from './health/health.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { AuditLogsModule } from './audit-logs/audit-logs.module';
     ExchangeRatesModule,
     HealthModule,
     AuditLogsModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [

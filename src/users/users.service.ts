@@ -28,6 +28,10 @@ export class UsersService {
     });
   }
 
+  async updateByUserId(userId: string, updateData: Partial<User>): Promise<void> {
+    await this.userRepository.update(userId, updateData);
+  }
+
   async createUser(
     email: string,
     password: string,

@@ -22,6 +22,9 @@ import { CurrenciesService } from '../../currencies/currencies.service';
 import { ExchangeRatesService } from '../../exchange-rates/exchange-rates.service';
 import { StellarService } from '../../blockchain/stellar/stellar.service';
 import { UsersService } from '../../users/users.service';
+import { AuditLogsService } from '../../audit-logs/audit-logs.service';
+import { AuditAction } from '../../audit-logs/enums/audit-action.enum';
+import { User } from '../../users/user.entity';
 
 @Injectable()
 export class TransactionsService {
@@ -34,6 +37,7 @@ export class TransactionsService {
     private readonly exchangeRatesService: ExchangeRatesService,
     private readonly stellarService: StellarService,
     private readonly usersService: UsersService,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   /**
@@ -42,6 +46,8 @@ export class TransactionsService {
   async createDeposit(
     userId: string,
     createDepositDto: CreateDepositDto,
+    ipAddress?: string,
+    userAgent?: string,
   ): Promise<Transaction> {
     const { amount, currency, sourceAddress } = createDepositDto;
 
@@ -85,13 +91,27 @@ export class TransactionsService {
     await this.transactionRepository.save(transaction);
 
     try {
+      // Log deposit creation
+      await this.auditLogsService.logTransactionEvent(
+        userId,
+        AuditAction.DEPOSIT_CREATED,
+        transaction.id,
+        {
+          amount: transaction.amount,
+          currency: transaction.currency,
+          sourceAddress,
+          ip: ipAddress,
+          device: userAgent,
+        }
+      );
+
       // Get user's Stellar address for receiving the deposit
       const destinationAddress = await this.getUserStellarAddress(userId);
 
       // Create payment operation
       const paymentOperation = Operation.payment({
-        destination: destinationAddress,
-        asset: Asset.native(), // XLM for now, adjust based on your currency mapping
+        destination: destinationAddress as string,
+        asset: Asset.native(),
         amount: amount.toString(),
       });
 
@@ -113,6 +133,7 @@ export class TransactionsService {
 
       // Submit the transaction
       const result: any = await this.stellarService.submitTransaction(signedTx);
+      
       // Update transaction with hash
       transaction.txHash = result.hash;
       await this.transactionRepository.save(transaction);
@@ -130,6 +151,20 @@ export class TransactionsService {
       transaction.failureReason = error.message;
       await this.transactionRepository.save(transaction);
 
+      // Log deposit failure
+      await this.auditLogsService.logTransactionEvent(
+        userId,
+        AuditAction.DEPOSIT_CREATED + '_FAILED',
+        transaction.id,
+        {
+          amount: transaction.amount,
+          currency: transaction.currency,
+          reason: error.message,
+          ip: ipAddress,
+          device: userAgent,
+        }
+      );
+
       throw new InternalServerErrorException(
         'Failed to create deposit transaction on blockchain',
       );
@@ -142,6 +177,8 @@ export class TransactionsService {
   async createWithdrawal(
     userId: string,
     createWithdrawalDto: CreateWithdrawalDto,
+    ipAddress?: string,
+    userAgent?: string,
   ): Promise<Transaction> {
     const { amount, currency, destinationAddress } = createWithdrawalDto;
 
@@ -158,13 +195,27 @@ export class TransactionsService {
     }
 
     // Check user balance
-    const user = await this.usersService.findOne(userId);
+    const user = await this.usersService.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
     const userBalance = await this.getUserBalance(userId, currency);
     if (parseFloat(userBalance) < amount) {
+      // Log failed withdrawal attempt due to insufficient balance
+      await this.auditLogsService.logTransactionEvent(
+        userId,
+        AuditAction.WITHDRAWAL_CREATED + '_FAILED',
+        undefined,
+        {
+          amount,
+          currency,
+          reason: 'Insufficient balance',
+          ip: ipAddress,
+          device: userAgent,
+        }
+      );
+      
       throw new BadRequestException('Insufficient balance');
     }
 
@@ -196,6 +247,20 @@ export class TransactionsService {
     await this.transactionRepository.save(transaction);
 
     try {
+      // Log withdrawal creation
+      await this.auditLogsService.logTransactionEvent(
+        userId,
+        AuditAction.WITHDRAWAL_CREATED,
+        transaction.id,
+        {
+          amount: transaction.amount,
+          currency: transaction.currency,
+          destinationAddress,
+          ip: ipAddress,
+          device: userAgent,
+        }
+      );
+
       // Get user's Stellar address (source of withdrawal)
       const sourceAddress = await this.getUserStellarAddress(userId);
 
@@ -208,7 +273,7 @@ export class TransactionsService {
 
       // Create Stellar transaction
       const stellarTx = await this.stellarService.createTransaction({
-        sourcePublicKey: sourceAddress,
+        sourcePublicKey: sourceAddress as string,
         operations: [paymentOperation],
         memo: `WITHDRAW-${transaction.id}`,
       });
@@ -217,9 +282,9 @@ export class TransactionsService {
       const secretKey = await this.getUserStellarSecretKey(userId);
 
       // Sign the transaction
-      const signedTx = this.stellarService.signTransaction(
+      const signedTx = await this.stellarService.signTransaction(
         stellarTx,
-        secretKey,
+        secretKey as string,
       );
 
       // Submit the transaction
@@ -245,6 +310,20 @@ export class TransactionsService {
       transaction.failureReason = error.message;
       await this.transactionRepository.save(transaction);
 
+      // Log withdrawal failure
+      await this.auditLogsService.logTransactionEvent(
+        userId,
+        AuditAction.WITHDRAWAL_CREATED + '_FAILED',
+        transaction.id,
+        {
+          amount: transaction.amount,
+          currency: transaction.currency,
+          reason: error.message,
+          ip: ipAddress,
+          device: userAgent,
+        }
+      );
+
       throw new InternalServerErrorException(
         'Failed to create withdrawal transaction on blockchain',
       );
@@ -254,7 +333,10 @@ export class TransactionsService {
   /**
    * Verify transaction status on the blockchain
    */
-  async verifyTransaction(transactionId: string): Promise<Transaction> {
+  async verifyTransaction(
+    transactionId: string,
+    adminId?: string,
+  ): Promise<Transaction> {
     const transaction = await this.transactionRepository.findOne({
       where: { id: transactionId },
     });
@@ -275,6 +357,8 @@ export class TransactionsService {
       const verificationResult = await this.stellarService.verifyTransaction(
         transaction.txHash,
       );
+
+      const oldStatus = transaction.status;
 
       if (verificationResult.status === 'SUCCESS') {
         transaction.status = TransactionStatus.SUCCESS;
@@ -307,7 +391,22 @@ export class TransactionsService {
         this.logger.log(`Transaction still pending: ${transactionId}`);
         return transaction;
       }
+
       await this.transactionRepository.save(transaction);
+
+      // Log transaction status update
+      await this.auditLogsService.logTransactionEvent(
+        transaction.userId,
+        AuditAction.TRANSACTION_STATUS_UPDATED,
+        transaction.id,
+        {
+          oldStatus,
+          newStatus: transaction.status,
+          verifiedBy: adminId,
+          verificationResult: verificationResult.status,
+          failureReason: transaction.failureReason,
+        }
+      );
 
       return transaction;
     } catch (error) {
@@ -316,6 +415,110 @@ export class TransactionsService {
         'Failed to verify transaction on blockchain',
       );
     }
+  }
+
+  /**
+   * Update transaction status manually (admin function)
+   */
+  async updateTransactionStatus(
+    transactionId: string,
+    status: TransactionStatus,
+    adminId: string,
+    reason?: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<Transaction> {
+    const transaction = await this.transactionRepository.findOne({
+      where: { id: transactionId },
+    });
+
+    if (!transaction) {
+      throw new NotFoundException('Transaction not found');
+    }
+
+    const oldStatus = transaction.status;
+    transaction.status = status;
+    
+    if (reason) {
+      transaction.failureReason = reason;
+    }
+
+    await this.transactionRepository.save(transaction);
+
+    // Log transaction status update
+    await this.auditLogsService.logTransactionEvent(
+      transaction.userId,
+      AuditAction.TRANSACTION_STATUS_UPDATED,
+      transaction.id,
+      {
+        oldStatus,
+        newStatus: status,
+        updatedBy: adminId,
+        reason,
+        ip: ipAddress,
+        device: userAgent,
+      }
+    );
+
+    this.logger.log(
+      `Transaction ${transactionId} status updated from ${oldStatus} to ${status} by admin ${adminId}`,
+    );
+
+    return transaction;
+  }
+
+  /**
+   * Cancel a transaction
+   */
+  async cancelTransaction(
+    transactionId: string,
+    userId?: string,
+    adminId?: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<Transaction> {
+    const where: any = { id: transactionId };
+    if (userId) {
+      where.userId = userId;
+    }
+
+    const transaction = await this.transactionRepository.findOne({ where });
+
+    if (!transaction) {
+      throw new NotFoundException('Transaction not found');
+    }
+
+    // Only allow cancelling pending transactions
+    if (transaction.status !== TransactionStatus.PENDING) {
+      throw new BadRequestException(
+        'Only pending transactions can be cancelled',
+      );
+    }
+
+    const oldStatus = transaction.status;
+    transaction.status = TransactionStatus.CANCELLED;
+    await this.transactionRepository.save(transaction);
+
+    // Log transaction cancellation
+    await this.auditLogsService.logTransactionEvent(
+      transaction.userId,
+      AuditAction.TRANSACTION_CANCELLED,
+      transaction.id,
+      {
+        oldStatus,
+        newStatus: transaction.status,
+        cancelledBy: adminId || userId,
+        userCancelled: !!userId && !adminId,
+        ip: ipAddress,
+        device: userAgent,
+      }
+    );
+
+    this.logger.log(
+      `Transaction ${transactionId} cancelled by ${adminId || userId}`,
+    );
+
+    return transaction;
   }
 
   /**
@@ -378,48 +581,41 @@ export class TransactionsService {
   /**
    * Helper method to get user's Stellar address
    */
-  private async getUserStellarAddress(userId: string): Promise<string> {
-    const user = await this.usersService.findOne(userId);
+  private async getUserStellarAddress(userId: string): Promise<string | null> {
+    const user = await this.usersService.findById(userId);
 
-    if (!user.stellarAddress) {
+    if (!(user as User).stellarAddress) {
       throw new BadRequestException(
         'User does not have a Stellar address configured',
       );
     }
 
-    return user.stellarAddress;
+    return (user as User).stellarAddress;
   }
 
   /**
    * Helper method to get user's Stellar secret key
    */
-  private async getUserStellarSecretKey(userId: string): Promise<string> {
-    const user = await this.usersService.findOne(userId);
+  private async getUserStellarSecretKey(userId: string): Promise<string | null> {
+    const user = await this.usersService.findById(userId);
 
-    if (!user.stellarSecretKey) {
+    if (!(user as User).stellarSecretKey) {
       throw new BadRequestException(
         'User does not have a Stellar secret key configured',
       );
     }
 
-    return user.stellarSecretKey;
+    return (user as User).stellarSecretKey;
   }
 
   /**
    * Helper method to get Stellar secret key for an address
-   * This is used for deposits where the source address is external
    */
   private async getStellarSecretKey(address: string): Promise<string> {
-    // For deposits, the secret key should be provided by the user
-    // or retrieved from a secure source
-    // This is a placeholder - implement based on your security requirements
-
-    // Option 1: Return platform's hot wallet secret for receiving deposits
     if (process.env.STELLAR_HOT_WALLET_SECRET) {
       return process.env.STELLAR_HOT_WALLET_SECRET;
     }
 
-    // Option 2: Throw error requiring user to provide secret
     throw new BadRequestException(
       'Secret key required for this operation. Please provide it securely.',
     );
@@ -430,21 +626,19 @@ export class TransactionsService {
    */
   private async getUserBalance(
     userId: string,
-    currency: string,
+    currency: string, //Should later be enum type for determined currencies
   ): Promise<string> {
-    const user = await this.usersService.findOne(userId);
+    const user = await this.usersService.findById(userId);
 
-    if (user.balances && user.balances[currency]) {
+    if (user?.balances && user.balances[currency]) {
       return user.balances[currency].toString();
     }
 
-    // Return 0 if no balance found
     return '0.00';
   }
 
   /**
    * Helper method to update user balance
-   * This should handle balance updates atomically
    */
   private async updateUserBalance(
     userId: string,
@@ -455,30 +649,34 @@ export class TransactionsService {
       `Updating balance for user ${userId}: ${amount} ${currency}`,
     );
 
-    // Get current user
-    const user = await this.usersService.findOne(userId);
+    const user = await this.usersService.findById(userId);
 
-    // Initialize balances if not exists
-    if (!user.balances) {
-      user.balances = {};
+    if (!user?.balances) {
+      (user as User).balances = {};
     }
 
     const currentBalance = parseFloat(
-      user.balances[currency]?.toString() || '0',
+      user?.balances?.[currency]?.toString() || '0'
     );
 
     const newBalance = currentBalance + amount;
 
     if (newBalance < 0) {
       throw new BadRequestException('Insufficient balance');
+      
     }
 
+    if (!user || !user.balances) {
+      throw new Error('User not found or balances not initialized');
+    }
+    
     user.balances[currency] = newBalance;
 
-    await this.usersService.update(userId, { balances: user.balances });
+    await this.usersService.updateByUserId(userId, { balances: user?.balances });
 
     this.logger.log(
       `Balance updated for user ${userId}: ${currentBalance} -> ${newBalance} ${currency}`,
     );
   }
 }
+

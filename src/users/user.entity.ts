@@ -15,7 +15,6 @@ export enum UserRole {
 }
 
 @Entity('users')
-@Index(['email'], { unique: true })
 export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -33,6 +32,21 @@ export class User {
   @Column({ type: 'varchar', length: 255 })
   @Exclude({ toPlainOnly: true })
   password: string;
+
+  @Column({ type: 'varchar', length: 20, nullable: true, unique: true })
+  @Index()
+  phone: string | null;
+
+  @Column({ type: 'varchar', length: 56 })
+  @Index()
+  walletPublicKey: string;
+
+  @Column({ type: 'text' })
+  @Exclude({ toPlainOnly: true })
+  walletSecretKeyEncrypted: string;
+
+  @Column({ type: 'jsonb', nullable: true, default: {} })
+  balances: Record<string, number>;
 
   @Column({ type: 'boolean', default: false })
   isVerified: boolean;

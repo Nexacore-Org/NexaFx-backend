@@ -15,6 +15,7 @@ export * from './dto/pagination.dto';
 // Services
 export * from './services/pagination.service';
 export * from './services/date.service';
+export * from './services/encryption.service';
 
 // Module
 export * from './common.module';

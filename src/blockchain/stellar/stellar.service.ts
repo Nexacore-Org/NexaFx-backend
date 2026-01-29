@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import Server, {
+import {
+  Horizon,
   Keypair,
   TransactionBuilder,
   BASE_FEE,
@@ -22,7 +23,7 @@ import {
 
 @Injectable()
 export class StellarService {
-  private server: any;
+  private server: Horizon.Server;
   private networkPassphrase: string;
   private readonly logger = new Logger(StellarService.name);
 
@@ -34,7 +35,7 @@ export class StellarService {
       throw new Error('Stellar environment variables not configured');
     }
 
-    this.server = new Server(horizonUrl);
+    this.server = new Horizon.Server(horizonUrl);
     this.networkPassphrase = Networks[network as keyof typeof Networks];
 
     if (!this.networkPassphrase) {
@@ -46,8 +47,8 @@ export class StellarService {
 
   async checkConnectivity(): Promise<boolean> {
     try {
-      // Fetches root info from Horizon server (lightweight check)
-      await this.server.server();
+      // Fetches fee stats from Horizon server (lightweight check)
+      await this.server.feeStats();
       return true;
     } catch (error: any) {
       this.logger.error(`Stellar connectivity check failed: ${error.message}`);

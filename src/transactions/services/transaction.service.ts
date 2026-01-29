@@ -158,7 +158,7 @@ export class TransactionsService {
     }
 
     // Check user balance
-    const user = await this.usersService.findOne(userId);
+    const user = await this.usersService.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -376,40 +376,50 @@ export class TransactionsService {
   }
 
   /**
-   * Helper method to get user's Stellar address
+   * Helper method to get user's Stellar address (wallet public key)
    */
   private async getUserStellarAddress(userId: string): Promise<string> {
-    const user = await this.usersService.findOne(userId);
+    const user = await this.usersService.findById(userId);
 
-    if (!user.stellarAddress) {
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.walletPublicKey) {
       throw new BadRequestException(
-        'User does not have a Stellar address configured',
+        'User does not have a Stellar wallet configured',
       );
     }
 
-    return user.stellarAddress;
+    return user.walletPublicKey;
   }
 
   /**
    * Helper method to get user's Stellar secret key
+   * Note: The secret key is stored encrypted - this returns the encrypted value
+   * Decryption should be handled by the caller using EncryptionService
    */
   private async getUserStellarSecretKey(userId: string): Promise<string> {
-    const user = await this.usersService.findOne(userId);
+    const user = await this.usersService.findById(userId);
 
-    if (!user.stellarSecretKey) {
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.walletSecretKeyEncrypted) {
       throw new BadRequestException(
         'User does not have a Stellar secret key configured',
       );
     }
 
-    return user.stellarSecretKey;
+    return user.walletSecretKeyEncrypted;
   }
 
   /**
    * Helper method to get Stellar secret key for an address
    * This is used for deposits where the source address is external
    */
-  private async getStellarSecretKey(address: string): Promise<string> {
+  private async getStellarSecretKey(_address: string): Promise<string> {
     // For deposits, the secret key should be provided by the user
     // or retrieved from a secure source
     // This is a placeholder - implement based on your security requirements
@@ -432,7 +442,11 @@ export class TransactionsService {
     userId: string,
     currency: string,
   ): Promise<string> {
-    const user = await this.usersService.findOne(userId);
+    const user = await this.usersService.findById(userId);
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
 
     if (user.balances && user.balances[currency]) {
       return user.balances[currency].toString();
@@ -456,7 +470,11 @@ export class TransactionsService {
     );
 
     // Get current user
-    const user = await this.usersService.findOne(userId);
+    const user = await this.usersService.findById(userId);
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
 
     // Initialize balances if not exists
     if (!user.balances) {

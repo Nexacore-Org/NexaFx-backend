@@ -5,8 +5,10 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Index,
+  OneToMany,
 } from 'typeorm';
 import { Exclude } from 'class-transformer';
+import { Notification } from '../notifications/entities/notification.entity';
 
 export enum UserRole {
   USER = 'USER',
@@ -15,7 +17,6 @@ export enum UserRole {
 }
 
 @Entity('users')
-@Index(['email'], { unique: true })
 export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -34,6 +35,21 @@ export class User {
   @Exclude({ toPlainOnly: true })
   password: string;
 
+  @Column({ type: 'varchar', length: 20, nullable: true, unique: true })
+  @Index()
+  phone: string | null;
+
+  @Column({ type: 'varchar', length: 56 })
+  @Index()
+  walletPublicKey: string;
+
+  @Column({ type: 'text' })
+  @Exclude({ toPlainOnly: true })
+  walletSecretKeyEncrypted: string;
+
+  @Column({ type: 'jsonb', nullable: true, default: {} })
+  balances: Record<string, number>;
+
   @Column({ type: 'boolean', default: false })
   isVerified: boolean;
 
@@ -44,19 +60,12 @@ export class User {
   })
   role: UserRole;
 
-  @Column({ type: 'jsonb', nullable: true })
-  balances?: Record<string, number>;
-
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  stellarAddress: string | null;
-
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  stellarSecretKey: string | null;
-
   @CreateDateColumn({ type: 'timestamp with time zone' })
   createdAt: Date;
 
   @UpdateDateColumn({ type: 'timestamp with time zone' })
   updatedAt: Date;
+
+  @OneToMany(() => Notification, (notification) => notification.user)
   notifications: Notification[];
 }

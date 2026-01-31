@@ -9,12 +9,14 @@ import { OtpDeliveryService } from './email/otp-delivery.service';
 import { UsersModule } from '../users/users.module';
 import { OtpsModule } from '../otps/otps.module';
 import { TokensModule } from '../tokens/tokens.module';
+import { StellarModule } from '../blockchain/stellar/stellar.module';
 
 @Module({
   imports: [
     UsersModule,
     OtpsModule,
     TokensModule,
+    StellarModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

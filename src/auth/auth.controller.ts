@@ -6,6 +6,9 @@ import { LoginDto } from './dto/login.dto';
 import { VerifyLoginOtpDto } from './dto/verify-login-otp.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { SignupDto } from './dto/signup.dto';
+import { VerifySignupOtpDto } from './dto/verify-signup-otp.dto';
+import { VerifySignupResponseDto } from './dto/signup-response.dto';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -123,5 +126,62 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Invalid or expired refresh token' })
   async refreshToken(@Body('refreshToken') refreshToken: string) {
     return this.authService.refreshAccessToken(refreshToken);
+  }
+
+  @Public()
+  @Post('signup')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Register a new user account' })
+  @ApiBody({ type: SignupDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Account created, OTP sent to email',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+      },
+    },
+  })
+  @ApiResponse({ status: 409, description: 'Phone already registered' })
+  @ApiResponse({ status: 400, description: 'Invalid request body' })
+  async signup(@Body() signupDto: SignupDto) {
+    return this.authService.signup(signupDto);
+  }
+
+  @Public()
+  @Post('verify-signup-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify signup OTP and complete registration' })
+  @ApiBody({ type: VerifySignupOtpDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Signup verified, tokens issued',
+    type: VerifySignupResponseDto,
+  })
+  @ApiResponse({ status: 401, description: 'Invalid or expired OTP' })
+  @ApiResponse({ status: 400, description: 'Account already verified or invalid request' })
+  async verifySignupOtp(@Body() verifyDto: VerifySignupOtpDto) {
+    return this.authService.verifySignupOtp(verifyDto);
+  }
+
+  @Public()
+  @Post('resend-signup-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resend signup verification OTP' })
+  @ApiBody({ type: ForgotPasswordDto })
+  @ApiResponse({
+    status: 200,
+    description: 'If a pending signup exists, OTP has been resent',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Invalid request body' })
+  async resendSignupOtp(@Body() dto: ForgotPasswordDto) {
+    return this.authService.resendSignupOtp(dto.email);
   }
 }

@@ -12,6 +12,7 @@ import { User } from '../users/user.entity';
 export enum OtpType {
   LOGIN = 'LOGIN',
   PASSWORD_RESET = 'PASSWORD_RESET',
+  SIGNUP = 'SIGNUP',
 }
 
 @Entity('otps')

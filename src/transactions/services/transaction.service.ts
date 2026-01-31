@@ -126,14 +126,14 @@ export class TransactionsService {
       const secretKey = await this.getStellarSecretKey(sourceAddress);
 
       // Sign the transaction
-      const signedTx: any = this.stellarService.signTransaction(
+      const signedTx: any = await this.stellarService.signTransaction(
         stellarTx,
         secretKey,
       );
 
       // Submit the transaction
       const result: any = await this.stellarService.submitTransaction(signedTx);
-      
+
       // Update transaction with hash
       transaction.txHash = result.hash;
       await this.transactionRepository.save(transaction);
@@ -215,7 +215,7 @@ export class TransactionsService {
           device: userAgent,
         }
       );
-      
+
       throw new BadRequestException('Insufficient balance');
     }
 
@@ -438,7 +438,7 @@ export class TransactionsService {
 
     const oldStatus = transaction.status;
     transaction.status = status;
-    
+
     if (reason) {
       transaction.failureReason = reason;
     }
@@ -579,39 +579,54 @@ export class TransactionsService {
   }
 
   /**
-   * Helper method to get user's Stellar address
+   * Helper method to get user's Stellar address (wallet public key)
    */
-  private async getUserStellarAddress(userId: string): Promise<string | null> {
+  private async getUserStellarAddress(userId: string): Promise<string> {
     const user = await this.usersService.findById(userId);
 
-    if (!(user as User).stellarAddress) {
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.walletPublicKey) {
       throw new BadRequestException(
-        'User does not have a Stellar address configured',
+        'User does not have a Stellar wallet configured',
       );
     }
 
-    return (user as User).stellarAddress;
+    return user.walletPublicKey;
   }
 
   /**
    * Helper method to get user's Stellar secret key
+   * Note: The secret key is stored encrypted - this returns the encrypted value
+   * Decryption should be handled by the caller using EncryptionService
    */
-  private async getUserStellarSecretKey(userId: string): Promise<string | null> {
+  private async getUserStellarSecretKey(userId: string): Promise<string> {
     const user = await this.usersService.findById(userId);
 
-    if (!(user as User).stellarSecretKey) {
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.walletSecretKeyEncrypted) {
       throw new BadRequestException(
         'User does not have a Stellar secret key configured',
       );
     }
 
-    return (user as User).stellarSecretKey;
+    return user.walletSecretKeyEncrypted;
   }
 
   /**
    * Helper method to get Stellar secret key for an address
    */
-  private async getStellarSecretKey(address: string): Promise<string> {
+  private async getStellarSecretKey(_address: string): Promise<string> {
+    // For deposits, the secret key should be provided by the user
+    // or retrieved from a secure source
+    // This is a placeholder - implement based on your security requirements
+
+    // Option 1: Return platform's hot wallet secret for receiving deposits
     if (process.env.STELLAR_HOT_WALLET_SECRET) {
       return process.env.STELLAR_HOT_WALLET_SECRET;
     }
@@ -629,6 +644,10 @@ export class TransactionsService {
     currency: string, //Should later be enum type for determined currencies
   ): Promise<string> {
     const user = await this.usersService.findById(userId);
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
 
     if (user?.balances && user.balances[currency]) {
       return user.balances[currency].toString();
@@ -649,7 +668,12 @@ export class TransactionsService {
       `Updating balance for user ${userId}: ${amount} ${currency}`,
     );
 
+    // Get current user
     const user = await this.usersService.findById(userId);
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
 
     if (!user?.balances) {
       (user as User).balances = {};
@@ -663,13 +687,12 @@ export class TransactionsService {
 
     if (newBalance < 0) {
       throw new BadRequestException('Insufficient balance');
-      
     }
 
     if (!user || !user.balances) {
       throw new Error('User not found or balances not initialized');
     }
-    
+
     user.balances[currency] = newBalance;
 
     await this.usersService.updateByUserId(userId, { balances: user?.balances });
@@ -679,4 +702,3 @@ export class TransactionsService {
     );
   }
 }
-

@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import Server, {
+import {
+  Horizon,
   Keypair,
   TransactionBuilder,
   BASE_FEE,
@@ -24,7 +25,7 @@ import { AuditAction } from '../../audit-logs/enums/audit-action.enum';
 
 @Injectable()
 export class StellarService {
-  private server: any;
+  private server: Horizon.Server;
   private networkPassphrase: string;
   private readonly logger = new Logger(StellarService.name);
 
@@ -38,7 +39,7 @@ export class StellarService {
       throw new Error('Stellar environment variables not configured');
     }
 
-    this.server = new Server(horizonUrl);
+    this.server = new Horizon.Server(horizonUrl);
     this.networkPassphrase = Networks[network as keyof typeof Networks];
 
     if (!this.networkPassphrase) {
@@ -50,8 +51,9 @@ export class StellarService {
 
   async checkConnectivity(): Promise<boolean> {
     try {
-      await this.server.server();
-      
+      // Fetches fee stats from Horizon server (lightweight check)
+      await this.server.feeStats();
+
       // Log successful connectivity check
       await this.auditLogsService.logSystemEvent(
         AuditAction.SYSTEM_CHECK,
@@ -63,11 +65,11 @@ export class StellarService {
           network: process.env.STELLAR_NETWORK,
         }
       );
-      
+
       return true;
     } catch (error: any) {
       this.logger.error(`Stellar connectivity check failed: ${error.message}`);
-      
+
       // Log connectivity failure
       await this.auditLogsService.logSystemEvent(
         AuditAction.SYSTEM_CHECK,
@@ -79,7 +81,7 @@ export class StellarService {
           horizonUrl: process.env.STELLAR_HORIZON_URL,
         }
       );
-      
+
       return false;
     }
   }
@@ -100,7 +102,7 @@ export class StellarService {
           keyType: 'stellar',
           ...logMetadata,
         };
-        
+
         // Log without exposing secret key
         await this.auditLogsService.logSystemEvent(
           AuditAction.WALLET_CREATED,
@@ -108,7 +110,7 @@ export class StellarService {
           metadata,
           true // Mark as sensitive (contains public key but generated along with private)
         );
-        
+
         // Additional log for key generation (very sensitive - hash only)
         await this.auditLogsService.logSystemEvent(
           AuditAction.WALLET_KEY_GENERATED,
@@ -128,7 +130,7 @@ export class StellarService {
       };
     } catch (error: any) {
       this.logger.error(`Failed to generate Stellar wallet: ${error.message}`);
-      
+
       // Log wallet generation failure
       if (userId) {
         await this.auditLogsService.logSystemEvent(
@@ -140,7 +142,7 @@ export class StellarService {
           }
         );
       }
-      
+
       throw new WalletGenerationError('Failed to generate Stellar wallet');
     }
   }
@@ -167,7 +169,7 @@ export class StellarService {
       }
 
       const transaction = builder.setTimeout(180).build();
-      
+
       // Log transaction creation (without sensitive signing data)
       if (params.userId) {
         await this.auditLogsService.logSystemEvent(
@@ -186,7 +188,7 @@ export class StellarService {
       return transaction;
     } catch (error: any) {
       this.logger.error(`Failed to build Stellar transaction: ${error.message}`);
-      
+
       // Log transaction build failure
       if (params.userId) {
         await this.auditLogsService.logSystemEvent(
@@ -199,7 +201,7 @@ export class StellarService {
           }
         );
       }
-      
+
       throw new TransactionBuildError('Failed to build Stellar transaction');
     }
   }
@@ -212,7 +214,7 @@ export class StellarService {
     try {
       const keypair = Keypair.fromSecret(secretKey);
       transaction.sign(keypair);
-      
+
       // Log transaction signing (highly sensitive - hash only)
       if (userId) {
         await this.auditLogsService.logSystemEvent(
@@ -226,11 +228,11 @@ export class StellarService {
           true // Mark as sensitive
         );
       }
-      
+
       return transaction;
     } catch (error: any) {
       this.logger.error(`Failed to sign Stellar transaction: ${error.message}`);
-      
+
       // Log signing failure
       if (userId) {
         await this.auditLogsService.logSystemEvent(
@@ -242,7 +244,7 @@ export class StellarService {
           true
         );
       }
-      
+
       throw new TransactionBuildError('Failed to sign Stellar transaction');
     }
   }
@@ -253,7 +255,7 @@ export class StellarService {
   ) {
     try {
       const result = await this.server.submitTransaction(transaction);
-      
+
       // Log successful transaction submission
       if (userId) {
         await this.auditLogsService.logSystemEvent(
@@ -261,17 +263,16 @@ export class StellarService {
           userId,
           {
             transactionHash: transaction.hash().toString('hex'),
-            resultCodes: result.resultCodes,
             ledger: result.ledger,
             network: process.env.STELLAR_NETWORK,
           }
         );
       }
-      
+
       return result;
     } catch (error: any) {
       this.logger.error(`Failed to submit Stellar transaction: ${error.message}`);
-      
+
       // Log submission failure
       if (userId) {
         await this.auditLogsService.logSystemEvent(
@@ -285,7 +286,7 @@ export class StellarService {
           }
         );
       }
-      
+
       throw new TransactionSubmissionError(
         error?.response?.data?.extras?.result_codes ||
           'Transaction submission failed',
@@ -307,7 +308,7 @@ export class StellarService {
         status: tx.successful ? 'SUCCESS' : 'FAILED',
         details: tx,
       };
-      
+
       // Log verification result
       if (userId) {
         await this.auditLogsService.logSystemEvent(
@@ -338,7 +339,7 @@ export class StellarService {
           }
         );
       }
-      
+
       return { status: 'PENDING' };
     }
   }

@@ -253,7 +253,6 @@ export class ScheduledJobsService {
         type: NotificationType.TRANSACTION,
         title: `${transaction.type} Confirmed`,
         message: notificationMessage,
-        status: NotificationStatus.UNREAD,
         relatedId: transaction.id,
         metadata: {
           transactionId: transaction.id,
@@ -323,7 +322,6 @@ export class ScheduledJobsService {
         type: NotificationType.TRANSACTION,
         title: `${transaction.type} Failed`,
         message: notificationMessage,
-        status: NotificationStatus.UNREAD,
         relatedId: transaction.id,
         metadata: {
           transactionId: transaction.id,
@@ -400,7 +398,7 @@ export class ScheduledJobsService {
       `[Balance Update] Updating balance for user ${userId}: +${amount} ${currency}`,
     );
 
-    const user = await this.usersService.findOne(userId);
+    const user = await this.usersService.findById(userId);
 
     if (!user) {
       throw new Error(`User ${userId} not found`);

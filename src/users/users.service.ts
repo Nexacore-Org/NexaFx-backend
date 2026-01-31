@@ -28,36 +28,67 @@ export class UsersService {
     });
   }
 
+  async findByPhone(phone: string): Promise<User | null> {
+    return this.userRepository.findOne({
+      where: { phone },
+    });
+  }
+
+  async deleteById(id: string): Promise<void> {
+    await this.userRepository.delete(id);
+  }
+
   async updateByUserId(userId: string, updateData: Partial<User>): Promise<void> {
     await this.userRepository.update(userId, updateData);
   }
 
-  async createUser(
-    email: string,
-    password: string,
-    role: UserRole = UserRole.USER,
-  ): Promise<Omit<User, 'password'>> {
-    const normalizedEmail = email.toLowerCase().trim();
+  async createUser(params: {
+    email: string;
+    password: string;
+    firstName?: string;
+    lastName?: string;
+    phone?: string;
+    walletPublicKey: string;
+    walletSecretKeyEncrypted: string;
+    role?: UserRole;
+  }): Promise<Omit<User, 'password' | 'walletSecretKeyEncrypted'>> {
+    const normalizedEmail = params.email.toLowerCase().trim();
 
     const existingUser = await this.findByEmail(normalizedEmail);
     if (existingUser) {
       throw new ConflictException('User with this email already exists');
     }
 
+    if (params.phone) {
+      const existingPhone = await this.findByPhone(params.phone);
+      if (existingPhone) {
+        throw new ConflictException('User with this phone already exists');
+      }
+    }
+
     const saltRounds = 12;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    const hashedPassword = await bcrypt.hash(params.password, saltRounds);
 
     const user = this.userRepository.create({
       email: normalizedEmail,
       password: hashedPassword,
-      role,
+      firstName: params.firstName || null,
+      lastName: params.lastName || null,
+      phone: params.phone || null,
+      walletPublicKey: params.walletPublicKey,
+      walletSecretKeyEncrypted: params.walletSecretKeyEncrypted,
+      role: params.role || UserRole.USER,
       isVerified: false,
     });
 
     const savedUser = await this.userRepository.save(user);
 
-    const { password: _, ...userWithoutPassword } = savedUser;
-    return userWithoutPassword;
+    const {
+      password: _,
+      walletSecretKeyEncrypted: __,
+      ...userWithoutSecrets
+    } = savedUser;
+    return userWithoutSecrets;
   }
 
   async updatePassword(userId: string, newPassword: string): Promise<void> {
@@ -94,18 +125,27 @@ export class UsersService {
     await this.userRepository.update(userId, { role });
   }
 
+  async update(userId: string, data: Partial<User>): Promise<void> {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    await this.userRepository.update(userId, data);
+  }
+
   async getProfile(userId: string): Promise<ProfileResponseDto> {
     const user = await this.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    return this.excludePassword(user);
+    return this.excludeSecrets(user);
   }
 
-  private excludePassword(user: User): ProfileResponseDto {
+  private excludeSecrets(user: User): ProfileResponseDto {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password, ...profile } = user;
+    const { password, walletSecretKeyEncrypted, ...profile } = user;
     return profile as ProfileResponseDto;
   }
 
@@ -133,7 +173,7 @@ export class UsersService {
     }
 
     const updatedUser = await this.findById(userId);
-    return this.excludePassword(updatedUser!);
+    return this.excludeSecrets(updatedUser!);
   }
 
   async deleteProfile(userId: string): Promise<void> {

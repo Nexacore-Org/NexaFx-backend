@@ -28,6 +28,19 @@ export class ProfileResponseDto {
   })
   lastName: string | null;
 
+  @ApiPropertyOptional({
+    example: '+2348012345678',
+    description: 'User phone number',
+    nullable: true,
+  })
+  phone: string | null;
+
+  @ApiProperty({
+    example: 'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOUJ3UHMNGUAO7UP',
+    description: 'Stellar wallet public key',
+  })
+  walletPublicKey: string;
+
   @ApiProperty({
     example: true,
     description: 'Whether the user email is verified',

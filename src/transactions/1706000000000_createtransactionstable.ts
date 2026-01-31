@@ -126,10 +126,14 @@ export class CreateTransactionsTable1706000000000 implements MigrationInterface 
 
     // Drop foreign key
     const table = await queryRunner.getTable('transactions');
-    const foreignKey = table.foreignKeys.find(
-      (fk) => fk.columnNames.indexOf('userId') !== -1,
-    );
-    await queryRunner.dropForeignKey('transactions', foreignKey);
+    if (table) {
+      const foreignKey = table.foreignKeys.find(
+        (fk) => fk.columnNames.indexOf('userId') !== -1,
+      );
+      if (foreignKey) {
+        await queryRunner.dropForeignKey('transactions', foreignKey);
+      }
+    }
 
     // Drop table
     await queryRunner.dropTable('transactions');

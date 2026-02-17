@@ -61,7 +61,10 @@ export class ExchangeRatesService {
     }
 
     try {
-      const providerRate = await this.providerClient.fetchRate(fromCode, toCode);
+      const providerRate = await this.providerClient.fetchRate(
+        fromCode,
+        toCode,
+      );
       const entry = this.cache.set(cacheKey, {
         rate: providerRate.rate,
         fetchedAt: providerRate.fetchedAt,
@@ -101,10 +104,7 @@ export class ExchangeRatesService {
     };
   }
 
-  private async validateCurrencyPair(
-    from: string,
-    to: string,
-  ): Promise<void> {
+  private async validateCurrencyPair(from: string, to: string): Promise<void> {
     try {
       await Promise.all([
         this.currenciesService.validateCurrency(from),

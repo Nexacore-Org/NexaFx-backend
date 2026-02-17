@@ -29,9 +29,7 @@ export class StellarService {
   private networkPassphrase: string;
   private readonly logger = new Logger(StellarService.name);
 
-  constructor(
-    private readonly auditLogsService: AuditLogsService,
-  ) {
+  constructor(private readonly auditLogsService: AuditLogsService) {
     const horizonUrl = process.env.STELLAR_HORIZON_URL;
     const network = process.env.STELLAR_NETWORK;
 
@@ -63,7 +61,7 @@ export class StellarService {
           status: 'connected',
           horizonUrl: process.env.STELLAR_HORIZON_URL,
           network: process.env.STELLAR_NETWORK,
-        }
+        },
       );
 
       return true;
@@ -79,7 +77,7 @@ export class StellarService {
           status: 'disconnected',
           error: error.message,
           horizonUrl: process.env.STELLAR_HORIZON_URL,
-        }
+        },
       );
 
       return false;
@@ -108,7 +106,7 @@ export class StellarService {
           AuditAction.WALLET_CREATED,
           userId,
           metadata,
-          true // Mark as sensitive (contains public key but generated along with private)
+          true, // Mark as sensitive (contains public key but generated along with private)
         );
 
         // Additional log for key generation (very sensitive - hash only)
@@ -120,7 +118,7 @@ export class StellarService {
             hash: this.hashPrivateKey(keypair.secret()),
             network: process.env.STELLAR_NETWORK,
           },
-          true // Mark as highly sensitive
+          true, // Mark as highly sensitive
         );
       }
 
@@ -139,7 +137,7 @@ export class StellarService {
           {
             error: error.message,
             ...logMetadata,
-          }
+          },
         );
       }
 
@@ -149,11 +147,11 @@ export class StellarService {
 
   /* -------------------- TRANSACTION -------------------- */
 
-  async createTransaction(params: CreateTransactionParams): Promise<Transaction> {
+  async createTransaction(
+    params: CreateTransactionParams,
+  ): Promise<Transaction> {
     try {
-      const account = await this.server.loadAccount(
-        params.sourcePublicKey,
-      );
+      const account = await this.server.loadAccount(params.sourcePublicKey);
 
       const builder = new TransactionBuilder(account, {
         fee: process.env.STELLAR_BASE_FEE || BASE_FEE,
@@ -181,13 +179,15 @@ export class StellarService {
             memo: params.memo,
             memoType: params.memoType,
             network: process.env.STELLAR_NETWORK,
-          }
+          },
         );
       }
 
       return transaction;
     } catch (error: any) {
-      this.logger.error(`Failed to build Stellar transaction: ${error.message}`);
+      this.logger.error(
+        `Failed to build Stellar transaction: ${error.message}`,
+      );
 
       // Log transaction build failure
       if (params.userId) {
@@ -198,7 +198,7 @@ export class StellarService {
             sourcePublicKey: params.sourcePublicKey,
             error: error.message,
             network: process.env.STELLAR_NETWORK,
-          }
+          },
         );
       }
 
@@ -206,7 +206,7 @@ export class StellarService {
     }
   }
 
- async signTransaction(
+  async signTransaction(
     transaction: Transaction,
     secretKey: string,
     userId?: string,
@@ -225,7 +225,7 @@ export class StellarService {
             publicKey: keypair.publicKey(),
             keyHash: this.hashPrivateKey(secretKey.substring(0, 10)), // Partial hash for identification
           },
-          true // Mark as sensitive
+          true, // Mark as sensitive
         );
       }
 
@@ -241,7 +241,7 @@ export class StellarService {
           {
             error: error.message,
           },
-          true
+          true,
         );
       }
 
@@ -249,10 +249,7 @@ export class StellarService {
     }
   }
 
-  async submitTransaction(
-    transaction: Transaction,
-    userId?: string,
-  ) {
+  async submitTransaction(transaction: Transaction, userId?: string) {
     try {
       const result = await this.server.submitTransaction(transaction);
 
@@ -265,13 +262,15 @@ export class StellarService {
             transactionHash: transaction.hash().toString('hex'),
             ledger: result.ledger,
             network: process.env.STELLAR_NETWORK,
-          }
+          },
         );
       }
 
       return result;
     } catch (error: any) {
-      this.logger.error(`Failed to submit Stellar transaction: ${error.message}`);
+      this.logger.error(
+        `Failed to submit Stellar transaction: ${error.message}`,
+      );
 
       // Log submission failure
       if (userId) {
@@ -283,7 +282,7 @@ export class StellarService {
             error: error.message,
             resultCodes: error?.response?.data?.extras?.result_codes,
             network: process.env.STELLAR_NETWORK,
-          }
+          },
         );
       }
 
@@ -299,10 +298,7 @@ export class StellarService {
     userId?: string,
   ): Promise<VerifyTransactionResult> {
     try {
-      const tx = await this.server
-        .transactions()
-        .transaction(txHash)
-        .call();
+      const tx = await this.server.transactions().transaction(txHash).call();
 
       const result: VerifyTransactionResult = {
         status: tx.successful ? 'SUCCESS' : 'FAILED',
@@ -320,7 +316,7 @@ export class StellarService {
             ledger: tx.ledger,
             createdAt: tx.created_at,
             network: process.env.STELLAR_NETWORK,
-          }
+          },
         );
       }
 
@@ -336,7 +332,7 @@ export class StellarService {
             status: 'PENDING',
             error: error.message,
             network: process.env.STELLAR_NETWORK,
-          }
+          },
         );
       }
 
@@ -352,7 +348,11 @@ export class StellarService {
   private hashPrivateKey(privateKey: string): string {
     // Use a simple hash function - in production, use crypto module
     const crypto = require('crypto');
-    return crypto.createHash('sha256').update(privateKey).digest('hex').substring(0, 16);
+    return crypto
+      .createHash('sha256')
+      .update(privateKey)
+      .digest('hex')
+      .substring(0, 16);
   }
 
   /**
@@ -393,7 +393,7 @@ export class StellarService {
         network: process.env.STELLAR_NETWORK,
         ...metadata,
       },
-      true // Sensitive - contains public key
+      true, // Sensitive - contains public key
     );
   }
 
@@ -406,14 +406,10 @@ export class StellarService {
     transactionHash: string,
     metadata?: Record<string, any>,
   ): Promise<void> {
-    await this.auditLogsService.logSystemEvent(
-      action,
-      userId,
-      {
-        transactionHash,
-        network: process.env.STELLAR_NETWORK,
-        ...metadata,
-      }
-    );
+    await this.auditLogsService.logSystemEvent(action, userId, {
+      transactionHash,
+      network: process.env.STELLAR_NETWORK,
+      ...metadata,
+    });
   }
 }

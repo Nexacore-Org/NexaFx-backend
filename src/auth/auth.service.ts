@@ -39,9 +39,14 @@ export class AuthService {
     private readonly auditLogsService: AuditLogsService,
   ) {}
 
-  async login(loginDto: LoginDto, ipAddress?: string, userAgent?: string): Promise<{ message: string }> {
+  async login(
+    loginDto: LoginDto,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<{ message: string }> {
     const user = await this.usersService.findByEmail(loginDto.email);
-    const genericMessage = 'If an account exists with this email, an OTP has been sent.';
+    const genericMessage =
+      'If an account exists with this email, an OTP has been sent.';
 
     if (!user || !user.isVerified) {
       await this.simulateProcessingDelay();
@@ -55,7 +60,7 @@ export class AuthService {
           reason: 'User not found or not verified',
           ip: ipAddress,
           device: userAgent,
-        }
+        },
       );
 
       return { message: genericMessage };
@@ -79,7 +84,7 @@ export class AuthService {
           ip: ipAddress,
           device: userAgent,
           userId: user.id,
-        }
+        },
       );
 
       return { message: genericMessage };
@@ -93,21 +98,21 @@ export class AuthService {
     });
 
     // Log successful login OTP sent
-    await this.auditLogsService.logAuthEvent(
-      user.id,
-      AuditAction.LOGIN,
-      {
-        method: 'email',
-        status: 'otp_sent',
-        ip: ipAddress,
-        device: userAgent,
-      }
-    );
+    await this.auditLogsService.logAuthEvent(user.id, AuditAction.LOGIN, {
+      method: 'email',
+      status: 'otp_sent',
+      ip: ipAddress,
+      device: userAgent,
+    });
 
     return { message: genericMessage };
   }
 
-  async verifyLoginOtp(verifyDto: VerifyLoginOtpDto, ipAddress?: string, userAgent?: string): Promise<{
+  async verifyLoginOtp(
+    verifyDto: VerifyLoginOtpDto,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<{
     accessToken: string;
     refreshToken: string;
     expiresIn: number;
@@ -123,7 +128,7 @@ export class AuthService {
           reason: 'Invalid credentials for OTP verification',
           ip: ipAddress,
           device: userAgent,
-        }
+        },
       );
 
       throw new UnauthorizedException('Invalid credentials');
@@ -144,17 +149,13 @@ export class AuthService {
     const expiresIn = this.getAccessTokenExpirySeconds();
 
     // Log successful login with OTP verification
-    await this.auditLogsService.logAuthEvent(
-      user.id,
-      AuditAction.LOGIN,
-      {
-        method: 'email',
-        status: 'success',
-        ip: ipAddress,
-        device: userAgent,
-        hasOtp: true,
-      }
-    );
+    await this.auditLogsService.logAuthEvent(user.id, AuditAction.LOGIN, {
+      method: 'email',
+      status: 'success',
+      ip: ipAddress,
+      device: userAgent,
+      hasOtp: true,
+    });
 
     return {
       accessToken,
@@ -169,7 +170,8 @@ export class AuthService {
     userAgent?: string,
   ): Promise<{ message: string }> {
     const user = await this.usersService.findByEmail(forgotDto.email);
-    const genericMessage = 'If an account exists with this email, password reset instructions have been sent.';
+    const genericMessage =
+      'If an account exists with this email, password reset instructions have been sent.';
 
     if (!user || !user.isVerified) {
       await this.simulateProcessingDelay();
@@ -194,7 +196,7 @@ export class AuthService {
         email: user.email,
         ip: ipAddress,
         device: userAgent,
-      }
+      },
     );
 
     return { message: genericMessage };
@@ -227,11 +229,12 @@ export class AuthService {
         email: user.email,
         ip: ipAddress,
         device: userAgent,
-      }
+      },
     );
 
     return {
-      message: 'Password has been reset successfully. Please login with your new password.',
+      message:
+        'Password has been reset successfully. Please login with your new password.',
     };
   }
 
@@ -239,7 +242,8 @@ export class AuthService {
     accessToken: string;
     expiresIn: number;
   }> {
-    const tokenEntity = await this.refreshTokensService.validateRefreshToken(refreshToken);
+    const tokenEntity =
+      await this.refreshTokensService.validateRefreshToken(refreshToken);
     const user = await this.usersService.findById(tokenEntity.userId);
 
     if (!user || !user.isVerified) {
@@ -282,14 +286,16 @@ export class AuthService {
 
     // Check phone uniqueness if provided
     if (signupDto.phone) {
-      const existingPhone = await this.usersService.findByPhone(signupDto.phone);
+      const existingPhone = await this.usersService.findByPhone(
+        signupDto.phone,
+      );
       if (existingPhone) {
         throw new ConflictException('Phone number is already registered');
       }
     }
 
     // Generate Stellar wallet using blockchain module
-    const wallet = await this.stellarService.generateWallet();
+    const wallet = this.stellarService.generateWallet();
 
     // Encrypt the secret key
     const encryptedSecretKey = this.encryptionService.encrypt(wallet.secretKey);
@@ -391,37 +397,38 @@ export class AuthService {
     return { message: genericMessage };
   }
 
-  async logout(userId: string, tokenId?: string, ipAddress?: string, userAgent?: string): Promise<void> {
+  async logout(
+    userId: string,
+    tokenId?: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<void> {
     // If you have a logout endpoint that invalidates refresh tokens
     if (tokenId) {
       await this.refreshTokensService.revokeRefreshToken(tokenId);
     }
 
     // Log logout action
-    await this.auditLogsService.logAuthEvent(
-      userId,
-      AuditAction.LOGOUT,
-      {
-        tokenId,
-        ip: ipAddress,
-        device: userAgent,
-      }
-    );
+    await this.auditLogsService.logAuthEvent(userId, AuditAction.LOGOUT, {
+      tokenId,
+      ip: ipAddress,
+      device: userAgent,
+    });
   }
 
-  async logoutAllDevices(userId: string, ipAddress?: string, userAgent?: string): Promise<void> {
+  async logoutAllDevices(
+    userId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<void> {
     await this.refreshTokensService.revokeAllUserTokens(userId);
 
     // Log logout from all devices
-    await this.auditLogsService.logAuthEvent(
-      userId,
-      AuditAction.LOGOUT,
-      {
-        scope: 'all_devices',
-        ip: ipAddress,
-        device: userAgent,
-      }
-    );
+    await this.auditLogsService.logAuthEvent(userId, AuditAction.LOGOUT, {
+      scope: 'all_devices',
+      ip: ipAddress,
+      device: userAgent,
+    });
   }
 
   private getAccessTokenExpirySeconds(): number {

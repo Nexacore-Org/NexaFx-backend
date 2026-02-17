@@ -16,12 +16,16 @@ import {
   NotificationResponseDto,
   PaginatedNotificationResponse,
 } from './dto/notification-response.dto';
+import { InjectRepository } from '@nestjs/typeorm';
 
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger('NotificationsService');
 
-  constructor(private notificationsRepository: Repository<Notification>) {}
+  constructor(
+    @InjectRepository(Notification)
+    private notificationsRepository: Repository<Notification>,
+  ) {}
 
   async create(
     createNotificationDto: CreateNotificationDto,

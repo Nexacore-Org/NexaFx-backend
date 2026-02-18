@@ -9,13 +9,10 @@ import { CurrenciesModule } from './currencies/currencies.module';
 import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
 import { CommonModule } from './common/common.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
-import { User } from './users/user.entity';
-import { Otp } from './otps/otp.entity';
-import { RefreshToken } from './tokens/refresh-token.entity';
-import { Currency } from './currencies/currency.entity';
 import { HealthModule } from './health/health.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { TransactionsModule } from './transactions/transaction.module';
 
 @Module({
   imports: [
@@ -31,14 +28,14 @@ import { NotificationsModule } from './notifications/notifications.module';
         username: configService.get<string>('DB_USERNAME') || 'postgres',
         password: configService.get<string>('DB_PASSWORD') || 'postgres',
         database: configService.get<string>('DB_NAME') || 'nexafx',
-        entities: [User, Otp, RefreshToken, Currency],
         synchronize: configService.get<string>('NODE_ENV') !== 'production',
         ssl:
           configService.get<string>('DB_SSL') === 'true'
             ? { rejectUnauthorized: false }
             : false,
+        autoLoadEntities: true,
 
-        logging: configService.get<string>('NODE_ENV') === 'development',
+        // logging: configService.get<string>('NODE_ENV') === 'development',
       }),
       inject: [ConfigService],
     }),
@@ -49,6 +46,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     HealthModule,
     AuditLogsModule,
     NotificationsModule,
+    TransactionsModule,
   ],
   controllers: [AppController],
   providers: [

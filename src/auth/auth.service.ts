@@ -295,7 +295,7 @@ export class AuthService {
     }
 
     // Generate Stellar wallet using blockchain module
-    const wallet = this.stellarService.generateWallet();
+    const wallet = await this.stellarService.generateWallet();
 
     // Encrypt the secret key
     const encryptedSecretKey = this.encryptionService.encrypt(wallet.secretKey);

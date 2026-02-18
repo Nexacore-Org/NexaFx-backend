@@ -33,6 +33,11 @@ import { NotificationsModule } from './notifications/notifications.module';
         database: configService.get<string>('DB_NAME') || 'nexafx',
         entities: [User, Otp, RefreshToken, Currency],
         synchronize: configService.get<string>('NODE_ENV') !== 'production',
+        ssl:
+          configService.get<string>('DB_SSL') === 'true'
+            ? { rejectUnauthorized: false }
+            : false,
+
         logging: configService.get<string>('NODE_ENV') === 'development',
       }),
       inject: [ConfigService],

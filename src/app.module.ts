@@ -23,16 +23,22 @@ import { TransactionsModule } from './transactions/transaction.module';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
-        host: configService.get<string>('DB_HOST') || 'localhost',
-        port: configService.get<number>('DB_PORT') || 5432,
-        username: configService.get<string>('DB_USERNAME') || 'postgres',
-        password: configService.get<string>('DB_PASSWORD') || 'postgres',
-        database: configService.get<string>('DB_NAME') || 'nexafx',
-        synchronize: configService.get<string>('NODE_ENV') !== 'production',
-        ssl:
-          configService.get<string>('DB_SSL') === 'true'
-            ? { rejectUnauthorized: false }
-            : false,
+        // host: configService.get<string>('DB_HOST') || 'localhost',
+        // port: configService.get<number>('DB_PORT') || 5432,
+        // username: configService.get<string>('DB_USERNAME') || 'postgres',
+        // password: configService.get<string>('DB_PASSWORD') || 'postgres',
+        // database: configService.get<string>('DB_NAME') || 'nexafx',
+        url: configService.get<string>('DATABASE_URL'),
+
+        // synchronize: configService.get<string>('NODE_ENV') !== 'production',
+        // ssl:
+        //   configService.get<string>('DB_SSL') === 'true'
+        //     ? { rejectUnauthorized: false }
+        //     : false,
+        synchronize: true,
+        ssl: {
+          rejectUnauthorized: false,
+        },
         autoLoadEntities: true,
 
         // logging: configService.get<string>('NODE_ENV') === 'development',

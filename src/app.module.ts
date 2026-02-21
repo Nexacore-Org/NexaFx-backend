@@ -14,6 +14,9 @@ import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { TransactionsModule } from './transactions/transaction.module';
 import { BeneficiariesModule } from './beneficiaries/beneficiaries.module';
+import { KycModule } from './kyc/kyc.module';
+// import { KycServiceService } from './kyc.service/kyc.service.service';
+// import { Service } from './kyc.service.ts/kyc/.service';
 
 @Module({
   imports: [
@@ -56,6 +59,7 @@ import { BeneficiariesModule } from './beneficiaries/beneficiaries.module';
     NotificationsModule,
     TransactionsModule,
     BeneficiariesModule,
+    KycModule,
   ],
   controllers: [AppController],
   providers: [
@@ -64,6 +68,8 @@ import { BeneficiariesModule } from './beneficiaries/beneficiaries.module';
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
     },
+    // KycServiceService,
+    // Service,
   ],
 })
 export class AppModule {}

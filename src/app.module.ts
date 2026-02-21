@@ -13,11 +13,13 @@ import { HealthModule } from './health/health.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { TransactionsModule } from './transactions/transaction.module';
+import { BeneficiariesModule } from './beneficiaries/beneficiaries.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: '.env',
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -53,6 +55,7 @@ import { TransactionsModule } from './transactions/transaction.module';
     AuditLogsModule,
     NotificationsModule,
     TransactionsModule,
+    BeneficiariesModule,
   ],
   controllers: [AppController],
   providers: [

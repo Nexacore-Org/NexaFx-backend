@@ -268,7 +268,7 @@ export class AuthService {
   async signup(signupDto: SignupDto): Promise<{ message: string }> {
     const normalizedEmail = signupDto.email.toLowerCase().trim();
     const genericMessage =
-      'If this email is available, a verification code has been sent.';
+      'this email is available, a verification code has been sent.';
 
     // Check if email already exists
     const existingUser = await this.usersService.findByEmail(normalizedEmail);
@@ -322,7 +322,9 @@ export class AuthService {
       });
     }
 
-    return { message: genericMessage };
+    return {
+      message: 'User has been created and a verification code has been sent',
+    };
   }
 
   async verifySignupOtp(

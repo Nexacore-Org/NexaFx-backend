@@ -37,46 +37,15 @@ async function bootstrap() {
     .setTitle('NexaFX Backend API')
     .setDescription('NexaFX Backend API with Audit Logs')
     .setVersion('1.0')
-    .addTag('auth', 'Authentication endpoints')
-    .addTag('audit-logs', 'Audit logs endpoints (Admin only)')
-    .addTag('transactions', 'Transaction management')
-    .addTag('users', 'User management')
-    .addTag('currencies', 'Currency management')
-    .addTag('health', 'Health checks')
-    .addTag('NexaFX', 'General API endpoints')
-    .addBearerAuth(
-      {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-      },
-      'access-token',
-    )
+    .addBearerAuth()
     .build();
 
   const swaggerDoc = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('api-docs', app, swaggerDoc);
 
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(process.env.PORT ?? 3001);
 }
 bootstrap();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // import { NestFactory } from '@nestjs/core';
 // import { AppModule } from './app.module';

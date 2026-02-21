@@ -4,10 +4,10 @@ import {
   Keypair,
   TransactionBuilder,
   BASE_FEE,
-  Memo,
   Networks,
   Transaction,
 } from 'stellar-sdk';
+import * as crypto from 'crypto';
 
 import {
   CreateTransactionParams,
@@ -22,6 +22,24 @@ import {
 } from './stellar.errors';
 import { AuditLogsService } from '../../audit-logs/audit-logs.service';
 import { AuditAction } from '../../audit-logs/enums/audit-action.enum';
+
+interface StellarError {
+  message: string;
+  response?: {
+    data?: {
+      extras?: {
+        result_codes?: string;
+      };
+    };
+  };
+}
+
+function toStellarError(error: unknown): StellarError {
+  if (error instanceof Error) {
+    return error as StellarError;
+  }
+  return { message: String(error) };
+}
 
 @Injectable()
 export class StellarService {
@@ -49,10 +67,8 @@ export class StellarService {
 
   async checkConnectivity(): Promise<boolean> {
     try {
-      // Fetches fee stats from Horizon server (lightweight check)
       await this.server.feeStats();
 
-      // Log successful connectivity check
       await this.auditLogsService.logSystemEvent(
         AuditAction.SYSTEM_CHECK,
         undefined,
@@ -65,10 +81,10 @@ export class StellarService {
       );
 
       return true;
-    } catch (error: any) {
+    } catch (err: unknown) {
+      const error = toStellarError(err);
       this.logger.error(`Stellar connectivity check failed: ${error.message}`);
 
-      // Log connectivity failure
       await this.auditLogsService.logSystemEvent(
         AuditAction.SYSTEM_CHECK,
         undefined,
@@ -88,12 +104,11 @@ export class StellarService {
 
   async generateWallet(
     userId?: string,
-    logMetadata?: Record<string, any>,
+    logMetadata?: Record<string, unknown>,
   ): Promise<GenerateWalletResult> {
     try {
       const keypair = Keypair.random();
 
-      // Log wallet generation (mark as sensitive if it contains secrets)
       if (userId) {
         const metadata = {
           publicKey: keypair.publicKey(),
@@ -101,15 +116,13 @@ export class StellarService {
           ...logMetadata,
         };
 
-        // Log without exposing secret key
         await this.auditLogsService.logSystemEvent(
           AuditAction.WALLET_CREATED,
           userId,
           metadata,
-          true, // Mark as sensitive (contains public key but generated along with private)
+          true,
         );
 
-        // Additional log for key generation (very sensitive - hash only)
         await this.auditLogsService.logSystemEvent(
           AuditAction.WALLET_KEY_GENERATED,
           userId,
@@ -118,7 +131,7 @@ export class StellarService {
             hash: this.hashPrivateKey(keypair.secret()),
             network: process.env.STELLAR_NETWORK,
           },
-          true, // Mark as highly sensitive
+          true,
         );
       }
 
@@ -126,10 +139,10 @@ export class StellarService {
         publicKey: keypair.publicKey(),
         secretKey: keypair.secret(),
       };
-    } catch (error: any) {
+    } catch (err: unknown) {
+      const error = toStellarError(err);
       this.logger.error(`Failed to generate Stellar wallet: ${error.message}`);
 
-      // Log wallet generation failure
       if (userId) {
         await this.auditLogsService.logSystemEvent(
           AuditAction.WALLET_CREATED + '_FAILED',
@@ -162,13 +175,8 @@ export class StellarService {
         builder.addOperation(operation);
       }
 
-      if (params.memo) {
-        builder.addMemo(Memo.text(params.memo));
-      }
-
       const transaction = builder.setTimeout(180).build();
 
-      // Log transaction creation (without sensitive signing data)
       if (params.userId) {
         await this.auditLogsService.logSystemEvent(
           AuditAction.TRANSACTION_CREATED,
@@ -184,12 +192,12 @@ export class StellarService {
       }
 
       return transaction;
-    } catch (error: any) {
+    } catch (err: unknown) {
+      const error = toStellarError(err);
       this.logger.error(
         `Failed to build Stellar transaction: ${error.message}`,
       );
 
-      // Log transaction build failure
       if (params.userId) {
         await this.auditLogsService.logSystemEvent(
           AuditAction.TRANSACTION_CREATED_FAILED,
@@ -215,7 +223,6 @@ export class StellarService {
       const keypair = Keypair.fromSecret(secretKey);
       transaction.sign(keypair);
 
-      // Log transaction signing (highly sensitive - hash only)
       if (userId) {
         await this.auditLogsService.logSystemEvent(
           AuditAction.TRANSACTION_SIGNED,
@@ -223,24 +230,22 @@ export class StellarService {
           {
             transactionHash: this.hashTransaction(transaction),
             publicKey: keypair.publicKey(),
-            keyHash: this.hashPrivateKey(secretKey.substring(0, 10)), // Partial hash for identification
+            keyHash: this.hashPrivateKey(secretKey.substring(0, 10)),
           },
-          true, // Mark as sensitive
+          true,
         );
       }
 
       return transaction;
-    } catch (error: any) {
+    } catch (err: unknown) {
+      const error = toStellarError(err);
       this.logger.error(`Failed to sign Stellar transaction: ${error.message}`);
 
-      // Log signing failure
       if (userId) {
         await this.auditLogsService.logSystemEvent(
           AuditAction.TRANSACTION_SIGNED + '_FAILED',
           userId,
-          {
-            error: error.message,
-          },
+          { error: error.message },
           true,
         );
       }
@@ -253,7 +258,6 @@ export class StellarService {
     try {
       const result = await this.server.submitTransaction(transaction);
 
-      // Log successful transaction submission
       if (userId) {
         await this.auditLogsService.logSystemEvent(
           AuditAction.TRANSACTION_SUBMITTED,
@@ -267,12 +271,12 @@ export class StellarService {
       }
 
       return result;
-    } catch (error: any) {
+    } catch (err: unknown) {
+      const error = toStellarError(err);
       this.logger.error(
         `Failed to submit Stellar transaction: ${error.message}`,
       );
 
-      // Log submission failure
       if (userId) {
         await this.auditLogsService.logSystemEvent(
           AuditAction.TRANSACTION_SUBMITTED + '_FAILED',
@@ -280,14 +284,14 @@ export class StellarService {
           {
             transactionHash: transaction.hash().toString('hex'),
             error: error.message,
-            resultCodes: error?.response?.data?.extras?.result_codes,
+            resultCodes: error.response?.data?.extras?.result_codes,
             network: process.env.STELLAR_NETWORK,
           },
         );
       }
 
       throw new TransactionSubmissionError(
-        error?.response?.data?.extras?.result_codes ||
+        error.response?.data?.extras?.result_codes ??
           'Transaction submission failed',
       );
     }
@@ -305,7 +309,6 @@ export class StellarService {
         details: tx,
       };
 
-      // Log verification result
       if (userId) {
         await this.auditLogsService.logSystemEvent(
           AuditAction.TRANSACTION_VERIFIED,
@@ -321,8 +324,9 @@ export class StellarService {
       }
 
       return result;
-    } catch (error: any) {
-      // Log verification attempt (pending status)
+    } catch (err: unknown) {
+      const error = toStellarError(err);
+
       if (userId) {
         await this.auditLogsService.logSystemEvent(
           AuditAction.TRANSACTION_VERIFIED,
@@ -342,12 +346,7 @@ export class StellarService {
 
   /* -------------------- HELPER METHODS -------------------- */
 
-  /**
-   * Generate a hash for private keys (never log the actual key)
-   */
   private hashPrivateKey(privateKey: string): string {
-    // Use a simple hash function - in production, use crypto module
-    const crypto = require('crypto');
     return crypto
       .createHash('sha256')
       .update(privateKey)
@@ -355,34 +354,24 @@ export class StellarService {
       .substring(0, 16);
   }
 
-  /**
-   * Generate a hash for transaction identification
-   */
   private hashTransaction(transaction: Transaction): string {
     const hash = transaction.hash().toString('hex');
     return hash.substring(0, 16) + '...' + hash.substring(hash.length - 8);
   }
 
-  /* -------------------- NEW METHODS FOR AUDIT LOGGING -------------------- */
+  /* -------------------- WRAPPER METHODS -------------------- */
 
-  /**
-   * Generate wallet with audit logging (backward compatible wrapper)
-   */
   async generateWalletWithLogging(
     userId: string,
-    metadata?: Record<string, any>,
+    metadata?: Record<string, unknown>,
   ): Promise<GenerateWalletResult> {
     return this.generateWallet(userId, metadata);
   }
 
-  /**
-   * Create and log wallet generation event separately
-   * (Useful when wallet is generated elsewhere but needs logging)
-   */
   async logWalletGeneration(
     userId: string,
     publicKey: string,
-    metadata?: Record<string, any>,
+    metadata?: Record<string, unknown>,
   ): Promise<void> {
     await this.auditLogsService.logSystemEvent(
       AuditAction.WALLET_CREATED,
@@ -393,18 +382,15 @@ export class StellarService {
         network: process.env.STELLAR_NETWORK,
         ...metadata,
       },
-      true, // Sensitive - contains public key
+      true,
     );
   }
 
-  /**
-   * Log transaction creation event
-   */
   async logTransactionEvent(
     userId: string,
     action: string,
     transactionHash: string,
-    metadata?: Record<string, any>,
+    metadata?: Record<string, unknown>,
   ): Promise<void> {
     await this.auditLogsService.logSystemEvent(action, userId, {
       transactionHash,

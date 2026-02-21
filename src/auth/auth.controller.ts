@@ -160,7 +160,10 @@ export class AuthController {
     type: VerifySignupResponseDto,
   })
   @ApiResponse({ status: 401, description: 'Invalid or expired OTP' })
-  @ApiResponse({ status: 400, description: 'Account already verified or invalid request' })
+  @ApiResponse({
+    status: 400,
+    description: 'Account already verified or invalid request',
+  })
   async verifySignupOtp(@Body() verifyDto: VerifySignupOtpDto) {
     return this.authService.verifySignupOtp(verifyDto);
   }

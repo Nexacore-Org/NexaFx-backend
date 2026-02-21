@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { Exclude } from 'class-transformer';
 import { Notification } from '../notifications/entities/notification.entity';
+import { KycRecord } from 'src/kyc/entities/kyc.entity';
 
 export enum UserRole {
   USER = 'USER',
@@ -34,6 +35,9 @@ export class User {
   @Column({ type: 'varchar', length: 255 })
   @Exclude({ toPlainOnly: true })
   password: string;
+
+@OneToMany(() => KycRecord, (kyc) => kyc.user)
+kycRecords: KycRecord[];
 
   @Column({ type: 'varchar', length: 20, nullable: true, unique: true })
   @Index()

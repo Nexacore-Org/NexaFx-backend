@@ -13,6 +13,9 @@ import { HealthModule } from './health/health.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { TransactionsModule } from './transactions/transaction.module';
+import { KycModule } from './kyc/kyc.module';
+import { KycServiceService } from './kyc.service/kyc.service.service';
+import { Service } from './kyc.service.ts/kyc/.service';
 
 @Module({
   imports: [
@@ -53,6 +56,7 @@ import { TransactionsModule } from './transactions/transaction.module';
     AuditLogsModule,
     NotificationsModule,
     TransactionsModule,
+    KycModule,
   ],
   controllers: [AppController],
   providers: [
@@ -61,6 +65,8 @@ import { TransactionsModule } from './transactions/transaction.module';
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
     },
+    KycServiceService,
+    Service,
   ],
 })
 export class AppModule {}

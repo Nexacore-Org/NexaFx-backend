@@ -13,14 +13,16 @@ import { HealthModule } from './health/health.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { TransactionsModule } from './transactions/transaction.module';
+import { BeneficiariesModule } from './beneficiaries/beneficiaries.module';
 import { KycModule } from './kyc/kyc.module';
-import { KycServiceService } from './kyc.service/kyc.service.service';
-import { Service } from './kyc.service.ts/kyc/.service';
+// import { KycServiceService } from './kyc.service/kyc.service.service';
+// import { Service } from './kyc.service.ts/kyc/.service';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: '.env',
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -56,6 +58,7 @@ import { Service } from './kyc.service.ts/kyc/.service';
     AuditLogsModule,
     NotificationsModule,
     TransactionsModule,
+    BeneficiariesModule,
     KycModule,
   ],
   controllers: [AppController],
@@ -65,8 +68,8 @@ import { Service } from './kyc.service.ts/kyc/.service';
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
     },
-    KycServiceService,
-    Service,
+    // KycServiceService,
+    // Service,
   ],
 })
 export class AppModule {}

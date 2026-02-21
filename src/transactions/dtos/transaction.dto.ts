@@ -15,7 +15,11 @@ import {
 } from '../entities/transaction.entity';
 
 export class CreateDepositDto {
-  @ApiProperty({ example: 100.5, description: 'Amount to deposit', minimum: 0.01 })
+  @ApiProperty({
+    example: 100.5,
+    description: 'Amount to deposit',
+    minimum: 0.01,
+  })
   @IsNumber()
   @IsPositive()
   @Min(0.01)
@@ -36,7 +40,11 @@ export class CreateDepositDto {
 }
 
 export class CreateWithdrawalDto {
-  @ApiProperty({ example: 50.25, description: 'Amount to withdraw', minimum: 0.01 })
+  @ApiProperty({
+    example: 50.25,
+    description: 'Amount to withdraw',
+    minimum: 0.01,
+  })
   @IsNumber()
   @IsPositive()
   @Min(0.01)
@@ -54,6 +62,15 @@ export class CreateWithdrawalDto {
   @IsString()
   @IsNotEmpty()
   destinationAddress: string;
+
+  @ApiPropertyOptional({
+    description:
+      'ID of a saved beneficiary. If provided, walletAddress is pre-filled from it.',
+    example: 'a1b2c3d4-...',
+  })
+  @IsUUID()
+  @IsOptional()
+  beneficiaryId?: string;
 }
 
 export class VerifyTransactionDto {
@@ -67,28 +84,47 @@ export class VerifyTransactionDto {
 }
 
 export class TransactionQueryDto {
-  @ApiPropertyOptional({ enum: TransactionType, description: 'Filter by transaction type' })
+  @ApiPropertyOptional({
+    enum: TransactionType,
+    description: 'Filter by transaction type',
+  })
   @IsOptional()
   @IsEnum(TransactionType)
   type?: TransactionType;
 
-  @ApiPropertyOptional({ enum: TransactionStatus, description: 'Filter by transaction status' })
+  @ApiPropertyOptional({
+    enum: TransactionStatus,
+    description: 'Filter by transaction status',
+  })
   @IsOptional()
   @IsEnum(TransactionStatus)
   status?: TransactionStatus;
 
-  @ApiPropertyOptional({ example: 'XLM', description: 'Filter by currency code' })
+  @ApiPropertyOptional({
+    example: 'XLM',
+    description: 'Filter by currency code',
+  })
   @IsOptional()
   @IsString()
   currency?: string;
 
-  @ApiPropertyOptional({ example: 1, description: 'Page number', minimum: 1, default: 1 })
+  @ApiPropertyOptional({
+    example: 1,
+    description: 'Page number',
+    minimum: 1,
+    default: 1,
+  })
   @IsOptional()
   @IsNumber()
   @Min(1)
   page?: number;
 
-  @ApiPropertyOptional({ example: 20, description: 'Items per page', minimum: 1, default: 20 })
+  @ApiPropertyOptional({
+    example: 20,
+    description: 'Items per page',
+    minimum: 1,
+    default: 20,
+  })
   @IsOptional()
   @IsNumber()
   @Min(1)

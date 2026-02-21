@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PassportModule } from '@nestjs/passport';
+import type { StringValue } from 'ms';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
@@ -29,12 +30,13 @@ import { StellarModule } from '../blockchain/stellar/stellar.module';
           throw new Error('JWT_SECRET must be set in production environment');
         }
 
+        const expiresIn = (configService.get<string>('JWT_EXPIRES_IN') ??
+          '15m') as StringValue;
+
         return {
-          secret: secret || 'default-secret-change-in-production',
-          signOptions: {
-            expiresIn: configService.get<string>('JWT_EXPIRES_IN') || '15m',
-          },
-        } as any;
+          secret: secret ?? 'default-secret-change-in-production',
+          signOptions: { expiresIn },
+        };
       },
       inject: [ConfigService],
     }),

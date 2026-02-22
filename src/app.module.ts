@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -15,8 +16,6 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { TransactionsModule } from './transactions/transaction.module';
 import { BeneficiariesModule } from './beneficiaries/beneficiaries.module';
 import { KycModule } from './kyc/kyc.module';
-// import { KycServiceService } from './kyc.service/kyc.service.service';
-// import { Service } from './kyc.service.ts/kyc/.service';
 
 @Module({
   imports: [
@@ -28,26 +27,23 @@ import { KycModule } from './kyc/kyc.module';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
-        // host: configService.get<string>('DB_HOST') || 'localhost',
-        // port: configService.get<number>('DB_PORT') || 5432,
-        // username: configService.get<string>('DB_USERNAME') || 'postgres',
-        // password: configService.get<string>('DB_PASSWORD') || 'postgres',
-        // database: configService.get<string>('DB_NAME') || 'nexafx',
         url: configService.get<string>('DATABASE_URL'),
-
-        // synchronize: configService.get<string>('NODE_ENV') !== 'production',
-        // ssl:
-        //   configService.get<string>('DB_SSL') === 'true'
-        //     ? { rejectUnauthorized: false }
-        //     : false,
         synchronize: true,
         ssl: {
           rejectUnauthorized: false,
         },
         autoLoadEntities: true,
-
-        // logging: configService.get<string>('NODE_ENV') === 'development',
       }),
+      inject: [ConfigService],
+    }),
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => [
+        {
+          ttl: (configService.get<number>('THROTTLE_TTL') ?? 60) * 1000,
+          limit: configService.get<number>('THROTTLE_LIMIT') ?? 100,
+        },
+      ],
       inject: [ConfigService],
     }),
     CommonModule,
@@ -68,8 +64,10 @@ import { KycModule } from './kyc/kyc.module';
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
     },
-    // KycServiceService,
-    // Service,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}

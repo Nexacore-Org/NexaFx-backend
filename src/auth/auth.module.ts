@@ -14,6 +14,7 @@ import { StellarModule } from '../blockchain/stellar/stellar.module';
 
 @Module({
   imports: [
+    ConfigModule,
     UsersModule,
     OtpsModule,
     TokensModule,

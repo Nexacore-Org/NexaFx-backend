@@ -9,13 +9,24 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SignupDto } from './dto/signup.dto';
 import { VerifySignupOtpDto } from './dto/verify-signup-otp.dto';
 import { VerifySignupResponseDto } from './dto/signup-response.dto';
+import { Throttle } from '@nestjs/throttler';
+// import { ConfigService } from '@nestjs/config';
 
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    // private readonly configService: ConfigService,
+  ) {}
 
   @Public()
+  @Throttle({
+    default: {
+      ttl: 60 * 1000,
+      limit: Number(process.env.THROTTLE_AUTH_LIMIT ?? 5),
+    },
+  })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Initiate login with email and password' })
@@ -59,6 +70,12 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({
+    default: {
+      ttl: 60 * 1000,
+      limit: Number(process.env.THROTTLE_AUTH_LIMIT ?? 5),
+    },
+  })
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Initiate password reset flow' })
@@ -129,6 +146,12 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({
+    default: {
+      ttl: 60 * 1000,
+      limit: Number(process.env.THROTTLE_AUTH_LIMIT ?? 5),
+    },
+  })
   @Post('signup')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Register a new user account' })

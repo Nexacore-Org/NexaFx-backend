@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { TransactionsService } from './transaction.service';
+import { UserRole } from 'src/users/user.entity';
+
+const SYSTEM_USER_ID = 'system';
 
 @Injectable()
 export class TransactionVerificationService {
@@ -25,7 +28,12 @@ export class TransactionVerificationService {
 
       for (const transaction of pendingTransactions) {
         try {
-          await this.transactionsService.verifyTransaction(transaction.id);
+          await this.transactionsService.verifyTransaction(
+            transaction.id,
+            SYSTEM_USER_ID,
+            UserRole.ADMIN,
+            SYSTEM_USER_ID,
+          );
           this.logger.log(
             `Verified transaction: ${transaction.id} - Status: ${transaction.status}`,
           );

@@ -7,11 +7,12 @@ import { TransactionsModule } from '../transactions/transaction.module';
 import { BlockchainModule } from '../blockchain/blockchain.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { UsersModule } from '../users/users.module';
+import { Notification } from 'src/notifications/entities/notification.entity';
 
 @Module({
   imports: [
     ScheduleModule.forRoot(),
-    TypeOrmModule.forFeature([Transaction]),
+    TypeOrmModule.forFeature([Transaction, Notification]),
     TransactionsModule,
     BlockchainModule,
     NotificationsModule,

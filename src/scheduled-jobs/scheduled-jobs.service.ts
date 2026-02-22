@@ -13,7 +13,9 @@ import { UsersService } from '../users/users.service';
 import {
   NotificationType,
   NotificationStatus,
+  Notification,
 } from '../notifications/entities/notification.entity';
+import { InjectRepository } from '@nestjs/typeorm';
 
 @Injectable()
 export class ScheduledJobsService {
@@ -21,7 +23,10 @@ export class ScheduledJobsService {
   private processingTransactionIds = new Set<string>();
 
   constructor(
+    @InjectRepository(Transaction)
     private readonly transactionRepository: Repository<Transaction>,
+    @InjectRepository(Notification)
+    private readonly notificationRepository: Repository<Notification>,
     private readonly transactionsService: TransactionsService,
     private readonly stellarService: StellarService,
     private readonly notificationsService: NotificationsService,
@@ -145,16 +150,58 @@ export class ScheduledJobsService {
   }
 
   /**
-   * Clean up old processed notifications every day at 2 AM
+   * Clean up old notifications every day at 2 AM.
+   * - READ notifications older than 30 days are deleted.
+   * - UNREAD notifications older than 90 days are deleted.
    */
   @Cron(CronExpression.EVERY_DAY_AT_2AM)
-  cleanupOldNotifications(): void {
+  async cleanupOldNotifications(): Promise<void> {
     this.logger.log('[Scheduled Job] Starting old notification cleanup');
 
     try {
-      // This is a placeholder - implement based on your notification cleanup strategy
-      // For example, delete notifications older than 30 days
-      this.logger.log('[Scheduled Job] Notification cleanup completed');
+      const now = new Date();
+
+      const thirtyDaysAgo = new Date(now);
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const ninetyDaysAgo = new Date(now);
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+      // Delete READ notifications older than 30 days
+      const readResult = await this.notificationRepository
+        .createQueryBuilder()
+        .delete()
+        .from(Notification)
+        .where('status = :status AND "createdAt" < :cutoff', {
+          status: NotificationStatus.READ,
+          cutoff: thirtyDaysAgo,
+        })
+        .execute();
+
+      const readDeleted = readResult.affected ?? 0;
+      this.logger.log(
+        `[Cleanup] Deleted ${readDeleted} READ notifications older than 30 days`,
+      );
+
+      // Delete UNREAD notifications older than 90 days
+      const unreadResult = await this.notificationRepository
+        .createQueryBuilder()
+        .delete()
+        .from(Notification)
+        .where('status = :status AND "createdAt" < :cutoff', {
+          status: NotificationStatus.UNREAD,
+          cutoff: ninetyDaysAgo,
+        })
+        .execute();
+
+      const unreadDeleted = unreadResult.affected ?? 0;
+      this.logger.log(
+        `[Cleanup] Deleted ${unreadDeleted} UNREAD notifications older than 90 days`,
+      );
+
+      this.logger.log(
+        `[Scheduled Job] Notification cleanup completed — ${readDeleted + unreadDeleted} total records removed`,
+      );
     } catch (error) {
       this.logger.error(
         '[Scheduled Job] Fatal error in notification cleanup:',

@@ -210,4 +210,49 @@ export class AuthController {
   async resendSignupOtp(@Body() dto: ForgotPasswordDto) {
     return this.authService.resendSignupOtp(dto.email);
   }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Logout current session' })
+  @ApiResponse({
+    status: 200,
+    description: 'Logout successful',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async logout(@Req() req: any) {
+    const userId = req.user.userId;
+    const tokenId = req.user.jti; // JWT ID
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('User-Agent');
+    
+    return this.authService.logout(userId, tokenId, ipAddress, userAgent);
+  }
+
+  @Post('logout-all')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Logout from all devices' })
+  @ApiResponse({
+    status: 200,
+    description: 'Logout from all devices successful',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async logoutAllDevices(@Req() req: any) {
+    const userId = req.user.userId;
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('User-Agent');
+    
+    return this.authService.logoutAllDevices(userId, ipAddress, userAgent);
+  }
 }

@@ -16,6 +16,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { TransactionsModule } from './transactions/transaction.module';
 import { BeneficiariesModule } from './beneficiaries/beneficiaries.module';
 import { KycModule } from './kyc/kyc.module';
+import { ScheduledJobsModule } from './scheduled-jobs/scheduled-jobs.module';
 import { FeesModule } from './fees/fees.module';
 
 @Module({
@@ -57,6 +58,7 @@ import { FeesModule } from './fees/fees.module';
     TransactionsModule,
     BeneficiariesModule,
     KycModule,
+    ScheduledJobsModule,
     FeesModule,
   ],
   controllers: [AppController],

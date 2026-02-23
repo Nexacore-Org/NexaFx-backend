@@ -36,8 +36,8 @@ export class User {
   @Exclude({ toPlainOnly: true })
   password: string;
 
-@OneToMany(() => KycRecord, (kyc) => kyc.user)
-kycRecords: KycRecord[];
+  @OneToMany(() => KycRecord, (kyc) => kyc.user)
+  kycRecords: KycRecord[];
 
   @Column({ type: 'varchar', length: 20, nullable: true, unique: true })
   @Index()
@@ -53,6 +53,14 @@ kycRecords: KycRecord[];
 
   @Column({ type: 'jsonb', nullable: true, default: {} })
   balances: Record<string, number>;
+
+  @Column({ type: 'varchar', length: 8, unique: true })
+  @Index()
+  referralCode: string;
+
+  @Column({ type: 'uuid', nullable: true })
+  @Index()
+  referredBy: string | null;
 
   @Column({ type: 'boolean', default: false })
   isVerified: boolean;

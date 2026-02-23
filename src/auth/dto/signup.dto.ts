@@ -6,6 +6,7 @@ import {
   MaxLength,
   IsOptional,
   Matches,
+  Length,
 } from 'class-validator';
 
 export class SignupDto {
@@ -56,4 +57,16 @@ export class SignupDto {
     message: 'Phone must be in international format (e.g., +2348012345678)',
   })
   phone?: string;
+
+  @ApiPropertyOptional({
+    example: 'AB12CD34',
+    description: 'Referral code from an existing user',
+  })
+  @IsOptional()
+  @IsString()
+  @Length(8, 8)
+  @Matches(/^[A-Za-z0-9]{8}$/, {
+    message: 'Referral code must be 8 alphanumeric characters',
+  })
+  referralCode?: string;
 }

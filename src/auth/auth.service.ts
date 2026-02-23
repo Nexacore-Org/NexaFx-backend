@@ -24,6 +24,7 @@ import { VerifySignupResponseDto } from './dto/signup-response.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
+import { ReferralsService } from '../referrals/referrals.service';
 
 @Injectable()
 export class AuthService {
@@ -37,6 +38,7 @@ export class AuthService {
     private readonly stellarService: StellarService,
     private readonly encryptionService: EncryptionService,
     private readonly auditLogsService: AuditLogsService,
+    private readonly referralsService: ReferralsService,
   ) {}
 
   async login(
@@ -267,6 +269,7 @@ export class AuthService {
 
   async signup(signupDto: SignupDto): Promise<{ message: string }> {
     const normalizedEmail = signupDto.email.toLowerCase().trim();
+    const normalizedReferralCode = signupDto.referralCode?.toUpperCase().trim();
     const genericMessage =
       'this email is available, a verification code has been sent.';
 
@@ -294,6 +297,18 @@ export class AuthService {
       }
     }
 
+    let referredBy: string | null = null;
+    if (normalizedReferralCode) {
+      const referrer =
+        await this.usersService.findByReferralCode(normalizedReferralCode);
+      if (!referrer) {
+        throw new BadRequestException('Invalid referral code');
+      }
+      referredBy = referrer.id;
+    }
+
+    const generatedReferralCode = await this.generateUniqueReferralCode();
+
     // Generate Stellar wallet using blockchain module
     const wallet = await this.stellarService.generateWallet();
 
@@ -309,7 +324,13 @@ export class AuthService {
       phone: signupDto.phone,
       walletPublicKey: wallet.publicKey,
       walletSecretKeyEncrypted: encryptedSecretKey,
+      referralCode: generatedReferralCode,
+      referredBy,
     });
+
+    if (referredBy) {
+      await this.referralsService.createPendingReferral(referredBy, user.id);
+    }
 
     // Generate and send OTP
     const fullUser = await this.usersService.findById(user.id);
@@ -453,6 +474,28 @@ export class AuthService {
       default:
         return 900;
     }
+  }
+
+  private async generateUniqueReferralCode(): Promise<string> {
+    const characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const codeLength = 8;
+    const maxAttempts = 20;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      let code = '';
+      for (let i = 0; i < codeLength; i++) {
+        code += characters[Math.floor(Math.random() * characters.length)];
+      }
+
+      const existing = await this.usersService.findByReferralCode(code);
+      if (!existing) {
+        return code;
+      }
+    }
+
+    throw new BadRequestException(
+      'Unable to generate referral code. Please try again.',
+    );
   }
 
   private async simulateProcessingDelay(): Promise<void> {

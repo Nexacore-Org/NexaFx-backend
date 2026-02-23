@@ -16,6 +16,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { TransactionsModule } from './transactions/transaction.module';
 import { BeneficiariesModule } from './beneficiaries/beneficiaries.module';
 import { KycModule } from './kyc/kyc.module';
+import { ReferralsModule } from './referrals/referrals.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { KycModule } from './kyc/kyc.module';
     AuditLogsModule,
     NotificationsModule,
     TransactionsModule,
+    ReferralsModule,
     BeneficiariesModule,
     KycModule,
   ],

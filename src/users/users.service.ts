@@ -34,6 +34,12 @@ export class UsersService {
     });
   }
 
+  async findByReferralCode(referralCode: string): Promise<User | null> {
+    return this.userRepository.findOne({
+      where: { referralCode: referralCode.toUpperCase().trim() },
+    });
+  }
+
   async deleteById(id: string): Promise<void> {
     await this.userRepository.delete(id);
   }
@@ -53,6 +59,8 @@ export class UsersService {
     phone?: string;
     walletPublicKey: string;
     walletSecretKeyEncrypted: string;
+    referralCode: string;
+    referredBy?: string | null;
     role?: UserRole;
   }): Promise<Omit<User, 'password' | 'walletSecretKeyEncrypted'>> {
     const normalizedEmail = params.email.toLowerCase().trim();
@@ -80,6 +88,8 @@ export class UsersService {
       phone: params.phone || null,
       walletPublicKey: params.walletPublicKey,
       walletSecretKeyEncrypted: params.walletSecretKeyEncrypted,
+      referralCode: params.referralCode.toUpperCase().trim(),
+      referredBy: params.referredBy ?? null,
       role: params.role || UserRole.USER,
       isVerified: false,
     });

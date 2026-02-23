@@ -41,6 +41,21 @@ export class NotificationsService {
       throw new BadRequestException('Failed to create notification');
     }
   }
+  async updateBatchStatus(
+    notificationIds: string[],
+    status: NotificationStatus,
+  ): Promise<{ updated: number }> {
+    if (!notificationIds || notificationIds.length === 0) {
+      throw new BadRequestException('Notification IDs are required');
+    }
+
+    const result = await this.notificationsRepository.update(
+      { id: In(notificationIds) },
+      { status },
+    );
+
+    return { updated: result.affected || 0 };
+  }
 
   async findAll(
     userId: string,

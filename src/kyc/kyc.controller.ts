@@ -19,10 +19,11 @@ import { KycService } from './kyc.service';
 import { SubmitKycDto } from './dtos/kyc-submit';
 import { ApproveKycDto } from './dtos/kyc-approve';
 import { KycRecord} from './entities/kyc.entity';
-import { JwtAuthGuard } from 'src/common';
-import { Roles } from 'src/auth/decorators/roles.decorator';
-import { UserRole } from 'src/users//user.entity';
-import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { JwtAuthGuard } from '../common';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { CurrentUser, CurrentUserPayload } from '../auth/decorators/current-user.decorator';
+import { UserRole } from '../users/user.entity';
+import { RolesGuard } from '../auth/guards/roles.guard';
 
 import { ReviewKycDto } from './dtos/kyc-review';
 
@@ -40,8 +41,8 @@ export class KycController {
     description: 'KYC submission successful',
     type: KycRecord,
   })
-  async submitKyc(@Req() req, @Body() dto: SubmitKycDto) {
-    return this.kycService.submitKyc(req.user.id, dto);
+  async submitKyc(@CurrentUser() user: CurrentUserPayload, @Body() dto: SubmitKycDto) {
+    return this.kycService.submitKyc(user.userId, dto);
   }
   // TODO: Implement role-based authentication for admin access
   @Patch(':id/approve')
@@ -66,8 +67,8 @@ export class KycController {
     description: 'KYC status retrieved successfully',
     type: KycRecord,
   })
-  async getKycStatus(@Request() req) {
-    return this.kycService.getKycStatus(req.user.id);
+  async getKycStatus(@CurrentUser() user: CurrentUserPayload) {
+    return this.kycService.getKycStatus(user.userId);
   }
 
   // TODO: Implement role-based authentication for admin access

@@ -16,7 +16,9 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { TransactionsModule } from './transactions/transaction.module';
 import { BeneficiariesModule } from './beneficiaries/beneficiaries.module';
 import { KycModule } from './kyc/kyc.module';
-import { TwoFactorModule } from './two-factor/two-factor.module';
+import { ScheduledJobsModule } from './scheduled-jobs/scheduled-jobs.module';
+import { ReceiptsModule } from './receipts/receipts.module';
+import { FeesModule } from './fees/fees.module';
 
 @Module({
   imports: [
@@ -57,7 +59,9 @@ import { TwoFactorModule } from './two-factor/two-factor.module';
     TransactionsModule,
     BeneficiariesModule,
     KycModule,
-    TwoFactorModule,
+    ScheduledJobsModule,
+    ReceiptsModule,
+    FeesModule,
   ],
   controllers: [AppController],
   providers: [

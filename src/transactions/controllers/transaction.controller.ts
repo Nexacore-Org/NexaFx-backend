@@ -59,7 +59,7 @@ export class TransactionsController {
     @Body() createDepositDto: CreateDepositDto,
   ): Promise<TransactionResponseDto> {
     return this.transactionsService.createDeposit(
-      req.user.id,
+      req.user.userId,
       createDepositDto,
     );
   }
@@ -87,7 +87,7 @@ export class TransactionsController {
     @Body() createWithdrawalDto: CreateWithdrawalDto,
   ): Promise<TransactionResponseDto> {
     return this.transactionsService.createWithdrawal(
-      req.user.id,
+      req.user.userId,
       createWithdrawalDto,
     );
   }
@@ -116,8 +116,14 @@ export class TransactionsController {
   @ApiResponse({ status: 500, description: 'Blockchain verification failed' })
   async verifyTransaction(
     @Param('id') id: string,
+    @Request() req,
   ): Promise<TransactionResponseDto> {
-    return this.transactionsService.verifyTransaction(id);
+    return this.transactionsService.verifyTransaction(
+      id,
+      req.user.userId,
+      req.user.id,
+      req.user.role,
+    );
   }
 
   @Get()
@@ -135,7 +141,7 @@ export class TransactionsController {
     @Request() req,
     @Query() query: TransactionQueryDto,
   ): Promise<TransactionListResponseDto> {
-    return this.transactionsService.findAllByUser(req.user.id, query);
+    return this.transactionsService.findAllByUser(req.user.userId, query);
   }
 
   @Get('pending')
@@ -177,6 +183,6 @@ export class TransactionsController {
     @Param('id') id: string,
     @Request() req,
   ): Promise<TransactionResponseDto> {
-    return this.transactionsService.findOne(id, req.user.id);
+    return this.transactionsService.findOne(id, req.user.userId);
   }
 }

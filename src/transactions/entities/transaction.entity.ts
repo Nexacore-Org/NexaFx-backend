@@ -61,6 +61,12 @@ export class Transaction {
   @Column({ type: 'text', nullable: true })
   failureReason: string;
 
+  @Column({ type: 'decimal', precision: 20, scale: 8, nullable: true })
+  feeAmount: string;
+
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  feeCurrency: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

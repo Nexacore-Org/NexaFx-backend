@@ -1,4 +1,20 @@
-import { Controller, Get, Post, Patch, Delete, Body } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { UpdateNotificationDto } from './dto/update-notification.dto';
@@ -6,101 +22,137 @@ import {
   BatchMarkAsReadDto,
   BatchDeleteDto,
   BatchUpdateStatusDto,
-  MarkAllAsReadDto,
 } from './dto/batch-notification.dto';
 import {
   NotificationType,
   NotificationStatus,
 } from './entities/notification.entity';
+import {
+  CurrentUser,
+  CurrentUserPayload,
+} from '../auth/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
+@ApiTags('Notifications')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller('notifications')
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
   @Post()
-  create(createNotificationDto: CreateNotificationDto) {
+  @ApiOperation({ summary: 'Create notification' })
+  @ApiResponse({ status: 201, description: 'Notification created' })
+  create(@Body() createNotificationDto: CreateNotificationDto) {
     return this.notificationsService.create(createNotificationDto);
   }
 
   @Get()
+  @ApiOperation({ summary: 'Get notifications for authenticated user' })
+  @ApiResponse({ status: 200, description: 'Notifications retrieved' })
   findAll(
-    userId: string,
-    page: number = 1,
-    limit: number = 20,
-    type?: NotificationType,
-    status?: NotificationStatus,
+    @CurrentUser() user: CurrentUserPayload,
+    @Query('page') page = 1,
+    @Query('limit') limit = 20,
+    @Query('type') type?: NotificationType,
+    @Query('status') status?: NotificationStatus,
   ) {
-    return this.notificationsService.findAll(userId, page, limit, type, status);
+    return this.notificationsService.findAll(
+      user.userId,
+      Number(page),
+      Number(limit),
+      type,
+      status,
+    );
   }
 
   @Get('unread-count')
-  getUnreadCount(userId: string) {
-    return this.notificationsService.getUnreadCount(userId);
+  @ApiOperation({ summary: 'Get unread notification count' })
+  getUnreadCount(@CurrentUser() user: CurrentUserPayload) {
+    return this.notificationsService.getUnreadCount(user.userId);
   }
 
   @Get('by-type')
-  getByType(userId: string, type: NotificationType) {
-    return this.notificationsService.findByType(userId, type);
+  @ApiOperation({ summary: 'Get notifications by type' })
+  getByType(
+    @CurrentUser() user: CurrentUserPayload,
+    @Query('type') type: NotificationType,
+  ) {
+    return this.notificationsService.findByType(user.userId, type);
   }
 
   @Get('by-status')
-  getByStatus(userId: string, status: NotificationStatus) {
-    return this.notificationsService.findByStatus(userId, status);
-  }
-
-  @Get('user/:userId')
-  findByUser(userId: string) {
-    return this.notificationsService.findByUserId(userId);
+  @ApiOperation({ summary: 'Get notifications by status' })
+  getByStatus(
+    @CurrentUser() user: CurrentUserPayload,
+    @Query('status') status: NotificationStatus,
+  ) {
+    return this.notificationsService.findByStatus(user.userId, status);
   }
 
   @Get(':id')
-  findOne(id: string) {
+  @ApiOperation({ summary: 'Get notification by ID' })
+  findOne(@Param('id') id: string) {
     return this.notificationsService.findById(id);
   }
 
   @Patch(':id')
-  update(id: string, updateNotificationDto: UpdateNotificationDto) {
+  @ApiOperation({ summary: 'Update notification' })
+  update(
+    @Param('id') id: string,
+    @Body() updateNotificationDto: UpdateNotificationDto,
+  ) {
     return this.notificationsService.update(id, updateNotificationDto);
   }
 
   @Patch(':id/read')
-  markAsRead(id: string) {
+  @ApiOperation({ summary: 'Mark notification as read' })
+  markAsRead(@Param('id') id: string) {
     return this.notificationsService.markAsRead(id);
   }
 
   @Patch('batch/read')
-  markMultipleAsRead(batchMarkAsReadDto: BatchMarkAsReadDto) {
+  @ApiOperation({ summary: 'Mark multiple notifications as read' })
+  markMultipleAsRead(@Body() batchMarkAsReadDto: BatchMarkAsReadDto) {
     return this.notificationsService.markMultipleAsRead(
       batchMarkAsReadDto.notificationIds,
     );
   }
 
   @Patch('batch/mark-all-read')
-  markAllAsRead(markAllAsReadDto: MarkAllAsReadDto) {
-    return this.notificationsService.markAllAsRead(markAllAsReadDto.userId);
+  @ApiOperation({
+    summary: 'Mark all notifications as read for authenticated user',
+  })
+  markAllAsRead(@CurrentUser() user: CurrentUserPayload) {
+    return this.notificationsService.markAllAsRead(user.userId);
   }
 
   @Patch('batch/status')
-  updateBatchStatus(batchUpdateStatusDto: BatchUpdateStatusDto) {
-    return this.notificationsService.markMultipleAsRead(
+  @ApiOperation({ summary: 'Update status of multiple notifications' })
+  updateBatchStatus(@Body() batchUpdateStatusDto: BatchUpdateStatusDto) {
+    return this.notificationsService.updateBatchStatus(
       batchUpdateStatusDto.notificationIds,
+      batchUpdateStatusDto.status,
     );
   }
 
   @Delete(':id')
-  delete(id: string) {
+  @ApiOperation({ summary: 'Delete notification' })
+  delete(@Param('id') id: string) {
     return this.notificationsService.delete(id);
   }
 
   @Delete('batch/delete')
-  deleteMultiple(batchDeleteDto: BatchDeleteDto) {
+  @ApiOperation({ summary: 'Delete multiple notifications' })
+  deleteMultiple(@Body() batchDeleteDto: BatchDeleteDto) {
     return this.notificationsService.deleteMultiple(
       batchDeleteDto.notificationIds,
     );
   }
 
-  @Delete('user/:userId')
-  deleteAllByUser(userId: string) {
-    return this.notificationsService.deleteAllByUser(userId);
+  @Delete('user')
+  @ApiOperation({ summary: 'Delete all notifications for authenticated user' })
+  deleteAllByUser(@CurrentUser() user: CurrentUserPayload) {
+    return this.notificationsService.deleteAllByUser(user.userId);
   }
 }

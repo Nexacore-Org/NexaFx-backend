@@ -6,7 +6,7 @@ import { AuditLogResponseDto } from './dto/audit-log-response.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { UserRole } from 'src/users/user.entity'; 
+import { UserRole } from '../users/user.entity'; 
 import { TransformResponseInterceptor } from '../common'; 
 
 
@@ -49,7 +49,7 @@ export class AuditLogsController {
     @Query() filters: Omit<GetAuditLogsDto, 'userId'>,
     @Req() req: any,
   ) {
-    const userId = req.user.id;
+    const userId = req.user.userId;
     return this.auditLogsService.getLogsByUserId(userId, filters);
   }
 }

@@ -7,8 +7,7 @@ import { TransactionsModule } from '../transactions/transaction.module';
 import { BlockchainModule } from '../blockchain/blockchain.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { UsersModule } from '../users/users.module';
-import { Notification } from 'src/notifications/entities/notification.entity';
-import { RateAlertsModule } from '../rate-alerts/rate-alerts.module';
+import { Notification } from '../notifications/entities/notification.entity';
 
 @Module({
   imports: [

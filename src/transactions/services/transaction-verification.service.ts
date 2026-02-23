@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { TransactionsService } from './transaction.service';
-import { UserRole } from 'src/users/user.entity';
+import { UserRole } from '../../users/user.entity';
 
 const SYSTEM_USER_ID = 'system';
 

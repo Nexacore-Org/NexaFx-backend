@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TransactionsService } from './services/transaction.service';
+import { TransactionVerificationService } from './services/transaction-verification.service';
 import { TransactionsController } from './controllers/transaction.controller';
 import { Transaction } from './entities/transaction.entity';
 import { CurrenciesModule } from '../currencies/currencies.module';
@@ -17,7 +18,7 @@ import { UsersModule } from '../users/users.module';
     UsersModule,
   ],
   controllers: [TransactionsController],
-  providers: [TransactionsService],
+  providers: [TransactionsService, TransactionVerificationService],
   exports: [TransactionsService],
 })
 export class TransactionsModule {}

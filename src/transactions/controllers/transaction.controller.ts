@@ -116,8 +116,13 @@ export class TransactionsController {
   @ApiResponse({ status: 500, description: 'Blockchain verification failed' })
   async verifyTransaction(
     @Param('id') id: string,
+    @Request() req,
   ): Promise<TransactionResponseDto> {
-    return this.transactionsService.verifyTransaction(id);
+    return this.transactionsService.verifyTransaction(
+      id,
+      req.user.id,
+      req.user.role,
+    );
   }
 
   @Get()

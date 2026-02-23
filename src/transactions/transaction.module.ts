@@ -7,6 +7,7 @@ import { CurrenciesModule } from '../currencies/currencies.module';
 import { ExchangeRatesModule } from '../exchange-rates/exchange-rates.module';
 import { BlockchainModule } from '../blockchain/blockchain.module';
 import { UsersModule } from '../users/users.module';
+import { FeesModule } from '../fees/fees.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { UsersModule } from '../users/users.module';
     ExchangeRatesModule,
     BlockchainModule,
     UsersModule,
+    FeesModule,
   ],
   controllers: [TransactionsController],
   providers: [TransactionsService],

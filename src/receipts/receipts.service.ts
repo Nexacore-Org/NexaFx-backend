@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Transaction, TransactionStatus, TransactionType } from '../transactions/entities/transaction.entity';
 import { UsersService } from '../users/users.service';
 import { CurrentUserPayload } from '../auth/decorators/current-user.decorator';
+import { NotificationsService } from '../notifications/notifications.service';
 import PDFDocument from 'pdfkit';
 import { Response } from 'express';
 

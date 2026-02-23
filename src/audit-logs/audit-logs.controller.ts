@@ -49,7 +49,7 @@ export class AuditLogsController {
     @Query() filters: Omit<GetAuditLogsDto, 'userId'>,
     @Req() req: any,
   ) {
-    const userId = req.user.id;
+    const userId = req.user.userId;
     return this.auditLogsService.getLogsByUserId(userId, filters);
   }
 }

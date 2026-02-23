@@ -32,6 +32,10 @@ export enum AuditAction {
     SYSTEM_BACKUP = 'SYSTEM_BACKUP',
     SYSTEM_CHECK = 'SYSTEM_CHECK',
     
+    // Fee actions
+    FEE_CONFIG_CREATED = 'FEE_CONFIG_CREATED',
+    FEE_CONFIG_UPDATED = 'FEE_CONFIG_UPDATED',
+
     // Admin actions
     USER_UPDATED = 'USER_UPDATED',
     USER_DELETED = 'USER_DELETED',

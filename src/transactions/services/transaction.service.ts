@@ -32,6 +32,8 @@ import { AuditLogsService } from '../../audit-logs/audit-logs.service';
 import { AuditAction } from '../../audit-logs/enums/audit-action.enum';
 import { UserRole } from '../../users/user.entity';
 import { ConfigService } from '@nestjs/config';
+import { FeesService } from '../../fees/fees.service';
+import { FeeTransactionType } from '../../fees/entities/fee-config.entity';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -70,6 +72,7 @@ export class TransactionsService {
     private readonly usersService: UsersService,
     private readonly auditLogsService: AuditLogsService,
     private readonly configService: ConfigService,
+    private readonly feesService: FeesService,
   ) {}
 
   /**
@@ -109,18 +112,28 @@ export class TransactionsService {
       );
     }
 
+    const fee = await this.feesService.calculateFee(
+      FeeTransactionType.DEPOSIT,
+      currency,
+      amount,
+    );
+
     const transaction = this.transactionRepository.create({
       userId,
       type: TransactionType.DEPOSIT,
       amount: amount.toString(),
       currency,
       rate,
+      feeAmount: fee.feeAmount.toFixed(8),
+      feeCurrency: fee.feeCurrency,
       status: TransactionStatus.PENDING,
     });
 
     await this.transactionRepository.save(transaction);
 
     try {
+      await this.feesService.recordFee(transaction.id, userId, fee);
+
       await this.auditLogsService.logTransactionEvent(
         userId,
         AuditAction.DEPOSIT_CREATED,
@@ -128,6 +141,7 @@ export class TransactionsService {
         {
           amount: transaction.amount,
           currency: transaction.currency,
+          feeAmount: fee.feeAmount,
           sourceAddress,
           ip: ipAddress,
           device: userAgent,
@@ -256,18 +270,35 @@ export class TransactionsService {
       );
     }
 
+    const fee = await this.feesService.calculateFee(
+      FeeTransactionType.WITHDRAW,
+      currency,
+      amount,
+    );
+
+    const totalDeduction = amount + fee.feeAmount;
+    if (parseFloat(userBalance) < totalDeduction) {
+      throw new BadRequestException(
+        'Insufficient balance to cover the transaction amount and fee',
+      );
+    }
+
     const transaction = this.transactionRepository.create({
       userId,
       type: TransactionType.WITHDRAW,
       amount: amount.toString(),
       currency,
       rate,
+      feeAmount: fee.feeAmount.toFixed(8),
+      feeCurrency: fee.feeCurrency,
       status: TransactionStatus.PENDING,
     });
 
     await this.transactionRepository.save(transaction);
 
     try {
+      await this.feesService.recordFee(transaction.id, userId, fee);
+
       await this.auditLogsService.logTransactionEvent(
         userId,
         AuditAction.WITHDRAWAL_CREATED,
@@ -275,6 +306,7 @@ export class TransactionsService {
         {
           amount: transaction.amount,
           currency: transaction.currency,
+          feeAmount: fee.feeAmount,
           destinationAddress,
           ip: ipAddress,
           device: userAgent,

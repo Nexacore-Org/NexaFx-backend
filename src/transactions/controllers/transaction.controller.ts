@@ -121,6 +121,7 @@ export class TransactionsController {
     return this.transactionsService.verifyTransaction(
       id,
       req.user.userId,
+      req.user.id,
       req.user.role,
     );
   }

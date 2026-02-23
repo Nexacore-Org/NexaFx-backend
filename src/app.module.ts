@@ -17,6 +17,8 @@ import { TransactionsModule } from './transactions/transaction.module';
 import { BeneficiariesModule } from './beneficiaries/beneficiaries.module';
 import { KycModule } from './kyc/kyc.module';
 import { ScheduledJobsModule } from './scheduled-jobs/scheduled-jobs.module';
+import { ReceiptsModule } from './receipts/receipts.module';
+import { FeesModule } from './fees/fees.module';
 
 @Module({
   imports: [
@@ -58,6 +60,8 @@ import { ScheduledJobsModule } from './scheduled-jobs/scheduled-jobs.module';
     BeneficiariesModule,
     KycModule,
     ScheduledJobsModule,
+    ReceiptsModule,
+    FeesModule,
   ],
   controllers: [AppController],
   providers: [

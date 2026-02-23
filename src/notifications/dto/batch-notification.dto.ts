@@ -1,4 +1,4 @@
-import { IsArray, IsUUID, IsEnum, IsOptional } from 'class-validator';
+import { IsArray, IsUUID, IsEnum } from 'class-validator';
 import { NotificationStatus } from '../entities/notification.entity';
 
 export class BatchMarkAsReadDto {
@@ -22,8 +22,4 @@ export class BatchUpdateStatusDto {
   status: NotificationStatus;
 }
 
-export class MarkAllAsReadDto {
-  @IsOptional()
-  @IsUUID()
-  userId: string;
-}
+export class MarkAllAsReadDto {}

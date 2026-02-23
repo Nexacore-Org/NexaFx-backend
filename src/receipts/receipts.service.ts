@@ -3,10 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Transaction, TransactionStatus, TransactionType } from '../transactions/entities/transaction.entity';
 import { UsersService } from '../users/users.service';
-import { CurrentUserPayload } from '../auth/decorators/current-user.decorator';
-import { NotificationsService } from '../notifications/notifications.service';
 import PDFDocument from 'pdfkit';
-import { Response } from 'express';
+import { ConfigService } from '@nestjs/config';
+import Mailgun from 'mailgun.js';
+import FormData from 'form-data';
 
 @Injectable()
 export class ReceiptsService {
@@ -16,6 +16,7 @@ export class ReceiptsService {
     @InjectRepository(Transaction)
     private readonly transactionRepository: Repository<Transaction>,
     private readonly usersService: UsersService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**

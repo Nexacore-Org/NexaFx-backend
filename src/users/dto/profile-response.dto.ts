@@ -48,6 +48,12 @@ export class ProfileResponseDto {
   isVerified: boolean;
 
   @ApiProperty({
+    example: false,
+    description: 'Whether TOTP two-factor authentication is enabled',
+  })
+  isTwoFactorEnabled: boolean;
+
+  @ApiProperty({
     example: 'USER',
     enum: UserRole,
     description: 'User role',

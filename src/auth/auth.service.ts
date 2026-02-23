@@ -21,9 +21,25 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SignupDto } from './dto/signup.dto';
 import { VerifySignupOtpDto } from './dto/verify-signup-otp.dto';
 import { VerifySignupResponseDto } from './dto/signup-response.dto';
+import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
+import { TwoFactorService } from '../two-factor/two-factor.service';
+
+interface AuthTokensResponse {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+}
+
+interface TwoFactorPendingResponse {
+  requiresTwoFactor: true;
+  twoFactorToken: string;
+  message: string;
+}
+
+type VerifyLoginOtpResponse = AuthTokensResponse | TwoFactorPendingResponse;
 
 @Injectable()
 export class AuthService {
@@ -37,6 +53,7 @@ export class AuthService {
     private readonly stellarService: StellarService,
     private readonly encryptionService: EncryptionService,
     private readonly auditLogsService: AuditLogsService,
+    private readonly twoFactorService: TwoFactorService,
   ) {}
 
   async login(
@@ -112,11 +129,7 @@ export class AuthService {
     verifyDto: VerifyLoginOtpDto,
     ipAddress?: string,
     userAgent?: string,
-  ): Promise<{
-    accessToken: string;
-    refreshToken: string;
-    expiresIn: number;
-  }> {
+  ): Promise<VerifyLoginOtpResponse> {
     const user = await this.usersService.findByEmail(verifyDto.email);
     if (!user || !user.isVerified) {
       // Log failed OTP verification
@@ -136,32 +149,103 @@ export class AuthService {
 
     await this.otpsService.validateOtp(user, verifyDto.otp, OtpType.LOGIN);
 
-    const payload: JwtPayload = {
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-    };
+    if (user.isTwoFactorEnabled) {
+      const twoFactorToken = this.jwtService.sign(
+        {
+          sub: user.id,
+          email: user.email,
+          role: user.role,
+          authStage: '2fa_pending',
+        },
+        {
+          expiresIn: '5m',
+          secret: this.getTwoFactorChallengeSecret(),
+        },
+      );
 
-    const accessToken = this.jwtService.sign(payload);
-    const refreshToken = await this.refreshTokensService.createRefreshToken(
-      user.id,
-    );
-    const expiresIn = this.getAccessTokenExpirySeconds();
+      await this.auditLogsService.logAuthEvent(user.id, AuditAction.LOGIN, {
+        method: 'email',
+        status: '2fa_required',
+        ip: ipAddress,
+        device: userAgent,
+      });
 
-    // Log successful login with OTP verification
+      return {
+        requiresTwoFactor: true,
+        twoFactorToken,
+        message: 'Two-factor authentication code is required',
+      };
+    }
+
+    const tokens = await this.issueAuthTokens(user.id, user.email, user.role);
+
     await this.auditLogsService.logAuthEvent(user.id, AuditAction.LOGIN, {
       method: 'email',
       status: 'success',
       ip: ipAddress,
       device: userAgent,
       hasOtp: true,
+      hasTwoFactor: false,
     });
 
-    return {
-      accessToken,
-      refreshToken,
-      expiresIn,
-    };
+    return tokens;
+  }
+
+  async verifyTwoFactor(
+    verifyDto: VerifyTwoFactorDto,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<AuthTokensResponse> {
+    let decoded: JwtPayload & { authStage?: string };
+
+    try {
+      decoded = this.jwtService.verify(verifyDto.twoFactorToken, {
+        secret: this.getTwoFactorChallengeSecret(),
+      }) as JwtPayload & { authStage?: string };
+    } catch {
+      throw new UnauthorizedException('Invalid or expired two-factor token');
+    }
+
+    if (decoded.authStage !== '2fa_pending') {
+      throw new UnauthorizedException('Invalid two-factor token');
+    }
+
+    const user = await this.usersService.findById(decoded.sub);
+
+    if (!user || !user.isVerified || !user.isTwoFactorEnabled) {
+      throw new UnauthorizedException('Invalid two-factor verification state');
+    }
+
+    const isValid = await this.twoFactorService.verifyTotpCode(
+      user.id,
+      verifyDto.totpCode,
+    );
+
+    if (!isValid) {
+      await this.auditLogsService.logAuthEvent(
+        user.id,
+        AuditAction.FAILED_LOGIN,
+        {
+          reason: 'Invalid TOTP code',
+          ip: ipAddress,
+          device: userAgent,
+        },
+      );
+      throw new UnauthorizedException('Invalid two-factor code');
+    }
+
+    const tokens = await this.issueAuthTokens(user.id, user.email, user.role);
+
+    await this.auditLogsService.logAuthEvent(user.id, AuditAction.LOGIN, {
+      method: 'email+totp',
+      status: 'success',
+      ip: ipAddress,
+      device: userAgent,
+      hasOtp: true,
+      hasTwoFactor: true,
+    });
+
+    return tokens;
   }
 
   async forgotPassword(
@@ -453,6 +537,37 @@ export class AuthService {
       default:
         return 900;
     }
+  }
+
+  private async issueAuthTokens(
+    userId: string,
+    email: string,
+    role: string,
+  ): Promise<AuthTokensResponse> {
+    const payload: JwtPayload = {
+      sub: userId,
+      email,
+      role,
+    };
+
+    const accessToken = this.jwtService.sign(payload);
+    const refreshToken =
+      await this.refreshTokensService.createRefreshToken(userId);
+    const expiresIn = this.getAccessTokenExpirySeconds();
+
+    return {
+      accessToken,
+      refreshToken,
+      expiresIn,
+    };
+  }
+
+  private getTwoFactorChallengeSecret(): string {
+    const baseSecret =
+      this.configService.get<string>('JWT_SECRET') ||
+      'default-secret-change-in-production';
+
+    return `${baseSecret}_2fa_challenge`;
   }
 
   private async simulateProcessingDelay(): Promise<void> {

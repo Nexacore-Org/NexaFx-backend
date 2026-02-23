@@ -31,6 +31,7 @@ import { UsersService } from '../../users/users.service';
 import { AuditLogsService } from '../../audit-logs/audit-logs.service';
 import { AuditAction } from '../../audit-logs/enums/audit-action.enum';
 import { UserRole } from '../../users/user.entity';
+import { ConfigService } from '@nestjs/config';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -68,6 +69,7 @@ export class TransactionsService {
     private readonly stellarService: StellarService,
     private readonly usersService: UsersService,
     private readonly auditLogsService: AuditLogsService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -636,8 +638,9 @@ export class TransactionsService {
   }
 
   private async getStellarSecretKey(): Promise<string> {
-    if (process.env.STELLAR_HOT_WALLET_SECRET) {
-      return process.env.STELLAR_HOT_WALLET_SECRET;
+    const stellarSecret = this.configService.get<string>('STELLAR_HOT_WALLET_SECRET');
+    if (stellarSecret) {
+      return stellarSecret;
     }
 
     throw new BadRequestException(

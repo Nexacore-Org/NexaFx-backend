@@ -19,10 +19,10 @@ import { KycService } from './kyc.service';
 import { SubmitKycDto } from './dtos/kyc-submit';
 import { ApproveKycDto } from './dtos/kyc-approve';
 import { KycRecord} from './entities/kyc.entity';
-import { JwtAuthGuard } from 'src/common';
-import { Roles } from 'src/auth/decorators/roles.decorator';
-import { UserRole } from 'src/users//user.entity';
-import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { JwtAuthGuard } from '../common';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '../users/user.entity';
+import { RolesGuard } from '../auth/guards/roles.guard';
 
 import { ReviewKycDto } from './dtos/kyc-review';
 

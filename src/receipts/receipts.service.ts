@@ -228,4 +228,151 @@ export class ReceiptsService {
 
     return transaction;
   }
+
+  /**
+   * Email transaction receipt to user's registered email
+   */
+  async emailTransactionReceipt(
+    transactionId: string,
+    userId: string,
+  ): Promise<void> {
+    // Generate the PDF receipt
+    const pdfBuffer = await this.generateTransactionReceipt(transactionId, userId);
+    
+    // Get transaction details for email content
+    const transaction = await this.getTransactionById(transactionId, userId);
+    const user = await this.usersService.findOne(userId);
+    
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Send email with PDF attachment
+    await this.sendReceiptEmail(user.email, transaction, pdfBuffer);
+  }
+
+  /**
+   * Send receipt email with PDF attachment using Mailgun
+   */
+  private async sendReceiptEmail(
+    to: string,
+    transaction: Transaction,
+    pdfBuffer: Buffer,
+  ): Promise<void> {
+    const apiKey = this.configService.get<string>('MAILGUN_API_KEY');
+    const domain = this.configService.get<string>('MAILGUN_DOMAIN');
+    const fromEmail = this.configService.get<string>('MAILGUN_FROM_EMAIL');
+    const fromName = this.configService.get<string>('MAILGUN_FROM_NAME') ?? 'NexaFX';
+
+    if (!apiKey || !domain || !fromEmail) {
+      throw new Error(
+        'Missing Mailgun configuration: MAILGUN_API_KEY, MAILGUN_DOMAIN, and MAILGUN_FROM_EMAIL are required',
+      );
+    }
+
+    const skipEmail = this.configService.get<string>('SKIP_EMAIL_SENDING');
+    if (skipEmail === 'true') {
+      this.logger.log(`[RECEIPT DEV] Email skipped — Receipt for ${to}: Transaction ${transaction.id}`);
+      return;
+    }
+
+    try {
+      const mailgun = new Mailgun(FormData);
+      const client = mailgun.client({ username: 'api', key: apiKey });
+
+      const referenceNumber = `NFX-${transaction.id.slice(-8).toUpperCase()}`;
+      const transactionDate = transaction.createdAt.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+
+      const htmlContent = `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; background: #ffffff;">
+          <div style="background: #F5A623; padding: 24px; border-radius: 12px 12px 0 0; text-align: center;">
+            <h1 style="margin: 0; color: #fff; font-size: 24px; font-weight: 700;">NexaFX</h1>
+          </div>
+          <div style="padding: 32px;">
+            <h2 style="margin: 0 0 8px; font-size: 20px; color: #1A1A1A;">Your Transaction Receipt</h2>
+            <p style="color: #555; line-height: 1.6;">
+              Thank you for using NexaFX. Please find your transaction receipt attached to this email.
+            </p>
+            
+            <div style="background: #FFF8E7; border: 2px solid #F5A623; border-radius: 12px; padding: 20px; margin: 24px 0;">
+              <p style="margin: 0 0 8px; font-size: 13px; color: #666; text-transform: uppercase; letter-spacing: 1px;">Reference Number</p>
+              <p style="margin: 0; font-size: 18px; font-weight: 700; color: #1A1A1A;">${referenceNumber}</p>
+              
+              <p style="margin: 16px 0 8px; font-size: 13px; color: #666; text-transform: uppercase; letter-spacing: 1px;">Transaction Type</p>
+              <p style="margin: 0; font-size: 16px; font-weight: 600; color: #1A1A1A;">${transaction.type}</p>
+              
+              <p style="margin: 16px 0 8px; font-size: 13px; color: #666; text-transform: uppercase; letter-spacing: 1px;">Amount</p>
+              <p style="margin: 0; font-size: 16px; font-weight: 600; color: #1A1A1A;">${transaction.amount} ${transaction.currency}</p>
+              
+              <p style="margin: 16px 0 8px; font-size: 13px; color: #666; text-transform: uppercase; letter-spacing: 1px;">Date</p>
+              <p style="margin: 0; font-size: 16px; font-weight: 600; color: #1A1A1A;">${transactionDate}</p>
+              
+              <p style="margin: 16px 0 8px; font-size: 13px; color: #666; text-transform: uppercase; letter-spacing: 1px;">Status</p>
+              <p style="margin: 0; font-size: 16px; font-weight: 600; color: ${transaction.status === 'SUCCESS' ? '#27ae60' : transaction.status === 'FAILED' ? '#e74c3c' : '#f39c12'};">${transaction.status}</p>
+            </div>
+
+            ${transaction.txHash ? `
+            <div style="background: #f8f9fa; border-radius: 8px; padding: 16px; margin: 16px 0;">
+              <p style="margin: 0 0 8px; font-size: 12px; color: #666;">Stellar Transaction Hash</p>
+              <p style="margin: 0; font-size: 12px; font-family: monospace; word-break: break-all; color: #1A1A1A;">${transaction.txHash}</p>
+              <p style="margin: 8px 0 0; font-size: 12px;">
+                <a href="https://stellar.expert/explorer/testnet/tx/${transaction.txHash}" style="color: #F5A623; text-decoration: none;">View on Stellar Explorer →</a>
+              </p>
+            </div>
+            ` : ''}
+            
+            <p style="font-size: 12px; color: #999; text-align: center; margin-top: 32px;">
+              If you have any questions about this transaction, please contact our support team at support@nexafx.com
+            </p>
+            <p style="font-size: 12px; color: #ccc; text-align: center;">
+              © ${new Date().getFullYear()} NexaFX. All rights reserved.
+            </p>
+          </div>
+        </div>
+      `;
+
+      const textContent = `
+Your Transaction Receipt
+
+Thank you for using NexaFX. Please find your transaction receipt attached to this email.
+
+Transaction Details:
+- Reference Number: ${referenceNumber}
+- Type: ${transaction.type}
+- Amount: ${transaction.amount} ${transaction.currency}
+- Date: ${transactionDate}
+- Status: ${transaction.status}
+${transaction.txHash ? `- Stellar Transaction Hash: ${transaction.txHash}\n- Explorer Link: https://stellar.expert/explorer/testnet/tx/${transaction.txHash}` : ''}
+
+If you have any questions about this transaction, please contact our support team at support@nexafx.com
+
+© ${new Date().getFullYear()} NexaFX. All rights reserved.
+      `.trim();
+
+      await client.messages.create(domain, {
+        from: `${fromName} <${fromEmail}>`,
+        to: [to],
+        subject: `Your NexaFX Transaction Receipt - ${referenceNumber}`,
+        html: htmlContent,
+        text: textContent,
+        attachment: {
+          filename: `receipt-${transaction.id}.pdf`,
+          data: pdfBuffer,
+          contentType: 'application/pdf',
+        },
+      });
+
+      this.logger.log(`[RECEIPT] Receipt email sent successfully to ${to}`);
+    } catch (error) {
+      this.logger.error(
+        `[RECEIPT] Failed to send receipt email to ${to}`,
+        error instanceof Error ? error.message : String(error),
+      );
+      throw new Error('Failed to send receipt email');
+    }
+  }
 }

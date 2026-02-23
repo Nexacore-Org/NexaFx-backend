@@ -13,6 +13,7 @@ import {
   CreateTransactionParams,
   GenerateWalletResult,
   VerifyTransactionResult,
+  WalletBalanceResult,
 } from './stellar.types';
 
 import {
@@ -25,7 +26,9 @@ import { AuditAction } from '../../audit-logs/enums/audit-action.enum';
 
 interface StellarError {
   message: string;
+  status?: number;
   response?: {
+    status?: number;
     data?: {
       extras?: {
         result_codes?: string;
@@ -155,6 +158,44 @@ export class StellarService {
       }
 
       throw new WalletGenerationError('Failed to generate Stellar wallet');
+    }
+  }
+
+  async getWalletBalances(publicKey: string): Promise<WalletBalanceResult[]> {
+    try {
+      const account = await this.server.loadAccount(publicKey);
+
+      return account.balances.map((balance) => {
+        if (balance.asset_type === 'native') {
+          return {
+            asset: 'XLM',
+            balance: balance.balance,
+          };
+        }
+
+        return {
+          asset: balance.asset_code || 'UNKNOWN',
+          balance: balance.balance,
+          assetIssuer: balance.asset_issuer,
+        };
+      });
+    } catch (err: unknown) {
+      const error = toStellarError(err);
+      const statusCode = error.response?.status ?? error.status;
+
+      if (statusCode === 404) {
+        this.logger.warn(
+          `Stellar account not funded/activated yet: ${publicKey}`,
+        );
+        return [];
+      }
+
+      this.logger.error(
+        `Failed to load Stellar balances for ${publicKey}: ${error.message}`,
+      );
+      throw new TransactionBuildError(
+        'Failed to fetch Stellar wallet balances',
+      );
     }
   }
 

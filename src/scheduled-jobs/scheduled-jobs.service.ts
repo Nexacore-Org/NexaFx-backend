@@ -211,6 +211,26 @@ export class ScheduledJobsService {
   }
 
   /**
+   * Sync wallet balances from Stellar into User.balances snapshot every 5 minutes
+   */
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async syncWalletBalancesSnapshot(): Promise<void> {
+    this.logger.log('[Scheduled Job] Starting wallet balances snapshot sync');
+
+    try {
+      const result = await this.usersService.syncWalletBalanceSnapshots();
+      this.logger.log(
+        `[Scheduled Job] Wallet snapshot sync completed (${result.updated}/${result.processed} users updated)`,
+      );
+    } catch (error) {
+      this.logger.error(
+        '[Scheduled Job] Fatal error in wallet balances snapshot sync:',
+        error,
+      );
+    }
+  }
+
+  /**
    * Helper method to reconcile a single transaction
    */
   private async reconcileTransaction(transaction: Transaction): Promise<void> {

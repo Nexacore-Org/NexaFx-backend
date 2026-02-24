@@ -16,6 +16,7 @@ import {
   Notification,
 } from '../notifications/entities/notification.entity';
 import { InjectRepository } from '@nestjs/typeorm';
+import { RateAlertsService } from '../rate-alerts/rate-alerts.service';
 
 @Injectable()
 export class ScheduledJobsService {
@@ -31,6 +32,7 @@ export class ScheduledJobsService {
     private readonly stellarService: StellarService,
     private readonly notificationsService: NotificationsService,
     private readonly usersService: UsersService,
+    private readonly rateAlertsService: RateAlertsService,
   ) {}
 
   /**
@@ -144,6 +146,26 @@ export class ScheduledJobsService {
     } catch (error) {
       this.logger.error(
         '[Scheduled Job] Fatal error in failed transaction retry:',
+        error,
+      );
+    }
+  }
+
+  /**
+   * Check user-configured exchange rate alerts every 5 minutes.
+   */
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async checkRateAlerts(): Promise<void> {
+    this.logger.log('[Scheduled Job] Starting rate alert evaluation');
+
+    try {
+      const result = await this.rateAlertsService.checkAndTriggerAlerts();
+      this.logger.log(
+        `[Scheduled Job] Rate alerts checked=${result.checked}, triggered=${result.triggered}, reactivated=${result.reactivated}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        '[Scheduled Job] Fatal error while checking rate alerts:',
         error,
       );
     }

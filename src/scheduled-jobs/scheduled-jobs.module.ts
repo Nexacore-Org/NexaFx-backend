@@ -17,6 +17,7 @@ import { Notification } from '../notifications/entities/notification.entity';
     BlockchainModule,
     NotificationsModule,
     UsersModule,
+    RateAlertsModule,
   ],
   providers: [ScheduledJobsService],
   exports: [ScheduledJobsService],

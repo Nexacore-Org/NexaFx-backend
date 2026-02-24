@@ -35,8 +35,8 @@ export class User {
   @Exclude({ toPlainOnly: true })
   password: string;
 
-@OneToMany(() => KycRecord, (kyc) => kyc.user)
-kycRecords: KycRecord[];
+  @OneToMany(() => KycRecord, (kyc) => kyc.user)
+  kycRecords: KycRecord[];
 
   @Column({ type: 'varchar', length: 20, nullable: true, unique: true })
   @Index()
@@ -50,11 +50,18 @@ kycRecords: KycRecord[];
   @Exclude({ toPlainOnly: true })
   walletSecretKeyEncrypted: string;
 
+  @Column({ type: 'text', nullable: true })
+  @Exclude({ toPlainOnly: true })
+  twoFactorSecret: string | null;
+
   @Column({ type: 'jsonb', nullable: true, default: {} })
   balances: Record<string, number>;
 
   @Column({ type: 'boolean', default: false })
   isVerified: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  isTwoFactorEnabled: boolean;
 
   @Column({
     type: 'enum',

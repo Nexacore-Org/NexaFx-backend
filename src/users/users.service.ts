@@ -78,7 +78,7 @@ export class UsersService {
     walletPublicKey: string;
     walletSecretKeyEncrypted: string;
     role?: UserRole;
-  }): Promise<Omit<User, 'password' | 'walletSecretKeyEncrypted'>> {
+  }): Promise<Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'>> {
     const normalizedEmail = params.email.toLowerCase().trim();
 
     const existingUser = await this.findByEmail(normalizedEmail);
@@ -113,6 +113,7 @@ export class UsersService {
     const {
       password: _,
       walletSecretKeyEncrypted: __,
+      twoFactorSecret: ___,
       ...userWithoutSecrets
     } = savedUser;
     return userWithoutSecrets;
@@ -287,7 +288,8 @@ export class UsersService {
 
   private excludeSecrets(user: User): ProfileResponseDto {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password, walletSecretKeyEncrypted, ...profile } = user;
+    const { password, walletSecretKeyEncrypted, twoFactorSecret, ...profile } =
+      user;
     return profile as ProfileResponseDto;
   }
 

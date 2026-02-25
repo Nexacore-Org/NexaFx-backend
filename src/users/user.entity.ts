@@ -69,6 +69,9 @@ export class User {
   isVerified: boolean;
 
   @Column({ type: 'boolean', default: false })
+  isSuspended: boolean;
+
+  @Column({ type: 'boolean', default: false })
   isTwoFactorEnabled: boolean;
 
   @Column({

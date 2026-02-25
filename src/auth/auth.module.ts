@@ -11,7 +11,7 @@ import { UsersModule } from '../users/users.module';
 import { OtpsModule } from '../otps/otps.module';
 import { TokensModule } from '../tokens/tokens.module';
 import { StellarModule } from '../blockchain/stellar/stellar.module';
-import { TwoFactorModule } from '../two-factor/two-factor.module';
+import { ReferralsModule } from '../referrals/referrals.module';
 
 @Module({
   imports: [
@@ -20,7 +20,7 @@ import { TwoFactorModule } from '../two-factor/two-factor.module';
     OtpsModule,
     TokensModule,
     StellarModule,
-    TwoFactorModule,
+    ReferralsModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

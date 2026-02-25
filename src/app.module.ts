@@ -21,6 +21,7 @@ import { ReceiptsModule } from './receipts/receipts.module';
 import { FeesModule } from './fees/fees.module';
 import { PushNotificationsModule } from './push-notifications/push-notifications.module';
 import { AdminModule } from './admin/admin.module';
+import { ReferralsModule } from './referrals/referrals.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { AdminModule } from './admin/admin.module';
     AuditLogsModule,
     NotificationsModule,
     TransactionsModule,
+    ReferralsModule,
     BeneficiariesModule,
     KycModule,
     ScheduledJobsModule,

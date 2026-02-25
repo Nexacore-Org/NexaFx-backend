@@ -20,6 +20,7 @@ import { ScheduledJobsModule } from './scheduled-jobs/scheduled-jobs.module';
 import { ReceiptsModule } from './receipts/receipts.module';
 import { FeesModule } from './fees/fees.module';
 import { PushNotificationsModule } from './push-notifications/push-notifications.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { PushNotificationsModule } from './push-notifications/push-notifications
     ReceiptsModule,
     FeesModule,
     PushNotificationsModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [

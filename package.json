@@ -37,6 +37,7 @@
     "bcrypt": "^5.1.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "date-fns": "^3.6.0",
     "form-data": "^4.0.5",
     "helmet": "^8.1.0",
     "mailgun.js": "^12.7.0",
@@ -44,12 +45,12 @@
     "passport-jwt": "^4.0.1",
     "pdfkit": "^0.15.2",
     "pg": "^8.13.1",
+    "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "speakeasy": "^2.0.0",
     "stellar-sdk": "^13.3.0",
     "swagger-ui-express": "^5.0.1",
-    "qrcode": "^1.5.4",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typeorm": "^0.3.20",
@@ -96,9 +97,6 @@
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
-    },
-    "moduleNameMapper": {
-      "^src/(.*)$": "<rootDir>/$1"
     },
     "collectCoverageFrom": [
       "**/*.(t|j)s"

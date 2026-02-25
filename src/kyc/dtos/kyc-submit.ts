@@ -26,7 +26,7 @@ export class SubmitKycDto {
   @Matches(/^[A-Za-z0-9]+$/, {
     message: 'ID number must contain only alphanumeric characters',
   })
-  idNumber: string;
+  documentNumber: string;
 
   @ApiProperty({ description: 'Base64 encoded selfie image or image URL' })
   @IsString()
@@ -43,6 +43,4 @@ export class SubmitKycDto {
 
   @IsString()
   documentBackUrl: string;
-
 }
-

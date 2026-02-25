@@ -584,7 +584,7 @@ export class TransactionsService {
   async findAllByUser(
     userId: string,
     query?: TransactionQueryDto,
-  ): Promise<{ transactions: Transaction[]; total: number }> {
+  ): Promise<{ transactions: any[]; total: number }> {
     const queryBuilder = this.transactionRepository
       .createQueryBuilder('transaction')
       .where('transaction.userId = :userId', { userId });
@@ -603,7 +603,50 @@ export class TransactionsService {
 
     const [transactions, total] = await queryBuilder.getManyAndCount();
 
-    return { transactions, total };
+    // Bulk fetch currency metadata for all unique currencies in the result set
+    const uniqueCurrencies = Array.from(
+      new Set(
+        transactions
+          .map((t) => t.currency)
+          .filter((c) => c)
+          .concat(transactions.map((t) => t.feeCurrency).filter((c) => c)),
+      ),
+    );
+
+    const currencyLookup: Record<string, any> = {};
+
+    try {
+      for (const currencyCode of uniqueCurrencies) {
+        const currency = await this.currenciesService.getCurrency(currencyCode);
+        currencyLookup[currencyCode] = {
+          symbol: currency.symbol || currencyCode,
+          displayName: currency.name || currencyCode,
+        };
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Failed to fetch currency metadata: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      // Fallback: use currency code as symbol and displayName
+      for (const currencyCode of uniqueCurrencies) {
+        currencyLookup[currencyCode] = {
+          symbol: currencyCode,
+          displayName: currencyCode,
+        };
+      }
+    }
+
+    // Enrich transactions with currency metadata
+    const enrichedTransactions = transactions.map((transaction) => ({
+      ...transaction,
+      currencySymbol:
+        currencyLookup[transaction.currency]?.symbol || transaction.currency,
+      currencyDisplayName:
+        currencyLookup[transaction.currency]?.displayName ||
+        transaction.currency,
+    }));
+
+    return { transactions: enrichedTransactions, total };
   }
 
   /**
@@ -670,7 +713,9 @@ export class TransactionsService {
   }
 
   private async getStellarSecretKey(): Promise<string> {
-    const stellarSecret = this.configService.get<string>('STELLAR_HOT_WALLET_SECRET');
+    const stellarSecret = this.configService.get<string>(
+      'STELLAR_HOT_WALLET_SECRET',
+    );
     if (stellarSecret) {
       return stellarSecret;
     }

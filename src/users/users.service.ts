@@ -58,6 +58,13 @@ export class UsersService {
     });
   }
 
+  async findAllActive(): Promise<User[]> {
+    return this.userRepository.find({
+      where: { isVerified: true },
+      select: ['id', 'email', 'firstName', 'lastName', 'role'],
+    });
+  }
+
   async deleteById(id: string): Promise<void> {
     await this.userRepository.delete(id);
   }
@@ -78,7 +85,9 @@ export class UsersService {
     walletPublicKey: string;
     walletSecretKeyEncrypted: string;
     role?: UserRole;
-  }): Promise<Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'>> {
+  }): Promise<
+    Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'>
+  > {
     const normalizedEmail = params.email.toLowerCase().trim();
 
     const existingUser = await this.findByEmail(normalizedEmail);
@@ -329,9 +338,7 @@ export class UsersService {
     await this.userRepository.delete(userId);
   }
 
-  private async mapWalletBalance(
-    balance: WalletBalanceResult,
-  ): Promise<{
+  private async mapWalletBalance(balance: WalletBalanceResult): Promise<{
     asset: string;
     balance: string;
     assetIssuer?: string;
@@ -379,9 +386,7 @@ export class UsersService {
 
     for (const balance of balances) {
       const parsedBalance = parseFloat(balance.balance);
-      const safeBalance = Number.isFinite(parsedBalance)
-        ? parsedBalance
-        : 0;
+      const safeBalance = Number.isFinite(parsedBalance) ? parsedBalance : 0;
 
       const key = balance.assetIssuer
         ? `${balance.asset}:${balance.assetIssuer}`

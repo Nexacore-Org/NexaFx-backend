@@ -6,26 +6,28 @@ import {
   Patch,
   Get,
   UseGuards,
-  Request,
-  Req,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiTags,
   ApiOperation,
   ApiResponse,
+  ApiParam,
+  ApiBody,
 } from '@nestjs/swagger';
 import { KycService } from './kyc.service';
 import { SubmitKycDto } from './dtos/kyc-submit';
 import { ApproveKycDto } from './dtos/kyc-approve';
-import { KycRecord} from './entities/kyc.entity';
-import { JwtAuthGuard } from '../common';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { CurrentUser, CurrentUserPayload } from '../auth/decorators/current-user.decorator';
-import { UserRole } from '../users/user.entity';
-import { RolesGuard } from '../auth/guards/roles.guard';
-
 import { ReviewKycDto } from './dtos/kyc-review';
+import { KycRecord } from './entities/kyc.entity';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import {
+  CurrentUser,
+  CurrentUserPayload,
+} from '../auth/decorators/current-user.decorator';
+import { UserRole } from '../users/user.entity';
 
 @ApiTags('KYC')
 @Controller('kyc')
@@ -36,28 +38,25 @@ export class KycController {
 
   @Post('submit')
   @ApiOperation({ summary: 'Submit KYC verification' })
+  @ApiBody({ type: SubmitKycDto })
   @ApiResponse({
     status: 201,
     description: 'KYC submission successful',
     type: KycRecord,
   })
-  async submitKyc(@CurrentUser() user: CurrentUserPayload, @Body() dto: SubmitKycDto) {
-    return this.kycService.submitKyc(user.userId, dto);
-  }
-  // TODO: Implement role-based authentication for admin access
-  @Patch(':id/approve')
-  @ApiOperation({ summary: 'Approve or reject KYC verification (Admin only)' })
   @ApiResponse({
-    status: 200,
-    description: 'KYC status updated successfully',
-    type: KycRecord,
+    status: 400,
+    description: 'Invalid data or existing submission under review',
   })
-  async approveKyc(
-    @Param('id') id: string,
-    @Body() approveKycDto: ApproveKycDto,
-  ): Promise<KycRecord> {
-    // TODO: Add role verification to ensure only admins can approve/reject KYC
-    return this.kycService.approveKyc(id, approveKycDto);
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+  })
+  async submitKyc(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: SubmitKycDto,
+  ) {
+    return this.kycService.submitKyc(user.userId, dto);
   }
 
   @Get('status')
@@ -65,42 +64,119 @@ export class KycController {
   @ApiResponse({
     status: 200,
     description: 'KYC status retrieved successfully',
-    type: KycRecord,
+    type: 'object',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
   })
   async getKycStatus(@CurrentUser() user: CurrentUserPayload) {
     return this.kycService.getKycStatus(user.userId);
   }
 
-  // TODO: Implement role-based authentication for admin access
   @Get('pending')
-  @ApiOperation({ summary: 'Get all pending KYC submissions (Admin only)' })
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Get all pending KYC submissions (Admin only)',
+    description:
+      'Retrieves a list of all pending KYC submissions for admin review',
+  })
   @ApiResponse({
     status: 200,
     description: 'Pending KYC submissions retrieved successfully',
     type: [KycRecord],
   })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Admin role required',
+  })
   async getPendingSubmissions(): Promise<KycRecord[]> {
-    // TODO: Add role verification to ensure only admins can view pending submissions
     return this.kycService.getPendingKycSubmissions();
   }
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.ADMIN)
-@Get('admin/pending')
-async listPending() {
-  return this.kycService.listPendingKyc();
-}
 
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.ADMIN)
-@Post('admin/review/:id')
-async review(
-  @Param('id') id: string,
-  @Body() dto: ReviewKycDto,
-) {
-  return this.kycService.reviewKyc(
-    id,
-    dto.decision,
-    dto.reason,
-  );
-}
+  @Patch(':id/approve')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Approve or reject a KYC submission (Admin only)',
+    description:
+      'Updates the status of a KYC submission to approved or rejected',
+  })
+  @ApiParam({
+    name: 'id',
+    type: String,
+    description: 'KYC record ID',
+  })
+  @ApiBody({ type: ApproveKycDto })
+  @ApiResponse({
+    status: 200,
+    description: 'KYC status updated successfully',
+    type: KycRecord,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid KYC data or already processed',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'KYC record not found',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Admin role required',
+  })
+  async approveKyc(
+    @Param('id') id: string,
+    @Body() approveKycDto: ApproveKycDto,
+  ): Promise<KycRecord> {
+    return this.kycService.approveKyc(id, approveKycDto);
+  }
+
+  @Patch(':id/review')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Review and make a decision on a KYC submission (Admin only)',
+    description:
+      'Reviews a KYC submission and approves or rejects it with optional reason',
+  })
+  @ApiParam({
+    name: 'id',
+    type: String,
+    description: 'KYC record ID',
+  })
+  @ApiBody({ type: ReviewKycDto })
+  @ApiResponse({
+    status: 200,
+    description: 'KYC reviewed successfully',
+    schema: { example: { message: 'KYC approved successfully' } },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid decision or KYC already reviewed',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'KYC record or user not found',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Admin role required',
+  })
+  async reviewKyc(@Param('id') id: string, @Body() dto: ReviewKycDto) {
+    return this.kycService.reviewKyc(id, dto.decision, dto.reason);
+  }
 }

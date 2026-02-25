@@ -20,6 +20,12 @@ export class TransactionResponseDto {
   @ApiProperty({ example: 'XLM' })
   currency: string;
 
+  @ApiPropertyOptional({ example: '★' })
+  currencySymbol: string;
+
+  @ApiPropertyOptional({ example: 'Stellar Lumens' })
+  currencyDisplayName: string;
+
   @ApiPropertyOptional({ example: '0.12345678' })
   rate: string;
 

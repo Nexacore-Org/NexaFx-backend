@@ -19,6 +19,7 @@ import { KycModule } from './kyc/kyc.module';
 import { ScheduledJobsModule } from './scheduled-jobs/scheduled-jobs.module';
 import { ReceiptsModule } from './receipts/receipts.module';
 import { FeesModule } from './fees/fees.module';
+import { PushNotificationsModule } from './push-notifications/push-notifications.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { FeesModule } from './fees/fees.module';
     ScheduledJobsModule,
     ReceiptsModule,
     FeesModule,
+    PushNotificationsModule,
   ],
   controllers: [AppController],
   providers: [

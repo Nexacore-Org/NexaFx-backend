@@ -31,9 +31,7 @@ import { UsersService } from '../../users/users.service';
 import { AuditLogsService } from '../../audit-logs/audit-logs.service';
 import { AuditAction } from '../../audit-logs/enums/audit-action.enum';
 import { UserRole } from '../../users/user.entity';
-import { ConfigService } from '@nestjs/config';
-import { FeesService } from '../../fees/fees.service';
-import { FeeTransactionType } from '../../fees/entities/fee-config.entity';
+import { ReferralsService } from '../../referrals/referrals.service';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -71,8 +69,7 @@ export class TransactionsService {
     private readonly stellarService: StellarService,
     private readonly usersService: UsersService,
     private readonly auditLogsService: AuditLogsService,
-    private readonly configService: ConfigService,
-    private readonly feesService: FeesService,
+    private readonly referralsService: ReferralsService,
   ) {}
 
   /**
@@ -177,6 +174,15 @@ export class TransactionsService {
 
       transaction.txHash = rawResult.hash;
       await this.transactionRepository.save(transaction);
+
+      try {
+        await this.referralsService.processReferralReward(userId);
+      } catch (referralError) {
+        const error = toError(referralError);
+        this.logger.warn(
+          `Referral reward processing failed for user ${userId}: ${error.message}`,
+        );
+      }
 
       this.logger.log(
         `Deposit transaction created successfully: ${transaction.id}`,
@@ -381,8 +387,8 @@ export class TransactionsService {
    */
   async verifyTransaction(
     transactionId: string,
-    requestingUserId: string,
-    requestingUserRole: UserRole,
+    requestingUserId?: string,
+    requestingUserRole?: UserRole,
     adminId?: string,
   ): Promise<Transaction> {
     const transaction = await this.transactionRepository.findOne({
@@ -400,13 +406,13 @@ export class TransactionsService {
     }
 
     const isAdmin = requestingUserRole === UserRole.ADMIN;
-    if (!isAdmin && transaction.userId !== requestingUserId) {
+    if (requestingUserId && !isAdmin && transaction.userId !== requestingUserId) {
       throw new ForbiddenException(
         'You do not have permission to verify this transaction',
       );
     }
 
-    if (!isAdmin && transaction.status !== TransactionStatus.PENDING) {
+    if (requestingUserRole && !isAdmin && transaction.status !== TransactionStatus.PENDING) {
       throw new BadRequestException(
         `Transaction is already ${transaction.status.toLowerCase()} and cannot be re-verified`,
       );

@@ -58,10 +58,9 @@ export class UsersService {
     });
   }
 
-  async findAllActive(): Promise<User[]> {
-    return this.userRepository.find({
-      where: { isVerified: true },
-      select: ['id', 'email', 'firstName', 'lastName', 'role'],
+  async findByReferralCode(referralCode: string): Promise<User | null> {
+    return this.userRepository.findOne({
+      where: { referralCode: referralCode.toUpperCase().trim() },
     });
   }
 
@@ -84,6 +83,8 @@ export class UsersService {
     phone?: string;
     walletPublicKey: string;
     walletSecretKeyEncrypted: string;
+    referralCode: string;
+    referredBy?: string | null;
     role?: UserRole;
   }): Promise<
     Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'>
@@ -113,6 +114,8 @@ export class UsersService {
       phone: params.phone || null,
       walletPublicKey: params.walletPublicKey,
       walletSecretKeyEncrypted: params.walletSecretKeyEncrypted,
+      referralCode: params.referralCode.toUpperCase().trim(),
+      referredBy: params.referredBy ?? null,
       role: params.role || UserRole.USER,
       isVerified: false,
     });

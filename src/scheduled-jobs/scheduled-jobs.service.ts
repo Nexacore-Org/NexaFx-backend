@@ -16,6 +16,7 @@ import {
   Notification,
 } from '../notifications/entities/notification.entity';
 import { InjectRepository } from '@nestjs/typeorm';
+import { RateAlertsService } from '../rate-alerts/rate-alerts.service';
 
 @Injectable()
 export class ScheduledJobsService {
@@ -31,6 +32,7 @@ export class ScheduledJobsService {
     private readonly stellarService: StellarService,
     private readonly notificationsService: NotificationsService,
     private readonly usersService: UsersService,
+    private readonly rateAlertsService: RateAlertsService,
   ) {}
 
   /**
@@ -150,6 +152,26 @@ export class ScheduledJobsService {
   }
 
   /**
+   * Check user-configured exchange rate alerts every 5 minutes.
+   */
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async checkRateAlerts(): Promise<void> {
+    this.logger.log('[Scheduled Job] Starting rate alert evaluation');
+
+    try {
+      const result = await this.rateAlertsService.checkAndTriggerAlerts();
+      this.logger.log(
+        `[Scheduled Job] Rate alerts checked=${result.checked}, triggered=${result.triggered}, reactivated=${result.reactivated}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        '[Scheduled Job] Fatal error while checking rate alerts:',
+        error,
+      );
+    }
+  }
+
+  /**
    * Clean up old notifications every day at 2 AM.
    * - READ notifications older than 30 days are deleted.
    * - UNREAD notifications older than 90 days are deleted.
@@ -205,6 +227,26 @@ export class ScheduledJobsService {
     } catch (error) {
       this.logger.error(
         '[Scheduled Job] Fatal error in notification cleanup:',
+        error,
+      );
+    }
+  }
+
+  /**
+   * Sync wallet balances from Stellar into User.balances snapshot every 5 minutes
+   */
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async syncWalletBalancesSnapshot(): Promise<void> {
+    this.logger.log('[Scheduled Job] Starting wallet balances snapshot sync');
+
+    try {
+      const result = await this.usersService.syncWalletBalanceSnapshots();
+      this.logger.log(
+        `[Scheduled Job] Wallet snapshot sync completed (${result.updated}/${result.processed} users updated)`,
+      );
+    } catch (error) {
+      this.logger.error(
+        '[Scheduled Job] Fatal error in wallet balances snapshot sync:',
         error,
       );
     }

@@ -2,18 +2,42 @@ import {
   Injectable,
   ConflictException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User, UserRole } from './user.entity';
-import { UpdateProfileDto, ProfileResponseDto } from './dto';
+import {
+  UpdateProfileDto,
+  ProfileResponseDto,
+  WalletBalancesResponseDto,
+  WalletPortfolioResponseDto,
+  PortfolioHoldingDto,
+} from './dto';
+import { StellarService } from '../blockchain/stellar/stellar.service';
+import { WalletBalanceResult } from '../blockchain/stellar/stellar.types';
+import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
+
+interface WalletBalancesCacheEntry {
+  expiresAt: number;
+  payload: Omit<WalletBalancesResponseDto, 'cached'>;
+}
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+  private readonly walletBalancesCache = new Map<
+    string,
+    WalletBalancesCacheEntry
+  >();
+  private readonly walletBalancesTtlMs = 30_000;
+
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly stellarService: StellarService,
+    private readonly exchangeRatesService: ExchangeRatesService,
   ) {}
 
   async findByEmail(email: string): Promise<User | null> {
@@ -62,7 +86,9 @@ export class UsersService {
     referralCode: string;
     referredBy?: string | null;
     role?: UserRole;
-  }): Promise<Omit<User, 'password' | 'walletSecretKeyEncrypted'>> {
+  }): Promise<
+    Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'>
+  > {
     const normalizedEmail = params.email.toLowerCase().trim();
 
     const existingUser = await this.findByEmail(normalizedEmail);
@@ -99,6 +125,7 @@ export class UsersService {
     const {
       password: _,
       walletSecretKeyEncrypted: __,
+      twoFactorSecret: ___,
       ...userWithoutSecrets
     } = savedUser;
     return userWithoutSecrets;
@@ -156,9 +183,125 @@ export class UsersService {
     return this.excludeSecrets(user);
   }
 
+  async getWalletBalances(
+    userId: string,
+    forceRefresh = false,
+  ): Promise<WalletBalancesResponseDto> {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const now = Date.now();
+    const cached = this.walletBalancesCache.get(user.id);
+    if (!forceRefresh && cached && cached.expiresAt > now) {
+      return {
+        ...cached.payload,
+        cached: true,
+      };
+    }
+
+    const rawBalances = await this.stellarService.getWalletBalances(
+      user.walletPublicKey,
+    );
+
+    const balances = await Promise.all(
+      rawBalances.map((balance) => this.mapWalletBalance(balance)),
+    );
+
+    const totalValueUSD = this.roundToTwo(
+      balances.reduce((sum, balance) => sum + balance.valueUSD, 0),
+    );
+    const totalValueNGN = this.roundToTwo(
+      balances.reduce((sum, balance) => sum + balance.valueNGN, 0),
+    );
+
+    const payload: Omit<WalletBalancesResponseDto, 'cached'> = {
+      walletPublicKey: user.walletPublicKey,
+      isFunded: rawBalances.length > 0,
+      balances,
+      totalValueUSD,
+      totalValueNGN,
+      fetchedAt: new Date().toISOString(),
+    };
+
+    this.walletBalancesCache.set(user.id, {
+      payload,
+      expiresAt: now + this.walletBalancesTtlMs,
+    });
+
+    return {
+      ...payload,
+      cached: false,
+    };
+  }
+
+  async getWalletPortfolio(
+    userId: string,
+  ): Promise<WalletPortfolioResponseDto> {
+    const balancesPayload = await this.getWalletBalances(userId);
+    const total = balancesPayload.totalValueUSD;
+
+    const holdings: PortfolioHoldingDto[] = balancesPayload.balances.map(
+      (item) => ({
+        asset: item.asset,
+        balance: item.balance,
+        assetIssuer: item.assetIssuer,
+        valueUSD: item.valueUSD,
+        valueNGN: item.valueNGN,
+        percentageOfPortfolio:
+          total > 0 ? this.roundToTwo((item.valueUSD / total) * 100) : 0,
+      }),
+    );
+
+    return {
+      walletPublicKey: balancesPayload.walletPublicKey,
+      isFunded: balancesPayload.isFunded,
+      totalPortfolioValueUSD: balancesPayload.totalValueUSD,
+      totalPortfolioValueNGN: balancesPayload.totalValueNGN,
+      holdings,
+      fetchedAt: balancesPayload.fetchedAt,
+      cached: balancesPayload.cached,
+    };
+  }
+
+  async syncWalletBalanceSnapshots(): Promise<{
+    processed: number;
+    updated: number;
+  }> {
+    const users = await this.userRepository.find({
+      select: ['id', 'walletPublicKey', 'balances'],
+    });
+
+    let updated = 0;
+
+    for (const user of users) {
+      try {
+        const liveBalances = await this.stellarService.getWalletBalances(
+          user.walletPublicKey,
+        );
+        const snapshot = this.toSnapshotBalances(liveBalances);
+        await this.userRepository.update(user.id, { balances: snapshot });
+        updated += 1;
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `Failed to sync wallet balances for user ${user.id}: ${errorMessage}`,
+        );
+      }
+    }
+
+    return {
+      processed: users.length,
+      updated,
+    };
+  }
+
   private excludeSecrets(user: User): ProfileResponseDto {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password, walletSecretKeyEncrypted, ...profile } = user;
+    const { password, walletSecretKeyEncrypted, twoFactorSecret, ...profile } =
+      user;
     return profile as ProfileResponseDto;
   }
 
@@ -196,5 +339,69 @@ export class UsersService {
     }
 
     await this.userRepository.delete(userId);
+  }
+
+  private async mapWalletBalance(balance: WalletBalanceResult): Promise<{
+    asset: string;
+    balance: string;
+    assetIssuer?: string;
+    valueUSD: number;
+    valueNGN: number;
+  }> {
+    const amount = parseFloat(balance.balance);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return {
+        asset: balance.asset,
+        balance: balance.balance,
+        assetIssuer: balance.assetIssuer,
+        valueUSD: 0,
+        valueNGN: 0,
+      };
+    }
+
+    const [usdRate, ngnRate] = await Promise.all([
+      this.getSafeRate(balance.asset, 'USD'),
+      this.getSafeRate(balance.asset, 'NGN'),
+    ]);
+
+    return {
+      asset: balance.asset,
+      balance: balance.balance,
+      assetIssuer: balance.assetIssuer,
+      valueUSD: this.roundToTwo(amount * usdRate),
+      valueNGN: this.roundToTwo(amount * ngnRate),
+    };
+  }
+
+  private async getSafeRate(from: string, to: string): Promise<number> {
+    try {
+      const rate = await this.exchangeRatesService.getRate(from, to);
+      return rate.rate;
+    } catch {
+      return 0;
+    }
+  }
+
+  private toSnapshotBalances(
+    balances: WalletBalanceResult[],
+  ): Record<string, number> {
+    const snapshot: Record<string, number> = {};
+
+    for (const balance of balances) {
+      const parsedBalance = parseFloat(balance.balance);
+      const safeBalance = Number.isFinite(parsedBalance) ? parsedBalance : 0;
+
+      const key = balance.assetIssuer
+        ? `${balance.asset}:${balance.assetIssuer}`
+        : balance.asset;
+
+      snapshot[key] = safeBalance;
+    }
+
+    return snapshot;
+  }
+
+  private roundToTwo(value: number): number {
+    return Number(value.toFixed(2));
   }
 }

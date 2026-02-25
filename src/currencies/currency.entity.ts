@@ -17,6 +17,9 @@ export class Currency {
   @Column({ type: 'varchar', length: 100 })
   name: string; // e.g., "Nigerian Naira"
 
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  symbol: string; // e.g., "₦", "$", "€"
+
   @Column({ type: 'int', default: 2 })
   decimals: number; // Number of decimal places
 

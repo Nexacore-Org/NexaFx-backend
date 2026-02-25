@@ -9,12 +9,11 @@ import {
 } from 'typeorm';
 import { Exclude } from 'class-transformer';
 import { Notification } from '../notifications/entities/notification.entity';
-import { KycRecord } from 'src/kyc/entities/kyc.entity';
+import { KycRecord } from '../kyc/entities/kyc.entity';
 
 export enum UserRole {
   USER = 'USER',
   ADMIN = 'ADMIN',
-  TUTOR = 'TUTOR',
 }
 
 @Entity('users')
@@ -51,6 +50,10 @@ export class User {
   @Exclude({ toPlainOnly: true })
   walletSecretKeyEncrypted: string;
 
+  @Column({ type: 'text', nullable: true })
+  @Exclude({ toPlainOnly: true })
+  twoFactorSecret: string | null;
+
   @Column({ type: 'jsonb', nullable: true, default: {} })
   balances: Record<string, number>;
 
@@ -64,6 +67,9 @@ export class User {
 
   @Column({ type: 'boolean', default: false })
   isVerified: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  isTwoFactorEnabled: boolean;
 
   @Column({
     type: 'enum',

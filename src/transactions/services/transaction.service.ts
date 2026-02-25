@@ -109,18 +109,28 @@ export class TransactionsService {
       );
     }
 
+    const fee = await this.feesService.calculateFee(
+      FeeTransactionType.DEPOSIT,
+      currency,
+      amount,
+    );
+
     const transaction = this.transactionRepository.create({
       userId,
       type: TransactionType.DEPOSIT,
       amount: amount.toString(),
       currency,
       rate,
+      feeAmount: fee.feeAmount.toFixed(8),
+      feeCurrency: fee.feeCurrency,
       status: TransactionStatus.PENDING,
     });
 
     await this.transactionRepository.save(transaction);
 
     try {
+      await this.feesService.recordFee(transaction.id, userId, fee);
+
       await this.auditLogsService.logTransactionEvent(
         userId,
         AuditAction.DEPOSIT_CREATED,
@@ -128,6 +138,7 @@ export class TransactionsService {
         {
           amount: transaction.amount,
           currency: transaction.currency,
+          feeAmount: fee.feeAmount,
           sourceAddress,
           ip: ipAddress,
           device: userAgent,
@@ -265,18 +276,35 @@ export class TransactionsService {
       );
     }
 
+    const fee = await this.feesService.calculateFee(
+      FeeTransactionType.WITHDRAW,
+      currency,
+      amount,
+    );
+
+    const totalDeduction = amount + fee.feeAmount;
+    if (parseFloat(userBalance) < totalDeduction) {
+      throw new BadRequestException(
+        'Insufficient balance to cover the transaction amount and fee',
+      );
+    }
+
     const transaction = this.transactionRepository.create({
       userId,
       type: TransactionType.WITHDRAW,
       amount: amount.toString(),
       currency,
       rate,
+      feeAmount: fee.feeAmount.toFixed(8),
+      feeCurrency: fee.feeCurrency,
       status: TransactionStatus.PENDING,
     });
 
     await this.transactionRepository.save(transaction);
 
     try {
+      await this.feesService.recordFee(transaction.id, userId, fee);
+
       await this.auditLogsService.logTransactionEvent(
         userId,
         AuditAction.WITHDRAWAL_CREATED,
@@ -284,6 +312,7 @@ export class TransactionsService {
         {
           amount: transaction.amount,
           currency: transaction.currency,
+          feeAmount: fee.feeAmount,
           destinationAddress,
           ip: ipAddress,
           device: userAgent,
@@ -561,7 +590,7 @@ export class TransactionsService {
   async findAllByUser(
     userId: string,
     query?: TransactionQueryDto,
-  ): Promise<{ transactions: Transaction[]; total: number }> {
+  ): Promise<{ transactions: any[]; total: number }> {
     const queryBuilder = this.transactionRepository
       .createQueryBuilder('transaction')
       .where('transaction.userId = :userId', { userId });
@@ -580,7 +609,50 @@ export class TransactionsService {
 
     const [transactions, total] = await queryBuilder.getManyAndCount();
 
-    return { transactions, total };
+    // Bulk fetch currency metadata for all unique currencies in the result set
+    const uniqueCurrencies = Array.from(
+      new Set(
+        transactions
+          .map((t) => t.currency)
+          .filter((c) => c)
+          .concat(transactions.map((t) => t.feeCurrency).filter((c) => c)),
+      ),
+    );
+
+    const currencyLookup: Record<string, any> = {};
+
+    try {
+      for (const currencyCode of uniqueCurrencies) {
+        const currency = await this.currenciesService.getCurrency(currencyCode);
+        currencyLookup[currencyCode] = {
+          symbol: currency.symbol || currencyCode,
+          displayName: currency.name || currencyCode,
+        };
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Failed to fetch currency metadata: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      // Fallback: use currency code as symbol and displayName
+      for (const currencyCode of uniqueCurrencies) {
+        currencyLookup[currencyCode] = {
+          symbol: currencyCode,
+          displayName: currencyCode,
+        };
+      }
+    }
+
+    // Enrich transactions with currency metadata
+    const enrichedTransactions = transactions.map((transaction) => ({
+      ...transaction,
+      currencySymbol:
+        currencyLookup[transaction.currency]?.symbol || transaction.currency,
+      currencyDisplayName:
+        currencyLookup[transaction.currency]?.displayName ||
+        transaction.currency,
+    }));
+
+    return { transactions: enrichedTransactions, total };
   }
 
   /**
@@ -647,8 +719,11 @@ export class TransactionsService {
   }
 
   private async getStellarSecretKey(): Promise<string> {
-    if (process.env.STELLAR_HOT_WALLET_SECRET) {
-      return process.env.STELLAR_HOT_WALLET_SECRET;
+    const stellarSecret = this.configService.get<string>(
+      'STELLAR_HOT_WALLET_SECRET',
+    );
+    if (stellarSecret) {
+      return stellarSecret;
     }
 
     throw new BadRequestException(

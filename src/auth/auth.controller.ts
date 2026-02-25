@@ -1,9 +1,10 @@
-import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, Request, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { Public } from './decorators/public.decorator';
 import { LoginDto } from './dto/login.dto';
 import { VerifyLoginOtpDto } from './dto/verify-login-otp.dto';
+import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SignupDto } from './dto/signup.dto';
@@ -53,10 +54,14 @@ export class AuthController {
   @ApiBody({ type: VerifyLoginOtpDto })
   @ApiResponse({
     status: 200,
-    description: 'OTP verified successfully, tokens issued',
+    description:
+      'OTP verified. Either tokens are issued directly or a 2FA challenge is returned',
     schema: {
       type: 'object',
       properties: {
+        requiresTwoFactor: { type: 'boolean' },
+        twoFactorToken: { type: 'string' },
+        message: { type: 'string' },
         accessToken: { type: 'string' },
         refreshToken: { type: 'string' },
         expiresIn: { type: 'number' },
@@ -67,6 +72,30 @@ export class AuthController {
   @ApiResponse({ status: 400, description: 'Invalid request body' })
   async verifyLoginOtp(@Body() verifyDto: VerifyLoginOtpDto) {
     return this.authService.verifyLoginOtp(verifyDto);
+  }
+
+  @Public()
+  @Post('verify-2fa')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Verify authenticator app TOTP and receive access tokens',
+  })
+  @ApiBody({ type: VerifyTwoFactorDto })
+  @ApiResponse({
+    status: 200,
+    description: '2FA verified successfully, tokens issued',
+    schema: {
+      type: 'object',
+      properties: {
+        accessToken: { type: 'string' },
+        refreshToken: { type: 'string' },
+        expiresIn: { type: 'number' },
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Invalid or expired 2FA token/code' })
+  async verifyTwoFactor(@Body() verifyDto: VerifyTwoFactorDto) {
+    return this.authService.verifyTwoFactor(verifyDto);
   }
 
   @Public()
@@ -209,5 +238,50 @@ export class AuthController {
   @ApiResponse({ status: 400, description: 'Invalid request body' })
   async resendSignupOtp(@Body() dto: ForgotPasswordDto) {
     return this.authService.resendSignupOtp(dto.email);
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Logout current session' })
+  @ApiResponse({
+    status: 200,
+    description: 'Logout successful',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async logout(@Req() req: any) {
+    const userId = req.user.userId;
+    const tokenId = req.user.jti; // JWT ID
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('User-Agent');
+    
+    return this.authService.logout(userId, tokenId, ipAddress, userAgent);
+  }
+
+  @Post('logout-all')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Logout from all devices' })
+  @ApiResponse({
+    status: 200,
+    description: 'Logout from all devices successful',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async logoutAllDevices(@Req() req: any) {
+    const userId = req.user.userId;
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('User-Agent');
+    
+    return this.authService.logoutAllDevices(userId, ipAddress, userAgent);
   }
 }

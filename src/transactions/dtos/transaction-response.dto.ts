@@ -20,6 +20,12 @@ export class TransactionResponseDto {
   @ApiProperty({ example: 'XLM' })
   currency: string;
 
+  @ApiPropertyOptional({ example: '★' })
+  currencySymbol: string;
+
+  @ApiPropertyOptional({ example: 'Stellar Lumens' })
+  currencyDisplayName: string;
+
   @ApiPropertyOptional({ example: '0.12345678' })
   rate: string;
 
@@ -31,6 +37,12 @@ export class TransactionResponseDto {
 
   @ApiPropertyOptional({ example: 'Insufficient funds on-chain' })
   failureReason: string;
+
+  @ApiPropertyOptional({ example: '0.50000000' })
+  feeAmount: string;
+
+  @ApiPropertyOptional({ example: 'XLM' })
+  feeCurrency: string;
 
   @ApiProperty({ example: '2024-01-15T10:30:00.000Z' })
   createdAt: Date;

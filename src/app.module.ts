@@ -58,6 +58,10 @@ import { ReferralsModule } from './referrals/referrals.module';
     ReferralsModule,
     BeneficiariesModule,
     KycModule,
+    ScheduledJobsModule,
+    ReceiptsModule,
+    FeesModule,
+    PushNotificationsModule,
   ],
   controllers: [AppController],
   providers: [

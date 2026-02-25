@@ -18,4 +18,10 @@ export interface VerifyTransactionResult {
   details?: any;
 }
 
+export interface WalletBalanceResult {
+  asset: string;
+  balance: string;
+  assetIssuer?: string;
+}
+
 export type StellarTransaction = Transaction;

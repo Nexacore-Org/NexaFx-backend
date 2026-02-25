@@ -19,11 +19,11 @@ import {
 import { BeneficiariesService } from './beneficiaries.service';
 import { CreateBeneficiaryDto } from './dto/create-beneficiary.dto';
 import { UpdateBeneficiaryDto } from './dto/update-beneficiary.dto';
-import { JwtAuthGuard } from 'src/common';
+import { JwtAuthGuard } from '../common';
 import {
   CurrentUser,
   CurrentUserPayload,
-} from 'src/auth/decorators/current-user.decorator';
+} from '../auth/decorators/current-user.decorator';
 
 @ApiTags('Beneficiaries')
 @ApiBearerAuth()

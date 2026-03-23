@@ -50,14 +50,16 @@ async function bootstrap() {
   });
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('NexaFX Backend API')
+    .setTitle('NexaFX API')
     .setDescription('NexaFX Backend API with Audit Logs')
     .setVersion('1.0')
     .addBearerAuth()
     .build();
 
-  const swaggerDoc = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api-docs', app, swaggerDoc);
+  if (process.env.NODE_ENV !== 'production' || configService.get<boolean>('ENABLE_SWAGGER')) {
+    const swaggerDoc = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api/docs', app, swaggerDoc);
+  }
 
   await app.listen(process.env.PORT ?? 3001);
 }

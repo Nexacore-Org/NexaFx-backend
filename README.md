@@ -130,7 +130,8 @@ Guards are applied at controller and route levels using custom decorators and Ne
 
 ## 📄 API Documentation
 
-**Coming Soon**: Swagger/OpenAPI integration for full REST endpoint visibility.
+The full API documentation via Swagger/OpenAPI is available at `/api/docs` when the backend is running.
+You can access it locally at [http://localhost:3000/api/docs](http://localhost:3000/api/docs).
 
 ---
 

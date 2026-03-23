@@ -8,7 +8,7 @@ import {
   UseGuards,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiParam, ApiBody } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -28,26 +28,45 @@ export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
   @Get('metrics')
-  @ApiOperation({ summary: 'Get platform metrics' })
+  @ApiOperation({ summary: 'Get platform metrics (Admin only)' })
   @ApiResponse({ status: 200, description: 'Returns platform statistics' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
   async getMetrics() {
     return this.adminService.getPlatformMetrics();
   }
 
   @Get('users')
-  @ApiOperation({ summary: 'List users with filtering' })
+  @ApiOperation({ summary: 'List users with filtering (Admin only)' })
+  @ApiResponse({ status: 200, description: 'Returns list of users' })
+  @ApiResponse({ status: 400, description: 'Bad Request' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
   async getUsers(@Query() query: UserQueryDto) {
     return this.adminService.getUsers(query);
   }
 
   @Get('users/:id')
-  @ApiOperation({ summary: 'Get detailed user profile' })
+  @ApiOperation({ summary: 'Get detailed user profile (Admin only)' })
+  @ApiParam({ name: 'id', type: String, description: 'User UUID' })
+  @ApiResponse({ status: 200, description: 'Returns detailed user profile' })
+  @ApiResponse({ status: 400, description: 'Bad Request' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
+  @ApiResponse({ status: 404, description: 'User not found' })
   async getUserById(@Param('id', ParseUUIDPipe) id: string) {
     return this.adminService.getUserById(id);
   }
 
   @Patch('users/:id/role')
-  @ApiOperation({ summary: 'Update user role' })
+  @ApiOperation({ summary: 'Update user role (Admin only)' })
+  @ApiParam({ name: 'id', type: String, description: 'User UUID' })
+  @ApiBody({ type: UpdateUserRoleDto })
+  @ApiResponse({ status: 200, description: 'User role updated successfully' })
+  @ApiResponse({ status: 400, description: 'Bad Request' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
+  @ApiResponse({ status: 404, description: 'User not found' })
   async updateUserRole(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateDto: UpdateUserRoleDto,
@@ -57,7 +76,13 @@ export class AdminController {
   }
 
   @Patch('users/:id/suspend')
-  @ApiOperation({ summary: 'Suspend user account' })
+  @ApiOperation({ summary: 'Suspend user account (Admin only)' })
+  @ApiParam({ name: 'id', type: String, description: 'User UUID' })
+  @ApiResponse({ status: 200, description: 'User suspended successfully' })
+  @ApiResponse({ status: 400, description: 'Bad Request' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
+  @ApiResponse({ status: 404, description: 'User not found' })
   async suspendUser(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() admin: { userId: string },
@@ -66,7 +91,13 @@ export class AdminController {
   }
 
   @Patch('users/:id/unsuspend')
-  @ApiOperation({ summary: 'Unsuspend user account' })
+  @ApiOperation({ summary: 'Unsuspend user account (Admin only)' })
+  @ApiParam({ name: 'id', type: String, description: 'User UUID' })
+  @ApiResponse({ status: 200, description: 'User unsuspended successfully' })
+  @ApiResponse({ status: 400, description: 'Bad Request' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
+  @ApiResponse({ status: 404, description: 'User not found' })
   async unsuspendUser(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() admin: { userId: string },
@@ -75,7 +106,11 @@ export class AdminController {
   }
 
   @Get('transactions')
-  @ApiOperation({ summary: 'Monitor transactions' })
+  @ApiOperation({ summary: 'Monitor transactions (Admin only)' })
+  @ApiResponse({ status: 200, description: 'Returns transactions list' })
+  @ApiResponse({ status: 400, description: 'Bad Request' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
   async getTransactions(@Query() query: AdminTransactionQueryDto) {
     return this.adminService.getTransactions(query);
   }

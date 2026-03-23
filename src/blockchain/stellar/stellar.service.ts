@@ -165,7 +165,7 @@ export class StellarService {
     try {
       const account = await this.server.loadAccount(publicKey);
 
-      return account.balances.map((balance) => {
+      return account.balances.map((balance: any) => {
         if (balance.asset_type === 'native') {
           return {
             asset: 'XLM',

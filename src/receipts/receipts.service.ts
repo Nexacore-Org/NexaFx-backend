@@ -122,7 +122,7 @@ export class ReceiptsService {
       throw new NotFoundException('No transactions found for the specified period');
     }
 
-    const user = await this.usersService.findOne(userId);
+    const user = await this.usersService.findById(userId);
 
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument();
@@ -241,7 +241,7 @@ export class ReceiptsService {
     
     // Get transaction details for email content
     const transaction = await this.getTransactionById(transactionId, userId);
-    const user = await this.usersService.findOne(userId);
+    const user = await this.usersService.findById(userId);
     
     if (!user) {
       throw new NotFoundException('User not found');

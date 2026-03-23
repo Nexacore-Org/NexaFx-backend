@@ -1,5 +1,6 @@
 import {
   Entity,
+  Index,
   Column,
   PrimaryGeneratedColumn,
   CreateDateColumn,
@@ -20,6 +21,10 @@ export enum NotificationStatus {
   READ = 'READ',
 }
 
+// Optimizes notification list filtering by user and read/unread status.
+@Index(['userId', 'status'])
+// Optimizes user notification history sorted by recency.
+@Index(['userId', 'createdAt'])
 @Entity('notifications')
 export class Notification {
   @PrimaryGeneratedColumn('uuid')

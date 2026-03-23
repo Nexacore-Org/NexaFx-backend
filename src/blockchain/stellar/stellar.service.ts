@@ -173,10 +173,18 @@ export class StellarService {
           };
         }
 
+        if ('asset_code' in balance) {
+          return {
+            asset: balance.asset_code || 'UNKNOWN',
+            balance: balance.balance,
+            assetIssuer:
+              'asset_issuer' in balance ? balance.asset_issuer : undefined,
+          };
+        }
+
         return {
-          asset: balance.asset_code || 'UNKNOWN',
+          asset: 'LIQUIDITY_POOL',
           balance: balance.balance,
-          assetIssuer: balance.asset_issuer,
         };
       });
     } catch (err: unknown) {

@@ -1,5 +1,6 @@
 import {
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
@@ -21,6 +22,10 @@ export enum TransactionStatus {
   CANCELLED = 'CANCELLED',
 }
 
+// Optimizes scheduled-job scans of pending transactions ordered by creation time.
+@Index(['status', 'createdAt'])
+// Optimizes user transaction list filtering by status.
+@Index(['userId', 'status'])
 @Entity('transactions')
 export class Transaction {
   @PrimaryGeneratedColumn('uuid')

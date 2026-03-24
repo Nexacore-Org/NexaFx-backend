@@ -138,6 +138,65 @@ export class ReceiptsController {
     }
   }
 
+  @Get('export')
+  @ApiOperation({ summary: 'Export monthly transactions as CSV or Excel' })
+  @ApiQuery({
+    name: 'format',
+    description: 'Export format: csv or excel',
+    required: true,
+    example: 'csv',
+  })
+  @ApiQuery({
+    name: 'month',
+    description: 'Month in YYYY-MM format',
+    required: true,
+    example: '2026-01',
+  })
+  @ApiProduces('text/csv')
+  @ApiProduces('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @ApiResponse({ status: 200, description: 'File exported successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid format or month' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'No transactions found for period' })
+  async exportMonthlyTransactions(
+    @Query('format') format: string,
+    @Query('month') month: string,
+    @CurrentUser() user: CurrentUserPayload,
+    @Res() res: Response,
+  ): Promise<void> {
+    try {
+      if (!['csv', 'excel'].includes(format)) {
+        throw new BadRequestException('Invalid format. Use csv or excel');
+      }
+      const monthRegex = /^\d{4}-(0[1-9]|1[0-2])$/;
+      if (!monthRegex.test(month)) {
+        throw new BadRequestException('Invalid month format. Use YYYY-MM');
+      }
+      if (format === 'csv') {
+        await this.receiptsService.exportTransactionsCSV(user.userId, month, res);
+      } else {
+        await this.receiptsService.exportTransactionsExcel(user.userId, month, res);
+      }
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        res
+          .status(
+            error instanceof NotFoundException
+              ? HttpStatus.NOT_FOUND
+              : HttpStatus.BAD_REQUEST,
+          )
+          .json({ message: error.message });
+      } else {
+        res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+          message: 'Failed to export transactions',
+        });
+      }
+    }
+  }
+
   @Get('transaction/:id/email')
   @ApiOperation({ summary: 'Email transaction receipt' })
   @ApiParam({

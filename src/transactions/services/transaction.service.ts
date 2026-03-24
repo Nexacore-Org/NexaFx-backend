@@ -8,6 +8,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import {
   Operation,
@@ -32,6 +33,8 @@ import { AuditLogsService } from '../../audit-logs/audit-logs.service';
 import { AuditAction } from '../../audit-logs/enums/audit-action.enum';
 import { UserRole } from '../../users/user.entity';
 import { ReferralsService } from '../../referrals/referrals.service';
+import { FeesService } from '../../fees/fees.service';
+import { FeeTransactionType } from '../../fees/entities/fee-config.entity';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -67,6 +70,8 @@ export class TransactionsService {
     private readonly currenciesService: CurrenciesService,
     private readonly exchangeRatesService: ExchangeRatesService,
     private readonly stellarService: StellarService,
+    private readonly configService: ConfigService,
+    private readonly feesService: FeesService,
     private readonly usersService: UsersService,
     private readonly auditLogsService: AuditLogsService,
     private readonly referralsService: ReferralsService,

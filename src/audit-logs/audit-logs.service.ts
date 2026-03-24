@@ -31,7 +31,10 @@ export class AuditLogsService {
 
       await this.auditLogsRepository.createAuditLog(logDto);
     } catch (error) {
-      this.logger.error(`Failed to create audit log: ${error.message}`, error.stack);
+      this.logger.error(
+        `Failed to create audit log: ${error.message}`,
+        error.stack,
+      );
       // Don't throw error to prevent breaking main functionality
     }
   }
@@ -48,17 +51,16 @@ export class AuditLogsService {
     return this.getLogs(completeFilters);
   }
 
-
   private getClientIp(): string {
     const request = this.request;
     const xForwardedFor = request.headers['x-forwarded-for'];
-    
+
     if (Array.isArray(xForwardedFor)) {
       return xForwardedFor[0] || '';
     } else if (typeof xForwardedFor === 'string') {
       return xForwardedFor.split(',')[0].trim() || '';
     }
-    
+
     return request.ip || request.socket.remoteAddress || '';
   }
 
@@ -67,7 +69,7 @@ export class AuditLogsService {
     userId: string | undefined,
     action: string,
     metadata?: Record<string, any>,
-    isSensitive: boolean  = false,
+    isSensitive: boolean = false,
   ) {
     return this.createLog({
       userId,
@@ -112,14 +114,14 @@ export class AuditLogsService {
     action: string,
     entityId?: string,
     metadata?: Record<string, any>,
-    isSensitive?: boolean
+    isSensitive?: boolean,
   ) {
     return this.createLog({
       action,
       entity: AuditEntityType.SYSTEM,
       entityId,
       metadata,
-      isSensitive
+      isSensitive,
     });
   }
 }

@@ -1,4 +1,13 @@
-import { IsEnum, IsOptional, IsUUID, IsObject, IsString, IsBoolean, IsIP, MaxLength } from 'class-validator';
+import {
+  IsEnum,
+  IsOptional,
+  IsUUID,
+  IsObject,
+  IsString,
+  IsBoolean,
+  IsIP,
+  MaxLength,
+} from 'class-validator';
 import { AuditEntityType } from '../enums/audit-entity-type.enum';
 
 export class CreateAuditLogDto {

@@ -18,7 +18,10 @@ export class AuditLogsService {
     try {
       await this.auditLogsRepository.createAuditLog(createAuditLogDto);
     } catch (error) {
-      this.logger.error(`Failed to create audit log: ${error.message}`, error.stack);
+      this.logger.error(
+        `Failed to create audit log: ${error.message}`,
+        error.stack,
+      );
       // Don't throw error to prevent breaking main functionality
     }
   }
@@ -34,7 +37,6 @@ export class AuditLogsService {
     };
     return this.getLogs(completeFilters);
   }
-
 
   /**
    * Helper to extract IP from request object
@@ -59,7 +61,7 @@ export class AuditLogsService {
     userId: string | undefined,
     action: string,
     metadata?: Record<string, any>,
-    isSensitive: boolean  = false,
+    isSensitive: boolean = false,
   ) {
     return this.createLog({
       userId,
@@ -104,14 +106,14 @@ export class AuditLogsService {
     action: string,
     entityId?: string,
     metadata?: Record<string, any>,
-    isSensitive?: boolean
+    isSensitive?: boolean,
   ) {
     return this.createLog({
       action,
       entity: AuditEntityType.SYSTEM,
       entityId,
       metadata,
-      isSensitive
+      isSensitive,
     });
   }
 }

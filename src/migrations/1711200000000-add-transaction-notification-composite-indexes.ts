@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner, TableIndex } from 'typeorm';
 
-export class AddTransactionNotificationCompositeIndexes1711200000000
-  implements MigrationInterface
-{
+export class AddTransactionNotificationCompositeIndexes1711200000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.createIndices('transactions', [
       new TableIndex({
@@ -32,8 +30,17 @@ export class AddTransactionNotificationCompositeIndexes1711200000000
       'notifications',
       'IDX_notifications_userId_createdAt',
     );
-    await queryRunner.dropIndex('notifications', 'IDX_notifications_userId_status');
-    await queryRunner.dropIndex('transactions', 'IDX_transactions_userId_status');
-    await queryRunner.dropIndex('transactions', 'IDX_transactions_status_createdAt');
+    await queryRunner.dropIndex(
+      'notifications',
+      'IDX_notifications_userId_status',
+    );
+    await queryRunner.dropIndex(
+      'transactions',
+      'IDX_transactions_userId_status',
+    );
+    await queryRunner.dropIndex(
+      'transactions',
+      'IDX_transactions_status_createdAt',
+    );
   }
 }

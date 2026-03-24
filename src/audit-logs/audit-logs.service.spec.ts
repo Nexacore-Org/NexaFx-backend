@@ -39,7 +39,9 @@ describe('AuditLogsService', () => {
       };
 
       const mockLog = { id: 'log-123', ...createDto };
-      jest.spyOn(repository, 'createAuditLog').mockResolvedValue(mockLog as any);
+      jest
+        .spyOn(repository, 'createAuditLog')
+        .mockResolvedValue(mockLog as any);
 
       await service.createLog(createDto);
 
@@ -49,4 +51,3 @@ describe('AuditLogsService', () => {
     });
   });
 });
-

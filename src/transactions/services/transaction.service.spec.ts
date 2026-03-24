@@ -11,7 +11,10 @@ import { UsersService } from '../../users/users.service';
 import { AuditLogsService } from '../../audit-logs/audit-logs.service';
 import { ReferralsService } from '../../referrals/referrals.service';
 import { FeesService } from '../../fees/fees.service';
-import { FeeTransactionType, FeeType } from '../../fees/entities/fee-config.entity';
+import {
+  FeeTransactionType,
+  FeeType,
+} from '../../fees/entities/fee-config.entity';
 
 describe('TransactionsService fee integration behavior', () => {
   let service: TransactionsService;
@@ -44,7 +47,8 @@ describe('TransactionsService fee integration behavior', () => {
   const usersService = {
     findById: jest.fn(async () => ({
       id: 'user-1',
-      walletPublicKey: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+      walletPublicKey:
+        'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
       walletSecretKeyEncrypted:
         'SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
       balances: { XLM: 1000 },

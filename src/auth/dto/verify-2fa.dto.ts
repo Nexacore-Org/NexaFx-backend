@@ -3,7 +3,8 @@ import { IsString, Length, Matches } from 'class-validator';
 
 export class VerifyTwoFactorDto {
   @ApiProperty({
-    description: 'Temporary token returned by /auth/verify-login-otp when 2FA is required',
+    description:
+      'Temporary token returned by /auth/verify-login-otp when 2FA is required',
   })
   @IsString()
   twoFactorToken: string;

@@ -187,7 +187,7 @@ export class AuthService {
     try {
       decoded = this.jwtService.verify(verifyDto.twoFactorToken, {
         secret: this.getTwoFactorChallengeSecret(),
-      }) as JwtPayload & { authStage?: string };
+      });
     } catch {
       throw new UnauthorizedException('Invalid or expired two-factor token');
     }
@@ -367,8 +367,9 @@ export class AuthService {
 
     let referredBy: string | null = null;
     if (normalizedReferralCode) {
-      const referrer =
-        await this.usersService.findByReferralCode(normalizedReferralCode);
+      const referrer = await this.usersService.findByReferralCode(
+        normalizedReferralCode,
+      );
       if (!referrer) {
         throw new BadRequestException('Invalid referral code');
       }

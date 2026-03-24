@@ -1,6 +1,9 @@
 import { IsEnum, IsOptional, IsString, IsDateString } from 'class-validator';
 import { PaginationDto } from '../../common/dto/pagination.dto';
-import { TransactionType, TransactionStatus } from '../../transactions/entities/transaction.entity';
+import {
+  TransactionType,
+  TransactionStatus,
+} from '../../transactions/entities/transaction.entity';
 
 export class AdminTransactionQueryDto extends PaginationDto {
   @IsOptional()

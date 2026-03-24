@@ -168,7 +168,7 @@ export class ReferralsService {
 
     await this.notificationsService.create({
       userId: referral.referrerId,
-      type: NotificationType.SYSTEM,
+      type: NotificationType.REFERRAL_REWARDED,
       title: 'Referral Reward Earned',
       message: `You earned ${rewardAmount} ${rewardCurrency} from your referral.`,
       metadata: {

@@ -114,11 +114,11 @@ export class TransactionsService {
       );
     }
 
-    const fee = await (this as any).feesService?.calculateFee(
+    const fee = (await (this as any).feesService?.calculateFee(
       TransactionType.DEPOSIT,
       currency,
       amount,
-    ) || { feeAmount: 0, feeCurrency: currency };
+    )) || { feeAmount: 0, feeCurrency: currency };
 
     const transaction = this.transactionRepository.create({
       userId,
@@ -281,11 +281,11 @@ export class TransactionsService {
       );
     }
 
-    const fee = await (this as any).feesService?.calculateFee(
+    const fee = (await (this as any).feesService?.calculateFee(
       TransactionType.WITHDRAW,
       currency,
       amount,
-    ) || { feeAmount: 0, feeCurrency: currency };
+    )) || { feeAmount: 0, feeCurrency: currency };
 
     const totalDeduction = amount + fee.feeAmount;
     if (parseFloat(userBalance) < totalDeduction) {
@@ -411,13 +411,21 @@ export class TransactionsService {
     }
 
     const isAdmin = requestingUserRole === UserRole.ADMIN;
-    if (requestingUserId && !isAdmin && transaction.userId !== requestingUserId) {
+    if (
+      requestingUserId &&
+      !isAdmin &&
+      transaction.userId !== requestingUserId
+    ) {
       throw new ForbiddenException(
         'You do not have permission to verify this transaction',
       );
     }
 
-    if (requestingUserRole && !isAdmin && transaction.status !== TransactionStatus.PENDING) {
+    if (
+      requestingUserRole &&
+      !isAdmin &&
+      transaction.status !== TransactionStatus.PENDING
+    ) {
       throw new BadRequestException(
         `Transaction is already ${transaction.status.toLowerCase()} and cannot be re-verified`,
       );

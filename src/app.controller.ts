@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, VERSION_NEUTRAL } from '@nestjs/common';
 import { AppService } from './app.service';
 import { Public } from './auth/decorators/public.decorator';
 
@@ -7,8 +7,12 @@ export class AppController {
   constructor(private readonly appService: AppService) {}
 
   @Public()
-  @Get()
-  getHello(): string {
-    return this.appService.getHello();
+  @Get({ version: VERSION_NEUTRAL })
+  healthCheck() {
+    return {
+      status: 'ok',
+      service: 'NexaFX API',
+      timestamp: new Date().toISOString(),
+    };
   }
 }

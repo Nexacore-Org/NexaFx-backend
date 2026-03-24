@@ -12,7 +12,7 @@ import { RateAlertsModule } from '../rate-alerts/rate-alerts.module';
 
 @Module({
   imports: [
-    ScheduleModule.forRoot(),
+    ScheduleModule,
     TypeOrmModule.forFeature([Transaction, Notification]),
     TransactionsModule,
     BlockchainModule,

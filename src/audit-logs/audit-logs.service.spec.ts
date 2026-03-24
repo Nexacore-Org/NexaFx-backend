@@ -18,13 +18,6 @@ describe('AuditLogsService', () => {
             findLogsWithPagination: jest.fn(),
           },
         },
-        {
-          provide: 'REQUEST',
-          useValue: {
-            headers: {},
-            ip: '127.0.0.1',
-          },
-        },
       ],
     }).compile();
 
@@ -42,6 +35,7 @@ describe('AuditLogsService', () => {
         userId: 'user-123',
         action: 'TEST_ACTION',
         entity: AuditEntityType.SYSTEM,
+        ipAddress: '127.0.0.1',
       };
 
       const mockLog = { id: 'log-123', ...createDto };
@@ -50,10 +44,7 @@ describe('AuditLogsService', () => {
       await service.createLog(createDto);
 
       expect(repository.createAuditLog).toHaveBeenCalledWith(
-        expect.objectContaining({
-          ...createDto,
-          ipAddress: '127.0.0.1',
-        }),
+        expect.objectContaining(createDto),
       );
     });
   });

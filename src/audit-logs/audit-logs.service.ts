@@ -1,9 +1,7 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { AuditLogsRepository } from './audit-logs.repository';
 import { CreateAuditLogDto } from './dto/create-audit-log.dto';
 import { GetAuditLogsDto } from './dto/get-audit-logs.dto';
-import { REQUEST } from '@nestjs/core';
-import { Request } from 'express';
 import { AuditEntityType } from './enums/audit-entity-type.enum';
 
 @Injectable()
@@ -12,24 +10,13 @@ export class AuditLogsService {
 
   constructor(
     private readonly auditLogsRepository: AuditLogsRepository,
-    @Inject(REQUEST) private readonly request: Request,
   ) {}
 
   async createLog(
-    createAuditLogDto: Omit<CreateAuditLogDto, 'ipAddress' | 'userAgent'>,
+    createAuditLogDto: CreateAuditLogDto,
   ): Promise<void> {
     try {
-      // Extract IP and User Agent from request if available
-      const ipAddress = this.getClientIp();
-      const userAgent = this.request.headers['user-agent'];
-
-      const logDto: CreateAuditLogDto = {
-        ...createAuditLogDto,
-        ipAddress,
-        userAgent,
-      };
-
-      await this.auditLogsRepository.createAuditLog(logDto);
+      await this.auditLogsRepository.createAuditLog(createAuditLogDto);
     } catch (error) {
       this.logger.error(`Failed to create audit log: ${error.message}`, error.stack);
       // Don't throw error to prevent breaking main functionality
@@ -49,9 +36,14 @@ export class AuditLogsService {
   }
 
 
-  private getClientIp(): string {
-    const request = this.request;
-    const xForwardedFor = request.headers['x-forwarded-for'];
+  /**
+   * Helper to extract IP from request object
+   * Can be used by controllers/interceptors before calling createLog
+   */
+  getClientIp(request: any): string {
+    if (!request) return '';
+    
+    const xForwardedFor = request.headers?.['x-forwarded-for'];
     
     if (Array.isArray(xForwardedFor)) {
       return xForwardedFor[0] || '';
@@ -59,7 +51,7 @@ export class AuditLogsService {
       return xForwardedFor.split(',')[0].trim() || '';
     }
     
-    return request.ip || request.socket.remoteAddress || '';
+    return request.ip || request.socket?.remoteAddress || '';
   }
 
   // Helper methods for common log types

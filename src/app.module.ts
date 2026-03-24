@@ -22,6 +22,7 @@ import { FeesModule } from './fees/fees.module';
 import { PushNotificationsModule } from './push-notifications/push-notifications.module';
 import { AdminModule } from './admin/admin.module';
 import { ReferralsModule } from './referrals/referrals.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { ReferralsModule } from './referrals/referrals.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({

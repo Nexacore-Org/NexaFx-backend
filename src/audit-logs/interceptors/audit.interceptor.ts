@@ -24,11 +24,16 @@ export class AuditInterceptor implements NestInterceptor {
     return next.handle().pipe(
       tap(async (response) => {
         try {
+          const ipAddress = this.auditLogsService.getClientIp(request);
+          const userAgent = request.headers['user-agent'];
+
           await this.auditLogsService.createLog({
             userId: user?.id,
             action,
             entity: entity as any,
             entityId: response?.id || request.params?.id,
+            ipAddress,
+            userAgent,
             metadata: {
               method: request.method,
               url: request.url,

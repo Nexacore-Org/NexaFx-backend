@@ -133,6 +133,7 @@ export class TransactionsController {
     description: 'Paginated list of user transactions',
     type: TransactionListResponseDto,
   })
+  @ApiResponse({ status: 400, description: 'Bad Request' })
   @ApiResponse({
     status: 401,
     description: 'Unauthorized - Invalid or missing JWT token',
@@ -147,7 +148,7 @@ export class TransactionsController {
   @Get('pending')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Get all pending transactions (admin)' })
+  @ApiOperation({ summary: 'Get all pending transactions (Admin only)' })
   @ApiResponse({
     status: 200,
     description: 'List of all pending transactions',

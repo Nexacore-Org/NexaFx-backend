@@ -70,6 +70,10 @@ export class KycController {
     status: 401,
     description: 'Unauthorized',
   })
+  @ApiResponse({
+    status: 404,
+    description: 'KYC record not found',
+  })
   async getKycStatus(@CurrentUser() user: CurrentUserPayload) {
     return this.kycService.getKycStatus(user.userId);
   }

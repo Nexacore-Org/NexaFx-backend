@@ -10,13 +10,14 @@ import {
   BadRequestException,
   NotFoundException
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiProduces, ApiBearerAuth } from '@nestjs/swagger';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser, CurrentUserPayload } from '../auth/decorators/current-user.decorator';
 import { ReceiptsService } from './receipts.service';
 
 @ApiTags('Receipts')
+@ApiBearerAuth()
 @Controller('receipts')
 @UseGuards(JwtAuthGuard)
 export class ReceiptsController {
@@ -29,20 +30,14 @@ export class ReceiptsController {
     description: 'Transaction UUID',
     example: '550e8400-e29b-41d4-a716-446655440000',
   })
+  @ApiProduces('application/pdf')
   @ApiResponse({
     status: 200,
     description: 'PDF receipt generated successfully',
-    content: {
-      'application/pdf': {
-        schema: {
-          type: 'string',
-          format: 'binary',
-        },
-      },
-    },
   })
-  @ApiResponse({ status: 404, description: 'Transaction not found' })
+  @ApiResponse({ status: 400, description: 'Bad Request' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Transaction not found' })
   async getTransactionReceipt(
     @Param('id') id: string,
     @CurrentUser() user: CurrentUserPayload,
@@ -77,21 +72,14 @@ export class ReceiptsController {
     example: '2026-01',
     required: true,
   })
+  @ApiProduces('application/pdf')
   @ApiResponse({
     status: 200,
     description: 'PDF statement generated successfully',
-    content: {
-      'application/pdf': {
-        schema: {
-          type: 'string',
-          format: 'binary',
-        },
-      },
-    },
   })
   @ApiResponse({ status: 400, description: 'Invalid month format' })
-  @ApiResponse({ status: 404, description: 'No transactions found for period' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'No transactions found for period' })
   async getMonthlyStatement(
     @Query('month') month: string,
     @CurrentUser() user: CurrentUserPayload,
@@ -142,8 +130,9 @@ export class ReceiptsController {
       },
     },
   })
-  @ApiResponse({ status: 404, description: 'Transaction not found' })
+  @ApiResponse({ status: 400, description: 'Bad Request' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Transaction not found' })
   async emailTransactionReceipt(
     @Param('id') id: string,
     @CurrentUser() user: CurrentUserPayload,

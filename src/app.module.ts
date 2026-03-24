@@ -35,9 +35,7 @@ import { ReferralsModule } from './referrals/referrals.module';
         type: 'postgres',
         url: configService.get<string>('DATABASE_URL'),
         synchronize: true,
-        ssl: {
-          rejectUnauthorized: false,
-        },
+        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
         autoLoadEntities: true,
       }),
       inject: [ConfigService],

@@ -21,10 +21,10 @@ export class TransactionResponseDto {
   currency: string;
 
   @ApiPropertyOptional({ example: '★' })
-  currencySymbol: string;
+  currencySymbol?: string;
 
   @ApiPropertyOptional({ example: 'Stellar Lumens' })
-  currencyDisplayName: string;
+  currencyDisplayName?: string;
 
   @ApiPropertyOptional({ example: '0.12345678' })
   rate: string;

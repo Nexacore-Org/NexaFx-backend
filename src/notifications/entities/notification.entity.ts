@@ -9,12 +9,8 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { User } from '../../users/user.entity';
-
-export enum NotificationType {
-  TRANSACTION = 'TRANSACTION',
-  OTP = 'OTP',
-  SYSTEM = 'SYSTEM',
-}
+import { NotificationType } from '../enum/notificationType.enum';
+export { NotificationType };
 
 export enum NotificationStatus {
   UNREAD = 'UNREAD',

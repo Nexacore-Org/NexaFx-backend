@@ -7,8 +7,11 @@ export class ApproveKycDto {
   @IsEnum(KycStatus)
   status: KycStatus;
 
-  @ApiProperty({ description: 'Reason for rejection if status is REJECTED', required: false })
+  @ApiProperty({
+    description: 'Reason for rejection if status is REJECTED',
+    required: false,
+  })
   @IsString()
   @IsOptional()
   rejectionReason?: string;
-} 
+}

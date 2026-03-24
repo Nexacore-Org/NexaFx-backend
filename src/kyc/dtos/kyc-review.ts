@@ -3,7 +3,7 @@ import { KycStatus } from '../entities/kyc.entity';
 
 export class ReviewKycDto {
   @IsEnum(KycStatus)
-  decision: KycStatus; 
+  decision: KycStatus;
 
   @IsOptional()
   @IsString()

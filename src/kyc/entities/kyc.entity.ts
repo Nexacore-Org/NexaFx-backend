@@ -60,8 +60,6 @@ export class KycRecord {
   @Column({ type: 'date' })
   dateOfBirth: Date;
 
-  
-
   @Column()
   nationality: string;
 

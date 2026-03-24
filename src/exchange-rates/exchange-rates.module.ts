@@ -10,7 +10,11 @@ import { ExchangeRatesCache } from './cache/exchange-rates.cache';
 @Module({
   imports: [ConfigModule, HttpModule, CurrenciesModule],
   controllers: [ExchangeRatesController],
-  providers: [ExchangeRatesService, ExchangeRatesProviderClient, ExchangeRatesCache],
+  providers: [
+    ExchangeRatesService,
+    ExchangeRatesProviderClient,
+    ExchangeRatesCache,
+  ],
   exports: [ExchangeRatesService],
 })
 export class ExchangeRatesModule {}

@@ -1,4 +1,13 @@
-import { IsEnum, IsOptional, IsUUID, IsDateString, IsNumber, IsString, Min, Max } from 'class-validator';
+import {
+  IsEnum,
+  IsOptional,
+  IsUUID,
+  IsDateString,
+  IsNumber,
+  IsString,
+  Min,
+  Max,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { AuditEntityType } from '../enums/audit-entity-type.enum';

@@ -1,15 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import { PaginationDto, PaginatedResult, PaginationMeta } from '../dto/pagination.dto';
+import {
+  PaginationDto,
+  PaginatedResult,
+  PaginationMeta,
+} from '../dto/pagination.dto';
 
 @Injectable()
 export class PaginationService {
   /**
    * Paginate an array of items
    */
-  paginate<T>(
-    items: T[],
-    paginationDto: PaginationDto,
-  ): PaginatedResult<T> {
+  paginate<T>(items: T[], paginationDto: PaginationDto): PaginatedResult<T> {
     const { page = 1, limit = 10 } = paginationDto;
     const totalItems = items.length;
     const totalPages = Math.ceil(totalItems / limit);
@@ -46,10 +47,7 @@ export class PaginationService {
   /**
    * Create pagination metadata
    */
-  createMeta(
-    paginationDto: PaginationDto,
-    totalItems: number,
-  ): PaginationMeta {
+  createMeta(paginationDto: PaginationDto, totalItems: number): PaginationMeta {
     const { page = 1, limit = 10 } = paginationDto;
     const totalPages = Math.ceil(totalItems / limit);
 

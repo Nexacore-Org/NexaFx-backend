@@ -56,7 +56,10 @@ async function bootstrap() {
     .addBearerAuth()
     .build();
 
-  if (process.env.NODE_ENV !== 'production' || configService.get<boolean>('ENABLE_SWAGGER')) {
+  if (
+    process.env.NODE_ENV !== 'production' ||
+    configService.get<boolean>('ENABLE_SWAGGER')
+  ) {
     const swaggerDoc = SwaggerModule.createDocument(app, swaggerConfig);
     SwaggerModule.setup('api/docs', app, swaggerDoc);
   }

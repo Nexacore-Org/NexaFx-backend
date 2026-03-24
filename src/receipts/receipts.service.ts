@@ -1,7 +1,16 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Transaction, TransactionStatus, TransactionType } from '../transactions/entities/transaction.entity';
+import {
+  Transaction,
+  TransactionStatus,
+  TransactionType,
+} from '../transactions/entities/transaction.entity';
 import { UsersService } from '../users/users.service';
 import PDFDocument from 'pdfkit';
 import { ConfigService } from '@nestjs/config';
@@ -52,7 +61,9 @@ export class ReceiptsService {
       doc.fontSize(12).text('Transaction Details:', { underline: true });
       doc.fontSize(10);
       doc.text(`Transaction ID: ${transaction.id}`);
-      doc.text(`Reference Number: NFX-${transaction.id.slice(-8).toUpperCase()}`);
+      doc.text(
+        `Reference Number: NFX-${transaction.id.slice(-8).toUpperCase()}`,
+      );
       doc.text(`Type: ${transaction.type}`);
       doc.text(`Status: ${transaction.status}`);
       doc.text(`Date: ${transaction.createdAt.toLocaleDateString()}`);
@@ -65,7 +76,8 @@ export class ReceiptsService {
       if (transaction.rate && transaction.type === TransactionType.DEPOSIT) {
         doc.text(`Exchange Rate: ${transaction.rate}`);
         // Calculate converted amount (assuming USD as base)
-        const convertedAmount = parseFloat(transaction.amount) * parseFloat(transaction.rate);
+        const convertedAmount =
+          parseFloat(transaction.amount) * parseFloat(transaction.rate);
         doc.text(`Converted Amount: ${convertedAmount.toFixed(2)} USD`);
       }
       doc.moveDown();
@@ -75,7 +87,9 @@ export class ReceiptsService {
       doc.fontSize(10);
       if (transaction.txHash) {
         doc.text(`Stellar Transaction Hash: ${transaction.txHash}`);
-        doc.text(`Explorer Link: https://stellar.expert/explorer/testnet/tx/${transaction.txHash}`);
+        doc.text(
+          `Explorer Link: https://stellar.expert/explorer/testnet/tx/${transaction.txHash}`,
+        );
         doc.text('Scan the QR code or visit the link to verify on blockchain');
       }
       doc.moveDown();
@@ -87,8 +101,12 @@ export class ReceiptsService {
       doc.moveDown();
 
       // Footer
-      doc.fontSize(8).text('This is an electronically generated receipt.', { align: 'center' });
-      doc.text('For any inquiries, contact support@nexafx.com', { align: 'center' });
+      doc.fontSize(8).text('This is an electronically generated receipt.', {
+        align: 'center',
+      });
+      doc.text('For any inquiries, contact support@nexafx.com', {
+        align: 'center',
+      });
 
       doc.end();
     });
@@ -119,7 +137,9 @@ export class ReceiptsService {
     });
 
     if (transactions.length === 0) {
-      throw new NotFoundException('No transactions found for the specified period');
+      throw new NotFoundException(
+        'No transactions found for the specified period',
+      );
     }
 
     const user = await this.usersService.findById(userId);
@@ -134,7 +154,12 @@ export class ReceiptsService {
 
       // Header
       doc.fontSize(20).text('NexaFX Monthly Statement', { align: 'center' });
-      doc.fontSize(12).text(`Period: ${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`, { align: 'center' });
+      doc
+        .fontSize(12)
+        .text(
+          `Period: ${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`,
+          { align: 'center' },
+        );
       doc.moveDown();
 
       // Account Information
@@ -145,11 +170,25 @@ export class ReceiptsService {
       doc.moveDown();
 
       // Summary
-      const deposits = transactions.filter(t => t.type === TransactionType.DEPOSIT && t.status === TransactionStatus.SUCCESS);
-      const withdrawals = transactions.filter(t => t.type === TransactionType.WITHDRAW && t.status === TransactionStatus.SUCCESS);
-      
-      const totalDeposits = deposits.reduce((sum, t) => sum + parseFloat(t.amount), 0);
-      const totalWithdrawals = withdrawals.reduce((sum, t) => sum + parseFloat(t.amount), 0);
+      const deposits = transactions.filter(
+        (t) =>
+          t.type === TransactionType.DEPOSIT &&
+          t.status === TransactionStatus.SUCCESS,
+      );
+      const withdrawals = transactions.filter(
+        (t) =>
+          t.type === TransactionType.WITHDRAW &&
+          t.status === TransactionStatus.SUCCESS,
+      );
+
+      const totalDeposits = deposits.reduce(
+        (sum, t) => sum + parseFloat(t.amount),
+        0,
+      );
+      const totalWithdrawals = withdrawals.reduce(
+        (sum, t) => sum + parseFloat(t.amount),
+        0,
+      );
       const netChange = totalDeposits - totalWithdrawals;
 
       doc.fontSize(12).text('Account Summary:', { underline: true });
@@ -184,22 +223,35 @@ export class ReceiptsService {
 
       // Table rows
       transactions.forEach((transaction) => {
-        if (yPosition > 700) { // Add new page if needed
+        if (yPosition > 700) {
+          // Add new page if needed
           doc.addPage();
           yPosition = 50;
         }
 
         doc.text(transaction.createdAt.toLocaleDateString(), 50, yPosition);
         doc.text(transaction.type, 130, yPosition);
-        doc.text(`${transaction.amount} ${transaction.currency}`, 190, yPosition);
+        doc.text(
+          `${transaction.amount} ${transaction.currency}`,
+          190,
+          yPosition,
+        );
         doc.text(transaction.status, 270, yPosition);
-        doc.text(`NFX-${transaction.id.slice(-8).toUpperCase()}`, 340, yPosition);
+        doc.text(
+          `NFX-${transaction.id.slice(-8).toUpperCase()}`,
+          340,
+          yPosition,
+        );
         yPosition += rowHeight;
       });
 
       // Footer
-      doc.fontSize(8).text('This is an electronically generated statement.', { align: 'center' });
-      doc.text('For any inquiries, contact support@nexafx.com', { align: 'center' });
+      doc.fontSize(8).text('This is an electronically generated statement.', {
+        align: 'center',
+      });
+      doc.text('For any inquiries, contact support@nexafx.com', {
+        align: 'center',
+      });
 
       doc.end();
     });
@@ -216,7 +268,10 @@ export class ReceiptsService {
   /**
    * Get transaction by ID with ownership validation
    */
-  async getTransactionById(transactionId: string, userId: string): Promise<Transaction> {
+  async getTransactionById(
+    transactionId: string,
+    userId: string,
+  ): Promise<Transaction> {
     const transaction = await this.transactionRepository.findOne({
       where: { id: transactionId, userId },
       relations: ['user'],
@@ -237,12 +292,15 @@ export class ReceiptsService {
     userId: string,
   ): Promise<void> {
     // Generate the PDF receipt
-    const pdfBuffer = await this.generateTransactionReceipt(transactionId, userId);
-    
+    const pdfBuffer = await this.generateTransactionReceipt(
+      transactionId,
+      userId,
+    );
+
     // Get transaction details for email content
     const transaction = await this.getTransactionById(transactionId, userId);
     const user = await this.usersService.findById(userId);
-    
+
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -262,7 +320,8 @@ export class ReceiptsService {
     const apiKey = this.configService.get<string>('MAILGUN_API_KEY');
     const domain = this.configService.get<string>('MAILGUN_DOMAIN');
     const fromEmail = this.configService.get<string>('MAILGUN_FROM_EMAIL');
-    const fromName = this.configService.get<string>('MAILGUN_FROM_NAME') ?? 'NexaFX';
+    const fromName =
+      this.configService.get<string>('MAILGUN_FROM_NAME') ?? 'NexaFX';
 
     if (!apiKey || !domain || !fromEmail) {
       throw new Error(
@@ -272,7 +331,9 @@ export class ReceiptsService {
 
     const skipEmail = this.configService.get<string>('SKIP_EMAIL_SENDING');
     if (skipEmail === 'true') {
-      this.logger.log(`[RECEIPT DEV] Email skipped — Receipt for ${to}: Transaction ${transaction.id}`);
+      this.logger.log(
+        `[RECEIPT DEV] Email skipped — Receipt for ${to}: Transaction ${transaction.id}`,
+      );
       return;
     }
 
@@ -281,11 +342,14 @@ export class ReceiptsService {
       const client = mailgun.client({ username: 'api', key: apiKey });
 
       const referenceNumber = `NFX-${transaction.id.slice(-8).toUpperCase()}`;
-      const transactionDate = transaction.createdAt.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      });
+      const transactionDate = transaction.createdAt.toLocaleDateString(
+        'en-US',
+        {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        },
+      );
 
       const htmlContent = `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; background: #ffffff;">
@@ -315,7 +379,9 @@ export class ReceiptsService {
               <p style="margin: 0; font-size: 16px; font-weight: 600; color: ${transaction.status === 'SUCCESS' ? '#27ae60' : transaction.status === 'FAILED' ? '#e74c3c' : '#f39c12'};">${transaction.status}</p>
             </div>
 
-            ${transaction.txHash ? `
+            ${
+              transaction.txHash
+                ? `
             <div style="background: #f8f9fa; border-radius: 8px; padding: 16px; margin: 16px 0;">
               <p style="margin: 0 0 8px; font-size: 12px; color: #666;">Stellar Transaction Hash</p>
               <p style="margin: 0; font-size: 12px; font-family: monospace; word-break: break-all; color: #1A1A1A;">${transaction.txHash}</p>
@@ -323,7 +389,9 @@ export class ReceiptsService {
                 <a href="https://stellar.expert/explorer/testnet/tx/${transaction.txHash}" style="color: #F5A623; text-decoration: none;">View on Stellar Explorer →</a>
               </p>
             </div>
-            ` : ''}
+            `
+                : ''
+            }
             
             <p style="font-size: 12px; color: #999; text-align: center; margin-top: 32px;">
               If you have any questions about this transaction, please contact our support team at support@nexafx.com

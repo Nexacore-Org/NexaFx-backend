@@ -1,15 +1,7 @@
 import { Controller, Get, Query } from '@nestjs/common';
-import {
-  ApiOperation,
-  ApiResponse,
-  ApiTags,
-  ApiQuery,
-} from '@nestjs/swagger';
+import { ApiOperation, ApiResponse, ApiTags, ApiQuery } from '@nestjs/swagger';
 import { ExchangeRatesService } from './exchange-rates.service';
-import {
-  ExchangeRateQueryDto,
-  ExchangeRateResponseDto,
-} from './dto';
+import { ExchangeRateQueryDto, ExchangeRateResponseDto } from './dto';
 import { Public } from '../auth/decorators/public.decorator';
 
 @ApiTags('Exchange Rates')

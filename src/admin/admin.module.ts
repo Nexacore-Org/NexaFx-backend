@@ -7,10 +7,7 @@ import { Transaction } from '../transactions/entities/transaction.entity';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([User, Transaction]),
-    AuditLogsModule,
-  ],
+  imports: [TypeOrmModule.forFeature([User, Transaction]), AuditLogsModule],
   controllers: [AdminController],
   providers: [AdminService],
 })

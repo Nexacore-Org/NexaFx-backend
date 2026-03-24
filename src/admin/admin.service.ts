@@ -1,8 +1,23 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, ILike, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
+import {
+  Repository,
+  Between,
+  ILike,
+  MoreThanOrEqual,
+  LessThanOrEqual,
+} from 'typeorm';
 import { User, UserRole } from '../users/user.entity';
-import { Transaction, TransactionStatus, TransactionType } from '../transactions/entities/transaction.entity';
+import {
+  Transaction,
+  TransactionStatus,
+  TransactionType,
+} from '../transactions/entities/transaction.entity';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import { UserQueryDto } from './dto/user-query.dto';
@@ -86,7 +101,9 @@ export class AdminService {
       .select('transaction.type', 'type')
       .addSelect('transaction.currency', 'currency')
       .addSelect('SUM(transaction.amount)', 'total')
-      .where('transaction.status = :status', { status: TransactionStatus.SUCCESS })
+      .where('transaction.status = :status', {
+        status: TransactionStatus.SUCCESS,
+      })
       .groupBy('transaction.type')
       .addGroupBy('transaction.currency')
       .getRawMany();
@@ -106,7 +123,15 @@ export class AdminService {
   }
 
   async getUsers(query: UserQueryDto) {
-    const { page = 1, limit = 10, search, isVerified, role, startDate, endDate } = query;
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      isVerified,
+      role,
+      startDate,
+      endDate,
+    } = query;
     const skip = (page - 1) * limit;
 
     const queryBuilder = this.userRepository.createQueryBuilder('user');
@@ -134,15 +159,12 @@ export class AdminService {
       queryBuilder.andWhere('user.createdAt <= :endDate', { endDate });
     }
 
-    queryBuilder
-      .skip(skip)
-      .take(limit)
-      .orderBy('user.createdAt', 'DESC');
+    queryBuilder.skip(skip).take(limit).orderBy('user.createdAt', 'DESC');
 
     const [users, total] = await queryBuilder.getManyAndCount();
 
     return {
-      data: users.map(user => ({
+      data: users.map((user) => ({
         id: user.id,
         email: user.email,
         firstName: user.firstName,
@@ -175,7 +197,11 @@ export class AdminService {
     return user;
   }
 
-  async updateUserRole(id: string, updateDto: UpdateUserRoleDto, adminId: string) {
+  async updateUserRole(
+    id: string,
+    updateDto: UpdateUserRoleDto,
+    adminId: string,
+  ) {
     const user = await this.getUserById(id);
 
     if (user.role === updateDto.role) {
@@ -194,7 +220,7 @@ export class AdminService {
         oldRole,
         newRole: user.role,
       },
-      true
+      true,
     );
 
     return user;
@@ -214,7 +240,7 @@ export class AdminService {
       adminId,
       AuditAction.USER_SUSPENDED,
       { targetUserId: id },
-      true
+      true,
     );
 
     return { message: 'User suspended successfully' };
@@ -234,17 +260,27 @@ export class AdminService {
       adminId,
       AuditAction.USER_UNSUSPENDED,
       { targetUserId: id },
-      true
+      true,
     );
 
     return { message: 'User unsuspended successfully' };
   }
 
   async getTransactions(query: AdminTransactionQueryDto) {
-    const { page = 1, limit = 10, type, status, currency, userId, startDate, endDate } = query;
+    const {
+      page = 1,
+      limit = 10,
+      type,
+      status,
+      currency,
+      userId,
+      startDate,
+      endDate,
+    } = query;
     const skip = (page - 1) * limit;
 
-    const queryBuilder = this.transactionRepository.createQueryBuilder('transaction');
+    const queryBuilder =
+      this.transactionRepository.createQueryBuilder('transaction');
 
     if (type) {
       queryBuilder.andWhere('transaction.type = :type', { type });
@@ -263,7 +299,9 @@ export class AdminService {
     }
 
     if (startDate) {
-      queryBuilder.andWhere('transaction.createdAt >= :startDate', { startDate });
+      queryBuilder.andWhere('transaction.createdAt >= :startDate', {
+        startDate,
+      });
     }
 
     if (endDate) {

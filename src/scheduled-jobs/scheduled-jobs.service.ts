@@ -337,9 +337,14 @@ export class ScheduledJobsService {
           ? `Your deposit of ${transaction.amount} ${transaction.currency} has been confirmed`
           : `Your withdrawal of ${transaction.amount} ${transaction.currency} has been confirmed`;
 
+      const notificationType =
+        transaction.type === TransactionType.DEPOSIT
+          ? NotificationType.DEPOSIT_CONFIRMED
+          : NotificationType.WITHDRAWAL_PROCESSED;
+
       await this.notificationsService.create({
         userId: transaction.userId,
-        type: NotificationType.TRANSACTION,
+        type: notificationType,
         title: `${transaction.type} Confirmed`,
         message: notificationMessage,
         relatedId: transaction.id,
@@ -408,7 +413,7 @@ export class ScheduledJobsService {
 
       await this.notificationsService.create({
         userId: transaction.userId,
-        type: NotificationType.TRANSACTION,
+        type: NotificationType.TRANSACTION_FAILED,
         title: `${transaction.type} Failed`,
         message: notificationMessage,
         relatedId: transaction.id,

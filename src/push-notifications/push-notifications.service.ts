@@ -47,7 +47,9 @@ export class PushNotificationsService {
   ): Promise<BroadcastResponseDto> {
     try {
       // Get all active users (verified users)
-      const activeUsers = (this.usersService as any).findAllActive ? await (this.usersService as any).findAllActive() : [];
+      const activeUsers = (this.usersService as any).findAllActive
+        ? await (this.usersService as any).findAllActive()
+        : [];
       const recipientCount = activeUsers.length;
 
       // Create the broadcast record

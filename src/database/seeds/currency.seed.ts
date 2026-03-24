@@ -64,7 +64,9 @@ export async function seedCurrencies(dataSource: DataSource): Promise<void> {
     if (!existing) {
       const currency = currencyRepository.create(currencyData);
       await currencyRepository.save(currency);
-      console.log(`Seeded currency: ${currencyData.code} - ${currencyData.name}`);
+      console.log(
+        `Seeded currency: ${currencyData.code} - ${currencyData.name}`,
+      );
     }
   }
 

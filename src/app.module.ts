@@ -24,6 +24,7 @@ import { AdminModule } from './admin/admin.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { BankingModule } from './modules/banking/banking.module';
+import { ComplianceEvidenceModule } from './compliance-evidence/compliance-evidence.module';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { BankingModule } from './modules/banking/banking.module';
     PushNotificationsModule,
     AdminModule,
     BankingModule,
+    ComplianceEvidenceModule,
   ],
   controllers: [AppController],
   providers: [

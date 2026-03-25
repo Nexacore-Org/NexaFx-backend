@@ -445,6 +445,13 @@ export class ScheduledJobsService {
       `[Retry] Attempting to re-verify failed transaction ${transaction.id}`,
     );
 
+    if (!transaction.txHash) {
+      this.logger.warn(
+        `[Retry] Skipping transaction ${transaction.id} because it has no blockchain hash`,
+      );
+      return;
+    }
+
     try {
       const verificationResult = await this.stellarService.verifyTransaction(
         transaction.txHash,

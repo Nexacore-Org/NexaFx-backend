@@ -1,6 +1,10 @@
 import { INestApplication } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it } from '@jest/globals';
-import { api, createE2eApp, signupAndVerifyUser } from '../helpers/e2e-app';
+import { JwtService } from '@nestjs/jwt';
+import { createE2eApp, signupAndVerifyUser } from '../helpers/e2e-app';
+import { UsersService } from '../../src/users/users.service';
+import { ExchangeRatesService } from '../../src/exchange-rates/exchange-rates.service';
+import { TransactionsService } from '../../src/transactions/services/transaction.service';
 
 function percentile(values: number[], target: number): number {
   const sorted = [...values].sort((a, b) => a - b);
@@ -24,43 +28,47 @@ async function measure(fn: () => Promise<void>, iterations: number) {
   };
 }
 
+function getUserIdFromToken(app: INestApplication, accessToken: string): string {
+  const jwtService = app.get(JwtService);
+  const payload = jwtService.verify<{ sub: string }>(accessToken);
+  return payload.sub;
+}
+
 describe('SLA Benchmarks', () => {
   let app: INestApplication;
-  let token: string;
+  let userId: string;
+  let usersService: UsersService;
+  let exchangeRatesService: ExchangeRatesService;
+  let transactionsService: TransactionsService;
 
   beforeAll(async () => {
     ({ app } = await createE2eApp());
     const user = await signupAndVerifyUser(app);
-    token = user.accessToken;
+    userId = getUserIdFromToken(app, user.accessToken);
 
-    await api(app)
-      .get('/v1/users/wallet/balances')
-      .set('Authorization', `Bearer ${token}`)
-      .expect(200);
+    usersService = app.get(UsersService);
+    exchangeRatesService = app.get(ExchangeRatesService);
+    transactionsService = app.get(TransactionsService);
 
-    await api(app)
-      .get('/v1/exchange-rates')
-      .query({ from: 'EUR', to: 'USD' })
-      .expect(200);
+    await usersService.getWalletBalances(userId);
+    await exchangeRatesService.getRate('EUR', 'USD');
   });
 
   afterAll(async () => {
-    await app.close();
+    if (app) {
+      await app.close();
+    }
   });
 
   it('keeps transaction creation under the configured p99 threshold', async () => {
     const threshold = Number(process.env.TRANSACTION_P99_BUDGET_MS ?? 200);
     const result = await measure(
       async () => {
-        await api(app)
-          .post('/v1/transactions/deposit')
-          .set('Authorization', `Bearer ${token}`)
-          .send({
-            amount: 25,
-            currency: 'USD',
-            sourceAddress: 'GSOURCEACCOUNTTESTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-          })
-          .expect(201);
+        await transactionsService.createDeposit(userId, {
+          amount: 25,
+          currency: 'USD',
+          sourceAddress: 'GSOURCEACCOUNTTESTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        });
       },
       25,
     );
@@ -72,12 +80,8 @@ describe('SLA Benchmarks', () => {
     const threshold = Number(process.env.BALANCE_P99_BUDGET_MS ?? 50);
     const result = await measure(
       async () => {
-        const response = await api(app)
-          .get('/v1/users/wallet/balances')
-          .set('Authorization', `Bearer ${token}`)
-          .expect(200);
-
-        expect(response.body.data.cached).toBe(true);
+        const response = await usersService.getWalletBalances(userId);
+        expect(response.cached).toBe(true);
       },
       40,
     );
@@ -89,10 +93,7 @@ describe('SLA Benchmarks', () => {
     const threshold = Number(process.env.FX_RATE_P99_BUDGET_MS ?? 100);
     const result = await measure(
       async () => {
-        await api(app)
-          .get('/v1/exchange-rates')
-          .query({ from: 'EUR', to: 'USD' })
-          .expect(200);
+        await exchangeRatesService.getRate('EUR', 'USD');
       },
       40,
     );

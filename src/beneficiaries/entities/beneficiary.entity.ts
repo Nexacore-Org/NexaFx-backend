@@ -1,4 +1,5 @@
 import { User } from '../../users/user.entity';
+import { DB_COLUMN_TYPES } from '../../common/database/column-types';
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -36,7 +37,7 @@ export class Beneficiary {
   currency: string;
 
   @Column({
-    type: 'enum',
+    type: DB_COLUMN_TYPES.enum,
     enum: BeneficiaryNetwork,
     default: BeneficiaryNetwork.STELLAR,
   })

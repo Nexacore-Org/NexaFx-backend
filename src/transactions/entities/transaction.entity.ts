@@ -9,6 +9,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { User } from '../../users/user.entity';
+import { DB_COLUMN_TYPES } from '../../common/database/column-types';
 
 export enum TransactionType {
   DEPOSIT = 'DEPOSIT',
@@ -41,7 +42,7 @@ export class Transaction {
   user: User;
 
   @Column({
-    type: 'enum',
+    type: DB_COLUMN_TYPES.enum,
     enum: TransactionType,
   })
   type: TransactionType;
@@ -56,7 +57,7 @@ export class Transaction {
   rate: string;
 
   @Column({
-    type: 'enum',
+    type: DB_COLUMN_TYPES.enum,
     enum: TransactionStatus,
     default: TransactionStatus.PENDING,
   })
@@ -77,7 +78,7 @@ export class Transaction {
   @Column({ type: 'decimal', precision: 20, scale: 8, nullable: true })
   reservedBalanceAmount: string | null;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: DB_COLUMN_TYPES.json, nullable: true })
   metadata?: Record<string, unknown> | null;
 
   @Column({ type: 'text', nullable: true })

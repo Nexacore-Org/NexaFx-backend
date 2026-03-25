@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { User } from '../../users/user.entity';
 import { NotificationType } from '../enum/notificationType.enum';
+import { DB_COLUMN_TYPES } from '../../common/database/column-types';
 export { NotificationType };
 
 export enum NotificationStatus {
@@ -36,7 +37,7 @@ export class Notification {
   user: User;
 
   @Column({
-    type: 'enum',
+    type: DB_COLUMN_TYPES.enum,
     enum: NotificationType,
     default: NotificationType.SYSTEM,
   })
@@ -49,13 +50,13 @@ export class Notification {
   message: string;
 
   @Column({
-    type: 'enum',
+    type: DB_COLUMN_TYPES.enum,
     enum: NotificationStatus,
     default: NotificationStatus.UNREAD,
   })
   status: NotificationStatus;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: DB_COLUMN_TYPES.json, nullable: true })
   metadata?: Record<string, any>;
 
   @Column({ nullable: true })
@@ -70,6 +71,6 @@ export class Notification {
   @UpdateDateColumn()
   updatedAt: Date;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: DB_COLUMN_TYPES.timestamp, nullable: true })
   readAt?: Date;
 }

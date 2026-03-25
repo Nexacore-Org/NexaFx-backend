@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
   Index,
 } from 'typeorm';
+import { DB_COLUMN_TYPES } from '../../common/database/column-types';
 
 export enum PushNotificationStatus {
   ACTIVE = 'ACTIVE',
@@ -25,7 +26,7 @@ export class PushNotification {
   message: string;
 
   @Column({
-    type: 'enum',
+    type: DB_COLUMN_TYPES.enum,
     enum: PushNotificationStatus,
     default: PushNotificationStatus.ACTIVE,
   })
@@ -37,9 +38,9 @@ export class PushNotification {
   @Column({ type: 'integer', default: 0 })
   recipientCount: number;
 
-  @CreateDateColumn({ type: 'timestamp with time zone' })
+  @CreateDateColumn({ type: DB_COLUMN_TYPES.timestamp })
   createdAt: Date;
 
-  @UpdateDateColumn({ type: 'timestamp with time zone' })
+  @UpdateDateColumn({ type: DB_COLUMN_TYPES.timestamp })
   updatedAt: Date;
 }

@@ -6,6 +6,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { DB_COLUMN_TYPES } from '../../../common/database/column-types';
 
 export enum BankAccountStatus {
   PENDING_VERIFICATION = 'PENDING_VERIFICATION',
@@ -38,7 +39,7 @@ export class BankAccount {
   routingNumber: string;
 
   @Column({
-    type: 'enum',
+    type: DB_COLUMN_TYPES.enum,
     enum: BankAccountStatus,
     default: BankAccountStatus.PENDING_VERIFICATION,
   })
@@ -53,7 +54,7 @@ export class BankAccount {
   @Column({ type: 'varchar', length: 255, nullable: true })
   verificationReference: string | null;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: DB_COLUMN_TYPES.timestamp, nullable: true })
   verifiedAt: Date | null;
 
   @CreateDateColumn()

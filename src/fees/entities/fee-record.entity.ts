@@ -9,6 +9,7 @@ import {
 import { Transaction } from '../../transactions/entities/transaction.entity';
 import { User } from '../../users/user.entity';
 import { FeeType } from './fee-config.entity';
+import { DB_COLUMN_TYPES } from '../../common/database/column-types';
 
 @Entity('fee_records')
 export class FeeRecord {
@@ -36,7 +37,7 @@ export class FeeRecord {
   feeCurrency: string;
 
   @Column({
-    type: 'enum',
+    type: DB_COLUMN_TYPES.enum,
     enum: FeeType,
   })
   feeType: FeeType;

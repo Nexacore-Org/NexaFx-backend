@@ -6,6 +6,7 @@ import {
   Index,
 } from 'typeorm';
 import { AuditEntityType } from '../enums/audit-entity-type.enum';
+import { DB_COLUMN_TYPES } from '../../common/database/column-types';
 
 @Entity('audit_logs')
 export class AuditLog {
@@ -21,7 +22,7 @@ export class AuditLog {
   action: string;
 
   @Column({
-    type: 'enum',
+    type: DB_COLUMN_TYPES.enum,
     enum: AuditEntityType,
   })
   @Index()
@@ -31,10 +32,10 @@ export class AuditLog {
   @Index()
   entityId: string | null;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: DB_COLUMN_TYPES.json, nullable: true })
   metadata: Record<string, any> | null;
 
-  @Column({ type: 'inet', nullable: true })
+  @Column({ type: DB_COLUMN_TYPES.inet, nullable: true })
   ipAddress: string | null;
 
   @Column({ type: 'varchar', length: 500, nullable: true })

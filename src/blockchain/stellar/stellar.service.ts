@@ -123,10 +123,10 @@ export class StellarService {
     logMetadata?: Record<string, unknown>,
   ): Promise<GenerateWalletResult> {
     if (this.fakeMode) {
-      const suffix = crypto.randomBytes(8).toString('hex').toUpperCase();
+      const keypair = Keypair.random();
       return {
-        publicKey: `GTEST${suffix}`.padEnd(56, 'A'),
-        secretKey: `STEST${suffix}`.padEnd(56, 'B'),
+        publicKey: keypair.publicKey(),
+        secretKey: keypair.secret(),
       };
     }
 

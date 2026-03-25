@@ -5,6 +5,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { DB_COLUMN_TYPES } from '../../common/database/column-types';
 
 export enum FeeTransactionType {
   DEPOSIT = 'DEPOSIT',
@@ -23,7 +24,7 @@ export class FeeConfig {
   id: string;
 
   @Column({
-    type: 'enum',
+    type: DB_COLUMN_TYPES.enum,
     enum: FeeTransactionType,
   })
   transactionType: FeeTransactionType;
@@ -32,7 +33,7 @@ export class FeeConfig {
   currency: string;
 
   @Column({
-    type: 'enum',
+    type: DB_COLUMN_TYPES.enum,
     enum: FeeType,
   })
   feeType: FeeType;

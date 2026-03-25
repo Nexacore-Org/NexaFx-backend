@@ -8,6 +8,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { User } from '../users/user.entity';
+import { DB_COLUMN_TYPES } from '../common/database/column-types';
 
 export enum OtpType {
   LOGIN = 'LOGIN',
@@ -33,17 +34,17 @@ export class Otp {
   codeHash: string;
 
   @Column({
-    type: 'enum',
+    type: DB_COLUMN_TYPES.enum,
     enum: OtpType,
   })
   type: OtpType;
 
-  @Column({ type: 'timestamp with time zone' })
+  @Column({ type: DB_COLUMN_TYPES.timestamp })
   expiresAt: Date;
 
-  @Column({ type: 'timestamp with time zone', nullable: true })
+  @Column({ type: DB_COLUMN_TYPES.timestamp, nullable: true })
   usedAt: Date | null;
 
-  @CreateDateColumn({ type: 'timestamp with time zone' })
+  @CreateDateColumn({ type: DB_COLUMN_TYPES.timestamp })
   createdAt: Date;
 }

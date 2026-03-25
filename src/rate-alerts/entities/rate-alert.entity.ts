@@ -5,6 +5,7 @@ import {
   CreateDateColumn,
   Index,
 } from 'typeorm';
+import { DB_COLUMN_TYPES } from '../../common/database/column-types';
 
 export enum RateAlertCondition {
   ABOVE = 'above',
@@ -32,7 +33,7 @@ export class RateAlert {
   targetRate: string;
 
   @Column({
-    type: 'enum',
+    type: DB_COLUMN_TYPES.enum,
     enum: RateAlertCondition,
   })
   condition: RateAlertCondition;
@@ -44,9 +45,9 @@ export class RateAlert {
   @Column({ type: 'boolean', default: false })
   recurring: boolean;
 
-  @Column({ type: 'timestamp with time zone', nullable: true })
+  @Column({ type: DB_COLUMN_TYPES.timestamp, nullable: true })
   triggeredAt: Date | null;
 
-  @CreateDateColumn({ type: 'timestamp with time zone' })
+  @CreateDateColumn({ type: DB_COLUMN_TYPES.timestamp })
   createdAt: Date;
 }

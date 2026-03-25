@@ -35,16 +35,32 @@ import { ComplianceEvidenceModule } from './compliance-evidence/compliance-evide
     ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        url: configService.get<string>('DATABASE_URL'),
-        synchronize: true,
-        ssl:
-          process.env.NODE_ENV === 'production'
-            ? { rejectUnauthorized: false }
-            : false,
-        autoLoadEntities: true,
-      }),
+      useFactory: (configService: ConfigService) => {
+        const isSqliteTest =
+          process.env.NODE_ENV === 'test' ||
+          configService.get<string>('TEST_DATABASE') === 'sqlite';
+
+        if (isSqliteTest) {
+          return {
+            type: 'sqlite' as const,
+            database: ':memory:',
+            synchronize: true,
+            dropSchema: true,
+            autoLoadEntities: true,
+          };
+        }
+
+        return {
+          type: 'postgres' as const,
+          url: configService.get<string>('DATABASE_URL'),
+          synchronize: true,
+          ssl:
+            process.env.NODE_ENV === 'production'
+              ? { rejectUnauthorized: false }
+              : false,
+          autoLoadEntities: true,
+        };
+      },
       inject: [ConfigService],
     }),
     ThrottlerModule.forRootAsync({

@@ -92,7 +92,7 @@ export class TransactionsService {
       `Creating deposit for user ${userId}: ${amount} ${currency}`,
     );
 
-    const currencyData = await this.currenciesService.findOne(currency);
+    const currencyData = await this.currenciesService.getCurrency(currency);
     if (!currencyData || !currencyData.isActive) {
       throw new BadRequestException(
         `Currency ${currency} is not supported or inactive`,
@@ -236,7 +236,7 @@ export class TransactionsService {
       `Creating withdrawal for user ${userId}: ${amount} ${currency}`,
     );
 
-    const currencyData = await this.currenciesService.findOne(currency);
+    const currencyData = await this.currenciesService.getCurrency(currency);
     if (!currencyData || !currencyData.isActive) {
       throw new BadRequestException(
         `Currency ${currency} is not supported or inactive`,

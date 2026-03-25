@@ -6,6 +6,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { DB_COLUMN_TYPES } from '../../common/database/column-types';
 
 export enum EvidencePackageStatus {
   PROCESSING = 'PROCESSING',
@@ -24,16 +25,16 @@ export class EvidencePackage {
   requestedByUserId: string;
 
   @Column({
-    type: 'enum',
+    type: DB_COLUMN_TYPES.enum,
     enum: EvidencePackageStatus,
     default: EvidencePackageStatus.PROCESSING,
   })
   status: EvidencePackageStatus;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: DB_COLUMN_TYPES.timestamp, nullable: true })
   generatedAt: Date | null;
 
-  @Column({ type: 'timestamp' })
+  @Column({ type: DB_COLUMN_TYPES.timestamp })
   expiresAt: Date;
 
   @Column({ type: 'int', default: 0 })
@@ -42,7 +43,7 @@ export class EvidencePackage {
   @Column({ type: 'varchar', length: 128, nullable: true })
   manifestHash: string | null;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: DB_COLUMN_TYPES.json, nullable: true })
   manifestJson: Record<string, unknown> | null;
 
   @Column({ type: 'text', nullable: true })
@@ -51,7 +52,7 @@ export class EvidencePackage {
   @Column({ type: 'varchar', length: 32, nullable: true })
   signatureAlgorithm: string | null;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: DB_COLUMN_TYPES.json, nullable: true })
   chainOfCustody: Record<string, unknown> | null;
 
   @Column({ type: 'text', nullable: true })

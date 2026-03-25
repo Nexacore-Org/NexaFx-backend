@@ -10,6 +10,7 @@ import {
 import { Exclude } from 'class-transformer';
 import { Notification } from '../notifications/entities/notification.entity';
 import { KycRecord } from '../kyc/entities/kyc.entity';
+import { DB_COLUMN_TYPES } from '../common/database/column-types';
 
 export enum UserRole {
   USER = 'USER',
@@ -54,7 +55,7 @@ export class User {
   @Exclude({ toPlainOnly: true })
   twoFactorSecret: string | null;
 
-  @Column({ type: 'jsonb', nullable: true, default: {} })
+  @Column({ type: DB_COLUMN_TYPES.json, nullable: true })
   balances: Record<string, number>;
 
   @Column({ type: 'varchar', length: 8, unique: true })
@@ -75,16 +76,16 @@ export class User {
   isTwoFactorEnabled: boolean;
 
   @Column({
-    type: 'enum',
+    type: DB_COLUMN_TYPES.enum,
     enum: UserRole,
     default: UserRole.USER,
   })
   role: UserRole;
 
-  @CreateDateColumn({ type: 'timestamp with time zone' })
+  @CreateDateColumn({ type: DB_COLUMN_TYPES.timestamp })
   createdAt: Date;
 
-  @UpdateDateColumn({ type: 'timestamp with time zone' })
+  @UpdateDateColumn({ type: DB_COLUMN_TYPES.timestamp })
   updatedAt: Date;
 
   @OneToMany(() => Notification, (notification) => notification.user)

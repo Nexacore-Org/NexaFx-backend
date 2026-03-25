@@ -8,6 +8,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { User } from '../../users/user.entity';
+import { DB_COLUMN_TYPES } from '../../common/database/column-types';
 
 export enum KycStatus {
   PENDING = 'pending',
@@ -42,7 +43,7 @@ export class KycRecord {
   userId: string;
 
   @Column({
-    type: 'enum',
+    type: DB_COLUMN_TYPES.enum,
     enum: KycStatus,
     default: KycStatus.PENDING,
   })
@@ -64,7 +65,7 @@ export class KycRecord {
   nationality: string;
 
   @Column({
-    type: 'enum',
+    type: DB_COLUMN_TYPES.enum,
     enum: DocumentType,
   })
   documentType: DocumentType;
@@ -84,10 +85,10 @@ export class KycRecord {
   @Column({ nullable: true })
   rejectionReason: string;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: DB_COLUMN_TYPES.timestamp, nullable: true })
   reviewedAt: Date;
 
-  @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+  @Column({ type: DB_COLUMN_TYPES.timestamp, default: () => 'CURRENT_TIMESTAMP' })
   submittedAt: Date;
 
   @CreateDateColumn()

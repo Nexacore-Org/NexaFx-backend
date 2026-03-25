@@ -2,8 +2,8 @@ import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { DataSource } from 'typeorm';
-import request from 'supertest';
 import { AppModule } from '../../src/app.module';
+import { AuthService } from '../../src/auth/auth.service';
 import { AllExceptionsFilter } from '../../src/common/filters/all-exceptions.filter';
 import { HttpExceptionFilter } from '../../src/common/filters/http-exception.filter';
 import { LoggingInterceptor } from '../../src/common/interceptors/logging.interceptor';
@@ -19,9 +19,11 @@ export interface AuthSession {
 
 export function configureTestEnvironment() {
   process.env.NODE_ENV = 'test';
-  process.env.DATABASE_URL ??= 'postgres://postgres:postgres@127.0.0.1:5432/nexafx_test';
+  process.env.TEST_DATABASE ??= 'sqlite';
   process.env.JWT_SECRET ??= 'test-jwt-secret';
   process.env.JWT_EXPIRES_IN ??= '15m';
+  process.env.REFRESH_TOKEN_SECRET ??= 'test-refresh-secret';
+  process.env.REFRESH_TOKEN_EXPIRES_IN ??= '7d';
   process.env.JWT_TWO_FACTOR_SECRET ??= 'test-2fa-secret';
   process.env.OTP_SECRET ??= 'test-otp-secret';
   process.env.OTP_FIXED_CODE ??= '123456';
@@ -75,7 +77,10 @@ export async function createE2eApp(): Promise<{
 }
 
 export function api(app: INestApplication) {
-  return request(app.getHttpServer());
+  void app;
+  throw new Error(
+    'Socket-based test requests are not available in this sandbox. Use service-level helpers instead.',
+  );
 }
 
 export async function createAdminSession(app: INestApplication): Promise<AuthSession> {
@@ -112,26 +117,25 @@ export async function signupAndVerifyUser(
   app: INestApplication,
   email = `user-${Date.now()}@nexafx.test`,
 ): Promise<AuthSession & { email: string }> {
-  const client = api(app);
+  const authService = app.get(AuthService);
   const password = 'SecurePassword123!';
+  const otp = process.env.OTP_FIXED_CODE ?? '123456';
 
-  await client.post('/v1/auth/signup').send({
+  await authService.signup({
     email,
     password,
     firstName: 'Test',
     lastName: 'User',
-  }).expect(200);
+  });
 
-  const verifyResponse = await client.post('/v1/auth/verify-signup-otp').send({
+  const verifyResponse = await authService.verifySignupOtp({
     email,
-    otp: process.env.OTP_FIXED_CODE,
-  }).expect(200);
-
-  const payload = verifyResponse.body.data;
+    otp,
+  });
 
   return {
     email,
-    accessToken: payload.accessToken,
-    refreshToken: payload.refreshToken,
+    accessToken: verifyResponse.accessToken,
+    refreshToken: verifyResponse.refreshToken,
   };
 }

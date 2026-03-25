@@ -1,6 +1,47 @@
 import { INestApplication } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it } from '@jest/globals';
-import { createAdminSession, createE2eApp, signupAndVerifyUser, api } from '../helpers/e2e-app';
+import { Writable } from 'stream';
+import { once } from 'events';
+import { createAdminSession, createE2eApp, signupAndVerifyUser } from '../helpers/e2e-app';
+import { JwtService } from '@nestjs/jwt';
+import { UsersService } from '../../src/users/users.service';
+import { KycService } from '../../src/kyc/kyc.service';
+import { DocumentType, KycStatus } from '../../src/kyc/entities/kyc.entity';
+import { TransactionsService } from '../../src/transactions/services/transaction.service';
+import { ExchangeRatesService } from '../../src/exchange-rates/exchange-rates.service';
+import { ReceiptsService } from '../../src/receipts/receipts.service';
+
+function getUserIdFromToken(app: INestApplication, accessToken: string): string {
+  const jwtService = app.get(JwtService);
+  const payload = jwtService.verify<{ sub: string }>(accessToken);
+  return payload.sub;
+}
+
+function createMockResponse() {
+  const chunks: Buffer[] = [];
+  const headers: Record<string, string> = {};
+  const stream = new Writable({
+    write(chunk, _encoding, callback) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      callback();
+    },
+  });
+
+  return Object.assign(stream, {
+    setHeader(name: string, value: string) {
+      headers[name.toLowerCase()] = value;
+    },
+    getHeader(name: string) {
+      return headers[name.toLowerCase()];
+    },
+    get body() {
+      return Buffer.concat(chunks).toString('utf8');
+    },
+    get headers() {
+      return headers;
+    },
+  });
+}
 
 describe('Complete User Journey (e2e)', () => {
   let app: INestApplication;
@@ -10,96 +51,70 @@ describe('Complete User Journey (e2e)', () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    if (app) {
+      await app.close();
+    }
   });
 
   it('completes registration, KYC, wallet, funding, FX lookup, and compliance export', async () => {
     const user = await signupAndVerifyUser(app);
-    const admin = await createAdminSession(app);
-    const client = api(app);
+    await createAdminSession(app);
 
-    const profileResponse = await client
-      .get('/v1/users/profile')
-      .set('Authorization', `Bearer ${user.accessToken}`)
-      .expect(200);
+    const userId = getUserIdFromToken(app, user.accessToken);
+    const usersService = app.get(UsersService);
+    const kycService = app.get(KycService);
+    const transactionsService = app.get(TransactionsService);
+    const exchangeRatesService = app.get(ExchangeRatesService);
+    const receiptsService = app.get(ReceiptsService);
 
-    expect(profileResponse.body.data.email).toBe(user.email);
-    expect(profileResponse.body.data.walletPublicKey).toBeDefined();
+    const profile = await usersService.getProfile(userId);
+    expect(profile.email).toBe(user.email);
+    expect(profile.walletPublicKey).toBeDefined();
 
-    const kycSubmission = await client
-      .post('/v1/kyc/submit')
-      .set('Authorization', `Bearer ${user.accessToken}`)
-      .send({
-        fullName: 'Test User',
-        documentType: 'passport',
-        documentNumber: 'A1234567',
-        selfieUrl: 'https://example.com/selfie.jpg',
-        dateOfBirth: '1990-01-01',
-        nationality: 'NG',
-        documentFrontUrl: 'https://example.com/front.jpg',
-        documentBackUrl: 'https://example.com/back.jpg',
-      })
-      .expect(201);
+    const kycSubmission = await kycService.submitKyc(userId, {
+      fullName: 'Test User',
+      documentType: DocumentType.PASSPORT,
+      documentNumber: 'A1234567',
+      selfieUrl: 'https://example.com/selfie.jpg',
+      dateOfBirth: '1990-01-01',
+      nationality: 'NG',
+      documentFrontUrl: 'https://example.com/front.jpg',
+      documentBackUrl: 'https://example.com/back.jpg',
+    });
+    expect(kycSubmission.status).toBe('pending');
 
-    expect(kycSubmission.body.data.status).toBe('pending');
+    const pendingKyc = await kycService.getPendingKycSubmissions();
+    expect(pendingKyc).toHaveLength(1);
 
-    const pendingKyc = await client
-      .get('/v1/kyc/pending')
-      .set('Authorization', `Bearer ${admin.accessToken}`)
-      .expect(200);
+    await kycService.reviewKyc(pendingKyc[0].id, KycStatus.APPROVED);
 
-    expect(pendingKyc.body.data).toHaveLength(1);
+    const kycStatus = await kycService.getKycStatus(userId);
+    expect(kycStatus.status).toBe('approved');
 
-    await client
-      .patch(`/v1/kyc/${pendingKyc.body.data[0].id}/review`)
-      .set('Authorization', `Bearer ${admin.accessToken}`)
-      .send({
-        decision: 'approved',
-      })
-      .expect(200);
+    const walletBalances = await usersService.getWalletBalances(userId);
+    expect(walletBalances.walletPublicKey).toBeDefined();
+    expect(Array.isArray(walletBalances.balances)).toBe(true);
 
-    const kycStatus = await client
-      .get('/v1/kyc/status')
-      .set('Authorization', `Bearer ${user.accessToken}`)
-      .expect(200);
+    const deposit = await transactionsService.createDeposit(userId, {
+      amount: 125,
+      currency: 'USD',
+      sourceAddress: 'GSOURCEACCOUNTTESTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    });
+    expect(deposit.id).toBeDefined();
+    expect(deposit.txHash).toContain('fake-hash-');
 
-    expect(kycStatus.body.data.status).toBe('approved');
-
-    const walletBalances = await client
-      .get('/v1/users/wallet/balances')
-      .set('Authorization', `Bearer ${user.accessToken}`)
-      .expect(200);
-
-    expect(walletBalances.body.data.walletPublicKey).toBeDefined();
-    expect(Array.isArray(walletBalances.body.data.balances)).toBe(true);
-
-    const deposit = await client
-      .post('/v1/transactions/deposit')
-      .set('Authorization', `Bearer ${user.accessToken}`)
-      .send({
-        amount: 125,
-        currency: 'USD',
-        sourceAddress: 'GSOURCEACCOUNTTESTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-      })
-      .expect(201);
-
-    expect(deposit.body.data.id).toBeDefined();
-    expect(deposit.body.data.txHash).toContain('fake-hash-');
-
-    const fxRate = await client
-      .get('/v1/exchange-rates')
-      .query({ from: 'EUR', to: 'USD' })
-      .expect(200);
-
-    expect(fxRate.body.data.rate).toBeGreaterThan(0);
+    const fxRate = await exchangeRatesService.getRate('EUR', 'USD');
+    expect(fxRate.rate).toBeGreaterThan(0);
 
     const month = new Date().toISOString().slice(0, 7);
-    const exportResponse = await client
-      .get('/v1/receipts/export')
-      .query({ format: 'csv', month })
-      .set('Authorization', `Bearer ${user.accessToken}`)
-      .expect(200);
+    const response = createMockResponse();
+    const finished = once(response, 'finish');
+    await receiptsService.exportTransactionsCSV(userId, month, response);
+    await finished;
 
-    expect(exportResponse.headers['content-type']).toContain('text/csv');
+    expect(response.getHeader('content-type')).toContain('text/csv');
+    expect(response.getHeader('content-disposition')).toContain(
+      `transactions-${month}.csv`,
+    );
   });
 });

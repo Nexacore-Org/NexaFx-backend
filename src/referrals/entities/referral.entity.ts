@@ -9,6 +9,7 @@ import {
   Index,
 } from 'typeorm';
 import { User } from '../../users/user.entity';
+import { DB_COLUMN_TYPES } from '../../common/database/column-types';
 
 export enum ReferralStatus {
   PENDING = 'pending',
@@ -37,7 +38,7 @@ export class Referral {
   referee: User;
 
   @Column({
-    type: 'enum',
+    type: DB_COLUMN_TYPES.enum,
     enum: ReferralStatus,
     default: ReferralStatus.PENDING,
   })
@@ -49,12 +50,12 @@ export class Referral {
   @Column({ type: 'varchar', length: 10, nullable: true })
   rewardCurrency: string | null;
 
-  @Column({ type: 'timestamp with time zone', nullable: true })
+  @Column({ type: DB_COLUMN_TYPES.timestamp, nullable: true })
   rewardedAt: Date | null;
 
-  @CreateDateColumn({ type: 'timestamp with time zone' })
+  @CreateDateColumn({ type: DB_COLUMN_TYPES.timestamp })
   createdAt: Date;
 
-  @UpdateDateColumn({ type: 'timestamp with time zone' })
+  @UpdateDateColumn({ type: DB_COLUMN_TYPES.timestamp })
   updatedAt: Date;
 }

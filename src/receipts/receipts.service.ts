@@ -175,12 +175,16 @@ export class ReceiptsService {
       const deposits = transactions.filter(
         (t) =>
           t.type === TransactionType.DEPOSIT &&
-          t.status === TransactionStatus.SUCCESS,
+          [TransactionStatus.SUCCESS, TransactionStatus.COMPLETED].includes(
+            t.status,
+          ),
       );
       const withdrawals = transactions.filter(
         (t) =>
           t.type === TransactionType.WITHDRAW &&
-          t.status === TransactionStatus.SUCCESS,
+          [TransactionStatus.SUCCESS, TransactionStatus.COMPLETED].includes(
+            t.status,
+          ),
       );
 
       const totalDeposits = deposits.reduce(
@@ -378,7 +382,7 @@ export class ReceiptsService {
               <p style="margin: 0; font-size: 16px; font-weight: 600; color: #1A1A1A;">${transactionDate}</p>
               
               <p style="margin: 16px 0 8px; font-size: 13px; color: #666; text-transform: uppercase; letter-spacing: 1px;">Status</p>
-              <p style="margin: 0; font-size: 16px; font-weight: 600; color: ${transaction.status === 'SUCCESS' ? '#27ae60' : transaction.status === 'FAILED' ? '#e74c3c' : '#f39c12'};">${transaction.status}</p>
+              <p style="margin: 0; font-size: 16px; font-weight: 600; color: ${['SUCCESS', 'COMPLETED'].includes(transaction.status) ? '#27ae60' : transaction.status === 'FAILED' ? '#e74c3c' : '#f39c12'};">${transaction.status}</p>
             </div>
 
             ${

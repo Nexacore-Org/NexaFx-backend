@@ -35,6 +35,18 @@ export class TransactionResponseDto {
   @ApiPropertyOptional({ example: 'abc123def456...' })
   txHash: string;
 
+  @ApiPropertyOptional({ example: '550e8400-e29b-41d4-a716-446655440001' })
+  bankAccountId?: string;
+
+  @ApiPropertyOptional({ example: 'BANK' })
+  rail?: string;
+
+  @ApiPropertyOptional({ example: 'rail_deposit_1711645588899_12345' })
+  externalReference?: string;
+
+  @ApiPropertyOptional({ example: '80.00000000' })
+  reservedBalanceAmount?: string;
+
   @ApiPropertyOptional({ example: 'Insufficient funds on-chain' })
   failureReason: string;
 

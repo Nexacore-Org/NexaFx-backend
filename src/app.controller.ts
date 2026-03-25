@@ -1,4 +1,4 @@
-import { Controller, Get, VERSION_NEUTRAL } from '@nestjs/common';
+import { Controller, Get, VERSION_NEUTRAL, Version } from '@nestjs/common';
 import { AppService } from './app.service';
 import { Public } from './auth/decorators/public.decorator';
 
@@ -7,7 +7,8 @@ export class AppController {
   constructor(private readonly appService: AppService) {}
 
   @Public()
-  @Get({ version: VERSION_NEUTRAL })
+  @Version(VERSION_NEUTRAL)
+  @Get()
   healthCheck() {
     return {
       status: 'ok',

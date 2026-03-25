@@ -23,6 +23,7 @@ import { PushNotificationsModule } from './push-notifications/push-notifications
 import { AdminModule } from './admin/admin.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { BankingModule } from './modules/banking/banking.module';
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     FeesModule,
     PushNotificationsModule,
     AdminModule,
+    BankingModule,
   ],
   controllers: [AppController],
   providers: [

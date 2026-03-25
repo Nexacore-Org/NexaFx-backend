@@ -17,6 +17,7 @@ export enum TransactionType {
 
 export enum TransactionStatus {
   PENDING = 'PENDING',
+  COMPLETED = 'COMPLETED',
   SUCCESS = 'SUCCESS',
   FAILED = 'FAILED',
   CANCELLED = 'CANCELLED',
@@ -26,6 +27,7 @@ export enum TransactionStatus {
 @Index(['status', 'createdAt'])
 // Optimizes user transaction list filtering by status.
 @Index(['userId', 'status'])
+@Index(['externalReference'])
 @Entity('transactions')
 export class Transaction {
   @PrimaryGeneratedColumn('uuid')
@@ -62,6 +64,21 @@ export class Transaction {
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   txHash: string;
+
+  @Column({ type: 'uuid', nullable: true })
+  bankAccountId?: string | null;
+
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  rail: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  externalReference: string | null;
+
+  @Column({ type: 'decimal', precision: 20, scale: 8, nullable: true })
+  reservedBalanceAmount: string | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  metadata?: Record<string, unknown> | null;
 
   @Column({ type: 'text', nullable: true })
   failureReason: string;

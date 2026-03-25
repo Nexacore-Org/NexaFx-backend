@@ -145,9 +145,9 @@ export class BankAccountService {
 
     const saved = await this.transactionRepository.save(transaction);
 
-    this.paymentRailService.scheduleSettlement(saved.id, reference, (payload) =>
-      this.applySettlementWebhook(payload),
-    );
+    this.paymentRailService.scheduleSettlement(saved.id, reference, async (payload) => {
+      await this.applySettlementWebhook(payload);
+    });
 
     await this.auditLogsService.logTransactionEvent(userId, 'BANK_DEPOSIT_INITIATED', saved.id, {
       bankAccountId: account.id,
@@ -187,9 +187,9 @@ export class BankAccountService {
 
     const saved = await this.transactionRepository.save(transaction);
 
-    this.paymentRailService.scheduleSettlement(saved.id, reference, (payload) =>
-      this.applySettlementWebhook(payload),
-    );
+    this.paymentRailService.scheduleSettlement(saved.id, reference, async (payload) => {
+      await this.applySettlementWebhook(payload);
+    });
 
     await this.auditLogsService.logTransactionEvent(
       userId,

@@ -63,7 +63,7 @@ export class Transaction {
   status: TransactionStatus;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  txHash: string;
+  txHash: string | null;
 
   @Column({ type: 'uuid', nullable: true })
   bankAccountId?: string | null;
@@ -81,7 +81,7 @@ export class Transaction {
   metadata?: Record<string, unknown> | null;
 
   @Column({ type: 'text', nullable: true })
-  failureReason: string;
+  failureReason: string | null;
 
   @Column({ type: 'decimal', precision: 20, scale: 8, nullable: true })
   feeAmount: string;

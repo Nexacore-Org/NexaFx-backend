@@ -47,17 +47,25 @@ export class ExchangeRatesService {
     await this.validateCurrencyPair(fromCode, toCode);
 
     const cacheKey = this.getCacheKey(fromCode, toCode);
-    const cached = this.cache.get(cacheKey);
+    const cached = this.safeCacheGet(cacheKey);
     if (cached) {
       return this.toRateResult(fromCode, toCode, cached);
     }
 
     if (fromCode === toCode) {
-      const entry = this.cache.set(cacheKey, {
+      const entry = this.safeCacheSet(cacheKey, {
         rate: 1,
         fetchedAt: new Date().toISOString(),
       });
-      return this.toRateResult(fromCode, toCode, entry);
+      return this.toRateResult(
+        fromCode,
+        toCode,
+        entry ?? {
+          rate: 1,
+          fetchedAt: new Date().toISOString(),
+          expiresAt: new Date().toISOString(),
+        },
+      );
     }
 
     try {
@@ -65,11 +73,16 @@ export class ExchangeRatesService {
         fromCode,
         toCode,
       );
-      const entry = this.cache.set(cacheKey, {
+      const fallbackEntry = {
+        rate: providerRate.rate,
+        fetchedAt: providerRate.fetchedAt,
+        expiresAt: providerRate.fetchedAt,
+      };
+      const entry = this.safeCacheSet(cacheKey, {
         rate: providerRate.rate,
         fetchedAt: providerRate.fetchedAt,
       });
-      return this.toRateResult(fromCode, toCode, entry);
+      return this.toRateResult(fromCode, toCode, entry ?? fallbackEntry);
     } catch (error) {
       this.logger.error(
         `Failed to fetch rate ${fromCode}->${toCode}`,
@@ -200,5 +213,34 @@ export class ExchangeRatesService {
     )}`;
 
     return Number(resultStr);
+  }
+
+  private safeCacheGet(key: string): ExchangeRateCacheEntry | null {
+    try {
+      return this.cache.get(key);
+    } catch (error) {
+      this.logger.warn(
+        `Exchange-rate cache read failed for ${key}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return null;
+    }
+  }
+
+  private safeCacheSet(
+    key: string,
+    entry: { rate: number; fetchedAt: string },
+  ): ExchangeRateCacheEntry | null {
+    try {
+      return this.cache.set(key, entry);
+    } catch (error) {
+      this.logger.warn(
+        `Exchange-rate cache write failed for ${key}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return null;
+    }
   }
 }

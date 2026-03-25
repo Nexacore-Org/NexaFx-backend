@@ -35,6 +35,14 @@ export class ExchangeRatesProviderClient {
     fetchedAt: string;
     source: string;
   }> {
+    if (this.isFakeMode()) {
+      return {
+        rate: this.getFakeRate(from, to),
+        fetchedAt: new Date().toISOString(),
+        source: 'fake-provider',
+      };
+    }
+
     const url = this.buildLatestUrl(from, to);
     try {
       const response = await firstValueFrom(
@@ -123,5 +131,28 @@ export class ExchangeRatesProviderClient {
     const parsed = raw ? Number(raw) : 5000;
     if (!Number.isFinite(parsed) || parsed <= 0) return 5000;
     return Math.floor(parsed);
+  }
+
+  private isFakeMode(): boolean {
+    return this.configService.get<string>('EXCHANGE_RATES_PROVIDER_FAKE_MODE') === 'true';
+  }
+
+  private getFakeRate(from: string, to: string): number {
+    if (from === to) {
+      return 1;
+    }
+
+    const rates: Record<string, number> = {
+      USD_USD: 1,
+      USD_NGN: 1500,
+      EUR_USD: 1.08,
+      EUR_NGN: 1620,
+      NGN_USD: 1 / 1500,
+      NGN_EUR: 1 / 1620,
+      XLM_USD: 0.12,
+      XLM_NGN: 180,
+    };
+
+    return rates[`${from}_${to}`] ?? 1.25;
   }
 }

@@ -111,6 +111,11 @@ export class OtpsService {
   }
 
   private generateSecureOtp(): string {
+    const fixedOtp = this.configService.get<string>('OTP_FIXED_CODE');
+    if (fixedOtp && /^\d{6}$/.test(fixedOtp)) {
+      return fixedOtp;
+    }
+
     const min = Math.pow(10, this.OTP_LENGTH - 1);
     const max = Math.pow(10, this.OTP_LENGTH) - 1;
     const randomNumber = crypto.randomInt(min, max + 1);

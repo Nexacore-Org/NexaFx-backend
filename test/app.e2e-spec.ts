@@ -1,25 +1,23 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
-import { App } from 'supertest/types';
-import { AppModule } from './../src/app.module';
+import { afterAll, beforeAll, describe, expect, it } from '@jest/globals';
+import { api, createE2eApp } from './helpers/e2e-app';
 
-describe('AppController (e2e)', () => {
-  let app: INestApplication<App>;
+describe('App Health (e2e)', () => {
+  let app: INestApplication;
 
-  beforeEach(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    await app.init();
+  beforeAll(async () => {
+    ({ app } = await createE2eApp());
   });
 
-  it('/ (GET)', () => {
-    return request(app.getHttpServer())
-      .get('/')
-      .expect(200)
-      .expect('Hello World!');
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('returns the root health payload', async () => {
+    const response = await api(app).get('/').expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.status).toBe('ok');
+    expect(response.body.data.service).toBe('NexaFX API');
   });
 });

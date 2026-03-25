@@ -1,0 +1,120 @@
+name: Full Test Suite
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nexafx_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d nexafx_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/nexafx_test
+      JWT_SECRET: test-jwt-secret
+      JWT_TWO_FACTOR_SECRET: test-2fa-secret
+      JWT_EXPIRES_IN: 15m
+      OTP_SECRET: test-otp-secret
+      OTP_FIXED_CODE: 123456
+      SKIP_EMAIL_SENDING: "true"
+      WALLET_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      STELLAR_FAKE_MODE: "true"
+      STELLAR_HORIZON_URL: https://fake-horizon.invalid
+      STELLAR_NETWORK: TESTNET
+      STELLAR_HOT_WALLET_SECRET: STELLAR_TEST_SECRET
+      EXCHANGE_RATES_PROVIDER_FAKE_MODE: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run E2E, performance, and chaos suites
+        run: npm run test:quality-gate
+
+  load-tests:
+    runs-on: ubuntu-latest
+    needs: quality-gate
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nexafx_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d nexafx_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/nexafx_test
+      JWT_SECRET: test-jwt-secret
+      JWT_TWO_FACTOR_SECRET: test-2fa-secret
+      JWT_EXPIRES_IN: 15m
+      OTP_SECRET: test-otp-secret
+      OTP_FIXED_CODE: 123456
+      SKIP_EMAIL_SENDING: "true"
+      WALLET_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      STELLAR_FAKE_MODE: "true"
+      STELLAR_HORIZON_URL: https://fake-horizon.invalid
+      STELLAR_NETWORK: TESTNET
+      STELLAR_HOT_WALLET_SECRET: STELLAR_TEST_SECRET
+      EXCHANGE_RATES_PROVIDER_FAKE_MODE: "true"
+      BASE_URL: http://127.0.0.1:3001
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - uses: grafana/setup-k6-action@v1
+
+      - name: Start application
+        run: nohup npm run start > server.log 2>&1 &
+
+      - name: Wait for application
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail "$BASE_URL/" >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
+      - name: Run concurrent user load test
+        run: k6 run test/load/concurrent-users.load-spec.ts
+
+      - name: Validate websocket load script
+        run: k6 inspect test/load/websocket-feed.load-spec.ts

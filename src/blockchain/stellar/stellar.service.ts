@@ -49,8 +49,17 @@ export class StellarService {
   private server: Horizon.Server;
   private networkPassphrase: string;
   private readonly logger = new Logger(StellarService.name);
+  private readonly fakeMode: boolean;
 
   constructor(private readonly auditLogsService: AuditLogsService) {
+    this.fakeMode = process.env.STELLAR_FAKE_MODE === 'true';
+
+    if (this.fakeMode) {
+      this.server = {} as Horizon.Server;
+      this.networkPassphrase = Networks.TESTNET;
+      return;
+    }
+
     const horizonUrl = process.env.STELLAR_HORIZON_URL;
     const network = process.env.STELLAR_NETWORK;
 
@@ -69,6 +78,10 @@ export class StellarService {
   /* -------------------- HEALTH CHECK -------------------- */
 
   async checkConnectivity(): Promise<boolean> {
+    if (this.fakeMode) {
+      return true;
+    }
+
     try {
       await this.server.feeStats();
 
@@ -109,6 +122,14 @@ export class StellarService {
     userId?: string,
     logMetadata?: Record<string, unknown>,
   ): Promise<GenerateWalletResult> {
+    if (this.fakeMode) {
+      const suffix = crypto.randomBytes(8).toString('hex').toUpperCase();
+      return {
+        publicKey: `GTEST${suffix}`.padEnd(56, 'A'),
+        secretKey: `STEST${suffix}`.padEnd(56, 'B'),
+      };
+    }
+
     try {
       const keypair = Keypair.random();
 
@@ -162,6 +183,19 @@ export class StellarService {
   }
 
   async getWalletBalances(publicKey: string): Promise<WalletBalanceResult[]> {
+    if (this.fakeMode) {
+      return [
+        {
+          asset: 'USD',
+          balance: '2500.00',
+        },
+        {
+          asset: 'XLM',
+          balance: '500.00',
+        },
+      ];
+    }
+
     try {
       const account = await this.server.loadAccount(publicKey);
 
@@ -212,6 +246,13 @@ export class StellarService {
   async createTransaction(
     params: CreateTransactionParams,
   ): Promise<Transaction> {
+    if (this.fakeMode) {
+      return {
+        hash: () => Buffer.from(`fake-${params.sourcePublicKey}`),
+        sign: () => undefined,
+      } as unknown as Transaction;
+    }
+
     try {
       const account = await this.server.loadAccount(params.sourcePublicKey);
 
@@ -268,6 +309,10 @@ export class StellarService {
     secretKey: string,
     userId?: string,
   ): Promise<Transaction> {
+    if (this.fakeMode) {
+      return transaction;
+    }
+
     try {
       const keypair = Keypair.fromSecret(secretKey);
       transaction.sign(keypair);
@@ -304,6 +349,13 @@ export class StellarService {
   }
 
   async submitTransaction(transaction: Transaction, userId?: string) {
+    if (this.fakeMode) {
+      return {
+        hash: `fake-hash-${crypto.randomBytes(6).toString('hex')}`,
+        ledger: 1,
+      };
+    }
+
     try {
       const result = await this.server.submitTransaction(transaction);
 
@@ -350,6 +402,13 @@ export class StellarService {
     txHash: string,
     userId?: string,
   ): Promise<VerifyTransactionResult> {
+    if (this.fakeMode) {
+      return {
+        status: 'SUCCESS',
+        details: { txHash },
+      };
+    }
+
     try {
       const tx = await this.server.transactions().transaction(txHash).call();
 

@@ -33,28 +33,28 @@ export class TransactionResponseDto {
   status: TransactionStatus;
 
   @ApiPropertyOptional({ example: 'abc123def456...' })
-  txHash: string;
+  txHash?: string | null;
 
   @ApiPropertyOptional({ example: '550e8400-e29b-41d4-a716-446655440001' })
-  bankAccountId?: string;
+  bankAccountId?: string | null;
 
   @ApiPropertyOptional({ example: 'BANK' })
-  rail?: string;
+  rail?: string | null;
 
   @ApiPropertyOptional({ example: 'rail_deposit_1711645588899_12345' })
-  externalReference?: string;
+  externalReference?: string | null;
 
   @ApiPropertyOptional({ example: '80.00000000' })
-  reservedBalanceAmount?: string;
+  reservedBalanceAmount?: string | null;
 
   @ApiPropertyOptional({ example: 'Insufficient funds on-chain' })
-  failureReason: string;
+  failureReason?: string | null;
 
   @ApiPropertyOptional({ example: '0.50000000' })
-  feeAmount: string;
+  feeAmount?: string | null;
 
   @ApiPropertyOptional({ example: 'XLM' })
-  feeCurrency: string;
+  feeCurrency?: string | null;
 
   @ApiProperty({ example: '2024-01-15T10:30:00.000Z' })
   createdAt: Date;

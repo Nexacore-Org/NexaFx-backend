@@ -1,0 +1,33 @@
+{
+  "name": "@nexacore-org/nexafx-js",
+  "version": "0.1.0",
+  "description": "Zero-dependency TypeScript SDK for core NexaFX APIs",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "openapi.json"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "npm run generate:types && tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "generate:types": "node ./scripts/generate-types.mjs",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit"
+  },
+  "keywords": [
+    "nexafx",
+    "sdk",
+    "typescript",
+    "openapi"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.6.1",
+    "typescript": "^5.7.3"
+  }
+}

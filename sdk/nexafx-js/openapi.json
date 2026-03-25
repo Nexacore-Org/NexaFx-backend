@@ -1,0 +1,513 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "NexaFX API",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3001"
+    }
+  ],
+  "paths": {
+    "/v1/auth/login": {
+      "post": {
+        "operationId": "AuthController_login",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OTP sent successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope_MessageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/verify-login-otp": {
+      "post": {
+        "operationId": "AuthController_verifyLoginOtp",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyLoginOtpDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OTP verification response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope_VerifyLoginOtpResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/verify-2fa": {
+      "post": {
+        "operationId": "AuthController_verifyTwoFactor",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyTwoFactorDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "2FA verification response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope_AuthTokensDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/refresh": {
+      "post": {
+        "operationId": "AuthController_refreshToken",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshTokenRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Refresh token response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope_AuthTokensDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/transactions/deposit": {
+      "post": {
+        "operationId": "TransactionsController_createDeposit",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDepositDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Deposit created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope_TransactionResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/transactions/withdraw": {
+      "post": {
+        "operationId": "TransactionsController_createWithdrawal",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWithdrawalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Withdrawal created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope_TransactionResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/transactions": {
+      "get": {
+        "operationId": "TransactionsController_findAll",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/TransactionType"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/TransactionStatus"
+            }
+          },
+          {
+            "name": "currency",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Transactions list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope_TransactionListResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/transactions/{id}": {
+      "get": {
+        "operationId": "TransactionsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Transaction details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope_TransactionResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/transactions/{id}/verify": {
+      "post": {
+        "operationId": "TransactionsController_verifyTransaction",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Transaction verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope_TransactionResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/exchange-rates": {
+      "get": {
+        "operationId": "ExchangeRatesController_getRate",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Exchange rate response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope_ExchangeRateResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "TransactionType": {
+        "type": "string",
+        "enum": ["deposit", "withdrawal"]
+      },
+      "TransactionStatus": {
+        "type": "string",
+        "enum": ["pending", "completed", "failed"]
+      },
+      "LoginDto": {
+        "type": "object",
+        "required": ["email", "password"],
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "password": { "type": "string" }
+        }
+      },
+      "MessageResponse": {
+        "type": "object",
+        "required": ["message"],
+        "properties": {
+          "message": { "type": "string" }
+        }
+      },
+      "VerifyLoginOtpDto": {
+        "type": "object",
+        "required": ["email", "otp"],
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "otp": { "type": "string" }
+        }
+      },
+      "VerifyTwoFactorDto": {
+        "type": "object",
+        "required": ["twoFactorToken", "totpCode"],
+        "properties": {
+          "twoFactorToken": { "type": "string" },
+          "totpCode": { "type": "string" }
+        }
+      },
+      "RefreshTokenRequestDto": {
+        "type": "object",
+        "required": ["refreshToken"],
+        "properties": {
+          "refreshToken": { "type": "string" }
+        }
+      },
+      "AuthTokensDto": {
+        "type": "object",
+        "required": ["accessToken", "expiresIn"],
+        "properties": {
+          "accessToken": { "type": "string" },
+          "refreshToken": { "type": "string" },
+          "expiresIn": { "type": "number" }
+        }
+      },
+      "TwoFactorChallengeDto": {
+        "type": "object",
+        "required": ["requiresTwoFactor", "twoFactorToken", "message"],
+        "properties": {
+          "requiresTwoFactor": { "type": "boolean" },
+          "twoFactorToken": { "type": "string" },
+          "message": { "type": "string" }
+        }
+      },
+      "VerifyLoginOtpResponseDto": {
+        "oneOf": [
+          { "$ref": "#/components/schemas/AuthTokensDto" },
+          { "$ref": "#/components/schemas/TwoFactorChallengeDto" }
+        ]
+      },
+      "CreateDepositDto": {
+        "type": "object",
+        "required": ["amount", "currency", "sourceAddress"],
+        "properties": {
+          "amount": { "type": "number" },
+          "currency": { "type": "string" },
+          "sourceAddress": { "type": "string" }
+        }
+      },
+      "CreateWithdrawalDto": {
+        "type": "object",
+        "required": ["amount", "currency", "destinationAddress"],
+        "properties": {
+          "amount": { "type": "number" },
+          "currency": { "type": "string" },
+          "destinationAddress": { "type": "string" },
+          "beneficiaryId": { "type": "string", "format": "uuid" }
+        }
+      },
+      "TransactionResponseDto": {
+        "type": "object",
+        "required": ["id", "userId", "type", "amount", "currency", "status", "createdAt", "updatedAt"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "userId": { "type": "string", "format": "uuid" },
+          "type": { "$ref": "#/components/schemas/TransactionType" },
+          "amount": { "type": "string" },
+          "currency": { "type": "string" },
+          "currencySymbol": { "type": "string" },
+          "currencyDisplayName": { "type": "string" },
+          "rate": { "type": "string" },
+          "status": { "$ref": "#/components/schemas/TransactionStatus" },
+          "txHash": { "type": "string" },
+          "failureReason": { "type": "string" },
+          "feeAmount": { "type": "string" },
+          "feeCurrency": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" },
+          "sourceAddress": { "type": "string" },
+          "destinationAddress": { "type": "string" }
+        }
+      },
+      "TransactionListResponseDto": {
+        "type": "object",
+        "required": ["transactions", "total"],
+        "properties": {
+          "transactions": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/TransactionResponseDto" }
+          },
+          "total": { "type": "number" }
+        }
+      },
+      "ExchangeRateResponseDto": {
+        "type": "object",
+        "required": ["from", "to", "rate"],
+        "properties": {
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "rate": { "type": "number" },
+          "fetchedAt": { "type": "string", "format": "date-time" },
+          "expiresAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ApiEnvelope_MessageResponse": {
+        "type": "object",
+        "required": ["success", "data", "timestamp"],
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": { "$ref": "#/components/schemas/MessageResponse" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ApiEnvelope_AuthTokensDto": {
+        "type": "object",
+        "required": ["success", "data", "timestamp"],
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": { "$ref": "#/components/schemas/AuthTokensDto" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ApiEnvelope_VerifyLoginOtpResponseDto": {
+        "type": "object",
+        "required": ["success", "data", "timestamp"],
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": { "$ref": "#/components/schemas/VerifyLoginOtpResponseDto" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ApiEnvelope_TransactionResponseDto": {
+        "type": "object",
+        "required": ["success", "data", "timestamp"],
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": { "$ref": "#/components/schemas/TransactionResponseDto" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ApiEnvelope_TransactionListResponseDto": {
+        "type": "object",
+        "required": ["success", "data", "timestamp"],
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": { "$ref": "#/components/schemas/TransactionListResponseDto" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ApiEnvelope_ExchangeRateResponseDto": {
+        "type": "object",
+        "required": ["success", "data", "timestamp"],
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": { "$ref": "#/components/schemas/ExchangeRateResponseDto" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

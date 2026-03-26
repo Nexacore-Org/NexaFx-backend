@@ -4,12 +4,16 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
+import { ThrottlerException } from '@nestjs/throttler';
 import { JwtService } from '@nestjs/jwt';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, MoreThan } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import { OtpsService } from '../otps/otps.service';
 import { OtpType } from '../otps/otp.entity';
+import { PasswordResetAttempt } from './entities/password-reset-attempt.entity';
 import { RefreshTokensService } from '../tokens/refresh-tokens.service';
 import { OtpDeliveryService } from './email/otp-delivery.service';
 import { StellarService } from '../blockchain/stellar/stellar.service';
@@ -40,6 +44,8 @@ export class AuthService {
     private readonly encryptionService: EncryptionService,
     private readonly auditLogsService: AuditLogsService,
     private readonly referralsService: ReferralsService,
+    @InjectRepository(PasswordResetAttempt)
+    private readonly passwordResetAttemptRepository: Repository<PasswordResetAttempt>,
   ) {}
 
   async login(
@@ -134,6 +140,10 @@ export class AuthService {
     }
 
     await this.otpsService.validateOtp(user, verifyDto.otp, OtpType.LOGIN);
+    await this.usersService.updateByUserId(user.id, {
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+    });
 
     if (user.isTwoFactorEnabled) {
       const twoFactorToken = this.jwtService.sign(
@@ -220,6 +230,11 @@ export class AuthService {
       throw new UnauthorizedException('Invalid two-factor code');
     }
 
+    await this.usersService.updateByUserId(user.id, {
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+    });
+
     const tokens = await this.issueAuthTokens(user.id, user.email, user.role);
 
     await this.auditLogsService.logAuthEvent(user.id, AuditAction.LOGIN, {
@@ -247,6 +262,8 @@ export class AuthService {
       await this.simulateProcessingDelay();
       return { message: genericMessage };
     }
+
+    await this.checkPasswordResetRateLimit(forgotDto.email, ipAddress);
 
     const otp = await this.otpsService.generateOtp(
       user,
@@ -287,6 +304,10 @@ export class AuthService {
       resetDto.otp,
       OtpType.PASSWORD_RESET,
     );
+    await this.usersService.updateByUserId(user.id, {
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+    });
     await this.usersService.updatePassword(user.id, resetDto.newPassword);
     await this.refreshTokensService.revokeAllUserTokens(user.id);
     await this.otpsService.invalidateAllUserOtps(user.id);
@@ -432,6 +453,10 @@ export class AuthService {
 
     // Validate OTP
     await this.otpsService.validateOtp(user, verifyDto.otp, OtpType.SIGNUP);
+    await this.usersService.updateByUserId(user.id, {
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+    });
 
     // Mark user as verified
     await this.usersService.verifyUser(user.id);
@@ -565,6 +590,32 @@ export class AuthService {
     throw new BadRequestException(
       'Unable to generate referral code. Please try again.',
     );
+  }
+
+  private async checkPasswordResetRateLimit(
+    email: string,
+    ipAddress?: string,
+  ): Promise<void> {
+    const windowStart = new Date();
+    windowStart.setHours(windowStart.getHours() - 1);
+
+    const recentAttempts = await this.passwordResetAttemptRepository.count({
+      where: {
+        email: email.toLowerCase().trim(),
+        createdAt: MoreThan(windowStart),
+      },
+    });
+
+    if (recentAttempts >= 3) {
+      throw new ThrottlerException(
+        'Too many password reset attempts. Please try again in 1 hour.',
+      );
+    }
+
+    await this.passwordResetAttemptRepository.save({
+      email: email.toLowerCase().trim(),
+      ipAddress: ipAddress || null,
+    });
   }
 
   private async simulateProcessingDelay(): Promise<void> {

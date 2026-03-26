@@ -2,11 +2,13 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PassportModule } from '@nestjs/passport';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import type { StringValue } from 'ms';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { OtpDeliveryService } from './email/otp-delivery.service';
+import { PasswordResetAttempt } from './entities/password-reset-attempt.entity';
 import { UsersModule } from '../users/users.module';
 import { OtpsModule } from '../otps/otps.module';
 import { TokensModule } from '../tokens/tokens.module';
@@ -22,6 +24,7 @@ import { ReferralsModule } from '../referrals/referrals.module';
     StellarModule,
     ReferralsModule,
     PassportModule,
+    TypeOrmModule.forFeature([PasswordResetAttempt]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {

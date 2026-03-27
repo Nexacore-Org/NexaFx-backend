@@ -29,7 +29,14 @@ export class KycService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async submitKyc(userId: string, dto: SubmitKycDto) {
+  async submitKyc(
+    userId: string,
+    dto: SubmitKycDto & {
+      documentFrontUrl?: string;
+      documentBackUrl?: string;
+      selfieUrl?: string;
+    },
+  ) {
     // 🔥 Check for active submission
     const existingActiveKyc = await this.kycRepository.findOne({
       where: [
@@ -42,6 +49,15 @@ export class KycService {
       throw new BadRequestException(
         'You already have a KYC submission under review.',
       );
+    }
+
+    // Basic validation to ensure required file paths exist
+    if (!dto.documentFrontUrl) {
+      throw new BadRequestException('documentFront file is required');
+    }
+
+    if (!dto.selfieUrl) {
+      throw new BadRequestException('selfie file is required');
     }
 
     const newKyc = this.kycRepository.create({

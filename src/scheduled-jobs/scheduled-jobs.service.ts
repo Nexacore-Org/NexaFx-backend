@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { Repository } from 'typeorm';
+import { Repository, LessThan, Not, IsNull } from 'typeorm';
+import * as os from 'os';
 import {
   Transaction,
   TransactionStatus,
@@ -21,6 +22,8 @@ import { RateAlertsService } from '../rate-alerts/rate-alerts.service';
 @Injectable()
 export class ScheduledJobsService {
   private readonly logger = new Logger(ScheduledJobsService.name);
+  private readonly LOCK_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+  private readonly instanceId: string;
   private processingTransactionIds = new Set<string>();
 
   constructor(
@@ -33,7 +36,10 @@ export class ScheduledJobsService {
     private readonly notificationsService: NotificationsService,
     private readonly usersService: UsersService,
     private readonly rateAlertsService: RateAlertsService,
-  ) {}
+  ) {
+    // Truncate hostname to 255 characters to match DB column constraint
+    this.instanceId = os.hostname().substring(0, 255);
+  }
 
   /**
    * Reconcile pending transactions every 2 minutes
@@ -46,8 +52,8 @@ export class ScheduledJobsService {
     );
 
     try {
-      // Fetch all pending transactions
-      const pendingTransactions = await this.getPendingTransactions();
+      // Atomically claim pending transactions for this instance
+      const pendingTransactions = await this.claimPendingTransactions();
 
       if (pendingTransactions.length === 0) {
         this.logger.log('[Scheduled Job] No pending transactions to reconcile');
@@ -55,21 +61,12 @@ export class ScheduledJobsService {
       }
 
       this.logger.log(
-        `[Scheduled Job] Found ${pendingTransactions.length} pending transactions`,
+        `[Scheduled Job] Claimed ${pendingTransactions.length} pending transactions`,
       );
 
-      // Process each transaction sequentially to avoid race conditions
+      // Process each transaction sequentially
       for (const transaction of pendingTransactions) {
-        // Skip if already being processed
-        if (this.processingTransactionIds.has(transaction.id)) {
-          this.logger.debug(
-            `[Scheduled Job] Skipping transaction ${transaction.id} - already being processed`,
-          );
-          continue;
-        }
-
         try {
-          this.processingTransactionIds.add(transaction.id);
           await this.reconcileTransaction(transaction);
         } catch (error) {
           this.logger.error(
@@ -77,7 +74,8 @@ export class ScheduledJobsService {
             error,
           );
         } finally {
-          this.processingTransactionIds.delete(transaction.id);
+          // Clear the lock after processing (success or failure)
+          await this.clearTransactionLock(transaction.id);
         }
       }
 
@@ -125,12 +123,13 @@ export class ScheduledJobsService {
       );
 
       for (const transaction of recentFailedTxs) {
-        if (this.processingTransactionIds.has(transaction.id)) {
+        // Try to claim the transaction for retry
+        const claimed = await this.claimTransactionForRetry(transaction.id);
+        if (!claimed) {
           continue;
         }
 
         try {
-          this.processingTransactionIds.add(transaction.id);
           await this.retryTransaction(transaction);
         } catch (error) {
           this.logger.error(
@@ -138,7 +137,8 @@ export class ScheduledJobsService {
             error,
           );
         } finally {
-          this.processingTransactionIds.delete(transaction.id);
+          // Clear the lock after processing (success or failure)
+          await this.clearTransactionLock(transaction.id);
         }
       }
 
@@ -470,14 +470,85 @@ export class ScheduledJobsService {
   }
 
   /**
-   * Get all pending transactions
+   * Atomically claim pending transactions for processing by this instance.
+   * Uses DB-level UPDATE with WHERE clause to prevent race conditions.
+   * Only claims transactions that are:
+   * - Status is PENDING
+   * - Not currently locked (processingLockedAt IS NULL)
+   * - Or lock has expired (processingLockedAt < expiry timestamp)
    */
-  private async getPendingTransactions(): Promise<Transaction[]> {
+  private async claimPendingTransactions(): Promise<Transaction[]> {
+    const expiryTimestamp = new Date(Date.now() - this.LOCK_EXPIRY_MS);
+
+    // Atomic UPDATE to claim transactions
+    const updateResult = await this.transactionRepository
+      .createQueryBuilder()
+      .update(Transaction)
+      .set({
+        processingLockedAt: new Date(),
+        processingLockedBy: this.instanceId,
+      })
+      .where(
+        'status = :status AND ("processingLockedAt" IS NULL OR "processingLockedAt" < :expiry)',
+        {
+          status: TransactionStatus.PENDING,
+          expiry: expiryTimestamp,
+        },
+      )
+      .execute();
+
+    const claimedCount = updateResult.affected ?? 0;
+
+    if (claimedCount === 0) {
+      return [];
+    }
+
+    // Fetch only transactions claimed by this instance
     return this.transactionRepository.find({
-      where: { status: TransactionStatus.PENDING },
+      where: {
+        status: TransactionStatus.PENDING,
+        processingLockedBy: this.instanceId,
+      },
       relations: ['user'],
       order: { createdAt: 'ASC' },
     });
+  }
+
+  /**
+   * Clear the processing lock for a transaction after processing.
+   */
+  private async clearTransactionLock(transactionId: string): Promise<void> {
+    await this.transactionRepository.update(transactionId, {
+      processingLockedAt: null,
+      processingLockedBy: null,
+    });
+  }
+
+  /**
+   * Atomically claim a single transaction for retry by this instance.
+   * Returns true if the transaction was successfully claimed.
+   */
+  private async claimTransactionForRetry(transactionId: string): Promise<boolean> {
+    const expiryTimestamp = new Date(Date.now() - this.LOCK_EXPIRY_MS);
+
+    const updateResult = await this.transactionRepository
+      .createQueryBuilder()
+      .update(Transaction)
+      .set({
+        processingLockedAt: new Date(),
+        processingLockedBy: this.instanceId,
+      })
+      .where(
+        'id = :id AND status = :status AND ("processingLockedAt" IS NULL OR "processingLockedAt" < :expiry)',
+        {
+          id: transactionId,
+          status: TransactionStatus.FAILED,
+          expiry: expiryTimestamp,
+        },
+      )
+      .execute();
+
+    return (updateResult.affected ?? 0) > 0;
   }
 
   /**

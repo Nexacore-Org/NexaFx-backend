@@ -77,4 +77,10 @@ export class Transaction {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  @Column({ type: 'timestamp', nullable: true })
+  processingLockedAt: Date | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  processingLockedBy: string | null;
 }

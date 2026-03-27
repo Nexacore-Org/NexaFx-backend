@@ -7,6 +7,7 @@ import {
   Query,
   UseGuards,
   ParseUUIDPipe,
+  Res,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -25,6 +26,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UserQueryDto } from './dto/user-query.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { AdminTransactionQueryDto } from './dto/admin-transaction-query.dto';
+import { MetricsQueryDto } from './dto/metrics-query.dto';
 
 @ApiTags('Admin')
 @ApiBearerAuth()
@@ -39,8 +41,22 @@ export class AdminController {
   @ApiResponse({ status: 200, description: 'Returns platform statistics' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
-  async getMetrics() {
-    return this.adminService.getPlatformMetrics();
+  async getMetrics(@Query() query: MetricsQueryDto) {
+    return this.adminService.getPlatformMetrics(query);
+  }
+
+  @Get('metrics/export')
+  @ApiOperation({ summary: 'Export platform metrics as CSV (Admin only)' })
+  @ApiResponse({ status: 200, description: 'Returns CSV file' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
+  async exportMetrics(@Query() query: MetricsQueryDto, @Res() res) {
+    const csv = await this.adminService.exportMetrics(query);
+    res.set({
+      'Content-Type': 'text/csv',
+      'Content-Disposition': 'attachment; filename=metrics.csv',
+    });
+    res.send(csv);
   }
 
   @Get('users')

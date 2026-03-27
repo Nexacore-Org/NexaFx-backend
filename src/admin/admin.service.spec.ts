@@ -156,6 +156,23 @@ describe('AdminService', () => {
       expect(result).toBeDefined();
       expect(result.users.total).toBe(10);
       expect(result.transactions.totalCount).toBe(20);
+      expect(result.dailySignups).toBeDefined();
+      expect(result.dailyTransactionVolumes).toBeDefined();
+    });
+
+    it('should return time-series data with correct structure', async () => {
+      const mockSignups = [{ date: '2023-01-01', count: 5 }];
+      const mockVolumes = [{ date: '2023-01-01', depositVolume: 100, withdrawalVolume: 50 }];
+
+      jest.spyOn(userRepository, 'count').mockResolvedValue(10);
+      jest.spyOn(transactionRepository, 'count').mockResolvedValue(20);
+      jest.spyOn(service as any, 'getDailySignups').mockResolvedValue(mockSignups);
+      jest.spyOn(service as any, 'getDailyTransactionVolumes').mockResolvedValue(mockVolumes);
+
+      const result = await service.getPlatformMetrics();
+
+      expect(result.dailySignups).toEqual(mockSignups);
+      expect(result.dailyTransactionVolumes).toEqual(mockVolumes);
     });
   });
 

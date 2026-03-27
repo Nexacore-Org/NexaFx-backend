@@ -23,4 +23,10 @@ export class PlatformMetricsDto {
   kyc: {
     pendingReviews: number;
   };
+  dailySignups: { date: string; count: number }[];
+  dailyTransactionVolumes: {
+    date: string;
+    depositVolume: number;
+    withdrawalVolume: number;
+  }[];
 }

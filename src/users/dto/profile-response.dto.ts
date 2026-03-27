@@ -47,6 +47,20 @@ export class ProfileResponseDto {
   })
   isVerified: boolean;
 
+  @ApiPropertyOptional({
+    example: { 'NATIVE': 100.5, 'USDC': 50.25 },
+    description: 'Wallet balance snapshot (cached from Stellar)',
+    nullable: true,
+  })
+  balances: Record<string, number> | null;
+
+  @ApiPropertyOptional({
+    example: '2025-03-27T10:30:00Z',
+    description: 'Timestamp of last wallet balance sync',
+    nullable: true,
+  })
+  balanceLastSyncedAt: Date | null;
+
   @ApiProperty({
     example: false,
     description: 'Whether TOTP two-factor authentication is enabled',

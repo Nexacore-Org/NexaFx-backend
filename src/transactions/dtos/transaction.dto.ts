@@ -130,3 +130,33 @@ export class TransactionQueryDto {
   @Min(1)
   limit?: number;
 }
+
+export class CreateSwapDto {
+  @ApiProperty({
+    example: 10,
+    description: 'Amount of source currency to swap',
+    minimum: 0.01,
+  })
+  @IsNumber()
+  @IsPositive()
+  @Min(0.01)
+  amount: number;
+
+  @ApiProperty({ example: 'XLM', description: 'Source currency code' })
+  @IsString()
+  @IsNotEmpty()
+  fromCurrency: string;
+
+  @ApiProperty({ example: 'USDC', description: 'Destination currency code' })
+  @IsString()
+  @IsNotEmpty()
+  toCurrency: string;
+
+  @ApiProperty({
+    example: 'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOUJ3UHMNGUAO7UP',
+    description: 'Stellar source address for the swap',
+  })
+  @IsString()
+  @IsNotEmpty()
+  sourceAddress: string;
+}

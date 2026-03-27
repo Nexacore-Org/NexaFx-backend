@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner, TableColumn } from 'typeorm';
 
-export class AddBalanceLastSyncedAtColumn1712000000000
-  implements MigrationInterface
-{
+export class AddBalanceLastSyncedAtColumn1712000000000 implements MigrationInterface {
   name = 'AddBalanceLastSyncedAtColumn1712000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

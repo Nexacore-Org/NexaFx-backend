@@ -88,7 +88,9 @@ describe('ReceiptsService', () => {
         {
           provide: UsersService,
           useValue: {
-            findById: jest.fn().mockResolvedValue({ email: 'test@example.com' }),
+            findById: jest
+              .fn()
+              .mockResolvedValue({ email: 'test@example.com' }),
           },
         },
         {
@@ -99,16 +101,22 @@ describe('ReceiptsService', () => {
     }).compile();
 
     service = module.get<ReceiptsService>(ReceiptsService);
-    transactionRepository = module.get<Repository<Transaction>>(getRepositoryToken(Transaction));
+    transactionRepository = module.get<Repository<Transaction>>(
+      getRepositoryToken(Transaction),
+    );
     usersService = module.get<UsersService>(UsersService);
   });
 
   it('should only return transactions within the requested month', async () => {
-    jest.spyOn(transactionRepository, 'find').mockResolvedValue(
-      mockTransactions.filter(
-        (t) => t.createdAt >= new Date('2025-01-01') && t.createdAt <= new Date('2025-01-31T23:59:59.999Z')
-      ) as any,
-    );
+    jest
+      .spyOn(transactionRepository, 'find')
+      .mockResolvedValue(
+        mockTransactions.filter(
+          (t) =>
+            t.createdAt >= new Date('2025-01-01') &&
+            t.createdAt <= new Date('2025-01-31T23:59:59.999Z'),
+        ) as any,
+      );
     const buffer = await service.generateMonthlyStatement('user-1', '2025-01');
     expect(buffer).toBeInstanceOf(Buffer);
     expect(transactionRepository.find).toHaveBeenCalledWith(
@@ -117,13 +125,17 @@ describe('ReceiptsService', () => {
           userId: 'user-1',
           createdAt: expect.any(Object),
         }),
-      })
+      }),
     );
   });
 
   it('should call Between with correct start and end dates', async () => {
-    const findSpy = jest.spyOn(transactionRepository, 'find').mockResolvedValue([]);
-    await expect(service.generateMonthlyStatement('user-1', '2025-01')).rejects.toThrow();
+    const findSpy = jest
+      .spyOn(transactionRepository, 'find')
+      .mockResolvedValue([]);
+    await expect(
+      service.generateMonthlyStatement('user-1', '2025-01'),
+    ).rejects.toThrow();
     const call = findSpy.mock.calls[0]?.[0];
     expect(call).toBeDefined();
     const where = call?.where;
@@ -134,11 +146,18 @@ describe('ReceiptsService', () => {
     const callArgs = whereObj?.createdAt;
     expect(callArgs).toBeDefined();
     // Only check FindOperator properties if present
-    if (callArgs && typeof callArgs === 'object' && 'type' in callArgs && 'value' in callArgs) {
+    if (
+      callArgs &&
+      typeof callArgs === 'object' &&
+      'type' in callArgs &&
+      'value' in callArgs
+    ) {
       expect((callArgs as any).type).toBe('between');
       expect(Array.isArray((callArgs as any).value)).toBe(true);
       expect((callArgs as any).value[0]).toEqual(new Date(2025, 0, 1));
-      expect((callArgs as any).value[1]).toEqual(new Date(2025, 0, 31, 23, 59, 59, 999));
+      expect((callArgs as any).value[1]).toEqual(
+        new Date(2025, 0, 31, 23, 59, 59, 999),
+      );
     } else {
       throw new Error('createdAt is not a FindOperator');
     }

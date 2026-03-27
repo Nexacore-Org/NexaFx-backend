@@ -546,29 +546,41 @@ export class TransactionsService {
   }
 
   /**
-   * Cancel a transaction
+   * Cancel a transaction (user-initiated)
+   * Only allows cancellation of PENDING transactions owned by the user
    */
   async cancelTransaction(
     transactionId: string,
-    userId?: string,
-    adminId?: string,
+    userId: string,
     ipAddress?: string,
     userAgent?: string,
   ): Promise<Transaction> {
-    const where: { id: string; userId?: string } = { id: transactionId };
-    if (userId) {
-      where.userId = userId;
-    }
-
-    const transaction = await this.transactionRepository.findOne({ where });
+    const transaction = await this.transactionRepository.findOne({
+      where: { id: transactionId },
+    });
 
     if (!transaction) {
       throw new NotFoundException('Transaction not found');
     }
 
+    // Verify ownership
+    if (transaction.userId !== userId) {
+      throw new ForbiddenException(
+        'You do not have permission to cancel this transaction',
+      );
+    }
+
+    // Verify status is PENDING
     if (transaction.status !== TransactionStatus.PENDING) {
       throw new BadRequestException(
-        'Only pending transactions can be cancelled',
+        `Cannot cancel transaction with status ${transaction.status}. Only PENDING transactions can be cancelled.`,
+      );
+    }
+
+    // Log warning if transaction was already submitted to blockchain
+    if (transaction.txHash) {
+      this.logger.warn(
+        `Transaction ${transactionId} has already been submitted to Stellar (txHash: ${transaction.txHash}). Cancelling in DB but on-chain state may differ.`,
       );
     }
 
@@ -583,15 +595,16 @@ export class TransactionsService {
       {
         oldStatus,
         newStatus: transaction.status,
-        cancelledBy: adminId ?? userId,
-        userCancelled: !!userId && !adminId,
+        cancelledBy: userId,
+        userCancelled: true,
         ip: ipAddress,
         device: userAgent,
+        txHash: transaction.txHash,
       },
     );
 
     this.logger.log(
-      `Transaction ${transactionId} cancelled by ${adminId ?? userId}`,
+      `Transaction ${transactionId} cancelled by user ${userId}`,
     );
 
     return transaction;

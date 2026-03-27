@@ -27,6 +27,7 @@ import { UserQueryDto } from './dto/user-query.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { AdminTransactionQueryDto } from './dto/admin-transaction-query.dto';
 import { MetricsQueryDto } from './dto/metrics-query.dto';
+import { OverrideTransactionDto } from './dto/override-transaction.dto';
 
 @ApiTags('Admin')
 @ApiBearerAuth()
@@ -136,5 +137,44 @@ export class AdminController {
   @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
   async getTransactions(@Query() query: AdminTransactionQueryDto) {
     return this.adminService.getTransactions(query);
+  }
+
+  @Patch('transactions/:id/override')
+  @ApiOperation({
+    summary: 'Override transaction status (Admin only)',
+    description:
+      'Allows admin to override transaction status to SUCCESS, FAILED, or CANCELLED. Requires a reason for audit compliance.',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Transaction UUID',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+  })
+  @ApiBody({ type: OverrideTransactionDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Transaction status overridden successfully',
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Invalid status (PENDING not allowed) or missing/empty reason',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Admin role required',
+  })
+  @ApiResponse({ status: 404, description: 'Transaction not found' })
+  async overrideTransactionStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() overrideDto: OverrideTransactionDto,
+    @CurrentUser() admin: { userId: string },
+  ) {
+    return this.adminService.overrideTransactionStatus(
+      id,
+      overrideDto,
+      admin.userId,
+    );
   }
 }

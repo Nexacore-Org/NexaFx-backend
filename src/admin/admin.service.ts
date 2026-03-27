@@ -27,9 +27,13 @@ import { PlatformMetricsDto } from './dto/platform-metrics.dto';
 import { startOfDay, startOfWeek, startOfMonth ,subDays, format, eachDayOfInterval, parseISO} from 'date-fns';
 import { MetricsQueryDto } from './dto/metrics-query.dto';
 import * as csv from 'fast-csv';
+import { OverrideTransactionDto } from './dto/override-transaction.dto';
+import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
@@ -464,5 +468,61 @@ export class AdminService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  /**
+   * Override transaction status (admin-only)
+   * Allows admin to set transaction status to SUCCESS, FAILED, or CANCELLED
+   * Requires a reason for audit compliance
+   */
+  async overrideTransactionStatus(
+    transactionId: string,
+    overrideDto: OverrideTransactionDto,
+    adminId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<Transaction> {
+    const { status, reason } = overrideDto;
+
+    // Admin cannot override to PENDING - only SUCCESS, FAILED, or CANCELLED
+    if (status === TransactionStatus.PENDING) {
+      throw new BadRequestException(
+        'Admin override cannot set status to PENDING. Only SUCCESS, FAILED, or CANCELLED are allowed.',
+      );
+    }
+
+    const transaction = await this.transactionRepository.findOne({
+      where: { id: transactionId },
+    });
+
+    if (!transaction) {
+      throw new NotFoundException('Transaction not found');
+    }
+
+    const oldStatus = transaction.status;
+    transaction.status = status;
+    transaction.failureReason = reason;
+    await this.transactionRepository.save(transaction);
+
+    await this.auditLogsService.logTransactionEvent(
+      transaction.userId,
+      AuditAction.TRANSACTION_STATUS_UPDATED,
+      transaction.id,
+      {
+        oldStatus,
+        newStatus: status,
+        updatedBy: adminId,
+        reason,
+        ip: ipAddress,
+        device: userAgent,
+        adminOverride: true,
+      },
+    );
+
+    this.logger.log(
+      `Transaction ${transactionId} status overridden by admin ${adminId}: ${oldStatus} -> ${status}. Reason: ${reason}`,
+    );
+
+    return transaction;
   }
 }

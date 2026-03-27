@@ -7,6 +7,7 @@ import { Transaction, TransactionStatus, TransactionType } from '../transactions
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { UserQueryDto } from './dto/user-query.dto';
+import { OverrideTransactionDto } from './dto/override-transaction.dto';
 
 describe('AdminService', () => {
   let service: AdminService;
@@ -252,6 +253,138 @@ describe('AdminService', () => {
       jest.spyOn(userRepository, 'findOne').mockResolvedValue({ ...mockUser, isSuspended: true });
 
       await expect(service.suspendUser('user-123', 'admin-123')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('overrideTransactionStatus', () => {
+    const mockTransaction: Transaction = {
+      id: 'tx-override-test',
+      userId: 'user-123',
+      type: TransactionType.DEPOSIT,
+      amount: '100.00',
+      currency: 'USD',
+      status: TransactionStatus.PENDING,
+      failureReason: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as Transaction;
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should override transaction status to SUCCESS with reason', async () => {
+      const overrideDto: OverrideTransactionDto = {
+        status: TransactionStatus.SUCCESS,
+        reason: 'Manual verification completed',
+      };
+
+      jest.spyOn(transactionRepository, 'findOne').mockResolvedValue(mockTransaction);
+      jest.spyOn(transactionRepository, 'save').mockResolvedValue({
+        ...mockTransaction,
+        status: TransactionStatus.SUCCESS,
+        failureReason: 'Manual verification completed',
+      } as Transaction);
+
+      const result = await service.overrideTransactionStatus(
+        'tx-override-test',
+        overrideDto,
+        'admin-123',
+      );
+
+      expect(result.status).toBe(TransactionStatus.SUCCESS);
+      expect(result.failureReason).toBe('Manual verification completed');
+      expect(auditLogsService.logTransactionEvent).toHaveBeenCalledWith(
+        'user-123',
+        expect.any(String),
+        'tx-override-test',
+        expect.objectContaining({
+          oldStatus: TransactionStatus.PENDING,
+          newStatus: TransactionStatus.SUCCESS,
+          updatedBy: 'admin-123',
+          reason: 'Manual verification completed',
+          adminOverride: true,
+        }),
+      );
+    });
+
+    it('should override transaction status to FAILED with reason', async () => {
+      const overrideDto: OverrideTransactionDto = {
+        status: TransactionStatus.FAILED,
+        reason: 'Blockchain confirmation timeout',
+      };
+
+      jest.spyOn(transactionRepository, 'findOne').mockResolvedValue(mockTransaction);
+      jest.spyOn(transactionRepository, 'save').mockResolvedValue({
+        ...mockTransaction,
+        status: TransactionStatus.FAILED,
+        failureReason: 'Blockchain confirmation timeout',
+      } as Transaction);
+
+      const result = await service.overrideTransactionStatus(
+        'tx-override-test',
+        overrideDto,
+        'admin-123',
+      );
+
+      expect(result.status).toBe(TransactionStatus.FAILED);
+    });
+
+    it('should override transaction status to CANCELLED with reason', async () => {
+      const overrideDto: OverrideTransactionDto = {
+        status: TransactionStatus.CANCELLED,
+        reason: 'User request after support ticket',
+      };
+
+      jest.spyOn(transactionRepository, 'findOne').mockResolvedValue(mockTransaction);
+      jest.spyOn(transactionRepository, 'save').mockResolvedValue({
+        ...mockTransaction,
+        status: TransactionStatus.CANCELLED,
+        failureReason: 'User request after support ticket',
+      } as Transaction);
+
+      const result = await service.overrideTransactionStatus(
+        'tx-override-test',
+        overrideDto,
+        'admin-123',
+      );
+
+      expect(result.status).toBe(TransactionStatus.CANCELLED);
+    });
+
+    it('should throw BadRequestException when trying to override to PENDING', async () => {
+      const overrideDto: OverrideTransactionDto = {
+        status: TransactionStatus.PENDING,
+        reason: 'Reset to pending',
+      };
+
+      await expect(
+        service.overrideTransactionStatus('tx-override-test', overrideDto, 'admin-123'),
+      ).rejects.toThrow(BadRequestException);
+
+      await expect(
+        service.overrideTransactionStatus('tx-override-test', overrideDto, 'admin-123'),
+      ).rejects.toThrow(
+        'Admin override cannot set status to PENDING. Only SUCCESS, FAILED, or CANCELLED are allowed.',
+      );
+
+      expect(transactionRepository.findOne).not.toHaveBeenCalled();
+      expect(auditLogsService.logTransactionEvent).not.toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException when transaction does not exist', async () => {
+      const overrideDto: OverrideTransactionDto = {
+        status: TransactionStatus.SUCCESS,
+        reason: 'Manual override',
+      };
+
+      jest.spyOn(transactionRepository, 'findOne').mockResolvedValue(null);
+
+      await expect(
+        service.overrideTransactionStatus('tx-nonexistent', overrideDto, 'admin-123'),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(auditLogsService.logTransactionEvent).not.toHaveBeenCalled();
     });
   });
 });

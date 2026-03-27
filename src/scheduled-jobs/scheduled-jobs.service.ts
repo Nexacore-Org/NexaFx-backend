@@ -42,6 +42,28 @@ export class ScheduledJobsService {
   }
 
   /**
+   * Sync wallet balance snapshots every 10 minutes
+   * Updates the cached balance snapshot from live Stellar data
+   */
+  @Cron('0 */10 * * * *')
+  async syncWalletBalances(): Promise<void> {
+    this.logger.log('[Scheduled Job] Starting wallet balance snapshot sync');
+
+    try {
+      const result = await this.usersService.syncWalletBalanceSnapshots();
+      this.logger.log(
+        `[Scheduled Job] Wallet balance sync completed: ${result.updated} synced, ${result.failed} failed out of ${result.processed} processed`,
+      );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `[Scheduled Job] Wallet balance sync failed: ${errorMessage}`,
+      );
+    }
+  }
+
+  /**
    * Reconcile pending transactions every 2 minutes
    * Checks Stellar network for transaction status and updates database accordingly
    */

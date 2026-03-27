@@ -87,6 +87,9 @@ export class User {
   })
   role: UserRole;
 
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  balanceLastSyncedAt: Date | null;
+
   @CreateDateColumn({ type: 'timestamp with time zone' })
   createdAt: Date;
 

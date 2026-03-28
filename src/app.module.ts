@@ -22,6 +22,7 @@ import { FeesModule } from './fees/fees.module';
 import { PushNotificationsModule } from './push-notifications/push-notifications.module';
 import { AdminModule } from './admin/admin.module';
 import { ReferralsModule } from './referrals/referrals.module';
+import { DaoModule } from './dao/dao.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -71,6 +72,8 @@ import { ScheduleModule } from '@nestjs/schedule';
     FeesModule,
     PushNotificationsModule,
     AdminModule,
+    // DAO module provides Stellar Soroban contract interaction for reward distribution
+    DaoModule,
   ],
   controllers: [AppController],
   providers: [

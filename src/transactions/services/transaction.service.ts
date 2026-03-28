@@ -35,6 +35,7 @@ import { UserRole } from '../../users/user.entity';
 import { ReferralsService } from '../../referrals/referrals.service';
 import { FeesService } from '../../fees/fees.service';
 import { FeeTransactionType } from '../../fees/entities/fee-config.entity';
+import { FirebaseService } from '../../firebase/firebase.service';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -75,6 +76,7 @@ export class TransactionsService {
     private readonly usersService: UsersService,
     private readonly auditLogsService: AuditLogsService,
     private readonly referralsService: ReferralsService,
+    private readonly firebaseService: FirebaseService,
   ) {}
 
   /**
@@ -213,6 +215,10 @@ export class TransactionsService {
           ip: ipAddress,
           device: userAgent,
         },
+      );
+
+      this.sendTransactionNotification(userId, transaction, 'FAILED', error.message).catch(
+        (e) => this.logger.error(`Failed to send push notification: ${e.message}`)
       );
 
       throw new InternalServerErrorException(
@@ -381,6 +387,10 @@ export class TransactionsService {
         },
       );
 
+      this.sendTransactionNotification(userId, transaction, 'FAILED', error.message).catch(
+        (e) => this.logger.error(`Failed to send push notification: ${e.message}`)
+      );
+
       throw new InternalServerErrorException(
         'Failed to create withdrawal transaction on blockchain',
       );
@@ -486,6 +496,17 @@ export class TransactionsService {
         },
       );
 
+      if (transaction.status === TransactionStatus.SUCCESS || transaction.status === TransactionStatus.FAILED) {
+        this.sendTransactionNotification(
+          transaction.userId,
+          transaction,
+          transaction.status,
+          transaction.failureReason,
+        ).catch(
+          (e) => this.logger.error(`Failed to send push notification: ${e.message}`)
+        );
+      }
+
       return transaction;
     } catch (err) {
       const error = toError(err);
@@ -541,6 +562,17 @@ export class TransactionsService {
     this.logger.log(
       `Transaction ${transactionId} status updated from ${oldStatus} to ${status} by admin ${adminId}`,
     );
+
+    if (status === TransactionStatus.SUCCESS || status === TransactionStatus.FAILED) {
+      this.sendTransactionNotification(
+        transaction.userId,
+        transaction,
+        status,
+        transaction.failureReason,
+      ).catch(
+        (e) => this.logger.error(`Failed to send push notification: ${e.message}`)
+      );
+    }
 
     return transaction;
   }
@@ -798,7 +830,43 @@ export class TransactionsService {
     });
 
     this.logger.log(
-      `Balance updated for user ${userId}: ${currentBalance} -> ${newBalance} ${currency}`,
+      `Updated user ${userId} balance for ${currency}. New balance: ${newBalance}`,
     );
+  }
+
+  private async sendTransactionNotification(
+    userId: string,
+    transaction: Transaction,
+    status: 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'PENDING',
+    failureReason?: string,
+  ): Promise<void> {
+    try {
+      const user = await this.usersService.findById(userId);
+      if (!user || !user.fcmTokens || user.fcmTokens.length === 0) return;
+
+      const actionText = transaction.type === TransactionType.DEPOSIT ? 'Deposit' : 'Withdrawal';
+      let title = '';
+      let body = '';
+
+      if (status === 'SUCCESS') {
+        title = `${actionText} Successful`;
+        body = `Your ${transaction.type.toLowerCase()} of ${transaction.amount} ${transaction.currency} was successful.`;
+      } else if (status === 'FAILED') {
+        title = `${actionText} Failed`;
+        body = `Your ${transaction.type.toLowerCase()} of ${transaction.amount} ${transaction.currency} failed.`;
+        if (failureReason) {
+           body += ` Reason: ${failureReason}`;
+        }
+      } else {
+        return; // Only notify on final states
+      }
+
+      await this.firebaseService.sendToTokens(user.fcmTokens, title, body, {
+        transactionId: transaction.id,
+        type: transaction.type,
+      });
+    } catch (e) {
+      // Intentionally swallow errors so it doesn't break flows
+    }
   }
 }

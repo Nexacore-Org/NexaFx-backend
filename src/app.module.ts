@@ -22,6 +22,7 @@ import { FeesModule } from './fees/fees.module';
 import { PushNotificationsModule } from './push-notifications/push-notifications.module';
 import { AdminModule } from './admin/admin.module';
 import { ReferralsModule } from './referrals/referrals.module';
+import { FirebaseModule } from './firebase/firebase.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -71,6 +72,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     FeesModule,
     PushNotificationsModule,
     AdminModule,
+    FirebaseModule,
   ],
   controllers: [AppController],
   providers: [

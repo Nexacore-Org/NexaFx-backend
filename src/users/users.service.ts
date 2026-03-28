@@ -309,6 +309,32 @@ export class UsersService {
     };
   }
 
+  async registerDeviceToken(userId: string, token: string): Promise<void> {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const currentTokens = user.fcmTokens || [];
+    if (!currentTokens.includes(token)) {
+      const updatedTokens = [...currentTokens, token];
+      await this.userRepository.update(userId, { fcmTokens: updatedTokens });
+    }
+  }
+
+  async removeDeviceToken(userId: string, token: string): Promise<void> {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const currentTokens = user.fcmTokens || [];
+    if (currentTokens.includes(token)) {
+      const updatedTokens = currentTokens.filter((t) => t !== token);
+      await this.userRepository.update(userId, { fcmTokens: updatedTokens });
+    }
+  }
+
   private excludeSecrets(user: User): ProfileResponseDto {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, walletSecretKeyEncrypted, twoFactorSecret, ...profile } =

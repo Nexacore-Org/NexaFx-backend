@@ -48,7 +48,7 @@ export class ProfileResponseDto {
   isVerified: boolean;
 
   @ApiPropertyOptional({
-    example: { 'NATIVE': 100.5, 'USDC': 50.25 },
+    example: { NATIVE: 100.5, USDC: 50.25 },
     description: 'Wallet balance snapshot (cached from Stellar)',
     nullable: true,
   })

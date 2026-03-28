@@ -72,3 +72,16 @@ export class TransactionListResponseDto {
   @ApiProperty({ example: 42 })
   total: number;
 }
+
+export class SwapResponseDto extends TransactionResponseDto {
+  @ApiProperty({ example: 'USDC' })
+  toCurrency: string;
+
+  @ApiProperty({ example: '12.50000000' })
+  toAmount: string;
+
+  @ApiProperty({
+    example: 'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOUJ3UHMNGUAO7UP',
+  })
+  sourceAddress: string;
+}

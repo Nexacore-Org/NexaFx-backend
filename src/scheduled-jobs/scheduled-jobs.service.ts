@@ -550,7 +550,9 @@ export class ScheduledJobsService {
    * Atomically claim a single transaction for retry by this instance.
    * Returns true if the transaction was successfully claimed.
    */
-  private async claimTransactionForRetry(transactionId: string): Promise<boolean> {
+  private async claimTransactionForRetry(
+    transactionId: string,
+  ): Promise<boolean> {
     const expiryTimestamp = new Date(Date.now() - this.LOCK_EXPIRY_MS);
 
     const updateResult = await this.transactionRepository

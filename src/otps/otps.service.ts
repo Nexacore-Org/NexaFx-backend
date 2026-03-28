@@ -57,7 +57,9 @@ export class OtpsService {
 
     const lockedUntil = this.getUserLockedUntil(user);
     if (lockedUntil && lockedUntil > new Date()) {
-      const remainingMinutes = Math.ceil((lockedUntil.getTime() - Date.now()) / 60000);
+      const remainingMinutes = Math.ceil(
+        (lockedUntil.getTime() - Date.now()) / 60000,
+      );
       throw new ThrottlerException(
         `Too many failed attempts. Please try again in ${remainingMinutes} minute(s)`,
       );

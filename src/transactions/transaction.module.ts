@@ -10,6 +10,7 @@ import { BlockchainModule } from '../blockchain/blockchain.module';
 import { UsersModule } from '../users/users.module';
 import { ReferralsModule } from '../referrals/referrals.module';
 import { FeesModule } from '../fees/fees.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { FeesModule } from '../fees/fees.module';
     UsersModule,
     ReferralsModule,
     FeesModule,
+    NotificationsModule,
   ],
   controllers: [TransactionsController],
   providers: [TransactionsService, TransactionVerificationService],

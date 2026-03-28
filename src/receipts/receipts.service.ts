@@ -1,8 +1,8 @@
 import * as fastCsv from 'fast-csv';
 import ExcelJS from 'exceljs';
-  /**
-   * Export transactions as CSV for a given user and month
-   */
+/**
+ * Export transactions as CSV for a given user and month
+ */
 import {
   Injectable,
   NotFoundException,
@@ -448,7 +448,11 @@ If you have any questions about this transaction, please contact our support tea
   /**
    * Export transactions as CSV for a given user and month
    */
-  async exportTransactionsCSV(userId: string, month: string, res: any): Promise<void> {
+  async exportTransactionsCSV(
+    userId: string,
+    month: string,
+    res: any,
+  ): Promise<void> {
     if (!this.validateMonthFormat(month)) {
       throw new BadRequestException('Invalid month format. Use YYYY-MM');
     }
@@ -465,11 +469,16 @@ If you have any questions about this transaction, please contact our support tea
     });
 
     if (!transactions.length) {
-      throw new NotFoundException('No transactions found for the specified period');
+      throw new NotFoundException(
+        'No transactions found for the specified period',
+      );
     }
 
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="transactions-${month}.csv"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="transactions-${month}.csv"`,
+    );
 
     const csvStream = fastCsv.format({ headers: true });
     csvStream.pipe(res);
@@ -492,7 +501,11 @@ If you have any questions about this transaction, please contact our support tea
   /**
    * Export transactions as Excel for a given user and month
    */
-  async exportTransactionsExcel(userId: string, month: string, res: any): Promise<void> {
+  async exportTransactionsExcel(
+    userId: string,
+    month: string,
+    res: any,
+  ): Promise<void> {
     if (!this.validateMonthFormat(month)) {
       throw new BadRequestException('Invalid month format. Use YYYY-MM');
     }
@@ -509,7 +522,9 @@ If you have any questions about this transaction, please contact our support tea
     });
 
     if (!transactions.length) {
-      throw new NotFoundException('No transactions found for the specified period');
+      throw new NotFoundException(
+        'No transactions found for the specified period',
+      );
     }
 
     const workbook = new ExcelJS.Workbook();
@@ -538,8 +553,14 @@ If you have any questions about this transaction, please contact our support tea
         createdAt: tx.createdAt.toISOString(),
       });
     });
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="transactions-${month}.xlsx"`);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="transactions-${month}.xlsx"`,
+    );
     await workbook.xlsx.write(res);
     res.end();
   }

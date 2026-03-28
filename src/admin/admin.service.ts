@@ -24,7 +24,15 @@ import { UserQueryDto } from './dto/user-query.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { AdminTransactionQueryDto } from './dto/admin-transaction-query.dto';
 import { PlatformMetricsDto } from './dto/platform-metrics.dto';
-import { startOfDay, startOfWeek, startOfMonth ,subDays, format, eachDayOfInterval, parseISO} from 'date-fns';
+import {
+  startOfDay,
+  startOfWeek,
+  startOfMonth,
+  subDays,
+  format,
+  eachDayOfInterval,
+  parseISO,
+} from 'date-fns';
 import { MetricsQueryDto } from './dto/metrics-query.dto';
 import * as csv from 'fast-csv';
 

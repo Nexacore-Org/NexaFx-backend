@@ -23,8 +23,11 @@ import {
 import {
   CreateDepositDto,
   CreateWithdrawalDto,
+  CreateSwapDto,
   TransactionQueryDto,
 } from '../dtos/transaction.dto';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { NotificationType } from '../../notifications/entities/notification.entity';
 import { CurrenciesService } from '../../currencies/currencies.service';
 import { ExchangeRatesService } from '../../exchange-rates/exchange-rates.service';
 import { StellarService } from '../../blockchain/stellar/stellar.service';
@@ -34,7 +37,10 @@ import { AuditAction } from '../../audit-logs/enums/audit-action.enum';
 import { UserRole } from '../../users/user.entity';
 import { ReferralsService } from '../../referrals/referrals.service';
 import { FeesService } from '../../fees/fees.service';
-import { FeeTransactionType } from '../../fees/entities/fee-config.entity';
+import {
+  FeeTransactionType,
+  FeeType,
+} from '../../fees/entities/fee-config.entity';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -75,6 +81,7 @@ export class TransactionsService {
     private readonly usersService: UsersService,
     private readonly auditLogsService: AuditLogsService,
     private readonly referralsService: ReferralsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -388,6 +395,199 @@ export class TransactionsService {
   }
 
   /**
+   * Create a swap transaction using Stellar path payments
+   */
+  async createSwap(
+    userId: string,
+    createSwapDto: CreateSwapDto,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<Transaction> {
+    const { amount, fromCurrency, toCurrency, sourceAddress } = createSwapDto;
+
+    this.logger.log(
+      `Creating swap for user ${userId}: ${amount} ${fromCurrency} to ${toCurrency}`,
+    );
+
+    if (fromCurrency === toCurrency) {
+      throw new BadRequestException(
+        'Source and destination currencies must be different',
+      );
+    }
+
+    const [fromCurrencyData, toCurrencyData] = await Promise.all([
+      this.currenciesService.findOne(fromCurrency),
+      this.currenciesService.findOne(toCurrency),
+    ]);
+
+    if (!fromCurrencyData || !fromCurrencyData.isActive) {
+      throw new BadRequestException(
+        `Source currency ${fromCurrency} is not supported or inactive`,
+      );
+    }
+
+    if (!toCurrencyData || !toCurrencyData.isActive) {
+      throw new BadRequestException(
+        `Destination currency ${toCurrency} is not supported or inactive`,
+      );
+    }
+
+    const userBalance = await this.getUserBalance(userId, fromCurrency);
+    if (parseFloat(userBalance) < amount) {
+      throw new BadRequestException('Insufficient balance');
+    }
+
+    let rate: number;
+    let resultingAmount: number;
+    try {
+      const exchangeRate = await this.exchangeRatesService.getRate(
+        fromCurrency,
+        toCurrency,
+      );
+      rate = exchangeRate.rate;
+      resultingAmount = amount * rate;
+    } catch (err) {
+      const error = toError(err);
+      this.logger.error(
+        `Failed to get exchange rate for ${fromCurrency} to ${toCurrency}`,
+        error,
+      );
+      throw new BadRequestException(
+        `Unable to get exchange rate for ${fromCurrency} to ${toCurrency}`,
+      );
+    }
+
+    const fee = (await this.feesService.calculateFee(
+      FeeTransactionType.SWAP,
+      fromCurrency,
+      amount,
+    )) || { feeAmount: 0, feeCurrency: fromCurrency, feeType: FeeType.FLAT };
+
+    if (parseFloat(userBalance) < amount + fee.feeAmount) {
+      throw new BadRequestException(
+        'Insufficient balance to cover the swap amount and fee',
+      );
+    }
+
+    const transaction = this.transactionRepository.create({
+      userId,
+      type: TransactionType.SWAP,
+      amount: amount.toString(),
+      currency: fromCurrency,
+      toCurrency,
+      toAmount: resultingAmount.toFixed(8),
+      rate: rate.toString(),
+      feeAmount: fee.feeAmount.toFixed(8),
+      feeCurrency: fee.feeCurrency,
+      status: TransactionStatus.PENDING,
+    });
+
+    await this.transactionRepository.save(transaction);
+
+    try {
+      await this.feesService.recordFee(transaction.id, userId, fee);
+
+      await this.auditLogsService.logTransactionEvent(
+        userId,
+        AuditAction.SWAP_CREATED,
+        transaction.id,
+        {
+          amount: transaction.amount,
+          fromCurrency: transaction.currency,
+          toCurrency: transaction.toCurrency,
+          toAmount: transaction.toAmount,
+          feeAmount: fee.feeAmount,
+          sourceAddress,
+          ip: ipAddress,
+          device: userAgent,
+        },
+      );
+
+      const destinationAddress = await this.getUserStellarAddress(userId);
+
+      // Map currency codes to Stellar Assets
+      // For non-native assets, a non-empty issuer is required by stellar-sdk.
+      // In a production app, the issuer should be fetched from CurrenciesService.
+      const fromAsset =
+        fromCurrency === 'XLM'
+          ? Asset.native()
+          : new Asset(
+              fromCurrency,
+              'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335XPB7X3NCQXMK3SBEG3CIFE7G',
+            ); // Dummy issuer (USDC testnet)
+      const toAsset =
+        toCurrency === 'XLM'
+          ? Asset.native()
+          : new Asset(
+              toCurrency,
+              'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335XPB7X3NCQXMK3SBEG3CIFE7G',
+            ); // Dummy issuer
+
+      const swapOperation = Operation.pathPaymentStrictSend({
+        sendAsset: fromAsset,
+        sendAmount: amount.toString(),
+        destination: destinationAddress,
+        destAsset: toAsset,
+        destMin: (resultingAmount * 0.99).toFixed(7), // 1% slippage tolerance
+        path: [],
+      });
+
+      const stellarTx = await this.stellarService.createTransaction({
+        sourcePublicKey: sourceAddress,
+        operations: [swapOperation],
+        memo: `SWAP-${transaction.id}`,
+      });
+
+      const secretKey = await this.getUserStellarSecretKey(userId);
+      const signedTx = await this.stellarService.signTransaction(
+        stellarTx,
+        secretKey,
+      );
+      const rawResult = await this.stellarService.submitTransaction(signedTx);
+
+      if (!isStellarSubmitResult(rawResult)) {
+        throw new Error('Unexpected response shape from Stellar submit');
+      }
+
+      transaction.txHash = rawResult.hash;
+      transaction.status = TransactionStatus.SUCCESS;
+      await this.transactionRepository.save(transaction);
+
+      // Update balances
+      await this.updateUserBalance(
+        userId,
+        fromCurrency,
+        -(amount + fee.feeAmount),
+      );
+      await this.updateUserBalance(userId, toCurrency, resultingAmount);
+
+      // Send notification
+      await this.notificationsService.create({
+        userId,
+        type: NotificationType.SWAP_COMPLETED,
+        title: 'Swap Completed',
+        message: `Successfully swapped ${amount} ${fromCurrency} to ${resultingAmount.toFixed(2)} ${toCurrency}`,
+        relatedId: transaction.id,
+      });
+
+      this.logger.log(
+        `Swap transaction completed successfully: ${transaction.id}`,
+      );
+
+      return transaction;
+    } catch (err) {
+      const error = toError(err);
+      this.logger.error(`Failed to execute swap transaction`, error);
+
+      transaction.status = TransactionStatus.FAILED;
+      transaction.failureReason = error.message;
+      await this.transactionRepository.save(transaction);
+
+      throw new BadRequestException(`Swap failed: ${error.message}`);
+    }
+  }
+
+  /**
    * Verify transaction status on the blockchain
    */
   async verifyTransaction(
@@ -629,7 +829,7 @@ export class TransactionsService {
           .map((t) => t.currency)
           .filter((c) => c)
           .concat(transactions.map((t) => t.feeCurrency).filter((c) => c)),
-      ) as Set<string>,
+      ),
     );
 
     const currencyLookup: Record<string, any> = {};

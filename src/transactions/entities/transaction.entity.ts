@@ -13,6 +13,7 @@ import { User } from '../../users/user.entity';
 export enum TransactionType {
   DEPOSIT = 'DEPOSIT',
   WITHDRAW = 'WITHDRAW',
+  SWAP = 'SWAP',
 }
 
 export enum TransactionStatus {
@@ -71,6 +72,12 @@ export class Transaction {
 
   @Column({ type: 'varchar', length: 10, nullable: true })
   feeCurrency: string;
+
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  toCurrency: string;
+
+  @Column({ type: 'decimal', precision: 20, scale: 8, nullable: true })
+  toAmount: string;
 
   @CreateDateColumn()
   createdAt: Date;

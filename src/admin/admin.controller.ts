@@ -28,6 +28,8 @@ import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { AdminTransactionQueryDto } from './dto/admin-transaction-query.dto';
 import { MetricsQueryDto } from './dto/metrics-query.dto';
 import { OverrideTransactionDto } from './dto/override-transaction.dto';
+import { Response } from 'express';
+import { join } from 'path';
 
 @ApiTags('Admin')
 @ApiBearerAuth()
@@ -51,7 +53,7 @@ export class AdminController {
   @ApiResponse({ status: 200, description: 'Returns CSV file' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
-  async exportMetrics(@Query() query: MetricsQueryDto, @Res() res) {
+  async exportMetrics(@Query() query: MetricsQueryDto, @Res() res: Response) {
     const csv = await this.adminService.exportMetrics(query);
     res.set({
       'Content-Type': 'text/csv',
@@ -176,5 +178,45 @@ export class AdminController {
       overrideDto,
       admin.userId,
     );
+  @Get('kyc-file/:userId/:version/:filename')
+  @ApiOperation({ summary: 'Serve KYC uploaded file (Admin only)' })
+  @ApiParam({ name: 'userId', type: String })
+  @ApiParam({ name: 'version', type: String })
+  @ApiParam({ name: 'filename', type: String })
+  @ApiResponse({ status: 200, description: 'Returns the requested file' })
+  @ApiResponse({ status: 404, description: 'File not found' })
+  serveKycFile(
+    @Param('userId') userId: string,
+    @Param('version') version: string,
+    @Param('filename') filename: string,
+    @Res() res,
+  ) {
+    const filePath = join(
+      process.cwd(),
+      'uploads',
+      'kyc',
+      userId,
+      version,
+      filename,
+    );
+    interface FileSendError {
+      message?: string;
+      code?: string;
+      status?: number;
+    }
+
+    interface TypedResponse {
+      sendFile(filePath: string, cb?: (err?: FileSendError) => void): unknown;
+      status(code: number): { send(body: unknown): unknown };
+      send(body: unknown): unknown;
+    }
+
+    const typedRes = res as TypedResponse;
+
+    return typedRes.sendFile(filePath, (err?: FileSendError) => {
+      if (err) {
+        typedRes.status(404).send({ message: 'File not found' });
+      }
+    });
   }
 }

@@ -8,13 +8,9 @@ import { AuditEntityType } from './enums/audit-entity-type.enum';
 export class AuditLogsService {
   private readonly logger = new Logger(AuditLogsService.name);
 
-  constructor(
-    private readonly auditLogsRepository: AuditLogsRepository,
-  ) {}
+  constructor(private readonly auditLogsRepository: AuditLogsRepository) {}
 
-  async createLog(
-    createAuditLogDto: CreateAuditLogDto,
-  ): Promise<void> {
+  async createLog(createAuditLogDto: CreateAuditLogDto): Promise<void> {
     try {
       await this.auditLogsRepository.createAuditLog(createAuditLogDto);
     } catch (error) {
@@ -44,15 +40,15 @@ export class AuditLogsService {
    */
   getClientIp(request: any): string {
     if (!request) return '';
-    
+
     const xForwardedFor = request.headers?.['x-forwarded-for'];
-    
+
     if (Array.isArray(xForwardedFor)) {
       return xForwardedFor[0] || '';
     } else if (typeof xForwardedFor === 'string') {
       return xForwardedFor.split(',')[0].trim() || '';
     }
-    
+
     return request.ip || request.socket?.remoteAddress || '';
   }
 

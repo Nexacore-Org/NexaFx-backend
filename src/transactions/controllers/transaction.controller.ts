@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   Param,
   Query,
@@ -217,5 +218,37 @@ export class TransactionsController {
     @Request() req,
   ): Promise<TransactionResponseDto> {
     return this.transactionsService.findOne(id, req.user.userId);
+  }
+
+  @Patch(':id/cancel')
+  @ApiOperation({ summary: 'Cancel a PENDING transaction' })
+  @ApiParam({
+    name: 'id',
+    description: 'Transaction UUID',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Transaction cancelled successfully',
+    type: TransactionResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Transaction is not in PENDING status',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Invalid or missing JWT token',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Transaction does not belong to the user',
+  })
+  @ApiResponse({ status: 404, description: 'Transaction not found' })
+  async cancelTransaction(
+    @Param('id') id: string,
+    @Request() req,
+  ): Promise<TransactionResponseDto> {
+    return this.transactionsService.cancelTransaction(id, req.user.userId);
   }
 }

@@ -1,9 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { InternalServerErrorException } from '@nestjs/common';
+import {
+  InternalServerErrorException,
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TransactionsService } from './transaction.service';
-import { Transaction } from '../entities/transaction.entity';
+import { Transaction, TransactionStatus } from '../entities/transaction.entity';
 import { CurrenciesService } from '../../currencies/currencies.service';
 import { ExchangeRatesService } from '../../exchange-rates/exchange-rates.service';
 import { StellarService } from '../../blockchain/stellar/stellar.service';
@@ -184,5 +189,121 @@ describe('TransactionsService fee integration behavior', () => {
       'Failed to create deposit transaction',
       expect.any(Error),
     );
+  });
+
+  describe('cancelTransaction', () => {
+    const mockPendingTransaction: Partial<Transaction> = {
+      id: 'tx-cancel-test',
+      userId: 'user-1',
+      status: TransactionStatus.PENDING,
+      type: TransactionType.DEPOSIT,
+      amount: '100',
+      currency: 'XLM',
+      txHash: null,
+    };
+
+    const mockSuccessTransaction: Partial<Transaction> = {
+      ...mockPendingTransaction,
+      status: TransactionStatus.SUCCESS,
+    };
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should cancel a PENDING transaction owned by the user', async () => {
+      transactionRepository.findOne.mockResolvedValue(mockPendingTransaction as Transaction);
+      transactionRepository.save.mockResolvedValue({
+        ...mockPendingTransaction,
+        status: TransactionStatus.CANCELLED,
+      } as Transaction);
+
+      const result = await service.cancelTransaction('tx-cancel-test', 'user-1');
+
+      expect(result.status).toBe(TransactionStatus.CANCELLED);
+      expect(transactionRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 'tx-cancel-test' },
+      });
+      expect(auditLogsService.logTransactionEvent).toHaveBeenCalledWith(
+        'user-1',
+        expect.any(String),
+        'tx-cancel-test',
+        expect.objectContaining({
+          oldStatus: TransactionStatus.PENDING,
+          newStatus: TransactionStatus.CANCELLED,
+          cancelledBy: 'user-1',
+          userCancelled: true,
+        }),
+      );
+    });
+
+    it('should throw ForbiddenException when user tries to cancel another user transaction', async () => {
+      transactionRepository.findOne.mockResolvedValue({
+        ...mockPendingTransaction,
+        userId: 'different-user',
+      } as Transaction);
+
+      await expect(
+        service.cancelTransaction('tx-cancel-test', 'user-1'),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(auditLogsService.logTransactionEvent).not.toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException when cancelling a non-PENDING transaction', async () => {
+      transactionRepository.findOne.mockResolvedValue(mockSuccessTransaction as Transaction);
+
+      await expect(
+        service.cancelTransaction('tx-cancel-test', 'user-1'),
+      ).rejects.toThrow(BadRequestException);
+
+      await expect(
+        service.cancelTransaction('tx-cancel-test', 'user-1'),
+      ).rejects.toThrow(
+        'Cannot cancel transaction with status SUCCESS. Only PENDING transactions can be cancelled.',
+      );
+
+      expect(auditLogsService.logTransactionEvent).not.toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException when transaction does not exist', async () => {
+      transactionRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.cancelTransaction('tx-nonexistent', 'user-1'),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(auditLogsService.logTransactionEvent).not.toHaveBeenCalled();
+    });
+
+    it('should log a warning when cancelling a transaction that has a txHash', async () => {
+      const transactionWithHash = {
+        ...mockPendingTransaction,
+        txHash: 'stellar-hash-123',
+      };
+
+      transactionRepository.findOne.mockResolvedValue(transactionWithHash as Transaction);
+      transactionRepository.save.mockResolvedValue({
+        ...transactionWithHash,
+        status: TransactionStatus.CANCELLED,
+      } as Transaction);
+
+      const loggerWarnSpy = jest.spyOn((service as any).logger, 'warn');
+
+      await service.cancelTransaction('tx-cancel-test', 'user-1');
+
+      expect(loggerWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('has already been submitted to Stellar'),
+      );
+
+      expect(auditLogsService.logTransactionEvent).toHaveBeenCalledWith(
+        'user-1',
+        expect.any(String),
+        'tx-cancel-test',
+        expect.objectContaining({
+          txHash: 'stellar-hash-123',
+        }),
+      );
+    });
   });
 });

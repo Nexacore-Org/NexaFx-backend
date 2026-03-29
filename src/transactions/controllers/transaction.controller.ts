@@ -21,11 +21,13 @@ import { TransactionsService } from '../services/transaction.service';
 import {
   CreateDepositDto,
   CreateWithdrawalDto,
+  CreateSwapDto,
   TransactionQueryDto,
 } from '../dtos/transaction.dto';
 import {
   TransactionResponseDto,
   TransactionListResponseDto,
+  SwapResponseDto,
 } from '../dtos/transaction-response.dto';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -90,6 +92,36 @@ export class TransactionsController {
       req.user.userId,
       createWithdrawalDto,
     );
+  }
+
+  @Post('swap')
+  @ApiOperation({ summary: 'Initiate a currency swap transaction' })
+  @ApiBody({ type: CreateSwapDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Swap transaction created successfully',
+    type: SwapResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Invalid request body, unsupported currency, or insufficient balance',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Invalid or missing JWT token',
+  })
+  @ApiResponse({ status: 500, description: 'Blockchain transaction failed' })
+  async createSwap(
+    @Request() req,
+    @Body() createSwapDto: CreateSwapDto,
+  ): Promise<SwapResponseDto> {
+    return this.transactionsService.createSwap(
+      req.user.userId,
+      createSwapDto,
+      req.ip,
+      req.headers['user-agent'],
+    ) as unknown as SwapResponseDto;
   }
 
   @Post(':id/verify')

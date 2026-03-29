@@ -22,7 +22,7 @@ describe('OtpsService - Brute Force Lockout', () => {
       failedLoginAttempts: 0,
       lockedUntil: null,
       ...overrides,
-    } as User);
+    }) as User;
 
   const hashOtp = (userId: string, type: OtpType, otp: string): string =>
     crypto
@@ -78,7 +78,11 @@ describe('OtpsService - Brute Force Lockout', () => {
 
     it('should allow OTP validation when user is not locked', async () => {
       setupValidOtp();
-      const result = await service.validateOtp(mockUser(), '123456', OtpType.LOGIN);
+      const result = await service.validateOtp(
+        mockUser(),
+        '123456',
+        OtpType.LOGIN,
+      );
       expect(result).toBe(true);
     });
 
@@ -100,7 +104,11 @@ describe('OtpsService - Brute Force Lockout', () => {
       });
       setupValidOtp();
 
-      const result = await service.validateOtp(expiredLockUser, '123456', OtpType.LOGIN);
+      const result = await service.validateOtp(
+        expiredLockUser,
+        '123456',
+        OtpType.LOGIN,
+      );
       expect(result).toBe(true);
     });
 
@@ -179,7 +187,6 @@ describe('OtpsService - Brute Force Lockout', () => {
       ).rejects.toThrow(ThrottlerException);
     });
 
-
     it('should use AUTH_LOCKOUT_DURATION_MINUTES from config', async () => {
       mockConfigService.get = jest.fn().mockImplementation((key: string) => {
         const config: Record<string, string> = {
@@ -205,7 +212,8 @@ describe('OtpsService - Brute Force Lockout', () => {
       ).rejects.toThrow(UnauthorizedException);
 
       const call = mockUsersService.updateByUserId.mock.calls[0];
-      const lockoutDuration = (call[1].lockedUntil.getTime() - Date.now()) / 60000;
+      const lockoutDuration =
+        (call[1].lockedUntil.getTime() - Date.now()) / 60000;
       expect(lockoutDuration).toBeGreaterThan(29);
       expect(lockoutDuration).toBeLessThan(31);
     });

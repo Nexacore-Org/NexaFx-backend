@@ -153,7 +153,9 @@ export class ReceiptsController {
     example: '2026-01',
   })
   @ApiProduces('text/csv')
-  @ApiProduces('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @ApiProduces(
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  )
   @ApiResponse({ status: 200, description: 'File exported successfully' })
   @ApiResponse({ status: 400, description: 'Invalid format or month' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -173,9 +175,17 @@ export class ReceiptsController {
         throw new BadRequestException('Invalid month format. Use YYYY-MM');
       }
       if (format === 'csv') {
-        await this.receiptsService.exportTransactionsCSV(user.userId, month, res);
+        await this.receiptsService.exportTransactionsCSV(
+          user.userId,
+          month,
+          res,
+        );
       } else {
-        await this.receiptsService.exportTransactionsExcel(user.userId, month, res);
+        await this.receiptsService.exportTransactionsExcel(
+          user.userId,
+          month,
+          res,
+        );
       }
     } catch (error) {
       if (

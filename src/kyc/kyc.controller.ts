@@ -6,6 +6,10 @@ import {
   Patch,
   Get,
   UseGuards,
+  UseInterceptors,
+  UploadedFiles,
+  Req,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -28,6 +32,9 @@ import {
   CurrentUserPayload,
 } from '../auth/decorators/current-user.decorator';
 import { UserRole } from '../users/user.entity';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { Request } from 'express';
+import { join } from 'path';
 
 @ApiTags('KYC')
 @Controller('kyc')
@@ -39,6 +46,16 @@ export class KycController {
   @Post('submit')
   @ApiOperation({ summary: 'Submit KYC verification' })
   @ApiBody({ type: SubmitKycDto })
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'documentFront', maxCount: 1 },
+        { name: 'documentBack', maxCount: 1 },
+        { name: 'selfie', maxCount: 1 },
+      ],
+      // Multer options are configured at module level via MulterModule.register
+    ),
+  )
   @ApiResponse({
     status: 201,
     description: 'KYC submission successful',
@@ -54,9 +71,66 @@ export class KycController {
   })
   async submitKyc(
     @CurrentUser() user: CurrentUserPayload,
+    @UploadedFiles()
+    files: Partial<
+      Record<
+        'documentFront' | 'documentBack' | 'selfie',
+        { filename: string }[]
+      >
+    >,
     @Body() dto: SubmitKycDto,
+    @Req() req: Request,
   ) {
-    return this.kycService.submitKyc(user.userId, dto);
+    // check multer provided error via request if any
+    const anyReq = req as unknown as Record<string, unknown> & {
+      fileValidationError?: string;
+      kycUploadVersion?: string;
+    };
+    if (anyReq.fileValidationError) {
+      throw new BadRequestException(anyReq.fileValidationError);
+    }
+
+    // Required files
+    if (!files?.documentFront || files.documentFront.length === 0) {
+      throw new BadRequestException('documentFront file is required');
+    }
+
+    if (!files?.selfie || files.selfie.length === 0) {
+      throw new BadRequestException('selfie file is required');
+    }
+
+    // compute stored relative paths (uploads/kyc/:userId/:version/:filename)
+    const version = anyReq.kycUploadVersion ?? '';
+    const userId = user.userId;
+    const base = join('uploads', 'kyc', userId, version);
+
+    const documentFrontUrl: string | undefined =
+      files.documentFront && files.documentFront[0]
+        ? join(base, files.documentFront[0].filename)
+        : undefined;
+
+    const documentBackUrl: string | undefined =
+      files.documentBack && files.documentBack[0]
+        ? join(base, files.documentBack[0].filename)
+        : undefined;
+
+    const selfieUrl: string | undefined =
+      files.selfie && files.selfie[0]
+        ? join(base, files.selfie[0].filename)
+        : undefined;
+
+    const payload: SubmitKycDto & {
+      documentFrontUrl?: string;
+      documentBackUrl?: string;
+      selfieUrl?: string;
+    } = {
+      ...dto,
+      documentFrontUrl,
+      documentBackUrl,
+      selfieUrl,
+    };
+
+    return this.kycService.submitKyc(user.userId, payload);
   }
 
   @Get('status')

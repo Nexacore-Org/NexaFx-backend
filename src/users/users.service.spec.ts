@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { UsersService } from './users.service';
 import { User, UserRole } from './user.entity';
 import { StellarService } from '../blockchain/stellar/stellar.service';
+import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
 
 describe('UsersService', () => {
   let service: UsersService;
@@ -26,6 +27,9 @@ describe('UsersService', () => {
     isSuspended: false,
     isTwoFactorEnabled: false,
     role: UserRole.USER,
+    fcmTokens: [],
+    failedLoginAttempts: 0,
+    lockedUntil: null,
     createdAt: new Date('2025-01-01T00:00:00Z'),
     updatedAt: new Date('2025-03-27T10:30:00Z'),
     password: 'hashed-password',
@@ -34,7 +38,7 @@ describe('UsersService', () => {
   } as User;
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
+    const moduleRef = await Test.createTestingModule({
       providers: [
         UsersService,
         {
@@ -52,11 +56,17 @@ describe('UsersService', () => {
             getWalletBalances: jest.fn(),
           },
         },
+        {
+          provide: ExchangeRatesService,
+          useValue: {
+            getRate: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
-    service = module.get<UsersService>(UsersService);
-    userRepository = module.get<Repository<User>>(getRepositoryToken(User));
+    service = (moduleRef as any).get(UsersService) as UsersService;
+    userRepository = (moduleRef as any).get(getRepositoryToken(User)) as Repository<User>;
   });
 
   describe('getProfile', () => {
@@ -110,6 +120,54 @@ describe('UsersService', () => {
       expect(result.processed).toBeGreaterThan(0);
       expect(result.updated).toBeGreaterThan(-1);
       expect(result.failed).toBeGreaterThan(-1);
+    });
+  });
+
+  describe('registerDeviceToken', () => {
+    it('should add a new token to fcmTokens array', async () => {
+      const userWithNoTokens = { ...mockUser, fcmTokens: [] };
+      jest.spyOn(userRepository, 'findOne').mockResolvedValue(userWithNoTokens);
+      const updateSpy = jest.spyOn(userRepository, 'update').mockResolvedValue(undefined as any);
+
+      await service.registerDeviceToken('user-123', 'new-token');
+
+      expect(updateSpy).toHaveBeenCalledWith('user-123', {
+        fcmTokens: ['new-token'],
+      });
+    });
+
+    it('should not add a duplicate token', async () => {
+      const userWithToken = { ...mockUser, fcmTokens: ['existing-token'] };
+      jest.spyOn(userRepository, 'findOne').mockResolvedValue(userWithToken);
+      const updateSpy = jest.spyOn(userRepository, 'update');
+
+      await service.registerDeviceToken('user-123', 'existing-token');
+
+      expect(updateSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('removeDeviceToken', () => {
+    it('should remove a token from fcmTokens array', async () => {
+      const userWithTokens = { ...mockUser, fcmTokens: ['token-1', 'token-2'] };
+      jest.spyOn(userRepository, 'findOne').mockResolvedValue(userWithTokens);
+      const updateSpy = jest.spyOn(userRepository, 'update').mockResolvedValue(undefined as any);
+
+      await service.removeDeviceToken('user-123', 'token-1');
+
+      expect(updateSpy).toHaveBeenCalledWith('user-123', {
+        fcmTokens: ['token-2'],
+      });
+    });
+
+    it('should do nothing if token does not exist', async () => {
+      const userWithTokens = { ...mockUser, fcmTokens: ['token-2'] };
+      jest.spyOn(userRepository, 'findOne').mockResolvedValue(userWithTokens);
+      const updateSpy = jest.spyOn(userRepository, 'update');
+
+      await service.removeDeviceToken('user-123', 'token-1');
+
+      expect(updateSpy).not.toHaveBeenCalled();
     });
   });
 });

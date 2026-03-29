@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
@@ -14,12 +15,12 @@ import { ConfigService } from '@nestjs/config';
 import { Notification } from '../notifications/entities/notification.entity';
 import { NotificationType } from '../notifications/entities/notification.entity';
 import { NotificationStatus } from '../notifications/entities/notification.entity';
-// import { NotificationCategory } from 'src/notifications/enum/notificationCategory.enum';
-// import { NotificationPriority } from 'src/notifications/enum/notificationPriority.enum';
-// import { NotificationChannel } from 'src/notifications/enum/notificationChannel.enum';
+import { FirebaseService } from '../firebase/firebase.service';
 
 @Injectable()
 export class KycService {
+  private readonly logger = new Logger(KycService.name);
+
   constructor(
     @InjectRepository(KycRecord)
     private kycRepository: Repository<KycRecord>,
@@ -27,6 +28,7 @@ export class KycService {
     private userRepository: Repository<User>,
     private configService: ConfigService,
     private readonly dataSource: DataSource,
+    private readonly firebaseService: FirebaseService,
   ) {}
 
   async submitKyc(
@@ -214,6 +216,18 @@ export class KycService {
       await manager.save(kyc);
       await manager.save(user);
       await manager.save(Notification, notificationPayload);
+
+      if (user.fcmTokens && user.fcmTokens.length > 0) {
+        this.firebaseService.sendToTokens(
+          user.fcmTokens,
+          notificationPayload.title!,
+          notificationPayload.message!,
+          {
+            entity: 'KYC',
+            kycStatus: decision.toLowerCase(),
+          },
+        ).catch(err => this.logger.error(`Failed to send KYC FCM: ${err.message}`));
+      }
 
       return {
         message: `KYC ${decision} successfully`,

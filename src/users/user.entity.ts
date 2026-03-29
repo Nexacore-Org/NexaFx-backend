@@ -57,6 +57,9 @@ export class User {
   @Column({ type: 'jsonb', nullable: true, default: {} })
   balances: Record<string, number>;
 
+  @Column({ type: 'jsonb', nullable: true, default: [] })
+  fcmTokens: string[];
+
   @Column({ type: 'varchar', length: 8, unique: true })
   @Index()
   referralCode: string;

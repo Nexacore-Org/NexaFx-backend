@@ -18,6 +18,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/entities/notification.entity';
 import { ReferralStatsDto } from './dto/referral-stats.dto';
 import { ReferralItemDto } from './dto/referral-item.dto';
+import { FirebaseService } from '../firebase/firebase.service';
 
 @Injectable()
 export class ReferralsService {
@@ -32,6 +33,7 @@ export class ReferralsService {
     private readonly transactionsRepository: Repository<Transaction>,
     private readonly notificationsService: NotificationsService,
     private readonly configService: ConfigService,
+    private readonly firebaseService: FirebaseService,
   ) {}
 
   async createPendingReferral(
@@ -179,6 +181,18 @@ export class ReferralsService {
       },
       relatedId: saved.id,
     });
+
+    const referrer = await this.usersRepository.findOne({ where: { id: referral.referrerId } });
+    if (referrer && referrer.fcmTokens && referrer.fcmTokens.length > 0) {
+      this.firebaseService.sendToTokens(
+        referrer.fcmTokens,
+        'Referral Reward Earned',
+        `You earned ${rewardAmount} ${rewardCurrency} from your referral.`,
+        {
+          referralId: saved.id,
+        },
+      ).catch(err => this.logger.error(`Failed to send Referral FCM: ${err.message}`));
+    }
 
     this.logger.log(
       `Referral reward issued for referrer ${referral.referrerId} and referee ${refereeId}`,

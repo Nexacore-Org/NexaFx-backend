@@ -11,6 +11,7 @@ import { UsersModule } from '../users/users.module';
 import { ReferralsModule } from '../referrals/referrals.module';
 import { FeesModule } from '../fees/fees.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { BeneficiariesModule } from '../beneficiaries/beneficiaries.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     ReferralsModule,
     FeesModule,
     NotificationsModule,
+    BeneficiariesModule,
   ],
   controllers: [TransactionsController],
   providers: [TransactionsService, TransactionVerificationService],

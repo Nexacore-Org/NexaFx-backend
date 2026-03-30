@@ -45,6 +45,9 @@ export class Beneficiary {
   @Column({ name: 'is_default', default: false })
   isDefault: boolean;
 
+  @Column({ name: 'last_used_at', type: 'timestamp', nullable: true })
+  lastUsedAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

@@ -55,18 +55,21 @@ export class CreateWithdrawalDto {
   @IsNotEmpty()
   currency: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOUJ3UHMNGUAO7UP',
-    description: 'Stellar destination address for the withdrawal',
+    description:
+      'Stellar destination address. Optional when beneficiaryId is provided — ' +
+      'if both are given, beneficiaryId takes precedence.',
   })
   @IsString()
-  @IsNotEmpty()
-  destinationAddress: string;
+  @IsOptional()
+  destinationAddress?: string;
 
   @ApiPropertyOptional({
     description:
-      'ID of a saved beneficiary. If provided, walletAddress is pre-filled from it.',
-    example: 'a1b2c3d4-...',
+      'ID of a saved beneficiary. If provided, the beneficiary\'s walletAddress ' +
+      'is used as the destination and lastUsedAt is updated on success.',
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
   })
   @IsUUID()
   @IsOptional()

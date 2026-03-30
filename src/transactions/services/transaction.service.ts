@@ -41,6 +41,8 @@ import {
   FeeTransactionType,
   FeeType,
 } from '../../fees/entities/fee-config.entity';
+import { BeneficiariesService } from '../../beneficiaries/beneficiaries.service'; // ← NEW
+import { FirebaseService } from '../../firebase/firebase.service';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -64,6 +66,67 @@ function isStellarSubmitResult(value: unknown): value is StellarSubmitResult {
   );
 }
 
+// ── Stellar destination pre-validation ───────────────────────────────────────
+
+/** Timeout for the pre-submission Stellar account existence check. */
+const STELLAR_ACCOUNT_CHECK_TIMEOUT_MS = 5_000;
+
+/**
+ * Verifies that a Stellar account exists and is funded before attempting a
+ * payment. Throwing here prevents creating a PENDING transaction that will
+ * immediately fail on-chain and waste a fee.
+ *
+ * Timeout (5 s): the withdrawal still proceeds — the Stellar network will
+ * surface the failure if the account really is unfunded.
+ *
+ * Non-404 errors (network blips, etc.): logged and swallowed so that
+ * transient connectivity issues do not block valid withdrawals.
+ */
+async function validateStellarDestination(
+  stellarService: StellarService,
+  address: string,
+  logger: Logger,
+): Promise<void> {
+  try {
+    await Promise.race([
+      stellarService.getWalletBalances(address),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error('timeout')),
+          STELLAR_ACCOUNT_CHECK_TIMEOUT_MS,
+        ),
+      ),
+    ]);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+
+    if (message === 'timeout') {
+      logger.warn(
+        `Stellar account validation timed out for ${address} — proceeding with withdrawal`,
+      );
+      return; // Do not block on timeout
+    }
+
+    const is404 =
+      message.includes('404') ||
+      message.toLowerCase().includes('not found') ||
+      message.toLowerCase().includes('does not exist');
+
+    if (is404) {
+      throw new BadRequestException(
+        'Destination account is not activated on the Stellar network. ' +
+          'The recipient must fund their account with at least 1 XLM before ' +
+          'a payment can be sent to it.',
+      );
+    }
+
+    // Transient error — log and allow the submission to proceed
+    logger.warn(
+      `Stellar destination validation returned a non-404 error for ${address}: ${message}`,
+    );
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Injectable()
@@ -82,6 +145,8 @@ export class TransactionsService {
     private readonly auditLogsService: AuditLogsService,
     private readonly referralsService: ReferralsService,
     private readonly notificationsService: NotificationsService,
+    private readonly beneficiariesService: BeneficiariesService, // ← NEW
+    private readonly firebaseService: FirebaseService,
   ) {}
 
   /**
@@ -173,7 +238,6 @@ export class TransactionsService {
 
       const secretKey = await this.getStellarSecretKey();
 
-      // Typed as StellarTransaction — no `any` cast needed
       const signedTx: StellarTransaction =
         await this.stellarService.signTransaction(stellarTx, secretKey);
 
@@ -232,20 +296,44 @@ export class TransactionsService {
     }
   }
 
-  /**
-   * Create a withdrawal transaction
-   */
   async createWithdrawal(
     userId: string,
     createWithdrawalDto: CreateWithdrawalDto,
     ipAddress?: string,
     userAgent?: string,
   ): Promise<Transaction> {
-    const { amount, currency, destinationAddress } = createWithdrawalDto;
+    const { amount, currency, beneficiaryId } = createWithdrawalDto;
+    let { destinationAddress } = createWithdrawalDto;
 
     this.logger.log(
       `Creating withdrawal for user ${userId}: ${amount} ${currency}`,
     );
+
+    // ── Resolve destination address ─────────────────────────────────────────
+    if (beneficiaryId) {
+      // getBeneficiaryById throws 404 if not found and 403 if not owned by userId
+      const beneficiary = await this.beneficiariesService.getBeneficiaryById(
+        userId,
+        beneficiaryId,
+      );
+
+      if (beneficiary.currency.toUpperCase() !== currency.toUpperCase()) {
+        throw new BadRequestException(
+          `Beneficiary currency (${beneficiary.currency}) does not match ` +
+            `the withdrawal currency (${currency}). ` +
+            'Please use a beneficiary with the matching currency or supply a destinationAddress directly.',
+        );
+      }
+
+      destinationAddress = beneficiary.walletAddress;
+    }
+
+    if (!destinationAddress) {
+      throw new BadRequestException(
+        'Either destinationAddress or a valid beneficiaryId must be provided.',
+      );
+    }
+    // ── End resolve destination address ─────────────────────────────────────
 
     const currencyData = await this.currenciesService.findOne(currency);
     if (!currencyData || !currencyData.isActive) {
@@ -305,6 +393,13 @@ export class TransactionsService {
       );
     }
 
+    await validateStellarDestination(
+      this.stellarService,
+      destinationAddress,
+      this.logger,
+    );
+    // ── End pre-submission validation ───────────────────────────────────────
+
     const transaction = this.transactionRepository.create({
       userId,
       type: TransactionType.WITHDRAW,
@@ -330,6 +425,7 @@ export class TransactionsService {
           currency: transaction.currency,
           feeAmount: fee.feeAmount,
           destinationAddress,
+          beneficiaryId,
           ip: ipAddress,
           device: userAgent,
         },
@@ -365,6 +461,17 @@ export class TransactionsService {
       await this.transactionRepository.save(transaction);
 
       await this.updateUserBalance(userId, currency, -amount);
+
+      if (beneficiaryId) {
+        try {
+          await this.beneficiariesService.updateLastUsed(beneficiaryId);
+        } catch (err) {
+          this.logger.warn(
+            `Failed to update lastUsedAt for beneficiary ${beneficiaryId}: ${toError(err).message}`,
+          );
+        }
+      }
+      // ── End update beneficiary ────────────────────────────────────────────
 
       this.logger.log(
         `Withdrawal transaction created successfully: ${transaction.id}`,
@@ -513,30 +620,27 @@ export class TransactionsService {
 
       const destinationAddress = await this.getUserStellarAddress(userId);
 
-      // Map currency codes to Stellar Assets
-      // For non-native assets, a non-empty issuer is required by stellar-sdk.
-      // In a production app, the issuer should be fetched from CurrenciesService.
       const fromAsset =
         fromCurrency === 'XLM'
           ? Asset.native()
           : new Asset(
               fromCurrency,
               'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335XPB7X3NCQXMK3SBEG3CIFE7G',
-            ); // Dummy issuer (USDC testnet)
+            );
       const toAsset =
         toCurrency === 'XLM'
           ? Asset.native()
           : new Asset(
               toCurrency,
               'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335XPB7X3NCQXMK3SBEG3CIFE7G',
-            ); // Dummy issuer
+            );
 
       const swapOperation = Operation.pathPaymentStrictSend({
         sendAsset: fromAsset,
         sendAmount: amount.toString(),
         destination: destinationAddress,
         destAsset: toAsset,
-        destMin: (resultingAmount * 0.99).toFixed(7), // 1% slippage tolerance
+        destMin: (resultingAmount * 0.99).toFixed(7),
         path: [],
       });
 
@@ -561,7 +665,6 @@ export class TransactionsService {
       transaction.status = TransactionStatus.SUCCESS;
       await this.transactionRepository.save(transaction);
 
-      // Update balances
       await this.updateUserBalance(
         userId,
         fromCurrency,
@@ -569,7 +672,6 @@ export class TransactionsService {
       );
       await this.updateUserBalance(userId, toCurrency, resultingAmount);
 
-      // Send notification
       await this.notificationsService.create({
         userId,
         type: NotificationType.SWAP_COMPLETED,
@@ -777,7 +879,6 @@ export class TransactionsService {
 
   /**
    * Cancel a transaction (user-initiated)
-   * Only allows cancellation of PENDING transactions owned by the user
    */
   async cancelTransaction(
     transactionId: string,
@@ -793,21 +894,18 @@ export class TransactionsService {
       throw new NotFoundException('Transaction not found');
     }
 
-    // Verify ownership
     if (transaction.userId !== userId) {
       throw new ForbiddenException(
         'You do not have permission to cancel this transaction',
       );
     }
 
-    // Verify status is PENDING
     if (transaction.status !== TransactionStatus.PENDING) {
       throw new BadRequestException(
         `Cannot cancel transaction with status ${transaction.status}. Only PENDING transactions can be cancelled.`,
       );
     }
 
-    // Log warning if transaction was already submitted to blockchain
     if (transaction.txHash) {
       this.logger.warn(
         `Transaction ${transactionId} has already been submitted to Stellar (txHash: ${transaction.txHash}). Cancelling in DB but on-chain state may differ.`,
@@ -865,7 +963,6 @@ export class TransactionsService {
 
     const [transactions, total] = await queryBuilder.getManyAndCount();
 
-    // Bulk fetch currency metadata for all unique currencies in the result set
     const uniqueCurrencies: string[] = Array.from(
       new Set(
         transactions
@@ -891,7 +988,6 @@ export class TransactionsService {
       this.logger.warn(
         `Failed to fetch currency metadata: ${error instanceof Error ? error.message : String(error)}`,
       );
-      // Fallback: use currency code as symbol and displayName
       for (const currencyCode of uniqueCurrencies) {
         // @ts-ignore - Pre-existing type issue
         currencyLookup[currencyCode] = {
@@ -901,7 +997,6 @@ export class TransactionsService {
       }
     }
 
-    // Enrich transactions with currency metadata
     const enrichedTransactions = transactions.map((transaction) => ({
       ...transaction,
       currencySymbol:
@@ -1066,10 +1161,10 @@ export class TransactionsService {
         title = `${actionText} Failed`;
         body = `Your ${transaction.type.toLowerCase()} of ${transaction.amount} ${transaction.currency} failed.`;
         if (failureReason) {
-           body += ` Reason: ${failureReason}`;
+          body += ` Reason: ${failureReason}`;
         }
       } else {
-        return; // Only notify on final states
+        return;
       }
 
       await this.firebaseService.sendToTokens(user.fcmTokens, title, body, {

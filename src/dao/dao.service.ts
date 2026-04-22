@@ -11,7 +11,10 @@ import {
   Horizon,
   rpc,
 } from 'stellar-sdk';
-import { RewardDistribution, RewardDistributionStatus } from './entities/reward-distribution.entity';
+import {
+  RewardDistribution,
+  RewardDistributionStatus,
+} from './entities/reward-distribution.entity';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
 @Injectable()
@@ -30,12 +33,16 @@ export class DaoService {
     private readonly rewardDistributionRepo: Repository<RewardDistribution>,
     private readonly auditLogsService: AuditLogsService,
   ) {
-    this.sorobanRpcUrl = this.configService.get<string>('STELLAR_SOROBAN_RPC_URL') || '';
-    this.defaultContractId = this.configService.get<string>('DAO_CONTRACT_ID') || '';
+    this.sorobanRpcUrl =
+      this.configService.get<string>('STELLAR_SOROBAN_RPC_URL') || '';
+    this.defaultContractId =
+      this.configService.get<string>('DAO_CONTRACT_ID') || '';
 
     const horizonUrl = this.configService.get<string>('STELLAR_HORIZON_URL');
     const network = this.configService.get<string>('STELLAR_NETWORK');
-    const hotWalletSecret = this.configService.get<string>('STELLAR_HOT_WALLET_SECRET');
+    const hotWalletSecret = this.configService.get<string>(
+      'STELLAR_HOT_WALLET_SECRET',
+    );
 
     if (!this.sorobanRpcUrl) {
       throw new Error('STELLAR_SOROBAN_RPC_URL must be set');
@@ -44,7 +51,9 @@ export class DaoService {
       throw new Error('DAO_CONTRACT_ID must be set');
     }
     if (!horizonUrl || !network || !hotWalletSecret) {
-      throw new Error('Stellar environment variables not configured for DAO service');
+      throw new Error(
+        'Stellar environment variables not configured for DAO service',
+      );
     }
 
     this.networkPassphrase = Networks[network as keyof typeof Networks];
@@ -65,7 +74,10 @@ export class DaoService {
     const targetContractId = contractId || this.defaultContractId;
 
     if (!targetContractId) {
-      throw new HttpException('Contract ID is required', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        'Contract ID is required',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     // Verify Soroban RPC health
@@ -190,7 +202,10 @@ export class DaoService {
 
       return distribution;
     } catch (err: any) {
-      if (err instanceof HttpException && err.getStatus() === HttpStatus.SERVICE_UNAVAILABLE) {
+      if (
+        err instanceof HttpException &&
+        err.getStatus() === HttpStatus.SERVICE_UNAVAILABLE
+      ) {
         this.logger.warn('Soroban RPC unavailable - distribution aborted');
         throw err;
       }

@@ -66,7 +66,9 @@ describe('UsersService', () => {
     }).compile();
 
     service = (moduleRef as any).get(UsersService) as UsersService;
-    userRepository = (moduleRef as any).get(getRepositoryToken(User)) as Repository<User>;
+    userRepository = (moduleRef as any).get(
+      getRepositoryToken(User),
+    ) as Repository<User>;
   });
 
   describe('getProfile', () => {
@@ -127,7 +129,9 @@ describe('UsersService', () => {
     it('should add a new token to fcmTokens array', async () => {
       const userWithNoTokens = { ...mockUser, fcmTokens: [] };
       jest.spyOn(userRepository, 'findOne').mockResolvedValue(userWithNoTokens);
-      const updateSpy = jest.spyOn(userRepository, 'update').mockResolvedValue(undefined as any);
+      const updateSpy = jest
+        .spyOn(userRepository, 'update')
+        .mockResolvedValue(undefined as any);
 
       await service.registerDeviceToken('user-123', 'new-token');
 
@@ -151,7 +155,9 @@ describe('UsersService', () => {
     it('should remove a token from fcmTokens array', async () => {
       const userWithTokens = { ...mockUser, fcmTokens: ['token-1', 'token-2'] };
       jest.spyOn(userRepository, 'findOne').mockResolvedValue(userWithTokens);
-      const updateSpy = jest.spyOn(userRepository, 'update').mockResolvedValue(undefined as any);
+      const updateSpy = jest
+        .spyOn(userRepository, 'update')
+        .mockResolvedValue(undefined as any);
 
       await service.removeDeviceToken('user-123', 'token-1');
 

@@ -212,13 +212,18 @@ describe('TransactionsService fee integration behavior', () => {
     });
 
     it('should cancel a PENDING transaction owned by the user', async () => {
-      transactionRepository.findOne.mockResolvedValue(mockPendingTransaction as Transaction);
+      transactionRepository.findOne.mockResolvedValue(
+        mockPendingTransaction as Transaction,
+      );
       transactionRepository.save.mockResolvedValue({
         ...mockPendingTransaction,
         status: TransactionStatus.CANCELLED,
       } as Transaction);
 
-      const result = await service.cancelTransaction('tx-cancel-test', 'user-1');
+      const result = await service.cancelTransaction(
+        'tx-cancel-test',
+        'user-1',
+      );
 
       expect(result.status).toBe(TransactionStatus.CANCELLED);
       expect(transactionRepository.findOne).toHaveBeenCalledWith({
@@ -251,7 +256,9 @@ describe('TransactionsService fee integration behavior', () => {
     });
 
     it('should throw BadRequestException when cancelling a non-PENDING transaction', async () => {
-      transactionRepository.findOne.mockResolvedValue(mockSuccessTransaction as Transaction);
+      transactionRepository.findOne.mockResolvedValue(
+        mockSuccessTransaction as Transaction,
+      );
 
       await expect(
         service.cancelTransaction('tx-cancel-test', 'user-1'),
@@ -282,7 +289,9 @@ describe('TransactionsService fee integration behavior', () => {
         txHash: 'stellar-hash-123',
       };
 
-      transactionRepository.findOne.mockResolvedValue(transactionWithHash as Transaction);
+      transactionRepository.findOne.mockResolvedValue(
+        transactionWithHash as Transaction,
+      );
       transactionRepository.save.mockResolvedValue({
         ...transactionWithHash,
         status: TransactionStatus.CANCELLED,

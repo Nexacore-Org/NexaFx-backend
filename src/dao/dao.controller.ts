@@ -29,14 +29,19 @@ export class DaoController {
   @Post('distribute-reward')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Trigger DAO reward distribution via Soroban contract' })
+  @ApiOperation({
+    summary: 'Trigger DAO reward distribution via Soroban contract',
+  })
   @ApiResponse({ status: 201, description: 'Reward distribution queued' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async distributeReward(
     @Request() req: { user: { userId: string } },
     @Body() distributeRewardDto: DistributeRewardDto,
   ) {
-    return this.daoService.distributeReward(req.user.userId, distributeRewardDto);
+    return this.daoService.distributeReward(
+      req.user.userId,
+      distributeRewardDto,
+    );
   }
 
   @Get('distributions')

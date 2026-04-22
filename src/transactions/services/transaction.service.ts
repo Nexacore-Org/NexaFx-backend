@@ -286,8 +286,13 @@ export class TransactionsService {
         },
       );
 
-      this.sendTransactionNotification(userId, transaction, 'FAILED', error.message).catch(
-        (e) => this.logger.error(`Failed to send push notification: ${e.message}`)
+      this.sendTransactionNotification(
+        userId,
+        transaction,
+        'FAILED',
+        error.message,
+      ).catch((e) =>
+        this.logger.error(`Failed to send push notification: ${e.message}`),
       );
 
       throw new InternalServerErrorException(
@@ -499,8 +504,13 @@ export class TransactionsService {
         },
       );
 
-      this.sendTransactionNotification(userId, transaction, 'FAILED', error.message).catch(
-        (e) => this.logger.error(`Failed to send push notification: ${e.message}`)
+      this.sendTransactionNotification(
+        userId,
+        transaction,
+        'FAILED',
+        error.message,
+      ).catch((e) =>
+        this.logger.error(`Failed to send push notification: ${e.message}`),
       );
 
       throw new InternalServerErrorException(
@@ -796,14 +806,17 @@ export class TransactionsService {
         },
       );
 
-      if (transaction.status === TransactionStatus.SUCCESS || transaction.status === TransactionStatus.FAILED) {
+      if (
+        transaction.status === TransactionStatus.SUCCESS ||
+        transaction.status === TransactionStatus.FAILED
+      ) {
         this.sendTransactionNotification(
           transaction.userId,
           transaction,
           transaction.status,
           transaction.failureReason,
-        ).catch(
-          (e) => this.logger.error(`Failed to send push notification: ${e.message}`)
+        ).catch((e) =>
+          this.logger.error(`Failed to send push notification: ${e.message}`),
         );
       }
 
@@ -863,14 +876,17 @@ export class TransactionsService {
       `Transaction ${transactionId} status updated from ${oldStatus} to ${status} by admin ${adminId}`,
     );
 
-    if (status === TransactionStatus.SUCCESS || status === TransactionStatus.FAILED) {
+    if (
+      status === TransactionStatus.SUCCESS ||
+      status === TransactionStatus.FAILED
+    ) {
       this.sendTransactionNotification(
         transaction.userId,
         transaction,
         status,
         transaction.failureReason,
-      ).catch(
-        (e) => this.logger.error(`Failed to send push notification: ${e.message}`)
+      ).catch((e) =>
+        this.logger.error(`Failed to send push notification: ${e.message}`),
       );
     }
 
@@ -931,9 +947,7 @@ export class TransactionsService {
       },
     );
 
-    this.logger.log(
-      `Transaction ${transactionId} cancelled by user ${userId}`,
-    );
+    this.logger.log(`Transaction ${transactionId} cancelled by user ${userId}`);
 
     return transaction;
   }
@@ -1150,7 +1164,8 @@ export class TransactionsService {
       const user = await this.usersService.findById(userId);
       if (!user || !user.fcmTokens || user.fcmTokens.length === 0) return;
 
-      const actionText = transaction.type === TransactionType.DEPOSIT ? 'Deposit' : 'Withdrawal';
+      const actionText =
+        transaction.type === TransactionType.DEPOSIT ? 'Deposit' : 'Withdrawal';
       let title = '';
       let body = '';
 

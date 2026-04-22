@@ -92,11 +92,15 @@ export class PushNotificationsService {
       // Collect FCM tokens and send
       const tokens = activeUsers.flatMap((u: any) => u.fcmTokens || []);
       if (tokens.length > 0) {
-        this.firebaseService.sendToTokens(
-          tokens,
-          createBroadcastDto.title,
-          createBroadcastDto.message,
-        ).catch(err => this.logger.error(`FCM Broadcast failed: ${err.message}`));
+        this.firebaseService
+          .sendToTokens(
+            tokens,
+            createBroadcastDto.title,
+            createBroadcastDto.message,
+          )
+          .catch((err) =>
+            this.logger.error(`FCM Broadcast failed: ${err.message}`),
+          );
       }
 
       // Log the action

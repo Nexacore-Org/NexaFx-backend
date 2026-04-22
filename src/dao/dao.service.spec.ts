@@ -2,7 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { HttpException } from '@nestjs/common';
-import { RewardDistribution, RewardDistributionStatus } from './entities/reward-distribution.entity';
+import {
+  RewardDistribution,
+  RewardDistributionStatus,
+} from './entities/reward-distribution.entity';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
 // Mock stellar-sdk BEFORE importing DaoService
@@ -28,20 +31,24 @@ jest.mock('stellar-sdk', () => {
       Server: jest.fn().mockImplementation(() => ({
         getNetwork: jest.fn().mockResolvedValue({ passphrase: 'Test SDF' }),
         prepareTransaction: jest.fn().mockResolvedValue({ sign: jest.fn() }),
-        sendTransaction: jest.fn().mockResolvedValue({ hash: 'test-tx-hash', status: 'PENDING' }),
+        sendTransaction: jest
+          .fn()
+          .mockResolvedValue({ hash: 'test-tx-hash', status: 'PENDING' }),
       })),
     },
     Horizon: {
       Server: jest.fn().mockImplementation(() => ({
         loadAccount: jest.fn().mockResolvedValue({
-          accountId: () => 'GBL3F66GFSRD3LCLZ2WMJE5IFBV42H5DMIFGB6X2I5SNTFBGVJ7RHZF4',
+          accountId: () =>
+            'GBL3F66GFSRD3LCLZ2WMJE5IFBV42H5DMIFGB6X2I5SNTFBGVJ7RHZF4',
         }),
       })),
     },
     Keypair: {
       ...actual.Keypair,
       fromSecret: jest.fn().mockReturnValue({
-        publicKey: () => 'GBL3F66GFSRD3LCLZ2WMJE5IFBV42H5DMIFGB6X2I5SNTFBGVJ7RHZF4',
+        publicKey: () =>
+          'GBL3F66GFSRD3LCLZ2WMJE5IFBV42H5DMIFGB6X2I5SNTFBGVJ7RHZF4',
         sign: jest.fn(),
       }),
     },
@@ -60,11 +67,14 @@ describe('DaoService', () => {
     const mockConfigService = {
       get: jest.fn((key: string) => {
         const config: Record<string, any> = {
-          STELLAR_SOROBAN_RPC_URL: 'https://horizon-testnet.stellar.org/soroban/rpc',
-          DAO_CONTRACT_ID: 'CAGAKXJ4PKVDG3NB6HVMQXWZQPBQSQXZZZFVBF3RIQAFH2XPZW2JZTY',
+          STELLAR_SOROBAN_RPC_URL:
+            'https://horizon-testnet.stellar.org/soroban/rpc',
+          DAO_CONTRACT_ID:
+            'CAGAKXJ4PKVDG3NB6HVMQXWZQPBQSQXZZZFVBF3RIQAFH2XPZW2JZTY',
           STELLAR_HORIZON_URL: 'https://horizon-testnet.stellar.org',
           STELLAR_NETWORK: 'TESTNET',
-          STELLAR_HOT_WALLET_SECRET: 'SBXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+          STELLAR_HOT_WALLET_SECRET:
+            'SBXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
           STELLAR_BASE_FEE: 100,
         };
         return config[key];
@@ -85,7 +95,10 @@ describe('DaoService', () => {
       providers: [
         DaoService,
         { provide: ConfigService, useValue: mockConfigService },
-        { provide: getRepositoryToken(RewardDistribution), useValue: mockRewardDistributionRepo },
+        {
+          provide: getRepositoryToken(RewardDistribution),
+          useValue: mockRewardDistributionRepo,
+        },
         { provide: AuditLogsService, useValue: mockAuditLogsService },
       ],
     }).compile();
@@ -137,7 +150,9 @@ describe('DaoService', () => {
 
   describe('getDistributions', () => {
     it('should return paginated distributions', async () => {
-      const mockDists = [{ id: 'dist-1', status: RewardDistributionStatus.SUCCESS }];
+      const mockDists = [
+        { id: 'dist-1', status: RewardDistributionStatus.SUCCESS },
+      ];
       rewardDistributionRepo.findAndCount.mockResolvedValue([mockDists, 1]);
 
       const result = await service.getDistributions(1, 20);

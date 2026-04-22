@@ -1,0 +1,71 @@
+name: Rollback Render Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_id:
+        description: 'Render Deploy ID to rollback to (required)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    name: Rollback Deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: production
+
+    steps:
+      - name: Perform Rollback
+        id: rollback
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+          DEPLOY_ID: ${{ inputs.deploy_id }}
+        run: |
+          echo "Initiating rollback to deploy ID: $DEPLOY_ID"
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Accept: application/json" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys/$DEPLOY_ID/rollback")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "HTTP Status Code: $HTTP_CODE"
+          echo ""
+
+          if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
+            echo "✅ Rollback initiated successfully"
+            echo ""
+            echo "Rollback details:"
+            echo "$BODY"
+            
+            NEW_DEPLOY_ID=$(echo "$BODY" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+            echo "new_deploy_id=$NEW_DEPLOY_ID" >> $GITHUB_OUTPUT
+            
+            echo ""
+            echo "You can monitor the rollback status using the deploy.yml workflow or Render dashboard."
+            exit 0
+          else
+            echo "❌ Rollback failed (HTTP $HTTP_CODE)"
+            echo ""
+            echo "Error response:"
+            echo "$BODY"
+            exit 1
+          fi
+
+      - name: Rollback Summary
+        if: always()
+        run: |
+          echo "---"
+          echo "Rollback Summary:"
+          echo "Target Deploy ID: ${{ inputs.deploy_id }}"
+          echo "Status: ${{ steps.rollback.outcome }}"
+          echo "Initiated at: $(date -u)"
+          echo "Initiated by: ${{ github.actor }}"

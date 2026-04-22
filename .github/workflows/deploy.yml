@@ -1,0 +1,143 @@
+name: Deploy to Render
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or commit SHA to deploy
+        required: false
+        default: main
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
+
+jobs:
+  deploy:
+    name: Deploy Service Deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+
+    # Only run if CI passed successfully or manual dispatch
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Trigger Render Deployment
+        id: trigger-deploy
+        run: |
+          echo "Triggering deployment via Render deploy hook"
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST ${{ secrets.RENDER_DEPLOY_HOOK_URL })
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          
+          if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ]; then
+            echo "Error: Failed to trigger deployment (HTTP $HTTP_CODE)"
+            exit 1
+          fi
+          
+          echo "Deployment triggered successfully"
+
+      - name: Wait for Deployment Completion
+        id: poll-deploy
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+        run: |
+          MAX_ATTEMPTS=20
+          SLEEP_INTERVAL=30
+          ATTEMPT=0
+
+          echo "Starting deployment status polling (timeout after $((MAX_ATTEMPTS * SLEEP_INTERVAL / 60)) minutes)"
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Poll attempt $ATTEMPT/$MAX_ATTEMPTS"
+            
+            RESPONSE=$(curl -s -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys?limit=1")
+            
+            DEPLOY_ID=$(echo "$RESPONSE" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+            STATUS=$(echo "$RESPONSE" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
+            
+            echo "Current status: $STATUS (Deploy ID: $DEPLOY_ID)"
+            
+            echo "deploy_id=$DEPLOY_ID" >> $GITHUB_OUTPUT
+            echo "deploy_status=$STATUS" >> $GITHUB_OUTPUT
+            
+            if [ "$STATUS" = "live" ]; then
+              echo "✅ Deployment succeeded"
+              exit 0
+            fi
+            
+            if [ "$STATUS" = "failed" ] || [ "$STATUS" = "canceled" ]; then
+              echo "❌ Deployment failed with status: $STATUS"
+              echo "deploy_error=$(echo "$RESPONSE" | grep -o '"message":"[^"]*"' | head -1 | cut -d'"' -f4)" >> $GITHUB_OUTPUT
+              exit 1
+            fi
+            
+            sleep $SLEEP_INTERVAL
+          done
+
+          echo "❌ Deployment timed out after $((MAX_ATTEMPTS * SLEEP_INTERVAL) seconds"
+          exit 1
+
+      - name: Notify PR Comment on Failure
+        if: failure() && steps.poll-deploy.outcome == 'failure'
+        uses: actions/github-script@v7
+        env:
+          DEPLOY_ID: ${{ steps.poll-deploy.outputs.deploy_id }}
+          DEPLOY_STATUS: ${{ steps.poll-deploy.outputs.deploy_status }}
+          DEPLOY_ERROR: ${{ steps.poll-deploy.outputs.deploy_error }}
+        with:
+          script: |
+            const { DEPLOY_ID, DEPLOY_STATUS, DEPLOY_ERROR } = process.env
+            
+            // Find PRs associated with this commit
+            const prs = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha
+            })
+            
+            if (prs.data.length > 0) {
+              const pr = prs.data[0]
+              
+              const comment = `❌ **Deployment Failed**
+              
+              | Details | |
+              | --- | --- |
+              | Commit | \`${context.sha.substring(0, 7)}\` |
+              | Deploy ID | \`${DEPLOY_ID || 'unknown'}\` |
+              | Status | ${DEPLOY_STATUS || 'unknown'} |
+              | Timestamp | ${new Date().toUTCString()} |
+              
+              **Error Message:**
+              \`\`\`
+              ${DEPLOY_ERROR || 'No error details available'}
+              \`\`\`
+              
+              To rollback run the \`rollback.yml\` workflow with this deploy ID.
+              `
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: comment
+              })
+              
+              console.log(`Comment posted on PR #${pr.number}`)
+            }

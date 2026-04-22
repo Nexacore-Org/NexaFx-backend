@@ -67,7 +67,7 @@ export class CreateWithdrawalDto {
 
   @ApiPropertyOptional({
     description:
-      'ID of a saved beneficiary. If provided, the beneficiary\'s walletAddress ' +
+      "ID of a saved beneficiary. If provided, the beneficiary's walletAddress " +
       'is used as the destination and lastUsedAt is updated on success.',
     example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
   })

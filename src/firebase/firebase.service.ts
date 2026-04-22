@@ -16,11 +16,17 @@ export class FirebaseService implements OnModuleInit {
   private initializeFirebase() {
     try {
       const projectId = this.configService.get<string>('FIREBASE_PROJECT_ID');
-      const clientEmail = this.configService.get<string>('FIREBASE_CLIENT_EMAIL');
-      const privateKeyStr = this.configService.get<string>('FIREBASE_PRIVATE_KEY');
+      const clientEmail = this.configService.get<string>(
+        'FIREBASE_CLIENT_EMAIL',
+      );
+      const privateKeyStr = this.configService.get<string>(
+        'FIREBASE_PRIVATE_KEY',
+      );
 
       if (!projectId || !clientEmail || !privateKeyStr) {
-        this.logger.warn('Firebase credentials not fully configured. Push notifications will be disabled.');
+        this.logger.warn(
+          'Firebase credentials not fully configured. Push notifications will be disabled.',
+        );
         return;
       }
 
@@ -38,14 +44,24 @@ export class FirebaseService implements OnModuleInit {
       this.initialized = true;
       this.logger.log('Firebase Admin SDK initialized successfully');
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Failed to initialize Firebase Admin SDK: ${errorMessage}`);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Failed to initialize Firebase Admin SDK: ${errorMessage}`,
+      );
     }
   }
 
-  async sendToTokens(tokens: string[], title: string, body: string, data?: Record<string, string>): Promise<void> {
+  async sendToTokens(
+    tokens: string[],
+    title: string,
+    body: string,
+    data?: Record<string, string>,
+  ): Promise<void> {
     if (!this.initialized) {
-      this.logger.warn('Firebase is not initialized. Skipping push notification delivery.');
+      this.logger.warn(
+        'Firebase is not initialized. Skipping push notification delivery.',
+      );
       return;
     }
 
@@ -73,18 +89,28 @@ export class FirebaseService implements OnModuleInit {
         response.responses.forEach((resp, idx) => {
           if (!resp.success) {
             failedTokens.push(tokens[idx]);
-            this.logger.warn(`Failed to send to token ${tokens[idx]}: ${resp.error?.message}`);
+            this.logger.warn(
+              `Failed to send to token ${tokens[idx]}: ${resp.error?.message}`,
+            );
           }
         });
 
         // In the future, we can clean up these failed tokens from the user's fcmTokens array
-        this.logger.log(`FCM send complete: ${response.successCount} successful, ${response.failureCount} failed.`);
+        this.logger.log(
+          `FCM send complete: ${response.successCount} successful, ${response.failureCount} failed.`,
+        );
       } else {
-        this.logger.log(`FCM send successful to ${response.successCount} tokens.`);
+        this.logger.log(
+          `FCM send successful to ${response.successCount} tokens.`,
+        );
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Error sending push notifications: ${errorMessage}`, error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Error sending push notifications: ${errorMessage}`,
+        error,
+      );
       // We don't rethrow to avoid blocking main flows since notifications are secondary
     }
   }

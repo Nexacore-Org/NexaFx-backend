@@ -569,10 +569,11 @@ We welcome contributions from the community! Please start with:
 5. **Open** a Pull Request with your changes
 
 **Before submitting**:
-- [ ] Tests pass: `npm run test`
-- [ ] Linting passes: `npm run lint`
-- [ ] Coverage is adequate
-- [ ] Updated README if adding major features
+- [x] **CI Pipeline Passes:** Ensure GitHub Actions (Lint, Type-check, Tests, Build) complete successfully. Failing CI will block PR merges.
+- [x] Tests pass locally: `npm run test`
+- [x] Linting passes locally: `npm run lint`
+- [x] Coverage is adequate
+- [x] Updated README if adding major features
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed guidelines.
 

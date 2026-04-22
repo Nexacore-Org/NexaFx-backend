@@ -218,15 +218,19 @@ export class KycService {
       await manager.save(Notification, notificationPayload);
 
       if (user.fcmTokens && user.fcmTokens.length > 0) {
-        this.firebaseService.sendToTokens(
-          user.fcmTokens,
-          notificationPayload.title!,
-          notificationPayload.message!,
-          {
-            entity: 'KYC',
-            kycStatus: decision.toLowerCase(),
-          },
-        ).catch(err => this.logger.error(`Failed to send KYC FCM: ${err.message}`));
+        this.firebaseService
+          .sendToTokens(
+            user.fcmTokens,
+            notificationPayload.title!,
+            notificationPayload.message!,
+            {
+              entity: 'KYC',
+              kycStatus: decision.toLowerCase(),
+            },
+          )
+          .catch((err) =>
+            this.logger.error(`Failed to send KYC FCM: ${err.message}`),
+          );
       }
 
       return {

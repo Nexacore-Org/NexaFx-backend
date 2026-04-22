@@ -44,7 +44,9 @@ describe('RatesGateway', () => {
         },
         {
           provide: JwtService,
-          useValue: { verifyAsync: jest.fn().mockResolvedValue({ sub: 'user-1' }) },
+          useValue: {
+            verifyAsync: jest.fn().mockResolvedValue({ sub: 'user-1' }),
+          },
         },
         {
           provide: ConfigService,
@@ -82,18 +84,28 @@ describe('RatesGateway', () => {
 
   describe('handleSubscribe', () => {
     it('should join the client to a room on valid currency pair', async () => {
-      mockExchangeRatesService.validateCurrencyPair.mockResolvedValue(undefined);
+      mockExchangeRatesService.validateCurrencyPair.mockResolvedValue(
+        undefined,
+      );
 
-      await gateway.handleSubscribe(mockClient as any, { from: 'BTC', to: 'USD' });
+      await gateway.handleSubscribe(mockClient as any, {
+        from: 'BTC',
+        to: 'USD',
+      });
 
       expect(service.validateCurrencyPair).toHaveBeenCalledWith('BTC', 'USD');
       expect(mockClient.join).toHaveBeenCalledWith('rate:BTC:USD');
     });
 
     it('should emit an error on invalid currency pair', async () => {
-      mockExchangeRatesService.validateCurrencyPair.mockRejectedValue(new Error('Invalid'));
+      mockExchangeRatesService.validateCurrencyPair.mockRejectedValue(
+        new Error('Invalid'),
+      );
 
-      await gateway.handleSubscribe(mockClient as any, { from: 'XYZ', to: 'ABC' });
+      await gateway.handleSubscribe(mockClient as any, {
+        from: 'XYZ',
+        to: 'ABC',
+      });
 
       expect(mockClient.emit).toHaveBeenCalledWith('error', expect.any(Object));
       expect(mockClient.join).not.toHaveBeenCalled();

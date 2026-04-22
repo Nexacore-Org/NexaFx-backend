@@ -182,16 +182,22 @@ export class ReferralsService {
       relatedId: saved.id,
     });
 
-    const referrer = await this.usersRepository.findOne({ where: { id: referral.referrerId } });
+    const referrer = await this.usersRepository.findOne({
+      where: { id: referral.referrerId },
+    });
     if (referrer && referrer.fcmTokens && referrer.fcmTokens.length > 0) {
-      this.firebaseService.sendToTokens(
-        referrer.fcmTokens,
-        'Referral Reward Earned',
-        `You earned ${rewardAmount} ${rewardCurrency} from your referral.`,
-        {
-          referralId: saved.id,
-        },
-      ).catch(err => this.logger.error(`Failed to send Referral FCM: ${err.message}`));
+      this.firebaseService
+        .sendToTokens(
+          referrer.fcmTokens,
+          'Referral Reward Earned',
+          `You earned ${rewardAmount} ${rewardCurrency} from your referral.`,
+          {
+            referralId: saved.id,
+          },
+        )
+        .catch((err) =>
+          this.logger.error(`Failed to send Referral FCM: ${err.message}`),
+        );
     }
 
     this.logger.log(

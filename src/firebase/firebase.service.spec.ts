@@ -56,7 +56,7 @@ describe('FirebaseService', () => {
   it('should format message correctly and call sendEachForMulticast', async () => {
     // Manually run onModuleInit since testing module doesn't do it automatically in simple compilation
     service.onModuleInit();
-    
+
     expect(admin.initializeApp).toHaveBeenCalledWith({
       credential: 'mock-cert',
     });

@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 
 export class DistributeRewardDto {
   @ApiProperty({ description: 'User UUID receiving the reward' })
@@ -7,7 +13,8 @@ export class DistributeRewardDto {
   userId: string;
 
   @ApiPropertyOptional({
-    description: 'Soroban contract ID (C...) to invoke; environment default can apply',
+    description:
+      'Soroban contract ID (C...) to invoke; environment default can apply',
   })
   @IsOptional()
   @IsString()
@@ -18,7 +25,9 @@ export class DistributeRewardDto {
   @IsNotEmpty()
   functionName: string;
 
-  @ApiPropertyOptional({ description: 'Arguments to pass to the contract function' })
+  @ApiPropertyOptional({
+    description: 'Arguments to pass to the contract function',
+  })
   @IsOptional()
   args?: any[];
 

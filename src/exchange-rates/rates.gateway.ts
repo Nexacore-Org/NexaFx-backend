@@ -45,7 +45,9 @@ export class RatesGateway implements OnGatewayInit {
     const to = data?.to?.toUpperCase();
 
     if (!from || !to) {
-      client.emit('error', { message: 'Currency "from" and "to" are required' });
+      client.emit('error', {
+        message: 'Currency "from" and "to" are required',
+      });
       return;
     }
 
@@ -55,7 +57,9 @@ export class RatesGateway implements OnGatewayInit {
       client.join(roomName);
       this.logger.log(`Client ${client.id} subscribed to ${roomName}`);
     } catch (error) {
-      this.logger.warn(`Subscription failed for ${from}/${to}: ${error.message}`);
+      this.logger.warn(
+        `Subscription failed for ${from}/${to}: ${error.message}`,
+      );
       client.emit('error', { message: `Invalid currency pair: ${from}/${to}` });
     }
   }

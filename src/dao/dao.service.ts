@@ -22,10 +22,11 @@ export class DaoService {
   private readonly logger = new Logger(DaoService.name);
   private readonly sorobanRpcUrl: string;
   private readonly defaultContractId: string;
-  private readonly networkPassphrase: string;
-  private readonly hotWalletKeypair: Keypair;
-  private readonly sorobanServer: rpc.Server;
-  private readonly horizonServer: Horizon.Server;
+  private readonly networkPassphrase: string | null = null;
+  private readonly hotWalletKeypair: Keypair | null = null;
+  private readonly sorobanServer: rpc.Server | null = null;
+  private readonly horizonServer: Horizon.Server | null = null;
+  private readonly daoConfigError: string | null = null;
 
   constructor(
     private readonly configService: ConfigService,
@@ -45,25 +46,33 @@ export class DaoService {
     );
 
     if (!this.sorobanRpcUrl) {
-      throw new Error('STELLAR_SOROBAN_RPC_URL must be set');
+      this.daoConfigError = 'STELLAR_SOROBAN_RPC_URL must be set';
+      return;
     }
     if (!this.defaultContractId) {
-      throw new Error('DAO_CONTRACT_ID must be set');
+      this.daoConfigError = 'DAO_CONTRACT_ID must be set';
+      return;
     }
     if (!horizonUrl || !network || !hotWalletSecret) {
-      throw new Error(
-        'Stellar environment variables not configured for DAO service',
-      );
+      this.daoConfigError =
+        'Stellar environment variables not configured for DAO service';
+      return;
     }
 
     this.networkPassphrase = Networks[network as keyof typeof Networks];
     if (!this.networkPassphrase) {
-      throw new Error(`Unsupported Stellar network: ${network}`);
+      this.daoConfigError = `Unsupported Stellar network: ${network}`;
+      return;
     }
 
-    this.hotWalletKeypair = Keypair.fromSecret(hotWalletSecret);
-    this.sorobanServer = new rpc.Server(this.sorobanRpcUrl);
-    this.horizonServer = new Horizon.Server(horizonUrl);
+    try {
+      this.hotWalletKeypair = Keypair.fromSecret(hotWalletSecret);
+      this.sorobanServer = new rpc.Server(this.sorobanRpcUrl);
+      this.horizonServer = new Horizon.Server(horizonUrl);
+    } catch (error) {
+      this.daoConfigError =
+        error instanceof Error ? error.message : 'Invalid DAO config';
+    }
   }
 
   async invokeContract(
@@ -72,6 +81,19 @@ export class DaoService {
     args: any[] = [],
   ): Promise<{ txHash: string; result: any }> {
     const targetContractId = contractId || this.defaultContractId;
+
+    if (
+      this.daoConfigError ||
+      !this.sorobanServer ||
+      !this.horizonServer ||
+      !this.hotWalletKeypair ||
+      !this.networkPassphrase
+    ) {
+      throw new HttpException(
+        `DAO service not configured: ${this.daoConfigError ?? 'missing dependencies'}`,
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
 
     if (!targetContractId) {
       throw new HttpException(

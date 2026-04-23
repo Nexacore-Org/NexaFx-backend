@@ -178,6 +178,8 @@ export class AdminController {
       overrideDto,
       admin.userId,
     );
+  }
+
   @Get('kyc-file/:userId/:version/:filename')
   @ApiOperation({ summary: 'Serve KYC uploaded file (Admin only)' })
   @ApiParam({ name: 'userId', type: String })

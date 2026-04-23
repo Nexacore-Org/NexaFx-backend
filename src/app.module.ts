@@ -20,6 +20,7 @@ import { ScheduledJobsModule } from './scheduled-jobs/scheduled-jobs.module';
 import { ReceiptsModule } from './receipts/receipts.module';
 import { FeesModule } from './fees/fees.module';
 import { PushNotificationsModule } from './push-notifications/push-notifications.module';
+import { FirebaseModule } from './firebase/firebase.module';
 import { AdminModule } from './admin/admin.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { DaoModule } from './dao/dao.module';
@@ -63,6 +64,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     HealthModule,
     AuditLogsModule,
     NotificationsModule,
+    FirebaseModule,
     TransactionsModule,
     ReferralsModule,
     BeneficiariesModule,

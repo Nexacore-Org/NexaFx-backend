@@ -63,4 +63,39 @@ export class BeneficiariesService {
   async updateLastUsed(id: string): Promise<void> {
     await this.beneficiaryRepository.update(id, { lastUsedAt: new Date() });
   }
+
+  async updateBeneficiary(
+    userId: string,
+    id: string,
+    dto: UpdateBeneficiaryDto,
+  ): Promise<Beneficiary> {
+    await this.getBeneficiaryById(userId, id);
+
+    if (dto.isDefault) {
+      await this.beneficiaryRepository.update(
+        { userId, isDefault: true },
+        { isDefault: false },
+      );
+    }
+
+    await this.beneficiaryRepository.update({ id, userId }, dto);
+    return this.getBeneficiaryById(userId, id);
+  }
+
+  async deleteBeneficiary(userId: string, id: string): Promise<void> {
+    await this.getBeneficiaryById(userId, id);
+    await this.beneficiaryRepository.delete({ id, userId });
+  }
+
+  async setDefault(userId: string, id: string): Promise<Beneficiary> {
+    await this.getBeneficiaryById(userId, id);
+
+    await this.beneficiaryRepository.update(
+      { userId, isDefault: true },
+      { isDefault: false },
+    );
+
+    await this.beneficiaryRepository.update({ id, userId }, { isDefault: true });
+    return this.getBeneficiaryById(userId, id);
+  }
 }

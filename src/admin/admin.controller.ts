@@ -159,8 +159,7 @@ export class AdminController {
   })
   @ApiResponse({
     status: 400,
-    description:
-      'Invalid status (PENDING not allowed) or missing/empty reason',
+    description: 'Invalid status (PENDING not allowed) or missing/empty reason',
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({
@@ -178,6 +177,8 @@ export class AdminController {
       overrideDto,
       admin.userId,
     );
+  }
+
   @Get('kyc-file/:userId/:version/:filename')
   @ApiOperation({ summary: 'Serve KYC uploaded file (Admin only)' })
   @ApiParam({ name: 'userId', type: String })

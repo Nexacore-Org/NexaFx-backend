@@ -1,11 +1,14 @@
+jest.mock('bcrypt', () => ({
+  hash: jest.fn(),
+  compare: jest.fn(),
+}));
+
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { ScheduledJobsService } from './scheduled-jobs.service';
 import {
   Transaction,
   TransactionStatus,
-  TransactionType,
 } from '../transactions/entities/transaction.entity';
 import { Notification } from '../notifications/entities/notification.entity';
 import { TransactionsService } from '../transactions/services/transaction.service';
@@ -16,7 +19,6 @@ import { RateAlertsService } from '../rate-alerts/rate-alerts.service';
 
 describe('ScheduledJobsService', () => {
   let service: ScheduledJobsService;
-  let transactionRepository: Repository<Transaction>;
 
   const mockTransactionRepository = {
     find: jest.fn(),
@@ -26,13 +28,18 @@ describe('ScheduledJobsService', () => {
 
   const mockNotificationRepository = {
     find: jest.fn(),
+    createQueryBuilder: jest.fn(),
   };
 
   const mockTransactionsService = {};
   const mockStellarService = {};
   const mockNotificationsService = {};
-  const mockUsersService = {};
-  const mockRateAlertsService = {};
+  const mockUsersService = {
+    syncWalletBalanceSnapshots: jest.fn(),
+  };
+  const mockRateAlertsService = {
+    checkAndTriggerAlerts: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -70,13 +77,60 @@ describe('ScheduledJobsService', () => {
     }).compile();
 
     service = module.get<ScheduledJobsService>(ScheduledJobsService);
-    transactionRepository = module.get<Repository<Transaction>>(
-      getRepositoryToken(Transaction),
-    );
   });
 
   afterEach(() => {
     jest.clearAllMocks();
+  });
+
+  describe('cron handlers', () => {
+    it.each([
+      ['syncWalletBalances', () => service.syncWalletBalances()],
+      [
+        'reconcilePendingTransactions',
+        () => service.reconcilePendingTransactions(),
+      ],
+      ['retryFailedTransactions', () => service.retryFailedTransactions()],
+      ['checkRateAlerts', () => service.checkRateAlerts()],
+      ['cleanupOldNotifications', () => service.cleanupOldNotifications()],
+      [
+        'syncWalletBalancesSnapshot',
+        () => service.syncWalletBalancesSnapshot(),
+      ],
+    ])('%s is directly callable without throwing', async (_name, callCron) => {
+      const deleteQueryBuilder = {
+        delete: jest.fn().mockReturnThis(),
+        from: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({ affected: 0 }),
+      };
+      const claimQueryBuilder = {
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({ affected: 0 }),
+      };
+
+      mockTransactionRepository.createQueryBuilder.mockReturnValue(
+        claimQueryBuilder,
+      );
+      mockTransactionRepository.find.mockResolvedValue([]);
+      mockNotificationRepository.createQueryBuilder.mockReturnValue(
+        deleteQueryBuilder,
+      );
+      mockUsersService.syncWalletBalanceSnapshots.mockResolvedValue({
+        processed: 0,
+        updated: 0,
+        failed: 0,
+      });
+      mockRateAlertsService.checkAndTriggerAlerts.mockResolvedValue({
+        checked: 0,
+        triggered: 0,
+        reactivated: 0,
+      });
+
+      await expect(callCron()).resolves.toBeUndefined();
+    });
   });
 
   describe('claimPendingTransactions', () => {
@@ -105,17 +159,22 @@ describe('ScheduledJobsService', () => {
       const result = await service['claimPendingTransactions']();
 
       expect(mockQueryBuilder.update).toHaveBeenCalledWith(Transaction);
-      expect(mockQueryBuilder.set).toHaveBeenCalledWith({
-        processingLockedAt: expect.any(Date),
-        processingLockedBy: expect.any(String),
-      });
-      expect(mockQueryBuilder.where).toHaveBeenCalledWith(
+      const [claimSetPayload] = mockQueryBuilder.set.mock.calls[0] as [
+        Record<string, unknown>,
+      ];
+      expect(claimSetPayload.processingLockedAt).toBeInstanceOf(Date);
+      expect(typeof claimSetPayload.processingLockedBy).toBe('string');
+
+      const whereCall = mockQueryBuilder.where.mock.calls[0] as [
+        string,
+        Record<string, unknown>,
+      ];
+      const [whereClause, whereParams] = whereCall;
+      expect(whereClause).toBe(
         'status = :status AND ("processingLockedAt" IS NULL OR "processingLockedAt" < :expiry)',
-        expect.objectContaining({
-          status: TransactionStatus.PENDING,
-          expiry: expect.any(Date),
-        }),
       );
+      expect(whereParams.status).toBe(TransactionStatus.PENDING);
+      expect(whereParams.expiry).toBeInstanceOf(Date);
       expect(result).toEqual(mockTransactions);
     });
 
@@ -155,18 +214,23 @@ describe('ScheduledJobsService', () => {
       const result = await service['claimTransactionForRetry'](transactionId);
 
       expect(mockQueryBuilder.update).toHaveBeenCalledWith(Transaction);
-      expect(mockQueryBuilder.set).toHaveBeenCalledWith({
-        processingLockedAt: expect.any(Date),
-        processingLockedBy: expect.any(String),
-      });
-      expect(mockQueryBuilder.where).toHaveBeenCalledWith(
+      const [retrySetPayload] = mockQueryBuilder.set.mock.calls[0] as [
+        Record<string, unknown>,
+      ];
+      expect(retrySetPayload.processingLockedAt).toBeInstanceOf(Date);
+      expect(typeof retrySetPayload.processingLockedBy).toBe('string');
+
+      const whereCall = mockQueryBuilder.where.mock.calls[0] as [
+        string,
+        Record<string, unknown>,
+      ];
+      const [whereClause, whereParams] = whereCall;
+      expect(whereClause).toBe(
         'id = :id AND status = :status AND ("processingLockedAt" IS NULL OR "processingLockedAt" < :expiry)',
-        expect.objectContaining({
-          id: transactionId,
-          status: TransactionStatus.FAILED,
-          expiry: expect.any(Date),
-        }),
       );
+      expect(whereParams.id).toBe(transactionId);
+      expect(whereParams.status).toBe(TransactionStatus.FAILED);
+      expect(whereParams.expiry).toBeInstanceOf(Date);
       expect(result).toBe(true);
     });
 
@@ -233,13 +297,16 @@ describe('ScheduledJobsService', () => {
       const result = await service['claimPendingTransactions']();
 
       expect(result).toEqual(mockTransactions);
-      expect(mockQueryBuilder.where).toHaveBeenCalledWith(
+      const whereCall = mockQueryBuilder.where.mock.calls[0] as [
+        string,
+        Record<string, unknown>,
+      ];
+      const [whereClause, whereParams] = whereCall;
+      expect(whereClause).toBe(
         'status = :status AND ("processingLockedAt" IS NULL OR "processingLockedAt" < :expiry)',
-        expect.objectContaining({
-          status: TransactionStatus.PENDING,
-          expiry: expect.any(Date),
-        }),
       );
+      expect(whereParams.status).toBe(TransactionStatus.PENDING);
+      expect(whereParams.expiry).toBeInstanceOf(Date);
     });
 
     it('should not claim a transaction with a recent lock', async () => {

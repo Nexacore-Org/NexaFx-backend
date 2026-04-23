@@ -95,7 +95,10 @@ export class BeneficiariesService {
       { isDefault: false },
     );
 
-    await this.beneficiaryRepository.update({ id, userId }, { isDefault: true });
+    await this.beneficiaryRepository.update(
+      { id, userId },
+      { isDefault: true },
+    );
     return this.getBeneficiaryById(userId, id);
   }
 }

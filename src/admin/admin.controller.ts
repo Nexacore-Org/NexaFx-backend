@@ -159,8 +159,7 @@ export class AdminController {
   })
   @ApiResponse({
     status: 400,
-    description:
-      'Invalid status (PENDING not allowed) or missing/empty reason',
+    description: 'Invalid status (PENDING not allowed) or missing/empty reason',
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({

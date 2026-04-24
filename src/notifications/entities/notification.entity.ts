@@ -21,6 +21,8 @@ export enum NotificationStatus {
 @Index(['userId', 'status'])
 // Optimizes user notification history sorted by recency.
 @Index(['userId', 'createdAt'])
+// Optimizes finding old notifications for auto-archiving.
+@Index(['isArchived', 'createdAt'])
 @Entity('notifications')
 export class Notification {
   @PrimaryGeneratedColumn('uuid')
@@ -72,4 +74,15 @@ export class Notification {
 
   @Column({ type: 'timestamp', nullable: true })
   readAt?: Date;
+
+  // Soft delete support
+  @Column({ default: false })
+  isDeleted: boolean;
+
+  // Auto-archive support (notifications older than 90 days)
+  @Column({ default: false })
+  isArchived: boolean;
+
+  @Column({ type: 'timestamp', nullable: true })
+  archivedAt?: Date;
 }

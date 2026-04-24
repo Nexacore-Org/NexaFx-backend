@@ -30,11 +30,13 @@ import { MetricsQueryDto } from './dto/metrics-query.dto';
 import { OverrideTransactionDto } from './dto/override-transaction.dto';
 import { Response } from 'express';
 import { join } from 'path';
+import { SkipApiKeyAuth } from '../api-keys/decorators/skip-api-key-auth.decorator';
 
 @ApiTags('Admin')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.ADMIN)
+@SkipApiKeyAuth()
 @Controller('admin')
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}

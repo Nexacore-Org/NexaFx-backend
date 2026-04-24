@@ -14,6 +14,7 @@ import { OtpsModule } from '../otps/otps.module';
 import { TokensModule } from '../tokens/tokens.module';
 import { StellarModule } from '../blockchain/stellar/stellar.module';
 import { ReferralsModule } from '../referrals/referrals.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { ReferralsModule } from '../referrals/referrals.module';
     TokensModule,
     StellarModule,
     ReferralsModule,
+    NotificationsModule,
     PassportModule,
     TypeOrmModule.forFeature([PasswordResetAttempt]),
     JwtModule.registerAsync({

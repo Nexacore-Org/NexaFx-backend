@@ -25,6 +25,9 @@ import { AdminModule } from './admin/admin.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { DaoModule } from './dao/dao.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ApiKeyModule } from './api-keys/api-key.module';
+import { ApiKeyGuard } from './api-keys/guards/api-key.guard';
+import { HierarchicalRbacModule } from './hierachial-rbac/hierarchical-rbac.module';
 
 @Module({
   imports: [
@@ -76,6 +79,8 @@ import { ScheduleModule } from '@nestjs/schedule';
     AdminModule,
     // DAO module provides Stellar Soroban contract interaction for reward distribution
     DaoModule,
+    ApiKeyModule,
+    HierarchicalRbacModule,
   ],
   controllers: [AppController],
   providers: [
@@ -83,6 +88,10 @@ import { ScheduleModule } from '@nestjs/schedule';
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: ApiKeyGuard,
     },
     {
       provide: APP_GUARD,

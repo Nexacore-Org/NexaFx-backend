@@ -17,6 +17,10 @@ import {
   PaginatedNotificationResponse,
 } from './dto/notification-response.dto';
 import { InjectRepository } from '@nestjs/typeorm';
+import { NotificationPreferenceService } from './services/notification-preference.service';
+import { NotificationChannel } from './enum/notificationChannel.enum';
+import { NotificationPersistenceService } from './services/notification-persistence.service';
+import { NotificationGateway } from './gateways/notification.gateway';
 
 @Injectable()
 export class NotificationsService {
@@ -25,17 +29,52 @@ export class NotificationsService {
   constructor(
     @InjectRepository(Notification)
     private notificationsRepository: Repository<Notification>,
+    private readonly preferenceService: NotificationPreferenceService,
+    private readonly persistenceService: NotificationPersistenceService,
+    private readonly notificationGateway: NotificationGateway,
   ) {}
 
   async create(
     createNotificationDto: CreateNotificationDto,
-  ): Promise<NotificationResponseDto> {
+    channel: NotificationChannel = NotificationChannel.IN_APP,
+  ): Promise<NotificationResponseDto | null> {
     try {
-      const notification = this.notificationsRepository.create(
-        createNotificationDto,
+      // Check user preferences before creating notification
+      const shouldSend = await this.preferenceService.shouldSend(
+        createNotificationDto.userId,
+        createNotificationDto.type,
+        channel,
       );
-      const saved = await this.notificationsRepository.save(notification);
-      return this.mapToResponseDto(saved);
+
+      if (!shouldSend) {
+        this.logger.debug(
+          `Notification skipped: ${createNotificationDto.type} for user ${createNotificationDto.userId} on ${channel}`,
+        );
+        return null;
+      }
+
+      // Persist notification to database
+      const notification = await this.persistenceService.createNotification({
+        ...createNotificationDto,
+        status: NotificationStatus.UNREAD,
+      });
+
+      // Emit WebSocket event (non-blocking, after DB persist)
+      if (channel === NotificationChannel.IN_APP) {
+        try {
+          await this.notificationGateway.emitNewNotification(
+            createNotificationDto.userId,
+            this.mapToResponseDto(notification),
+          );
+        } catch (error) {
+          this.logger.error(
+            `Failed to emit WebSocket notification: ${error.message}`,
+          );
+          // Don't throw - notification is already persisted
+        }
+      }
+
+      return this.mapToResponseDto(notification);
     } catch (error) {
       this.logger.error('Failed to create notification', error);
       throw new BadRequestException('Failed to create notification');

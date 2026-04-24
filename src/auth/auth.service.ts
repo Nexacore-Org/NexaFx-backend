@@ -30,6 +30,7 @@ import { JwtPayload } from './strategies/jwt.strategy';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import { ReferralsService } from '../referrals/referrals.service';
+import { NotificationPreferenceService } from '../notifications/services/notification-preference.service';
 
 @Injectable()
 export class AuthService {
@@ -44,6 +45,7 @@ export class AuthService {
     private readonly encryptionService: EncryptionService,
     private readonly auditLogsService: AuditLogsService,
     private readonly referralsService: ReferralsService,
+    private readonly notificationPreferenceService: NotificationPreferenceService,
     @InjectRepository(PasswordResetAttempt)
     private readonly passwordResetAttemptRepository: Repository<PasswordResetAttempt>,
   ) {}
@@ -460,6 +462,9 @@ export class AuthService {
 
     // Mark user as verified
     await this.usersService.verifyUser(user.id);
+
+    // Create default notification preferences
+    await this.notificationPreferenceService.getOrCreateDefaults(user.id);
 
     // Generate tokens
     const payload: JwtPayload = {

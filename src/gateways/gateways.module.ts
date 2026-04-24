@@ -1,20 +1,15 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { HttpModule } from '@nestjs/axios';
 import { JwtModule } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import type { StringValue } from 'ms';
-import { ExchangeRatesService } from './exchange-rates.service';
-import { ExchangeRatesController } from './exchange-rates.controller';
-import { CurrenciesModule } from '../currencies/currencies.module';
-import { ExchangeRatesProviderClient } from './providers/exchange-rates.provider';
-import { ExchangeRatesCache } from './cache/exchange-rates.cache';
+import { ExchangeRatesModule } from '../exchange-rates/exchange-rates.module';
+import { RatesGateway } from './rates.gateway';
+import { WsJwtGuard } from './ws-jwt.guard';
+import { GatewaysController } from './gateways.controller';
 
 @Module({
   imports: [
-    ConfigModule,
-    HttpModule,
-    CurrenciesModule,
+    ExchangeRatesModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
@@ -37,12 +32,7 @@ import { ExchangeRatesCache } from './cache/exchange-rates.cache';
       inject: [ConfigService],
     }),
   ],
-  controllers: [ExchangeRatesController],
-  providers: [
-    ExchangeRatesService,
-    ExchangeRatesProviderClient,
-    ExchangeRatesCache,
-  ],
-  exports: [ExchangeRatesService],
+  controllers: [GatewaysController],
+  providers: [RatesGateway, WsJwtGuard],
 })
-export class ExchangeRatesModule {}
+export class GatewaysModule {}

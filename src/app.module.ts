@@ -25,6 +25,7 @@ import { AdminModule } from './admin/admin.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { DaoModule } from './dao/dao.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { GatewaysModule } from './gateways/gateways.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     AuthModule,
     CurrenciesModule,
     ExchangeRatesModule,
+    GatewaysModule,
     HealthModule,
     AuditLogsModule,
     NotificationsModule,

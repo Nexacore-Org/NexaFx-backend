@@ -14,14 +14,16 @@ export interface Response<T> {
 }
 
 @Injectable()
-export class TransformResponseInterceptor<T> implements NestInterceptor<
-  T,
-  Response<T>
-> {
+export class TransformResponseInterceptor<T>
+  implements NestInterceptor<T, Response<T> | T>
+{
   intercept(
     context: ExecutionContext,
     next: CallHandler,
-  ): Observable<Response<T>> {
+  ): Observable<Response<T> | T> {
+    if ((context.getType() as string) === 'graphql') {
+      return next.handle();
+    }
     return next.handle().pipe(
       map((data) => ({
         success: true,

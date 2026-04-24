@@ -7,17 +7,17 @@ import { NotificationPreference } from './entities/notification-preference.entit
 import { NotificationPreferenceService } from './services/notification-preference.service';
 import { NotificationPreferenceController } from './controllers/notification-preference.controller';
 import { NotificationPersistenceService } from './services/notification-persistence.service';
-import { NotificationGateway, NotificationWsGuard } from './gateways/notification.gateway';
+import {
+  NotificationGateway,
+  NotificationWsGuard,
+} from './gateways/notification.gateway';
 import { UserNotificationController } from './controllers/user-notification.controller';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      Notification,
-      NotificationPreference,
-    ]),
+    TypeOrmModule.forFeature([Notification, NotificationPreference]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({

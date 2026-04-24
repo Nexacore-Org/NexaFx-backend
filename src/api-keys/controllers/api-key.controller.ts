@@ -193,10 +193,7 @@ export class ApiKeyController {
     @Query('gracePeriodMinutes') gracePeriodMinutes?: number,
   ): Promise<ApiKeyResponseDto> {
     const gracePeriod = gracePeriodMinutes || 5;
-    const { key, apiKey } = await this.apiKeyService.rotateKey(
-      id,
-      gracePeriod,
-    );
+    const { key, apiKey } = await this.apiKeyService.rotateKey(id, gracePeriod);
 
     return {
       key,

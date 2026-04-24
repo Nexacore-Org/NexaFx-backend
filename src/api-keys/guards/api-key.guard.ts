@@ -94,10 +94,7 @@ export class ApiKeyGuard implements CanActivate {
    * Validate that the API key has the required scopes
    * Supports hierarchical scopes (e.g., 'admin:*' matches 'admin:read')
    */
-  private validateScopes(
-    keyScopes: string[],
-    requiredScopes: string[],
-  ): void {
+  private validateScopes(keyScopes: string[], requiredScopes: string[]): void {
     for (const requiredScope of requiredScopes) {
       const hasScope = keyScopes.some((keyScope) => {
         // Exact match

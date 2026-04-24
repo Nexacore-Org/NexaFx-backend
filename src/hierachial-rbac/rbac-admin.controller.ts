@@ -25,7 +25,10 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/user.entity';
-import { CurrentUser, CurrentUserPayload } from '../auth/decorators/current-user.decorator';
+import {
+  CurrentUser,
+  CurrentUserPayload,
+} from '../auth/decorators/current-user.decorator';
 
 @ApiTags('Admin - RBAC')
 @ApiBearerAuth()
@@ -52,7 +55,10 @@ export class RbacAdminController {
     status: 201,
     description: 'Role created successfully',
   })
-  @ApiResponse({ status: 400, description: 'Bad Request or circular inheritance' })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request or circular inheritance',
+  })
   async createRole(
     @Body() createDto: CreateRoleDto,
     @CurrentUser() user: CurrentUserPayload,
@@ -68,7 +74,10 @@ export class RbacAdminController {
     status: 200,
     description: 'Role updated successfully',
   })
-  @ApiResponse({ status: 400, description: 'Bad Request or circular inheritance' })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request or circular inheritance',
+  })
   @ApiResponse({ status: 404, description: 'Role not found' })
   async updateRole(
     @Param('id', ParseUUIDPipe) id: string,
@@ -114,7 +123,8 @@ export class RbacAdminController {
   @Get('roles/:id/diff')
   @ApiOperation({
     summary: 'Preview permission change without applying',
-    description: 'Shows what permissions would be added/removed if parent changes',
+    description:
+      'Shows what permissions would be added/removed if parent changes',
   })
   @ApiParam({ name: 'id', type: String, description: 'Role UUID' })
   @ApiQuery({

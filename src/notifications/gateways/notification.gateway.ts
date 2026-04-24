@@ -24,7 +24,6 @@ export class NotificationWsGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const client = context.switchToWs().getClient<Socket>();
-    const data = context.switchToWs().getData();
 
     try {
       const token = client.handshake.query.token || client.handshake.auth.token;
@@ -66,8 +65,7 @@ export class NotificationGateway
   async handleConnection(client: Socket) {
     try {
       // Authenticate using JWT from query params or handshake auth
-      const token =
-        client.handshake.query.token || client.handshake.auth.token;
+      const token = client.handshake.query.token || client.handshake.auth.token;
 
       if (!token) {
         this.logger.warn('WebSocket connection rejected: No token provided');
@@ -87,9 +85,8 @@ export class NotificationGateway
       client.join(`user-${userId}`);
 
       // Send initial unread count
-      const { unreadCount } = await this.persistenceService.getUnreadCount(
-        userId,
-      );
+      const { unreadCount } =
+        await this.persistenceService.getUnreadCount(userId);
       client.emit('badge_count', { unreadCount });
     } catch (error) {
       this.logger.error(`WebSocket authentication failed: ${error.message}`);
@@ -121,9 +118,8 @@ export class NotificationGateway
       this.server.to(`user-${userId}`).emit('new_notification', notification);
 
       // Update badge count
-      const { unreadCount } = await this.persistenceService.getUnreadCount(
-        userId,
-      );
+      const { unreadCount } =
+        await this.persistenceService.getUnreadCount(userId);
       this.server.to(`user-${userId}`).emit('badge_count', { unreadCount });
 
       this.logger.debug(
@@ -140,9 +136,8 @@ export class NotificationGateway
    * Emit badge count update
    */
   async emitBadgeCount(userId: string) {
-    const { unreadCount } = await this.persistenceService.getUnreadCount(
-      userId,
-    );
+    const { unreadCount } =
+      await this.persistenceService.getUnreadCount(userId);
     this.server.to(`user-${userId}`).emit('badge_count', { unreadCount });
   }
 
@@ -169,7 +164,9 @@ export class NotificationGateway
 
       return { success: true };
     } catch (error) {
-      this.logger.error(`Failed to mark notification as read: ${error.message}`);
+      this.logger.error(
+        `Failed to mark notification as read: ${error.message}`,
+      );
       return { success: false, error: error.message };
     }
   }

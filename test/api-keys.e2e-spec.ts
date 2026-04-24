@@ -117,9 +117,9 @@ describe('API Keys (e2e)', () => {
     });
 
     it('should reject invalid API key format', async () => {
-      await expect(
-        apiKeyService.validateKey('short'),
-      ).rejects.toThrow('Invalid API key format');
+      await expect(apiKeyService.validateKey('short')).rejects.toThrow(
+        'Invalid API key format',
+      );
     });
 
     it('should reject non-existent API key', async () => {
@@ -145,10 +145,9 @@ describe('API Keys (e2e)', () => {
     });
 
     it('should reject revoked API key immediately', async () => {
-      const { key, apiKey } = await apiKeyService.generateKey(
-        'Revoked Key',
-        ['test:scope'],
-      );
+      const { key, apiKey } = await apiKeyService.generateKey('Revoked Key', [
+        'test:scope',
+      ]);
 
       // Revoke the key
       await apiKeyService.revokeKey(apiKey.id);
@@ -161,10 +160,9 @@ describe('API Keys (e2e)', () => {
 
   describe('API Key Revocation', () => {
     it('should revoke an API key immediately', async () => {
-      const { apiKey } = await apiKeyService.generateKey(
-        'To Be Revoked',
-        ['test:scope'],
-      );
+      const { apiKey } = await apiKeyService.generateKey('To Be Revoked', [
+        'test:scope',
+      ]);
 
       await apiKeyService.revokeKey(apiKey.id);
 
@@ -189,8 +187,10 @@ describe('API Keys (e2e)', () => {
         await apiKeyService.generateKey('Rotation Test', ['test:scope']);
 
       // Rotate with 5-minute grace period
-      const { key: newKey, apiKey: newApiKey } =
-        await apiKeyService.rotateKey(oldApiKey.id, 5);
+      const { key: newKey, apiKey: newApiKey } = await apiKeyService.rotateKey(
+        oldApiKey.id,
+        5,
+      );
 
       // New key should work
       const validatedNew = await apiKeyService.validateKey(newKey);
@@ -362,7 +362,8 @@ describe('API Keys (e2e)', () => {
       ]);
 
       // Create a key that differs by one character
-      const tamperedKey = key.slice(0, -1) + (key.slice(-1) === 'a' ? 'b' : 'a');
+      const tamperedKey =
+        key.slice(0, -1) + (key.slice(-1) === 'a' ? 'b' : 'a');
 
       // Should fail validation
       await expect(apiKeyService.validateKey(tamperedKey)).rejects.toThrow(

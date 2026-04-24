@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Role } from './entities/role.entity';
 import { UserRoleAssignment } from './entities/user-role.entity';
 import { RbacAuditLog } from './entities/rbac-audit-log.entity';
@@ -285,15 +285,9 @@ export class RbacAdminService {
     page?: number;
     limit?: number;
   }): Promise<{ logs: RbacAuditLog[]; total: number }> {
-    const {
-      action,
-      roleId,
-      actorId,
-      page = 1,
-      limit = 20,
-    } = filters || {};
+    const { action, roleId, actorId, page = 1, limit = 20 } = filters || {};
 
-    const where: any = {};
+    const where: Record<string, any> = {};
     if (action) where.action = action;
     if (roleId) where.roleId = roleId;
     if (actorId) where.actorId = actorId;

@@ -230,12 +230,7 @@ export class ApiKeyService {
     page?: number;
     limit?: number;
   }): Promise<{ keys: ApiKey[]; total: number }> {
-    const {
-      isActive,
-      scope,
-      page = 1,
-      limit = 20,
-    } = filters;
+    const { isActive, scope, page = 1, limit = 20 } = filters;
 
     const where: any = {};
 

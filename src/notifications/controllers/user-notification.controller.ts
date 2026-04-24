@@ -18,7 +18,10 @@ import {
 } from '@nestjs/swagger';
 import { NotificationPersistenceService } from '../services/notification-persistence.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { CurrentUser, CurrentUserPayload } from '../../auth/decorators/current-user.decorator';
+import {
+  CurrentUser,
+  CurrentUserPayload,
+} from '../../auth/decorators/current-user.decorator';
 
 @ApiTags('User Notifications')
 @ApiBearerAuth()
@@ -48,7 +51,7 @@ export class UserNotificationController {
     @Query('read') read?: string,
     @Query('archived') archived?: string,
   ) {
-    const filter: any = {};
+    const filter: Record<string, boolean> = {};
 
     if (read !== undefined) {
       filter.read = read === 'true';

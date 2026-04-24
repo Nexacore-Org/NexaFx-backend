@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
 import {
@@ -38,7 +33,7 @@ export class NotificationPersistenceService {
     limit: number;
     hasMore: boolean;
   }> {
-    const where: any = {
+    const where: Record<string, any> = {
       userId,
       isDeleted: false,
     };
@@ -198,18 +193,17 @@ export class NotificationPersistenceService {
         );
       }
     } catch (error) {
-      this.logger.error(`Failed to auto-archive notifications: ${error.message}`);
+      this.logger.error(
+        `Failed to auto-archive notifications: ${error.message}`,
+      );
     }
   }
 
   /**
    * Create and persist notification (used by NotificationsService)
    */
-  async createNotification(
-    data: Partial<Notification>,
-  ): Promise<Notification> {
+  async createNotification(data: Partial<Notification>): Promise<Notification> {
     const notification = this.notificationRepository.create(data);
     return this.notificationRepository.save(notification);
   }
 }
-

@@ -54,9 +54,7 @@ export class NotificationPreferenceService {
   /**
    * Get preferences grouped by notification type (cache-backed)
    */
-  async getPreferences(
-    userId: string,
-  ): Promise<NotificationPreference[]> {
+  async getPreferences(userId: string): Promise<NotificationPreference[]> {
     const cached = this.getFromCache(userId);
     if (cached) {
       return cached;
@@ -131,9 +129,7 @@ export class NotificationPreferenceService {
     }
 
     const preferences = await this.getPreferences(userId);
-    const preference = preferences.find(
-      (p) => p.notificationType === type,
-    );
+    const preference = preferences.find((p) => p.notificationType === type);
 
     if (!preference) {
       // Default to allowing if no preference exists

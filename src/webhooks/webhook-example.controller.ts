@@ -6,7 +6,7 @@ import { RequireScopes } from '../api-keys/decorators/require-scopes.decorator';
 
 /**
  * Example webhook controller demonstrating API key authentication
- * 
+ *
  * This endpoint can be called by external services using an API key
  * instead of user JWT authentication.
  */
@@ -23,10 +23,7 @@ export class WebhookExampleController {
     description: 'API key for authentication',
     required: true,
   })
-  async handlePaymentWebhook(
-    @Request() req: any,
-    @Body() payload: any,
-  ) {
+  async handlePaymentWebhook(@Request() req: any, @Body() payload: any) {
     // Access API key metadata
     const apiKey = req.apiKey;
     console.log(`Webhook received from: ${apiKey.name}`);
@@ -50,13 +47,10 @@ export class WebhookExampleController {
     required: true,
   })
   @RequireScopes('webhook:receive', 'notifications:write')
-  async handleNotificationWebhook(
-    @Request() req: any,
-    @Body() payload: any,
-  ) {
+  async handleNotificationWebhook(@Request() req: any, @Body() payload: any) {
     // This endpoint requires BOTH scopes
     const apiKey = req.apiKey;
-    
+
     // Process notification
     return {
       success: true,

@@ -7,9 +7,7 @@ import { UserRoleAssignment } from './entities/user-role.entity';
 import { RbacAuditLog } from './entities/rbac-audit-log.entity';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([Role, UserRoleAssignment, RbacAuditLog]),
-  ],
+  imports: [TypeOrmModule.forFeature([Role, UserRoleAssignment, RbacAuditLog])],
   controllers: [RbacAdminController],
   providers: [RbacAdminService],
   exports: [RbacAdminService],

@@ -1,10 +1,4 @@
-import {
-  Controller,
-  Get,
-  Put,
-  Body,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Put, Body, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -14,7 +8,10 @@ import {
 } from '@nestjs/swagger';
 import { NotificationPreferenceService } from '../services/notification-preference.service';
 import { UpdateNotificationPreferencesDto } from '../dto/update-notification-preferences.dto';
-import { CurrentUser, CurrentUserPayload } from '../../auth/decorators/current-user.decorator';
+import {
+  CurrentUser,
+  CurrentUserPayload,
+} from '../../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { NotificationType } from '../enum/notificationType.enum';
 
@@ -62,10 +59,10 @@ export class NotificationPreferenceController {
     },
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async getPreferences(
-    @CurrentUser() user: CurrentUserPayload,
-  ) {
-    const preferences = await this.preferenceService.getPreferences(user.userId);
+  async getPreferences(@CurrentUser() user: CurrentUserPayload) {
+    const preferences = await this.preferenceService.getPreferences(
+      user.userId,
+    );
 
     return {
       preferences: preferences.map((pref) => ({
@@ -79,7 +76,8 @@ export class NotificationPreferenceController {
   @Put()
   @ApiOperation({
     summary: 'Update notification preferences',
-    description: 'Updates preferences atomically. SECURITY type cannot be disabled.',
+    description:
+      'Updates preferences atomically. SECURITY type cannot be disabled.',
   })
   @ApiBody({ type: UpdateNotificationPreferencesDto })
   @ApiResponse({

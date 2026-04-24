@@ -17,10 +17,7 @@ export class ApiKeyUsageInterceptor implements NestInterceptor {
 
   constructor(private readonly apiKeyService: ApiKeyService) {}
 
-  intercept(
-    context: ExecutionContext,
-    next: CallHandler,
-  ): Observable<any> {
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const request = context.switchToHttp().getRequest<Request>();
     const response = context.switchToHttp().getResponse<Response>();
 

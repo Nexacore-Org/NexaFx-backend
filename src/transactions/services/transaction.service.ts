@@ -43,6 +43,7 @@ import {
 } from '../../fees/entities/fee-config.entity';
 import { BeneficiariesService } from '../../beneficiaries/beneficiaries.service'; // ← NEW
 import { FirebaseService } from '../../firebase/firebase.service';
+import { WebhookService } from '../../webhooks/services/webhook.service';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -147,6 +148,7 @@ export class TransactionsService {
     private readonly notificationsService: NotificationsService,
     private readonly beneficiariesService: BeneficiariesService, // ← NEW
     private readonly firebaseService: FirebaseService,
+    private readonly webhookService: WebhookService,
   ) {}
 
   /**
@@ -694,6 +696,9 @@ export class TransactionsService {
         `Swap transaction completed successfully: ${transaction.id}`,
       );
 
+      this.webhookService.dispatch('transaction.completed', transaction, userId)
+        .catch(e => this.logger.error(`Webhook dispatch failed: ${e.message}`));
+
       return transaction;
     } catch (err) {
       const error = toError(err);
@@ -818,6 +823,14 @@ export class TransactionsService {
         ).catch((e) =>
           this.logger.error(`Failed to send push notification: ${e.message}`),
         );
+      }
+
+      if (transaction.status === TransactionStatus.SUCCESS) {
+        this.webhookService.dispatch('transaction.completed', transaction, transaction.userId)
+          .catch(e => this.logger.error(`Webhook dispatch failed: ${e.message}`));
+      } else if (transaction.status === TransactionStatus.FAILED) {
+        this.webhookService.dispatch('transaction.failed', transaction, transaction.userId)
+          .catch(e => this.logger.error(`Webhook dispatch failed: ${e.message}`));
       }
 
       return transaction;

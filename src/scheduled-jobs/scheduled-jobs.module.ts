@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ScheduleModule } from '@nestjs/schedule';
 import { ScheduledJobsService } from './scheduled-jobs.service';
 import { Transaction } from '../transactions/entities/transaction.entity';
 import { TransactionsModule } from '../transactions/transaction.module';
@@ -12,7 +11,6 @@ import { RateAlertsModule } from '../rate-alerts/rate-alerts.module';
 
 @Module({
   imports: [
-    ScheduleModule,
     TypeOrmModule.forFeature([Transaction, Notification]),
     TransactionsModule,
     BlockchainModule,

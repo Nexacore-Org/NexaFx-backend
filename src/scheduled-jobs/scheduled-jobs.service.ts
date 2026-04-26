@@ -18,6 +18,7 @@ import {
 } from '../notifications/entities/notification.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { RateAlertsService } from '../rate-alerts/rate-alerts.service';
+import { WebhookService } from '../webhooks/services/webhook.service';
 
 @Injectable()
 export class ScheduledJobsService {
@@ -36,6 +37,7 @@ export class ScheduledJobsService {
     private readonly notificationsService: NotificationsService,
     private readonly usersService: UsersService,
     private readonly rateAlertsService: RateAlertsService,
+    private readonly webhookService: WebhookService,
   ) {
     // Truncate hostname to 255 characters to match DB column constraint
     this.instanceId = os.hostname().substring(0, 255);
@@ -185,6 +187,11 @@ export class ScheduledJobsService {
       this.logger.log(
         `[Scheduled Job] Rate alerts checked=${result.checked}, triggered=${result.triggered}, reactivated=${result.reactivated}`,
       );
+
+      // Dispatch webhooks for triggered alerts if needed
+      // result.triggeredAlerts.forEach(alert => {
+      //   this.webhookService.dispatch('rate_alert.triggered', alert, alert.userId);
+      // });
     } catch (error) {
       this.logger.error(
         '[Scheduled Job] Fatal error while checking rate alerts:',
@@ -271,6 +278,18 @@ export class ScheduledJobsService {
         '[Scheduled Job] Fatal error in wallet balances snapshot sync:',
         error,
       );
+    }
+  }
+
+  /**
+   * Process failed webhook deliveries every minute
+   */
+  @Cron(CronExpression.EVERY_MINUTE)
+  async processWebhookRetries(): Promise<void> {
+    try {
+      await this.webhookService.processRetries();
+    } catch (error) {
+      this.logger.error('[Scheduled Job] Webhook retry process failed:', error);
     }
   }
 
@@ -388,6 +407,10 @@ export class ScheduledJobsService {
         error,
       );
     }
+
+    // Dispatch Webhook
+    this.webhookService.dispatch('transaction.completed', transaction, transaction.userId)
+      .catch(e => this.logger.error(`Webhook dispatch failed: ${e.message}`));
   }
 
   /**
@@ -457,6 +480,10 @@ export class ScheduledJobsService {
         error,
       );
     }
+
+    // Dispatch Webhook
+    this.webhookService.dispatch('transaction.failed', transaction, transaction.userId)
+      .catch(e => this.logger.error(`Webhook dispatch failed: ${e.message}`));
   }
 
   /**

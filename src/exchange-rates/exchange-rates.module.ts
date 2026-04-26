@@ -8,8 +8,6 @@ import { ExchangeRatesController } from './exchange-rates.controller';
 import { CurrenciesModule } from '../currencies/currencies.module';
 import { ExchangeRatesProviderClient } from './providers/exchange-rates.provider';
 import { ExchangeRatesCache } from './cache/exchange-rates.cache';
-import { RatesGateway } from './rates.gateway';
-import { WsJwtGuard } from './ws-jwt.guard';
 
 type JwtExpiryValue = `${number}${'s' | 'm' | 'h' | 'd'}`;
 
@@ -45,8 +43,6 @@ type JwtExpiryValue = `${number}${'s' | 'm' | 'h' | 'd'}`;
     ExchangeRatesService,
     ExchangeRatesProviderClient,
     ExchangeRatesCache,
-    RatesGateway,
-    WsJwtGuard,
   ],
   exports: [ExchangeRatesService],
 })

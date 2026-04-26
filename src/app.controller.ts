@@ -8,11 +8,7 @@ export class AppController {
 
   @Public()
   @Get()
-  healthCheck() {
-    return {
-      status: 'ok',
-      service: 'NexaFX API',
-      timestamp: new Date().toISOString(),
-    };
+  getStatus() {
+    return this.appService.getStatus();
   }
 }

@@ -151,6 +151,38 @@ describe('ExchangeRatesService', () => {
         fetchedAt,
       });
     });
+
+    it('should emit rate update for same-currency pair (from === to)', async () => {
+      mockCurrenciesService.validateCurrency.mockResolvedValue(undefined);
+
+      const updates: any[] = [];
+      service.rateUpdates$.subscribe((u) => updates.push(u));
+
+      await service.getRate('USD', 'USD');
+
+      expect(updates.length).toBe(1);
+      expect(updates[0]).toMatchObject({
+        from: 'USD',
+        to: 'USD',
+        rate: 1,
+      });
+    });
+
+    it('should NOT emit rate update on cache hit', async () => {
+      mockCurrenciesService.validateCurrency.mockResolvedValue(undefined);
+      mockProviderClient.fetchRate.mockResolvedValue({
+        rate: 1.2,
+        fetchedAt: new Date().toISOString(),
+      });
+
+      const updates: any[] = [];
+      service.rateUpdates$.subscribe((u) => updates.push(u));
+
+      await service.getRate('EUR', 'USD');
+      await service.getRate('EUR', 'USD'); // cache hit
+
+      expect(updates.length).toBe(1);
+    });
   });
 
   describe('convert', () => {

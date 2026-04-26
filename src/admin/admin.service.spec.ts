@@ -5,7 +5,7 @@ import { AdminService } from './admin.service';
 import { User, UserRole } from '../users/user.entity';
 import { Transaction, TransactionStatus, TransactionType } from '../transactions/entities/transaction.entity';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { UserQueryDto } from './dto/user-query.dto';
 import { OverrideTransactionDto } from './dto/override-transaction.dto';
 
@@ -217,20 +217,31 @@ describe('AdminService', () => {
   });
 
   describe('updateUserRole', () => {
-    it('should update user role', async () => {
+    it('should return user unchanged when role is already set', async () => {
       jest.spyOn(userRepository, 'findOne').mockResolvedValue({ ...mockUser });
-      jest.spyOn(userRepository, 'save').mockImplementation(async (u) => u as User);
 
-      const result = await service.updateUserRole('user-123', { role: UserRole.ADMIN }, 'admin-123');
+      const result = await service.updateUserRole('user-123', { role: UserRole.USER }, 'admin-123');
 
-      expect(result.role).toBe(UserRole.ADMIN);
-      expect(auditLogsService.logAuthEvent).toHaveBeenCalled();
+      expect(result.role).toBe(UserRole.USER);
+      expect(auditLogsService.logAuthEvent).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException if user not found', async () => {
       jest.spyOn(userRepository, 'findOne').mockResolvedValue(null);
 
       await expect(service.updateUserRole('user-123', { role: UserRole.ADMIN }, 'admin-123')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should reject admin-tier role assignment changes', async () => {
+      jest.spyOn(userRepository, 'findOne').mockResolvedValue({ ...mockUser });
+
+      await expect(
+        service.updateUserRole(
+          'user-123',
+          { role: UserRole.ADMIN },
+          'admin-123',
+        ),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 

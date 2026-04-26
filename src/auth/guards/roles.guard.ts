@@ -3,6 +3,7 @@ import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import type { CurrentUserPayload } from '../decorators/current-user.decorator';
+import { UserRole } from '../../users/user.entity';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -23,6 +24,17 @@ export class RolesGuard implements CanActivate {
       .getRequest<Request & { user: CurrentUserPayload }>();
     const { user } = request;
 
-    return requiredRoles.some((role) => user?.role === role);
+    if (!user?.role) {
+      return false;
+    }
+
+    if (user.role === UserRole.SUPER_ADMIN) {
+      return requiredRoles.some(
+        (role) =>
+          role === UserRole.SUPER_ADMIN || role === UserRole.ADMIN,
+      );
+    }
+
+    return requiredRoles.some((role) => user.role === role);
   }
 }

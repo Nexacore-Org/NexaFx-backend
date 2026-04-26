@@ -26,6 +26,12 @@ export class AuditLogsService {
     return this.auditLogsRepository.findLogsWithPagination(filters);
   }
 
+  async getPrivilegedLogs(filters: GetAuditLogsDto) {
+    return this.auditLogsRepository.findLogsWithPagination(filters, {
+      includeSensitive: true,
+    });
+  }
+
   async getLogsByUserId(userId: string, filters?: Partial<GetAuditLogsDto>) {
     const completeFilters: GetAuditLogsDto = {
       ...filters,

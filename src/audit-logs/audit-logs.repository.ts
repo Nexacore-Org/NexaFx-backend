@@ -36,7 +36,10 @@ export class AuditLogsRepository extends Repository<AuditLog> {
     }
   }
 
-  async findLogsWithPagination(filters: GetAuditLogsDto) {
+  async findLogsWithPagination(
+    filters: GetAuditLogsDto,
+    options?: { includeSensitive?: boolean },
+  ) {
     const {
       entity,
       userId,
@@ -82,10 +85,11 @@ export class AuditLogsRepository extends Repository<AuditLog> {
       });
     }
 
-    // Exclude sensitive logs from general queries
-    query.andWhere('audit_log.isSensitive = :isSensitive', {
-      isSensitive: false,
-    });
+    if (!options?.includeSensitive) {
+      query.andWhere('audit_log.isSensitive = :isSensitive', {
+        isSensitive: false,
+      });
+    }
 
     const [logs, total] = await query.getManyAndCount();
 

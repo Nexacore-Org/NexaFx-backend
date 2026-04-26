@@ -3,7 +3,6 @@ import { ConfigModule } from '@nestjs/config';
 import { HttpModule } from '@nestjs/axios';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import type { StringValue } from 'ms';
 import { ExchangeRatesService } from './exchange-rates.service';
 import { ExchangeRatesController } from './exchange-rates.controller';
 import { CurrenciesModule } from '../currencies/currencies.module';
@@ -11,6 +10,8 @@ import { ExchangeRatesProviderClient } from './providers/exchange-rates.provider
 import { ExchangeRatesCache } from './cache/exchange-rates.cache';
 import { RatesGateway } from './rates.gateway';
 import { WsJwtGuard } from './ws-jwt.guard';
+
+type JwtExpiryValue = `${number}${'s' | 'm' | 'h' | 'd'}`;
 
 @Module({
   imports: [
@@ -29,7 +30,7 @@ import { WsJwtGuard } from './ws-jwt.guard';
         }
 
         const expiresIn = (configService.get<string>('JWT_EXPIRES_IN') ??
-          '15m') as StringValue;
+          '15m') as JwtExpiryValue;
 
         return {
           secret: secret ?? 'default-secret-change-in-production',

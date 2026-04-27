@@ -26,6 +26,8 @@ import { WebhookService } from '../../webhooks/services/webhook.service';
 import { TransactionType } from '../entities/transaction.entity';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { BeneficiariesService } from '../../beneficiaries/beneficiaries.service';
+import { WalletsService } from '../../wallets/wallets.service';
+import { EncryptionService } from '../../common/services/encryption.service';
 
 describe('TransactionsService fee integration behavior', () => {
   let service: TransactionsService;
@@ -116,6 +118,21 @@ describe('TransactionsService fee integration behavior', () => {
 
   const beneficiariesService = {};
 
+  const walletsService = {
+    resolveWalletForTransaction: jest.fn(async () => ({
+      publicKey:
+        'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+      encryptedSecretKey:
+        'SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    })),
+  };
+
+  const encryptionService = {
+    decrypt: jest.fn(
+      () => 'SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    ),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -139,6 +156,8 @@ describe('TransactionsService fee integration behavior', () => {
         { provide: WebhookService, useValue: webhookService },
         { provide: NotificationsService, useValue: notificationsService },
         { provide: BeneficiariesService, useValue: beneficiariesService },
+        { provide: WalletsService, useValue: walletsService },
+        { provide: EncryptionService, useValue: encryptionService },
       ],
     }).compile();
 
@@ -231,31 +250,27 @@ describe('TransactionsService fee integration behavior', () => {
   });
 
   describe('cancelTransaction', () => {
-    const mockPendingTransaction: Partial<Transaction> = {
-      id: 'tx-cancel-test',
-      userId: 'user-1',
-      status: TransactionStatus.PENDING,
-      type: TransactionType.DEPOSIT,
-      amount: '100',
-      currency: 'XLM',
-      txHash: null,
-    };
-
-    const mockSuccessTransaction: Partial<Transaction> = {
-      ...mockPendingTransaction,
-      status: TransactionStatus.SUCCESS,
-    };
+    const makePending = (overrides: Partial<Transaction> = {}): Transaction =>
+      ({
+        id: 'tx-cancel-test',
+        userId: 'user-1',
+        status: TransactionStatus.PENDING,
+        type: TransactionType.DEPOSIT,
+        amount: '100',
+        currency: 'XLM',
+        txHash: null,
+        ...overrides,
+      }) as Transaction;
 
     beforeEach(() => {
       jest.clearAllMocks();
     });
 
     it('should cancel a PENDING transaction owned by the user', async () => {
-      transactionRepository.findOne.mockResolvedValue(
-        mockPendingTransaction as Transaction,
-      );
+      const pending = makePending();
+      transactionRepository.findOne.mockResolvedValue(pending);
       transactionRepository.save.mockResolvedValue({
-        ...mockPendingTransaction,
+        ...pending,
         status: TransactionStatus.CANCELLED,
       } as Transaction);
 
@@ -282,10 +297,9 @@ describe('TransactionsService fee integration behavior', () => {
     });
 
     it('should throw ForbiddenException when user tries to cancel another user transaction', async () => {
-      transactionRepository.findOne.mockResolvedValue({
-        ...mockPendingTransaction,
-        userId: 'different-user',
-      } as Transaction);
+      transactionRepository.findOne.mockResolvedValue(
+        makePending({ userId: 'different-user' }),
+      );
 
       await expect(
         service.cancelTransaction('tx-cancel-test', 'user-1'),
@@ -296,7 +310,7 @@ describe('TransactionsService fee integration behavior', () => {
 
     it('should throw BadRequestException when cancelling a non-PENDING transaction', async () => {
       transactionRepository.findOne.mockResolvedValue(
-        mockSuccessTransaction as Transaction,
+        makePending({ status: TransactionStatus.SUCCESS }),
       );
 
       await expect(
@@ -323,14 +337,11 @@ describe('TransactionsService fee integration behavior', () => {
     });
 
     it('should log a warning when cancelling a transaction that has a txHash', async () => {
-      const transactionWithHash = {
-        ...mockPendingTransaction,
+      const transactionWithHash = makePending({
         txHash: 'stellar-hash-123',
-      };
+      });
 
-      transactionRepository.findOne.mockResolvedValue(
-        transactionWithHash as Transaction,
-      );
+      transactionRepository.findOne.mockResolvedValue(transactionWithHash);
       transactionRepository.save.mockResolvedValue({
         ...transactionWithHash,
         status: TransactionStatus.CANCELLED,

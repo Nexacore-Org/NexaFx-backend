@@ -26,6 +26,7 @@ import { ReferralsModule } from './referrals/referrals.module';
 import { DaoModule } from './dao/dao.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { GatewaysModule } from './gateways/gateways.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { GatewaysModule } from './gateways/gateways.module';
     AdminModule,
     // DAO module provides Stellar Soroban contract interaction for reward distribution
     DaoModule,
+    WebhooksModule,
   ],
   controllers: [AppController],
   providers: [

@@ -11,6 +11,7 @@ import { TransactionsService } from '../transactions/services/transaction.servic
 import { StellarService } from '../blockchain/stellar/stellar.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
+import { CurrencyPairService } from '../currencies/services/currency-pair.service';
 import {
   NotificationType,
   NotificationStatus,
@@ -38,9 +39,25 @@ export class ScheduledJobsService {
     private readonly usersService: UsersService,
     private readonly rateAlertsService: RateAlertsService,
     private readonly webhookService: WebhookService,
+    private readonly currencyPairService: CurrencyPairService,
   ) {
     // Truncate hostname to 255 characters to match DB column constraint
     this.instanceId = os.hostname().substring(0, 255);
+  }
+
+  /**
+   * Auto-resume suspended currency pairs every minute
+   */
+  @Cron(CronExpression.EVERY_MINUTE)
+  async autoResumePairs(): Promise<void> {
+    try {
+      const resumedCount = await this.currencyPairService.autoResumePairs();
+      if (resumedCount > 0) {
+        this.logger.log(`[Scheduled Job] Auto-resumed ${resumedCount} currency pairs`);
+      }
+    } catch (error) {
+      this.logger.error('[Scheduled Job] Auto-resume pairs failed:', error);
+    }
   }
 
   /**

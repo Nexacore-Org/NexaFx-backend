@@ -26,10 +26,10 @@ export class WebhookDelivery {
 
   @Index()
   @Column({ type: 'timestamp', nullable: true })
-  nextRetryAt: Date;
+  nextRetryAt: Date | null;
 
   @Column({ type: 'timestamp', nullable: true })
-  deliveredAt: Date;
+  deliveredAt: Date | null;
 
   @CreateDateColumn()
   createdAt: Date;

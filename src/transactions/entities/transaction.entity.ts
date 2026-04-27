@@ -90,4 +90,7 @@ export class Transaction {
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   processingLockedBy: string | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  metadata: any;
 }

@@ -26,6 +26,17 @@ import { JwtPayload } from './strategies/jwt.strategy';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import { ReferralsService } from '../referrals/referrals.service';
+import { TwoFactorService } from '../two-factor/two-factor.service';
+
+type VerifyLoginOtpResponse =
+  | { requiresTwoFactor: true; twoFactorToken: string; message: string }
+  | AuthTokensResponse;
+
+interface AuthTokensResponse {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+}
 
 @Injectable()
 export class AuthService {
@@ -40,6 +51,7 @@ export class AuthService {
     private readonly encryptionService: EncryptionService,
     private readonly auditLogsService: AuditLogsService,
     private readonly referralsService: ReferralsService,
+    private readonly twoFactorService: TwoFactorService,
   ) {}
 
   async login(
@@ -232,6 +244,34 @@ export class AuthService {
     });
 
     return tokens;
+  }
+
+  async verifyTwoFactorWithBackupCode(
+    twoFactorToken: string,
+    backupCode: string,
+  ): Promise<AuthTokensResponse> {
+    let decoded: JwtPayload & { authStage?: string };
+
+    try {
+      decoded = this.jwtService.verify(twoFactorToken, {
+        secret: this.getTwoFactorChallengeSecret(),
+      }) as JwtPayload & { authStage?: string };
+    } catch {
+      throw new UnauthorizedException('Invalid or expired two-factor token');
+    }
+
+    if (decoded.authStage !== '2fa_pending') {
+      throw new UnauthorizedException('Invalid two-factor token');
+    }
+
+    const user = await this.usersService.findById(decoded.sub);
+    if (!user || !user.isVerified || !user.isTwoFactorEnabled) {
+      throw new UnauthorizedException('Invalid two-factor verification state');
+    }
+
+    await this.twoFactorService.recoverWithBackupCode(user.id, backupCode);
+
+    return this.issueAuthTokens(user.id, user.email, user.role);
   }
 
   async forgotPassword(
@@ -542,6 +582,28 @@ export class AuthService {
       default:
         return 900;
     }
+  }
+
+  private getTwoFactorChallengeSecret(): string {
+    return (
+      this.configService.get<string>('JWT_2FA_SECRET') ??
+      this.configService.get<string>('JWT_SECRET') ??
+      'default-2fa-secret-change-in-production'
+    );
+  }
+
+  private async issueAuthTokens(
+    userId: string,
+    email: string,
+    role: string,
+  ): Promise<AuthTokensResponse> {
+    const payload: JwtPayload = { sub: userId, email, role };
+    const accessToken = this.jwtService.sign(payload);
+    const refreshToken = await this.refreshTokensService.createRefreshToken(
+      userId,
+    );
+    const expiresIn = this.getAccessTokenExpirySeconds();
+    return { accessToken, refreshToken, expiresIn };
   }
 
   private async generateUniqueReferralCode(): Promise<string> {

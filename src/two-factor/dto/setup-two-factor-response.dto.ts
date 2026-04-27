@@ -8,6 +8,18 @@ export class SetupTwoFactorResponseDto {
   qrCodeDataUrl: string;
 
   @ApiProperty({
+    description: 'otpauth:// URI for authenticator apps',
+    example: 'otpauth://totp/NexaFX:email@example.com?secret=...',
+  })
+  otpauthUrl: string;
+
+  @ApiProperty({
+    description: 'Base64-encoded PNG (no data URL prefix)',
+    example: 'iVBORw0KGgoAAAANSUhEUgAA...',
+  })
+  qrCodePngBase64: string;
+
+  @ApiProperty({
     description: 'Manual key for users who cannot scan the QR code',
     example: 'JBSWY3DPEHPK3PXP',
   })

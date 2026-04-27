@@ -8,6 +8,7 @@ export interface JwtPayload {
   sub: string;
   email: string;
   role: string;
+  authStage?: string;
 }
 
 @Injectable()
@@ -31,6 +32,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
+    // Prevent PARTIAL_AUTH tokens (2FA challenge tokens) from being used as full-access JWTs.
+    if (payload.authStage === '2fa_pending') {
+      throw new UnauthorizedException('Two-factor verification required');
+    }
+
     const user = await this.usersService.findById(payload.sub);
     if (!user) {
       throw new UnauthorizedException('User not found');

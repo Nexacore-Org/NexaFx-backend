@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddSuperAdminRoleAndPlatformConfig1761492000000
-  implements MigrationInterface
-{
+export class AddSuperAdminRoleAndPlatformConfig1761492000000 implements MigrationInterface {
   name = 'AddSuperAdminRoleAndPlatformConfig1761492000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

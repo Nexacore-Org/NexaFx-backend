@@ -1,4 +1,13 @@
-import { Controller, Post, Get, Delete, Body, Param, UseGuards, Request } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Delete,
+  Body,
+  Param,
+  UseGuards,
+  Request,
+} from '@nestjs/common';
 import { WebhookService } from '../services/webhook.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
@@ -8,8 +17,15 @@ export class WebhookController {
   constructor(private readonly webhookService: WebhookService) {}
 
   @Post()
-  async create(@Request() req, @Body() body: { url: string, events: string[] }) {
-    return this.webhookService.createEndpoint(req.user.id, body.url, body.events);
+  async create(
+    @Request() req,
+    @Body() body: { url: string; events: string[] },
+  ) {
+    return this.webhookService.createEndpoint(
+      req.user.id,
+      body.url,
+      body.events,
+    );
   }
 
   @Get()

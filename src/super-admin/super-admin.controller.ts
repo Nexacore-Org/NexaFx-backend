@@ -16,7 +16,10 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { CurrentUser, CurrentUserPayload } from '../auth/decorators/current-user.decorator';
+import {
+  CurrentUser,
+  CurrentUserPayload,
+} from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -40,7 +43,10 @@ export class SuperAdminController {
     summary:
       'Create a managed admin account. Defaults to ADMIN unless role is explicitly set to SUPER_ADMIN.',
   })
-  @ApiResponse({ status: 201, description: 'Managed admin created successfully' })
+  @ApiResponse({
+    status: 201,
+    description: 'Managed admin created successfully',
+  })
   createAdmin(
     @CurrentUser() actor: CurrentUserPayload,
     @Body() dto: CreateManagedAdminDto,
@@ -52,7 +58,10 @@ export class SuperAdminController {
   @ApiOperation({
     summary: 'Assign or revoke elevated admin roles for an existing user',
   })
-  @ApiResponse({ status: 200, description: 'Managed admin role updated successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Managed admin role updated successfully',
+  })
   updateManagedAdminRole(
     @CurrentUser() actor: CurrentUserPayload,
     @Param('id', ParseUUIDPipe) id: string,
@@ -65,7 +74,10 @@ export class SuperAdminController {
   @ApiOperation({
     summary: 'Demote an ADMIN or SUPER_ADMIN account back to USER',
   })
-  @ApiResponse({ status: 200, description: 'Managed admin demoted successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Managed admin demoted successfully',
+  })
   demoteAdmin(
     @CurrentUser() actor: CurrentUserPayload,
     @Param('id', ParseUUIDPipe) id: string,
@@ -90,7 +102,10 @@ export class SuperAdminController {
     summary:
       'Update maintenance mode, supported currencies, and fee configuration in one privileged endpoint',
   })
-  @ApiResponse({ status: 200, description: 'Platform configuration updated successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Platform configuration updated successfully',
+  })
   updatePlatformConfig(
     @CurrentUser() actor: CurrentUserPayload,
     @Body() dto: UpdatePlatformConfigDto,

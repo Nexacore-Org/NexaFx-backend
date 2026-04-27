@@ -23,6 +23,7 @@ import {
   WalletBalancesResponseDto,
   WalletPortfolioResponseDto,
   DeviceTokenDto,
+  RateLimitStatusDto,
 } from './dto';
 
 @ApiTags('Users')
@@ -157,5 +158,22 @@ export class UsersController {
   ): Promise<{ message: string }> {
     await this.usersService.deleteProfile(req.user.userId);
     return { message: 'Account deleted successfully' };
+  }
+
+  @Get('me/rate-limit')
+  @ApiOperation({ summary: 'Get current user rate limit status' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns rate limit information',
+    type: RateLimitStatusDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Invalid or missing JWT token',
+  })
+  async getRateLimitStatus(
+    @Request() req: { user: { userId: string } },
+  ): Promise<RateLimitStatusDto> {
+    return this.usersService.getRateLimitStatus(req.user.userId);
   }
 }

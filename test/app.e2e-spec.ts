@@ -9,8 +9,12 @@ jest.mock('firebase-admin', () => ({
   credential: { cert: jest.fn() },
   initializeApp: jest.fn(),
   auth: () => ({
-    verifyIdToken: jest.fn().mockResolvedValue({ uid: 'mock-uid', email: 'test@example.com' }),
-    getUser: jest.fn().mockResolvedValue({ uid: 'mock-uid', email: 'test@example.com' }),
+    verifyIdToken: jest
+      .fn()
+      .mockResolvedValue({ uid: 'mock-uid', email: 'test@example.com' }),
+    getUser: jest
+      .fn()
+      .mockResolvedValue({ uid: 'mock-uid', email: 'test@example.com' }),
   }),
   messaging: () => ({
     send: jest.fn().mockResolvedValue('mock-message-id'),
@@ -58,7 +62,7 @@ describe('NexaFx E2E Tests', () => {
 
     app = moduleFixture.createNestApplication();
     await app.init();
-    
+
     dataSource = app.get(DataSource);
   });
 
@@ -68,7 +72,9 @@ describe('NexaFx E2E Tests', () => {
       for (const entity of entities) {
         try {
           const repository = dataSource.getRepository(entity.name);
-          await repository.query(`TRUNCATE TABLE "${entity.tableName}" CASCADE;`);
+          await repository.query(
+            `TRUNCATE TABLE "${entity.tableName}" CASCADE;`,
+          );
         } catch (error) {
           // Ignore tables that might not exist or can't be truncated
         }

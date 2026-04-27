@@ -32,7 +32,9 @@ export class AuditLogsController {
 
   @Get()
   @Roles(UserRole.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Get non-user-specific audit logs (Super Admin only)' })
+  @ApiOperation({
+    summary: 'Get non-user-specific audit logs (Super Admin only)',
+  })
   @ApiResponse({
     status: 200,
     description: 'Returns paginated audit logs',

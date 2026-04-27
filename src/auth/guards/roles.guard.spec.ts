@@ -11,7 +11,9 @@ describe('RolesGuard', () => {
       getClass: jest.fn(),
       switchToHttp: () => ({
         getRequest: () => ({
-          user: role ? { userId: 'user-id', email: 'user@nexafx.test', role } : undefined,
+          user: role
+            ? { userId: 'user-id', email: 'user@nexafx.test', role }
+            : undefined,
         }),
       }),
     }) as unknown as ExecutionContext;

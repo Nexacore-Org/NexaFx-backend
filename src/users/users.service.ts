@@ -7,7 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { User, UserRole } from './user.entity';
+import { User, UserRole, UserPlan } from './user.entity';
 import {
   UpdateProfileDto,
   ProfileResponseDto,
@@ -18,6 +18,8 @@ import {
 import { StellarService } from '../blockchain/stellar/stellar.service';
 import { WalletBalanceResult } from '../blockchain/stellar/stellar.types';
 import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
+import { RateLimitConfig } from './rate-limit-config.entity';
+import { ThrottlerStorageService } from '@nestjs/throttler';
 
 interface WalletBalancesCacheEntry {
   expiresAt: number;
@@ -36,8 +38,11 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(RateLimitConfig)
+    private readonly rateLimitConfigRepository: Repository<RateLimitConfig>,
     private readonly stellarService: StellarService,
     private readonly exchangeRatesService: ExchangeRatesService,
+    private readonly throttlerStorageService: ThrottlerStorageService,
   ) {}
 
   async findByEmail(email: string): Promise<User | null> {
@@ -440,5 +445,59 @@ export class UsersService {
 
   private roundToTwo(value: number): number {
     return Number(value.toFixed(2));
+  }
+
+  async getRateLimitStatus(userId: string): Promise<{
+    plan: UserPlan;
+    limitPerMinute: number | null;
+    usedInCurrentWindow: number;
+    remaining: number | null;
+    resetAt: string | null;
+    isUnlimited: boolean;
+  }> {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Get rate limit config for the user's plan
+    const config = await this.rateLimitConfigRepository.findOne({
+      where: { plan: user.plan },
+    });
+
+    const isUnlimited = !config || config.limitPerMinute === null;
+    const limitPerMinute = config?.limitPerMinute ?? 60; // fallback if no config
+
+    // Get current usage from throttler storage
+    // The key is constructed as 'user:${userId}' based on PlanThrottlerGuard's generateKey override
+    const key = `user:${userId}`;
+    const storageEntry = this.throttlerStorageService.storage.get(key);
+    let used = 0;
+    let resetAt: string | null = null;
+    if (storageEntry) {
+      // totalHits is a Map where key is throttler name (likely undefined for default)
+      // As we have only one throttler with no explicit name, its key is undefined
+      // Get the first value available
+      for (const val of storageEntry.totalHits.values()) {
+        used = val;
+        break;
+      }
+      // expiration timestamp in ms
+      if (storageEntry.expiresAt) {
+        resetAt = new Date(storageEntry.expiresAt).toISOString();
+      }
+    }
+
+    // Calculate remaining (null if unlimited)
+    const remaining = isUnlimited ? null : Math.max(0, limitPerMinute - used);
+
+    return {
+      plan: user.plan,
+      limitPerMinute: isUnlimited ? null : limitPerMinute,
+      usedInCurrentWindow: used,
+      remaining,
+      resetAt,
+      isUnlimited,
+    };
   }
 }

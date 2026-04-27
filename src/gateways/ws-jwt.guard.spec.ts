@@ -16,7 +16,9 @@ describe('WsJwtGuard', () => {
     disconnect: jest.fn(),
   });
 
-  const makeContext = (client: ReturnType<typeof makeClient>): ExecutionContext =>
+  const makeContext = (
+    client: ReturnType<typeof makeClient>,
+  ): ExecutionContext =>
     ({
       switchToWs: () => ({
         getClient: () => client,
@@ -35,48 +37,74 @@ describe('WsJwtGuard', () => {
   describe('missing token', () => {
     it('emits 401 event when token is absent', async () => {
       const client = makeClient(undefined);
-      await expect(guard.canActivate(makeContext(client))).rejects.toBeInstanceOf(WsException);
-      expect(client.emit).toHaveBeenCalledWith('401', { message: 'Unauthorized' });
+      await expect(
+        guard.canActivate(makeContext(client)),
+      ).rejects.toBeInstanceOf(WsException);
+      expect(client.emit).toHaveBeenCalledWith('401', {
+        message: 'Unauthorized',
+      });
     });
 
     it('disconnects the client when token is absent', async () => {
       const client = makeClient(undefined);
-      await expect(guard.canActivate(makeContext(client))).rejects.toBeInstanceOf(WsException);
+      await expect(
+        guard.canActivate(makeContext(client)),
+      ).rejects.toBeInstanceOf(WsException);
       expect(client.disconnect).toHaveBeenCalled();
     });
 
     it('throws WsException when token is absent', async () => {
       const client = makeClient(undefined);
-      await expect(guard.canActivate(makeContext(client))).rejects.toThrow('Unauthorized');
+      await expect(guard.canActivate(makeContext(client))).rejects.toThrow(
+        'Unauthorized',
+      );
     });
 
     it('emits 401 event when token is an empty string', async () => {
       const client = makeClient('');
-      await expect(guard.canActivate(makeContext(client))).rejects.toBeInstanceOf(WsException);
-      expect(client.emit).toHaveBeenCalledWith('401', { message: 'Unauthorized' });
+      await expect(
+        guard.canActivate(makeContext(client)),
+      ).rejects.toBeInstanceOf(WsException);
+      expect(client.emit).toHaveBeenCalledWith('401', {
+        message: 'Unauthorized',
+      });
       expect(client.disconnect).toHaveBeenCalled();
     });
   });
 
   describe('invalid / expired token', () => {
     it('emits 401 event when JwtService rejects the token', async () => {
-      (jwtService.verifyAsync as jest.Mock).mockRejectedValue(new Error('invalid signature'));
+      (jwtService.verifyAsync as jest.Mock).mockRejectedValue(
+        new Error('invalid signature'),
+      );
       const client = makeClient('bad.token.here');
-      await expect(guard.canActivate(makeContext(client))).rejects.toBeInstanceOf(WsException);
-      expect(client.emit).toHaveBeenCalledWith('401', { message: 'Unauthorized' });
+      await expect(
+        guard.canActivate(makeContext(client)),
+      ).rejects.toBeInstanceOf(WsException);
+      expect(client.emit).toHaveBeenCalledWith('401', {
+        message: 'Unauthorized',
+      });
     });
 
     it('disconnects the client when token is invalid', async () => {
-      (jwtService.verifyAsync as jest.Mock).mockRejectedValue(new Error('jwt expired'));
+      (jwtService.verifyAsync as jest.Mock).mockRejectedValue(
+        new Error('jwt expired'),
+      );
       const client = makeClient('expired.token');
-      await expect(guard.canActivate(makeContext(client))).rejects.toBeInstanceOf(WsException);
+      await expect(
+        guard.canActivate(makeContext(client)),
+      ).rejects.toBeInstanceOf(WsException);
       expect(client.disconnect).toHaveBeenCalled();
     });
 
     it('throws WsException when token is invalid', async () => {
-      (jwtService.verifyAsync as jest.Mock).mockRejectedValue(new Error('jwt malformed'));
+      (jwtService.verifyAsync as jest.Mock).mockRejectedValue(
+        new Error('jwt malformed'),
+      );
       const client = makeClient('malformed');
-      await expect(guard.canActivate(makeContext(client))).rejects.toThrow('Unauthorized');
+      await expect(guard.canActivate(makeContext(client))).rejects.toThrow(
+        'Unauthorized',
+      );
     });
   });
 

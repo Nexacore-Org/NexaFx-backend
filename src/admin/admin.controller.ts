@@ -25,6 +25,7 @@ import { UserRole } from '../users/user.entity';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UserQueryDto } from './dto/user-query.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
+import { UpdateUserPlanDto } from './dto/update-user-plan.dto';
 import { AdminTransactionQueryDto } from './dto/admin-transaction-query.dto';
 import { MetricsQueryDto } from './dto/metrics-query.dto';
 import { OverrideTransactionDto } from './dto/override-transaction.dto';
@@ -99,6 +100,23 @@ export class AdminController {
     @CurrentUser() admin: { userId: string },
   ) {
     return this.adminService.updateUserRole(id, updateDto, admin.userId);
+  }
+
+  @Patch('users/:id/plan')
+  @ApiOperation({ summary: 'Update user plan (Admin only)' })
+  @ApiParam({ name: 'id', type: String, description: 'User UUID' })
+  @ApiBody({ type: UpdateUserPlanDto })
+  @ApiResponse({ status: 200, description: 'User plan updated successfully' })
+  @ApiResponse({ status: 400, description: 'Bad Request' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async updateUserPlan(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateDto: UpdateUserPlanDto,
+    @CurrentUser() admin: { userId: string },
+  ) {
+    return this.adminService.updateUserPlan(id, updateDto, admin.userId);
   }
 
   @Patch('users/:id/suspend')

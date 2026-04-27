@@ -409,8 +409,9 @@ export class ScheduledJobsService {
     }
 
     // Dispatch Webhook
-    this.webhookService.dispatch('transaction.completed', transaction, transaction.userId)
-      .catch(e => this.logger.error(`Webhook dispatch failed: ${e.message}`));
+    this.webhookService
+      .dispatch('transaction.completed', transaction, transaction.userId)
+      .catch((e) => this.logger.error(`Webhook dispatch failed: ${e.message}`));
   }
 
   /**
@@ -482,8 +483,9 @@ export class ScheduledJobsService {
     }
 
     // Dispatch Webhook
-    this.webhookService.dispatch('transaction.failed', transaction, transaction.userId)
-      .catch(e => this.logger.error(`Webhook dispatch failed: ${e.message}`));
+    this.webhookService
+      .dispatch('transaction.failed', transaction, transaction.userId)
+      .catch((e) => this.logger.error(`Webhook dispatch failed: ${e.message}`));
   }
 
   /**

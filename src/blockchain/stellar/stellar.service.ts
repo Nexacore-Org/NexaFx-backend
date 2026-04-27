@@ -412,14 +412,19 @@ export class StellarService {
           .call();
         paths = response.records;
         // Sort by destination_amount descending (highest output)
-        paths.sort((a, b) => parseFloat(b.destination_amount) - parseFloat(a.destination_amount));
+        paths.sort(
+          (a, b) =>
+            parseFloat(b.destination_amount) - parseFloat(a.destination_amount),
+        );
       } else {
         const response = await this.server
           .strictReceivePaths([sourceAsset], destAsset, amount)
           .call();
         paths = response.records;
         // Sort by source_amount ascending (lowest input)
-        paths.sort((a, b) => parseFloat(a.source_amount) - parseFloat(b.source_amount));
+        paths.sort(
+          (a, b) => parseFloat(a.source_amount) - parseFloat(b.source_amount),
+        );
       }
 
       return paths;
@@ -443,8 +448,9 @@ export class StellarService {
     const slippage = params.slippageTolerance || 0.005;
 
     if (params.mode === 'strict-send') {
-      if (!params.sendAmount) throw new Error('sendAmount is required for strict-send');
-      
+      if (!params.sendAmount)
+        throw new Error('sendAmount is required for strict-send');
+
       // Calculate destMin: destAmount * (1 - slippage)
       // We need to estimate destAmount from the path if not provided, but usually it's provided from findBestPath
       const destAmount = parseFloat(params.destAmount || '0');
@@ -459,7 +465,8 @@ export class StellarService {
         path: params.path,
       });
     } else {
-      if (!params.destAmount) throw new Error('destAmount is required for strict-receive');
+      if (!params.destAmount)
+        throw new Error('destAmount is required for strict-receive');
 
       // Calculate sendMax: sendAmount * (1 + slippage)
       const sendAmount = parseFloat(params.sendAmount || '0');

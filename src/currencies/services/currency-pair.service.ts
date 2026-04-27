@@ -93,7 +93,7 @@ export class CurrencyPairService {
     // OR just use a Date object if the user provides ISO string.
     // The requirement says "ISO duration". I'll use a basic parser or just expect a valid Date string for now.
     // Wait, requirement says "ISO duration". Let's use `Date` and add time to it.
-    
+
     const durationMs = this.parseDuration(durationIso);
     const suspendedUntil = new Date(Date.now() + durationMs);
 
@@ -144,7 +144,9 @@ export class CurrencyPairService {
           id: pair.id,
           pair: `${pair.fromCurrencyCode}/${pair.toCurrencyCode}`,
           isActive: pair.isActive,
-          suspensionStatus: pair.suspendedUntil ? `Suspended until ${pair.suspendedUntil.toISOString()}` : 'Active',
+          suspensionStatus: pair.suspendedUntil
+            ? `Suspended until ${pair.suspendedUntil.toISOString()}`
+            : 'Active',
           spread: `${pair.spreadPercent}%`,
           lastRateFetchTime: new Date(), // Mock
           '24hVolume': 0, // Mock
@@ -153,24 +155,38 @@ export class CurrencyPairService {
     );
   }
 
-  async validatePair(fromCode: string, toCode: string, amountUsd?: number): Promise<CurrencyPair> {
+  async validatePair(
+    fromCode: string,
+    toCode: string,
+    amountUsd?: number,
+  ): Promise<CurrencyPair> {
     const pair = await this.findByCodes(fromCode, toCode);
-    
+
     if (!pair) {
-      throw new BadRequestException(`Trading pair ${fromCode}/${toCode} is not supported`);
+      throw new BadRequestException(
+        `Trading pair ${fromCode}/${toCode} is not supported`,
+      );
     }
 
     if (!pair.isActive) {
-      const reason = pair.suspensionReason || 'Trading is temporarily suspended for this pair';
-      throw new BadRequestException(`Pair ${fromCode}/${toCode} is suspended: ${reason}`);
+      const reason =
+        pair.suspensionReason ||
+        'Trading is temporarily suspended for this pair';
+      throw new BadRequestException(
+        `Pair ${fromCode}/${toCode} is suspended: ${reason}`,
+      );
     }
 
     if (amountUsd !== undefined) {
       if (pair.minAmountUsd && amountUsd < pair.minAmountUsd) {
-        throw new BadRequestException(`Amount is below the minimum limit of ${pair.minAmountUsd} USD`);
+        throw new BadRequestException(
+          `Amount is below the minimum limit of ${pair.minAmountUsd} USD`,
+        );
       }
       if (pair.maxAmountUsd && amountUsd > pair.maxAmountUsd) {
-        throw new BadRequestException(`Amount exceeds the maximum limit of ${pair.maxAmountUsd} USD`);
+        throw new BadRequestException(
+          `Amount exceeds the maximum limit of ${pair.maxAmountUsd} USD`,
+        );
       }
     }
 

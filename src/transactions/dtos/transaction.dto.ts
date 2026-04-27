@@ -37,6 +37,15 @@ export class CreateDepositDto {
   @IsString()
   @IsNotEmpty()
   sourceAddress: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Optional wallet to credit. When omitted, the user’s default wallet is used.',
+    format: 'uuid',
+  })
+  @IsOptional()
+  @IsUUID()
+  walletId?: string;
 }
 
 export class CreateWithdrawalDto {
@@ -74,6 +83,15 @@ export class CreateWithdrawalDto {
   @IsUUID()
   @IsOptional()
   beneficiaryId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Optional wallet to withdraw from. When omitted, the user’s default wallet is used.',
+    format: 'uuid',
+  })
+  @IsOptional()
+  @IsUUID()
+  walletId?: string;
 }
 
 export class VerifyTransactionDto {
@@ -162,4 +180,14 @@ export class CreateSwapDto {
   @IsString()
   @IsNotEmpty()
   sourceAddress: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Optional wallet to use for the swap. When omitted, the user’s default wallet is used. ' +
+      'sourceAddress must match the selected wallet’s public key.',
+    format: 'uuid',
+  })
+  @IsOptional()
+  @IsUUID()
+  walletId?: string;
 }

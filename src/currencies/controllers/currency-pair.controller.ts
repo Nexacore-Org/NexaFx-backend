@@ -35,7 +35,10 @@ export class CurrencyPairController {
   @Patch('/admin/:id')
   @Roles(UserRole.ADMIN)
   @UseGuards(RolesGuard)
-  async updatePair(@Param('id') id: string, @Body() data: Partial<CurrencyPair>) {
+  async updatePair(
+    @Param('id') id: string,
+    @Body() data: Partial<CurrencyPair>,
+  ) {
     return this.currencyPairService.update(id, data);
   }
 

@@ -29,7 +29,6 @@ import { SuperAdminModule } from './super-admin/super-admin.module';
 import { GatewaysModule } from './gateways/gateways.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 
-
 @Module({
   imports: [
     ConfigModule.forRoot({

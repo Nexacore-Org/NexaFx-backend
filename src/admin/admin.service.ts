@@ -354,6 +354,15 @@ export class AdminService {
     adminId: string,
   ) {
     const user = await this.getUserById(id);
+    const touchesAdminTier = [user.role, updateDto.role].some(
+      (role) => role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN,
+    );
+
+    if (touchesAdminTier) {
+      throw new ForbiddenException(
+        'Admin-tier role assignments must be managed through SUPER_ADMIN controls',
+      );
+    }
 
     if (user.role === updateDto.role) {
       return user;

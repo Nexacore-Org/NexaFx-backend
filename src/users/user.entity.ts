@@ -14,6 +14,7 @@ import { KycRecord } from '../kyc/entities/kyc.entity';
 export enum UserRole {
   USER = 'USER',
   ADMIN = 'ADMIN',
+  SUPER_ADMIN = 'SUPER_ADMIN',
 }
 
 @Entity('users')

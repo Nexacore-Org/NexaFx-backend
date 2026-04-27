@@ -61,3 +61,7 @@ jest-out.txt
 tsc_output.txt
 tsc_final.txt
 coverage/
+.omx/
+.codex/
+.worktrees/
+pnpm-lock.yaml

@@ -25,7 +25,9 @@ import { AdminModule } from './admin/admin.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { DaoModule } from './dao/dao.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { SuperAdminModule } from './super-admin/super-admin.module';
 import { GatewaysModule } from './gateways/gateways.module';
+
 
 @Module({
   imports: [
@@ -76,6 +78,7 @@ import { GatewaysModule } from './gateways/gateways.module';
     FeesModule,
     PushNotificationsModule,
     AdminModule,
+    SuperAdminModule,
     // DAO module provides Stellar Soroban contract interaction for reward distribution
     DaoModule,
   ],

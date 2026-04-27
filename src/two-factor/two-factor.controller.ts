@@ -64,6 +64,8 @@ export class TwoFactorController {
   ): Promise<{ backupCodes: string[] }> {
     return this.twoFactorService.confirmTwoFactor(req.user.userId, dto.totpCode);
   }
+  ): Promise<{ message: string }> {
+    await this.twoFactorService.enableTwoFactor(req.user.userId, dto.totpCode);
 
   // Backward compatible alias
   @Post('enable')
@@ -96,10 +98,7 @@ export class TwoFactorController {
     @Request() req: { user: { userId: string } },
     @Body() dto: TwoFactorCodeDto,
   ): Promise<{ message: string }> {
-    await this.twoFactorService.disableTwoFactor(
-      req.user.userId,
-      dto.totpCode,
-    );
+    await this.twoFactorService.disableTwoFactor(req.user.userId, dto.totpCode);
 
     return { message: 'Two-factor authentication disabled' };
   }

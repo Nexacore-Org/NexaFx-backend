@@ -1,4 +1,9 @@
-import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
+import {
+  Injectable,
+  NestInterceptor,
+  ExecutionContext,
+  CallHandler,
+} from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { AuditLogsService } from '../audit-logs.service';
@@ -14,8 +19,14 @@ export class AuditInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
-    const action = this.reflector.get<string>('audit:action', context.getHandler());
-    const entity = this.reflector.get<string>('audit:entity', context.getHandler());
+    const action = this.reflector.get<string>(
+      'audit:action',
+      context.getHandler(),
+    );
+    const entity = this.reflector.get<string>(
+      'audit:entity',
+      context.getHandler(),
+    );
 
     if (!action || !entity) {
       return next.handle();
@@ -24,11 +35,16 @@ export class AuditInterceptor implements NestInterceptor {
     return next.handle().pipe(
       tap(async (response) => {
         try {
+          const ipAddress = this.auditLogsService.getClientIp(request);
+          const userAgent = request.headers['user-agent'];
+
           await this.auditLogsService.createLog({
             userId: user?.id,
             action,
             entity: entity as any,
             entityId: response?.id || request.params?.id,
+            ipAddress,
+            userAgent,
             metadata: {
               method: request.method,
               url: request.url,
@@ -46,17 +62,23 @@ export class AuditInterceptor implements NestInterceptor {
 
   private sanitizeBody(body: any): any {
     if (!body) return body;
-    
+
     const sanitized = { ...body };
-    
+
     // Remove sensitive fields
-    const sensitiveFields = ['password', 'token', 'secret', 'privateKey', 'pin'];
-    sensitiveFields.forEach(field => {
+    const sensitiveFields = [
+      'password',
+      'token',
+      'secret',
+      'privateKey',
+      'pin',
+    ];
+    sensitiveFields.forEach((field) => {
       if (sanitized[field]) {
         sanitized[field] = '[REDACTED]';
       }
     });
-    
+
     return sanitized;
   }
 }

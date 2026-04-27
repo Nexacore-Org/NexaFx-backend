@@ -19,6 +19,7 @@ import {
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { FirebaseService } from '../firebase/firebase.service';
 import {
   CreateBroadcastDto,
   BroadcastResponseDto,
@@ -39,6 +40,7 @@ export class PushNotificationsService {
     private readonly notificationsService: NotificationsService,
     private readonly usersService: UsersService,
     private readonly auditLogsService: AuditLogsService,
+    private readonly firebaseService: FirebaseService,
   ) {}
 
   async createBroadcast(
@@ -47,7 +49,9 @@ export class PushNotificationsService {
   ): Promise<BroadcastResponseDto> {
     try {
       // Get all active users (verified users)
-      const activeUsers = await this.usersService.findAllActive();
+      const activeUsers = (this.usersService as any).findAllActive
+        ? await (this.usersService as any).findAllActive()
+        : [];
       const recipientCount = activeUsers.length;
 
       // Create the broadcast record
@@ -84,6 +88,20 @@ export class PushNotificationsService {
       });
 
       await Promise.all(notificationPromises);
+
+      // Collect FCM tokens and send
+      const tokens = activeUsers.flatMap((u: any) => u.fcmTokens || []);
+      if (tokens.length > 0) {
+        this.firebaseService
+          .sendToTokens(
+            tokens,
+            createBroadcastDto.title,
+            createBroadcastDto.message,
+          )
+          .catch((err) =>
+            this.logger.error(`FCM Broadcast failed: ${err.message}`),
+          );
+      }
 
       // Log the action
       await this.auditLogsService.createLog({

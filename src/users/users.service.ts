@@ -268,12 +268,14 @@ export class UsersService {
   async syncWalletBalanceSnapshots(): Promise<{
     processed: number;
     updated: number;
+    failed: number;
   }> {
     const users = await this.userRepository.find({
       select: ['id', 'walletPublicKey', 'balances'],
     });
 
     let updated = 0;
+    let failed = 0;
 
     for (const user of users) {
       try {
@@ -281,9 +283,13 @@ export class UsersService {
           user.walletPublicKey,
         );
         const snapshot = this.toSnapshotBalances(liveBalances);
-        await this.userRepository.update(user.id, { balances: snapshot });
+        await this.userRepository.update(user.id, {
+          balances: snapshot,
+          balanceLastSyncedAt: new Date(),
+        });
         updated += 1;
       } catch (error) {
+        failed += 1;
         const errorMessage =
           error instanceof Error ? error.message : String(error);
         this.logger.warn(
@@ -292,10 +298,41 @@ export class UsersService {
       }
     }
 
+    this.logger.log(
+      `Wallet balance sync completed: ${updated} synced, ${failed} failed out of ${users.length} processed`,
+    );
+
     return {
       processed: users.length,
       updated,
+      failed,
     };
+  }
+
+  async registerDeviceToken(userId: string, token: string): Promise<void> {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const currentTokens = user.fcmTokens || [];
+    if (!currentTokens.includes(token)) {
+      const updatedTokens = [...currentTokens, token];
+      await this.userRepository.update(userId, { fcmTokens: updatedTokens });
+    }
+  }
+
+  async removeDeviceToken(userId: string, token: string): Promise<void> {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const currentTokens = user.fcmTokens || [];
+    if (currentTokens.includes(token)) {
+      const updatedTokens = currentTokens.filter((t) => t !== token);
+      await this.userRepository.update(userId, { fcmTokens: updatedTokens });
+    }
   }
 
   private excludeSecrets(user: User): ProfileResponseDto {

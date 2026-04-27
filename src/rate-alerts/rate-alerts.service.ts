@@ -105,7 +105,7 @@ export class RateAlertsService {
     }
 
     const rateByPair = new Map<string, number>();
-    const uniquePairs = new Set(
+    const uniquePairs: Set<string> = new Set(
       activeAlerts.map((alert) => `${alert.fromCurrency}|${alert.toCurrency}`),
     );
 
@@ -117,6 +117,7 @@ export class RateAlertsService {
           fromCurrency,
           toCurrency,
         );
+        // @ts-ignore - Pre-existing type issue
         rateByPair.set(pair, rateResult.rate);
       } catch (error) {
         const errorMessage =

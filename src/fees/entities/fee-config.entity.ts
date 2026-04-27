@@ -10,6 +10,7 @@ export enum FeeTransactionType {
   DEPOSIT = 'DEPOSIT',
   WITHDRAW = 'WITHDRAW',
   CONVERT = 'CONVERT',
+  SWAP = 'SWAP',
 }
 
 export enum FeeType {

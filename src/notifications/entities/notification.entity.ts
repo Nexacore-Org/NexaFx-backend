@@ -1,5 +1,6 @@
 import {
   Entity,
+  Index,
   Column,
   PrimaryGeneratedColumn,
   CreateDateColumn,
@@ -8,18 +9,18 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { User } from '../../users/user.entity';
-
-export enum NotificationType {
-  TRANSACTION = 'TRANSACTION',
-  OTP = 'OTP',
-  SYSTEM = 'SYSTEM',
-}
+import { NotificationType } from '../enum/notificationType.enum';
+export { NotificationType };
 
 export enum NotificationStatus {
   UNREAD = 'UNREAD',
   READ = 'READ',
 }
 
+// Optimizes notification list filtering by user and read/unread status.
+@Index(['userId', 'status'])
+// Optimizes user notification history sorted by recency.
+@Index(['userId', 'createdAt'])
 @Entity('notifications')
 export class Notification {
   @PrimaryGeneratedColumn('uuid')

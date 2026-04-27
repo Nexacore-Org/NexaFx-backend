@@ -30,7 +30,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
           ? exceptionResponse
           : (exceptionResponse as any).message || 'An error occurred',
       error:
-        typeof exceptionResponse === 'object' && (exceptionResponse as any).error
+        typeof exceptionResponse === 'object' &&
+        (exceptionResponse as any).error
           ? (exceptionResponse as any).error
           : HttpStatus[status],
     };

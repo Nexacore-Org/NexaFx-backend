@@ -9,6 +9,11 @@ import {
 import { DocumentType } from '../entities/kyc.entity';
 import { ApiProperty } from '@nestjs/swagger';
 
+/**
+ * SubmitKycDto now contains only form fields. File uploads are handled
+ * separately via multipart/form-data and saved to disk by Multer. The
+ * controller will map uploaded files to the entity URL fields.
+ */
 export class SubmitKycDto {
   @ApiProperty({ description: 'Full legal name of the user' })
   @IsString()
@@ -28,19 +33,9 @@ export class SubmitKycDto {
   })
   documentNumber: string;
 
-  @ApiProperty({ description: 'Base64 encoded selfie image or image URL' })
-  @IsString()
-  @IsNotEmpty()
-  selfieUrl: string;
-
   @IsDateString()
   dateOfBirth: string;
 
   @IsString()
   nationality: string;
-  @IsString()
-  documentFrontUrl: string;
-
-  @IsString()
-  documentBackUrl: string;
 }

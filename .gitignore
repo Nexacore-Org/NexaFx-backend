@@ -54,3 +54,14 @@ pids
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Build and Test Artifacts (Issue #287)
+jest_error.json
+jest-out.txt
+tsc_output.txt
+tsc_final.txt
+coverage/
+.omx/
+.codex/
+.worktrees/
+pnpm-lock.yaml

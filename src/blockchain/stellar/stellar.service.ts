@@ -6,6 +6,8 @@ import {
   BASE_FEE,
   Networks,
   Transaction,
+  Asset,
+  Operation,
 } from 'stellar-sdk';
 import * as crypto from 'crypto';
 
@@ -165,7 +167,7 @@ export class StellarService {
     try {
       const account = await this.server.loadAccount(publicKey);
 
-      return account.balances.map((balance) => {
+      return account.balances.map((balance: any) => {
         if (balance.asset_type === 'native') {
           return {
             asset: 'XLM',
@@ -391,6 +393,87 @@ export class StellarService {
       }
 
       return { status: 'PENDING' };
+    }
+  }
+
+  /* -------------------- PATH FINDING -------------------- */
+
+  async findBestPath(
+    sourceAsset: Asset,
+    destAsset: Asset,
+    amount: string,
+    mode: 'strict-send' | 'strict-receive',
+  ): Promise<any[]> {
+    try {
+      let paths: any[];
+
+      if (mode === 'strict-send') {
+        const response = await this.server
+          .strictSendPaths(sourceAsset, amount, [destAsset])
+          .call();
+        paths = response.records;
+        // Sort by destination_amount descending (highest output)
+        paths.sort((a, b) => parseFloat(b.destination_amount) - parseFloat(a.destination_amount));
+      } else {
+        const response = await this.server
+          .strictReceivePaths([sourceAsset], destAsset, amount)
+          .call();
+        paths = response.records;
+        // Sort by source_amount ascending (lowest input)
+        paths.sort((a, b) => parseFloat(a.source_amount) - parseFloat(b.source_amount));
+      }
+
+      return paths;
+    } catch (err: unknown) {
+      const error = toStellarError(err);
+      this.logger.error(`Failed to find best path: ${error.message}`);
+      return [];
+    }
+  }
+
+  buildPathPaymentOp(params: {
+    sendAsset: Asset;
+    sendAmount?: string;
+    destAsset: Asset;
+    destAmount?: string;
+    destination: string;
+    path: Asset[];
+    mode: 'strict-send' | 'strict-receive';
+    slippageTolerance?: number; // e.g., 0.005 for 0.5%
+  }): any {
+    const slippage = params.slippageTolerance || 0.005;
+
+    if (params.mode === 'strict-send') {
+      if (!params.sendAmount) throw new Error('sendAmount is required for strict-send');
+      
+      // Calculate destMin: destAmount * (1 - slippage)
+      // We need to estimate destAmount from the path if not provided, but usually it's provided from findBestPath
+      const destAmount = parseFloat(params.destAmount || '0');
+      const destMin = (destAmount * (1 - slippage)).toFixed(7);
+
+      return Operation.pathPaymentStrictSend({
+        sendAsset: params.sendAsset,
+        sendAmount: params.sendAmount,
+        destination: params.destination,
+        destAsset: params.destAsset,
+        destMin,
+        path: params.path,
+      });
+    } else {
+      if (!params.destAmount) throw new Error('destAmount is required for strict-receive');
+
+      // Calculate sendMax: sendAmount * (1 + slippage)
+      const sendAmount = parseFloat(params.sendAmount || '0');
+      const sendMax = (sendAmount * (1 + slippage)).toFixed(7);
+
+      return Operation.pathPaymentStrictReceive({
+        sendAsset: params.sendAsset,
+        sendMax,
+        destination: params.destination,
+        destAsset: params.destAsset,
+        destAmount: params.destAmount,
+        path: params.path,
+      });
     }
   }
 

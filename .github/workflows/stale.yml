@@ -1,0 +1,39 @@
+name: Stale Issue Management
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Run daily at midnight
+
+permissions:
+  issues: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Mark stale issues
+        uses: actions/stale@v9
+        with:
+          days-before-stale: 30
+          days-before-close: 7
+          stale-issue-label: stale
+          close-issue-label: stale-closed
+          stale-issue-message: |
+            This issue has been automatically marked as stale because it has not had recent activity. It will be closed after 7 days if no further activity occurs. If you believe this is still relevant, please add a comment to keep it open.
+
+            ---
+
+            \u2620\ufe0f **This issue is being closed due to inactivity.**
+
+            If you believe this issue should remain open, please explain why and it will be reopened.
+
+            <sub>Automated by stale bot</sub>
+          close-issue-message: |
+            This issue has been automatically closed because it has been marked as stale for 30 days with no activity.
+
+            If you believe this issue is still relevant, please reopen it with a comment explaining why.
+
+            <sub>Automated by stale bot</sub>
+          exempt-issue-labels: pinned,security,enhancement
+          operations-per-run: 100

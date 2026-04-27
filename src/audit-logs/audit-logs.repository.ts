@@ -12,24 +12,34 @@ export class AuditLogsRepository extends Repository<AuditLog> {
     super(AuditLog, dataSource.createEntityManager());
   }
 
-  async createAuditLog(createAuditLogDto: CreateAuditLogDto): Promise<AuditLog> {
+  async createAuditLog(
+    createAuditLogDto: CreateAuditLogDto,
+  ): Promise<AuditLog> {
     try {
       const auditLog = this.create(createAuditLogDto);
       const savedLog = await this.save(auditLog);
-      
+
       // Prevent logging sensitive data in the general log
       if (!createAuditLogDto.isSensitive) {
-        this.logger.debug(`Audit log created: ${savedLog.action} for ${savedLog.entity}`);
+        this.logger.debug(
+          `Audit log created: ${savedLog.action} for ${savedLog.entity}`,
+        );
       }
-      
+
       return savedLog;
     } catch (error) {
-      this.logger.error(`Failed to create audit log: ${error.message}`, error.stack);
+      this.logger.error(
+        `Failed to create audit log: ${error.message}`,
+        error.stack,
+      );
       throw error;
     }
   }
 
-  async findLogsWithPagination(filters: GetAuditLogsDto) {
+  async findLogsWithPagination(
+    filters: GetAuditLogsDto,
+    options?: { includeSensitive?: boolean },
+  ) {
     const {
       entity,
       userId,
@@ -56,7 +66,9 @@ export class AuditLogsRepository extends Repository<AuditLog> {
     }
 
     if (action) {
-      query.andWhere('audit_log.action LIKE :action', { action: `%${action}%` });
+      query.andWhere('audit_log.action LIKE :action', {
+        action: `%${action}%`,
+      });
     }
 
     if (startDate && endDate) {
@@ -64,13 +76,20 @@ export class AuditLogsRepository extends Repository<AuditLog> {
         createdAt: Between(new Date(startDate), new Date(endDate)),
       });
     } else if (startDate) {
-      query.andWhere('audit_log.createdAt >= :startDate', { startDate: new Date(startDate) });
+      query.andWhere('audit_log.createdAt >= :startDate', {
+        startDate: new Date(startDate),
+      });
     } else if (endDate) {
-      query.andWhere('audit_log.createdAt <= :endDate', { endDate: new Date(endDate) });
+      query.andWhere('audit_log.createdAt <= :endDate', {
+        endDate: new Date(endDate),
+      });
     }
 
-    // Exclude sensitive logs from general queries
-    query.andWhere('audit_log.isSensitive = :isSensitive', { isSensitive: false });
+    if (!options?.includeSensitive) {
+      query.andWhere('audit_log.isSensitive = :isSensitive', {
+        isSensitive: false,
+      });
+    }
 
     const [logs, total] = await query.getManyAndCount();
 

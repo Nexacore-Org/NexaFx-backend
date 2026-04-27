@@ -14,6 +14,7 @@ import { KycRecord } from '../kyc/entities/kyc.entity';
 export enum UserRole {
   USER = 'USER',
   ADMIN = 'ADMIN',
+  SUPER_ADMIN = 'SUPER_ADMIN',
 }
 
 @Entity('users')
@@ -57,6 +58,9 @@ export class User {
   @Column({ type: 'jsonb', nullable: true, default: {} })
   balances: Record<string, number>;
 
+  @Column({ type: 'jsonb', nullable: true, default: [] })
+  fcmTokens: string[];
+
   @Column({ type: 'varchar', length: 8, unique: true })
   @Index()
   referralCode: string;
@@ -74,12 +78,21 @@ export class User {
   @Column({ type: 'boolean', default: false })
   isTwoFactorEnabled: boolean;
 
+  @Column({ type: 'int', default: 0 })
+  failedLoginAttempts: number;
+
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  lockedUntil: Date | null;
+
   @Column({
     type: 'enum',
     enum: UserRole,
     default: UserRole.USER,
   })
   role: UserRole;
+
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  balanceLastSyncedAt: Date | null;
 
   @CreateDateColumn({ type: 'timestamp with time zone' })
   createdAt: Date;

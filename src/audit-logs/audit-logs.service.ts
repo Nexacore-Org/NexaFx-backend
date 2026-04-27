@@ -1,43 +1,35 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { AuditLogsRepository } from './audit-logs.repository';
 import { CreateAuditLogDto } from './dto/create-audit-log.dto';
 import { GetAuditLogsDto } from './dto/get-audit-logs.dto';
-import { REQUEST } from '@nestjs/core';
-import { Request } from 'express';
 import { AuditEntityType } from './enums/audit-entity-type.enum';
 
 @Injectable()
 export class AuditLogsService {
   private readonly logger = new Logger(AuditLogsService.name);
 
-  constructor(
-    private readonly auditLogsRepository: AuditLogsRepository,
-    @Inject(REQUEST) private readonly request: Request,
-  ) {}
+  constructor(private readonly auditLogsRepository: AuditLogsRepository) {}
 
-  async createLog(
-    createAuditLogDto: Omit<CreateAuditLogDto, 'ipAddress' | 'userAgent'>,
-  ): Promise<void> {
+  async createLog(createAuditLogDto: CreateAuditLogDto): Promise<void> {
     try {
-      // Extract IP and User Agent from request if available
-      const ipAddress = this.getClientIp();
-      const userAgent = this.request.headers['user-agent'];
-
-      const logDto: CreateAuditLogDto = {
-        ...createAuditLogDto,
-        ipAddress,
-        userAgent,
-      };
-
-      await this.auditLogsRepository.createAuditLog(logDto);
+      await this.auditLogsRepository.createAuditLog(createAuditLogDto);
     } catch (error) {
-      this.logger.error(`Failed to create audit log: ${error.message}`, error.stack);
+      this.logger.error(
+        `Failed to create audit log: ${error.message}`,
+        error.stack,
+      );
       // Don't throw error to prevent breaking main functionality
     }
   }
 
   async getLogs(filters: GetAuditLogsDto) {
     return this.auditLogsRepository.findLogsWithPagination(filters);
+  }
+
+  async getPrivilegedLogs(filters: GetAuditLogsDto) {
+    return this.auditLogsRepository.findLogsWithPagination(filters, {
+      includeSensitive: true,
+    });
   }
 
   async getLogsByUserId(userId: string, filters?: Partial<GetAuditLogsDto>) {
@@ -48,18 +40,22 @@ export class AuditLogsService {
     return this.getLogs(completeFilters);
   }
 
+  /**
+   * Helper to extract IP from request object
+   * Can be used by controllers/interceptors before calling createLog
+   */
+  getClientIp(request: any): string {
+    if (!request) return '';
 
-  private getClientIp(): string {
-    const request = this.request;
-    const xForwardedFor = request.headers['x-forwarded-for'];
-    
+    const xForwardedFor = request.headers?.['x-forwarded-for'];
+
     if (Array.isArray(xForwardedFor)) {
       return xForwardedFor[0] || '';
     } else if (typeof xForwardedFor === 'string') {
       return xForwardedFor.split(',')[0].trim() || '';
     }
-    
-    return request.ip || request.socket.remoteAddress || '';
+
+    return request.ip || request.socket?.remoteAddress || '';
   }
 
   // Helper methods for common log types
@@ -67,7 +63,7 @@ export class AuditLogsService {
     userId: string | undefined,
     action: string,
     metadata?: Record<string, any>,
-    isSensitive: boolean  = false,
+    isSensitive: boolean = false,
   ) {
     return this.createLog({
       userId,
@@ -112,14 +108,14 @@ export class AuditLogsService {
     action: string,
     entityId?: string,
     metadata?: Record<string, any>,
-    isSensitive?: boolean
+    isSensitive?: boolean,
   ) {
     return this.createLog({
       action,
       entity: AuditEntityType.SYSTEM,
       entityId,
       metadata,
-      isSensitive
+      isSensitive,
     });
   }
 }

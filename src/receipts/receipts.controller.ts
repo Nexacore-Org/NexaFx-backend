@@ -1,22 +1,34 @@
-import { 
-  Controller, 
-  Get, 
-  Param, 
-  Query, 
-  UseGuards, 
+import {
+  Controller,
+  Get,
+  Param,
+  Query,
+  UseGuards,
   Request,
   Res,
   HttpStatus,
   BadRequestException,
-  NotFoundException
+  NotFoundException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiParam,
+  ApiQuery,
+  ApiProduces,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { CurrentUser, CurrentUserPayload } from '../auth/decorators/current-user.decorator';
+import {
+  CurrentUser,
+  CurrentUserPayload,
+} from '../auth/decorators/current-user.decorator';
 import { ReceiptsService } from './receipts.service';
 
 @ApiTags('Receipts')
+@ApiBearerAuth()
 @Controller('receipts')
 @UseGuards(JwtAuthGuard)
 export class ReceiptsController {
@@ -29,41 +41,38 @@ export class ReceiptsController {
     description: 'Transaction UUID',
     example: '550e8400-e29b-41d4-a716-446655440000',
   })
+  @ApiProduces('application/pdf')
   @ApiResponse({
     status: 200,
     description: 'PDF receipt generated successfully',
-    content: {
-      'application/pdf': {
-        schema: {
-          type: 'string',
-          format: 'binary',
-        },
-      },
-    },
   })
-  @ApiResponse({ status: 404, description: 'Transaction not found' })
+  @ApiResponse({ status: 400, description: 'Bad Request' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Transaction not found' })
   async getTransactionReceipt(
     @Param('id') id: string,
     @CurrentUser() user: CurrentUserPayload,
     @Res() res: Response,
   ): Promise<void> {
     try {
-      const pdfBuffer = await this.receiptsService.generateTransactionReceipt(id, user.userId);
-      
+      const pdfBuffer = await this.receiptsService.generateTransactionReceipt(
+        id,
+        user.userId,
+      );
+
       res.set({
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="receipt-${id}.pdf"`,
         'Content-Length': pdfBuffer.length.toString(),
       });
-      
+
       res.send(pdfBuffer);
     } catch (error) {
       if (error instanceof NotFoundException) {
         res.status(HttpStatus.NOT_FOUND).json({ message: error.message });
       } else {
-        res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ 
-          message: 'Failed to generate receipt' 
+        res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+          message: 'Failed to generate receipt',
         });
       }
     }
@@ -77,21 +86,14 @@ export class ReceiptsController {
     example: '2026-01',
     required: true,
   })
+  @ApiProduces('application/pdf')
   @ApiResponse({
     status: 200,
     description: 'PDF statement generated successfully',
-    content: {
-      'application/pdf': {
-        schema: {
-          type: 'string',
-          format: 'binary',
-        },
-      },
-    },
   })
   @ApiResponse({ status: 400, description: 'Invalid month format' })
-  @ApiResponse({ status: 404, description: 'No transactions found for period' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'No transactions found for period' })
   async getMonthlyStatement(
     @Query('month') month: string,
     @CurrentUser() user: CurrentUserPayload,
@@ -104,22 +106,102 @@ export class ReceiptsController {
         throw new BadRequestException('Invalid month format. Use YYYY-MM');
       }
 
-      const pdfBuffer = await this.receiptsService.generateMonthlyStatement(user.userId, month);
-      
+      const pdfBuffer = await this.receiptsService.generateMonthlyStatement(
+        user.userId,
+        month,
+      );
+
       res.set({
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="statement-${month}.pdf"`,
         'Content-Length': pdfBuffer.length.toString(),
       });
-      
+
       res.send(pdfBuffer);
     } catch (error) {
-      if (error instanceof NotFoundException || error instanceof BadRequestException) {
-        res.status(error instanceof NotFoundException ? HttpStatus.NOT_FOUND : HttpStatus.BAD_REQUEST)
-           .json({ message: error.message });
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        res
+          .status(
+            error instanceof NotFoundException
+              ? HttpStatus.NOT_FOUND
+              : HttpStatus.BAD_REQUEST,
+          )
+          .json({ message: error.message });
       } else {
-        res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ 
-          message: 'Failed to generate statement' 
+        res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+          message: 'Failed to generate statement',
+        });
+      }
+    }
+  }
+
+  @Get('export')
+  @ApiOperation({ summary: 'Export monthly transactions as CSV or Excel' })
+  @ApiQuery({
+    name: 'format',
+    description: 'Export format: csv or excel',
+    required: true,
+    example: 'csv',
+  })
+  @ApiQuery({
+    name: 'month',
+    description: 'Month in YYYY-MM format',
+    required: true,
+    example: '2026-01',
+  })
+  @ApiProduces('text/csv')
+  @ApiProduces(
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  )
+  @ApiResponse({ status: 200, description: 'File exported successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid format or month' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'No transactions found for period' })
+  async exportMonthlyTransactions(
+    @Query('format') format: string,
+    @Query('month') month: string,
+    @CurrentUser() user: CurrentUserPayload,
+    @Res() res: Response,
+  ): Promise<void> {
+    try {
+      if (!['csv', 'excel'].includes(format)) {
+        throw new BadRequestException('Invalid format. Use csv or excel');
+      }
+      const monthRegex = /^\d{4}-(0[1-9]|1[0-2])$/;
+      if (!monthRegex.test(month)) {
+        throw new BadRequestException('Invalid month format. Use YYYY-MM');
+      }
+      if (format === 'csv') {
+        await this.receiptsService.exportTransactionsCSV(
+          user.userId,
+          month,
+          res,
+        );
+      } else {
+        await this.receiptsService.exportTransactionsExcel(
+          user.userId,
+          month,
+          res,
+        );
+      }
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        res
+          .status(
+            error instanceof NotFoundException
+              ? HttpStatus.NOT_FOUND
+              : HttpStatus.BAD_REQUEST,
+          )
+          .json({ message: error.message });
+      } else {
+        res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+          message: 'Failed to export transactions',
         });
       }
     }
@@ -142,8 +224,9 @@ export class ReceiptsController {
       },
     },
   })
-  @ApiResponse({ status: 404, description: 'Transaction not found' })
+  @ApiResponse({ status: 400, description: 'Bad Request' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Transaction not found' })
   async emailTransactionReceipt(
     @Param('id') id: string,
     @CurrentUser() user: CurrentUserPayload,

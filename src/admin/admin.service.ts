@@ -1,18 +1,47 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, ILike, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
+import {
+  Repository,
+  Between,
+  ILike,
+  MoreThanOrEqual,
+  LessThanOrEqual,
+} from 'typeorm';
 import { User, UserRole } from '../users/user.entity';
-import { Transaction, TransactionStatus, TransactionType } from '../transactions/entities/transaction.entity';
+import {
+  Transaction,
+  TransactionStatus,
+  TransactionType,
+} from '../transactions/entities/transaction.entity';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import { UserQueryDto } from './dto/user-query.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { AdminTransactionQueryDto } from './dto/admin-transaction-query.dto';
 import { PlatformMetricsDto } from './dto/platform-metrics.dto';
-import { startOfDay, startOfWeek, startOfMonth, endOfDay } from 'date-fns';
+import {
+  startOfDay,
+  startOfWeek,
+  startOfMonth,
+  subDays,
+  format,
+  eachDayOfInterval,
+  parseISO,
+} from 'date-fns';
+import { MetricsQueryDto } from './dto/metrics-query.dto';
+import * as csv from 'fast-csv';
+import { OverrideTransactionDto } from './dto/override-transaction.dto';
+import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
@@ -21,8 +50,29 @@ export class AdminService {
     private readonly auditLogsService: AuditLogsService,
   ) {}
 
-  async getPlatformMetrics(): Promise<PlatformMetricsDto> {
+  async getPlatformMetrics(
+    query: MetricsQueryDto = {},
+  ): Promise<PlatformMetricsDto> {
+    const { from, to } = query;
     const now = new Date();
+
+    // Default to last 30 days if no range provided
+    const fromDate = from ? parseISO(from) : subDays(now, 30);
+    const toDate = to ? parseISO(to) : now;
+
+    // Validate date range
+    if (fromDate > toDate) {
+      throw new BadRequestException('From date cannot be after to date');
+    }
+
+    // Prevent excessively large ranges
+    const daysDiff = Math.ceil(
+      (toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24),
+    );
+    if (daysDiff > 365) {
+      throw new BadRequestException('Date range cannot exceed 365 days');
+    }
+
     const todayStart = startOfDay(now);
     const weekStart = startOfWeek(now);
     const monthStart = startOfMonth(now);
@@ -56,6 +106,13 @@ export class AdminService {
     // const pendingKyc = await this.kycRepository.count({ where: { status: 'PENDING' } });
     const pendingKyc = 0; // Placeholder
 
+    // Time-series data
+    const dailySignups = await this.getDailySignups(fromDate, toDate);
+    const dailyTransactionVolumes = await this.getDailyTransactionVolumes(
+      fromDate,
+      toDate,
+    );
+
     return {
       users: {
         total: totalUsers,
@@ -72,6 +129,8 @@ export class AdminService {
       kyc: {
         pendingReviews: pendingKyc,
       },
+      dailySignups,
+      dailyTransactionVolumes,
     };
   }
 
@@ -86,7 +145,9 @@ export class AdminService {
       .select('transaction.type', 'type')
       .addSelect('transaction.currency', 'currency')
       .addSelect('SUM(transaction.amount)', 'total')
-      .where('transaction.status = :status', { status: TransactionStatus.SUCCESS })
+      .where('transaction.status = :status', {
+        status: TransactionStatus.SUCCESS,
+      })
       .groupBy('transaction.type')
       .addGroupBy('transaction.currency')
       .getRawMany();
@@ -105,8 +166,123 @@ export class AdminService {
     return result;
   }
 
+  private async getDailySignups(
+    fromDate: Date,
+    toDate: Date,
+  ): Promise<{ date: string; count: number }[]> {
+    const signups = await this.userRepository
+      .createQueryBuilder('user')
+      .select('DATE_TRUNC(\'day\', "createdAt")', 'date')
+      .addSelect('COUNT(*)', 'count')
+      .where('user.createdAt >= :fromDate', { fromDate })
+      .andWhere('user.createdAt <= :toDate', { toDate })
+      .groupBy('DATE_TRUNC(\'day\', "createdAt")')
+      .orderBy('DATE_TRUNC(\'day\', "createdAt")', 'ASC')
+      .getRawMany();
+
+    // Fill in missing days with 0
+    const allDays = eachDayOfInterval({ start: fromDate, end: toDate });
+    const signupMap = new Map(
+      signups.map((s) => [
+        format(parseISO(s.date), 'yyyy-MM-dd'),
+        parseInt(s.count),
+      ]),
+    );
+
+    return allDays.map((day) => ({
+      date: format(day, 'yyyy-MM-dd'),
+      count: signupMap.get(format(day, 'yyyy-MM-dd')) || 0,
+    }));
+  }
+
+  private async getDailyTransactionVolumes(
+    fromDate: Date,
+    toDate: Date,
+  ): Promise<
+    { date: string; depositVolume: number; withdrawalVolume: number }[]
+  > {
+    const volumes = await this.transactionRepository
+      .createQueryBuilder('transaction')
+      .select('DATE_TRUNC(\'day\', "createdAt")', 'date')
+      .addSelect('transaction.type', 'type')
+      .addSelect('SUM(CAST(transaction.amount AS DECIMAL))', 'volume')
+      .where('transaction.status = :status', {
+        status: TransactionStatus.SUCCESS,
+      })
+      .andWhere('transaction.createdAt >= :fromDate', { fromDate })
+      .andWhere('transaction.createdAt <= :toDate', { toDate })
+      .groupBy('DATE_TRUNC(\'day\', "createdAt")')
+      .addGroupBy('transaction.type')
+      .orderBy('DATE_TRUNC(\'day\', "createdAt")', 'ASC')
+      .getRawMany();
+
+    // Fill in missing days with 0
+    const allDays = eachDayOfInterval({ start: fromDate, end: toDate });
+    const volumeMap = new Map<
+      string,
+      { deposit: number; withdrawal: number }
+    >();
+
+    volumes.forEach((v) => {
+      const date = format(parseISO(v.date), 'yyyy-MM-dd');
+      if (!volumeMap.has(date)) {
+        volumeMap.set(date, { deposit: 0, withdrawal: 0 });
+      }
+      const dayVolumes = volumeMap.get(date)!;
+      const volume = parseFloat(v.volume);
+      if (v.type === TransactionType.DEPOSIT) {
+        dayVolumes.deposit += volume;
+      } else if (v.type === TransactionType.WITHDRAW) {
+        dayVolumes.withdrawal += volume;
+      }
+    });
+
+    return allDays.map((day) => {
+      const dateStr = format(day, 'yyyy-MM-dd');
+      const dayVolumes = volumeMap.get(dateStr) || {
+        deposit: 0,
+        withdrawal: 0,
+      };
+      return {
+        date: dateStr,
+        depositVolume: dayVolumes.deposit,
+        withdrawalVolume: dayVolumes.withdrawal,
+      };
+    });
+  }
+
+  async exportMetrics(query: MetricsQueryDto = {}): Promise<string> {
+    const metrics = await this.getPlatformMetrics(query);
+    const { dailySignups, dailyTransactionVolumes } = metrics;
+
+    // Combine data for CSV
+    const csvData = dailySignups.map((signup) => {
+      const volume = dailyTransactionVolumes.find(
+        (v) => v.date === signup.date,
+      );
+      return {
+        date: signup.date,
+        signups: signup.count,
+        depositVolume: volume?.depositVolume || 0,
+        withdrawalVolume: volume?.withdrawalVolume || 0,
+      };
+    });
+
+    // Generate CSV
+    const csvString = csv.writeToString(csvData, { headers: true });
+    return csvString;
+  }
+
   async getUsers(query: UserQueryDto) {
-    const { page = 1, limit = 10, search, isVerified, role, startDate, endDate } = query;
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      isVerified,
+      role,
+      startDate,
+      endDate,
+    } = query;
     const skip = (page - 1) * limit;
 
     const queryBuilder = this.userRepository.createQueryBuilder('user');
@@ -134,15 +310,12 @@ export class AdminService {
       queryBuilder.andWhere('user.createdAt <= :endDate', { endDate });
     }
 
-    queryBuilder
-      .skip(skip)
-      .take(limit)
-      .orderBy('user.createdAt', 'DESC');
+    queryBuilder.skip(skip).take(limit).orderBy('user.createdAt', 'DESC');
 
     const [users, total] = await queryBuilder.getManyAndCount();
 
     return {
-      data: users.map(user => ({
+      data: users.map((user) => ({
         id: user.id,
         email: user.email,
         firstName: user.firstName,
@@ -175,8 +348,21 @@ export class AdminService {
     return user;
   }
 
-  async updateUserRole(id: string, updateDto: UpdateUserRoleDto, adminId: string) {
+  async updateUserRole(
+    id: string,
+    updateDto: UpdateUserRoleDto,
+    adminId: string,
+  ) {
     const user = await this.getUserById(id);
+    const touchesAdminTier = [user.role, updateDto.role].some(
+      (role) => role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN,
+    );
+
+    if (touchesAdminTier) {
+      throw new ForbiddenException(
+        'Admin-tier role assignments must be managed through SUPER_ADMIN controls',
+      );
+    }
 
     if (user.role === updateDto.role) {
       return user;
@@ -194,7 +380,7 @@ export class AdminService {
         oldRole,
         newRole: user.role,
       },
-      true
+      true,
     );
 
     return user;
@@ -214,7 +400,7 @@ export class AdminService {
       adminId,
       AuditAction.USER_SUSPENDED,
       { targetUserId: id },
-      true
+      true,
     );
 
     return { message: 'User suspended successfully' };
@@ -234,17 +420,27 @@ export class AdminService {
       adminId,
       AuditAction.USER_UNSUSPENDED,
       { targetUserId: id },
-      true
+      true,
     );
 
     return { message: 'User unsuspended successfully' };
   }
 
   async getTransactions(query: AdminTransactionQueryDto) {
-    const { page = 1, limit = 10, type, status, currency, userId, startDate, endDate } = query;
+    const {
+      page = 1,
+      limit = 10,
+      type,
+      status,
+      currency,
+      userId,
+      startDate,
+      endDate,
+    } = query;
     const skip = (page - 1) * limit;
 
-    const queryBuilder = this.transactionRepository.createQueryBuilder('transaction');
+    const queryBuilder =
+      this.transactionRepository.createQueryBuilder('transaction');
 
     if (type) {
       queryBuilder.andWhere('transaction.type = :type', { type });
@@ -263,7 +459,9 @@ export class AdminService {
     }
 
     if (startDate) {
-      queryBuilder.andWhere('transaction.createdAt >= :startDate', { startDate });
+      queryBuilder.andWhere('transaction.createdAt >= :startDate', {
+        startDate,
+      });
     }
 
     if (endDate) {
@@ -287,5 +485,61 @@ export class AdminService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  /**
+   * Override transaction status (admin-only)
+   * Allows admin to set transaction status to SUCCESS, FAILED, or CANCELLED
+   * Requires a reason for audit compliance
+   */
+  async overrideTransactionStatus(
+    transactionId: string,
+    overrideDto: OverrideTransactionDto,
+    adminId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<Transaction> {
+    const { status, reason } = overrideDto;
+
+    // Admin cannot override to PENDING - only SUCCESS, FAILED, or CANCELLED
+    if (status === TransactionStatus.PENDING) {
+      throw new BadRequestException(
+        'Admin override cannot set status to PENDING. Only SUCCESS, FAILED, or CANCELLED are allowed.',
+      );
+    }
+
+    const transaction = await this.transactionRepository.findOne({
+      where: { id: transactionId },
+    });
+
+    if (!transaction) {
+      throw new NotFoundException('Transaction not found');
+    }
+
+    const oldStatus = transaction.status;
+    transaction.status = status;
+    transaction.failureReason = reason;
+    await this.transactionRepository.save(transaction);
+
+    await this.auditLogsService.logTransactionEvent(
+      transaction.userId,
+      AuditAction.TRANSACTION_STATUS_UPDATED,
+      transaction.id,
+      {
+        oldStatus,
+        newStatus: status,
+        updatedBy: adminId,
+        reason,
+        ip: ipAddress,
+        device: userAgent,
+        adminOverride: true,
+      },
+    );
+
+    this.logger.log(
+      `Transaction ${transactionId} status overridden by admin ${adminId}: ${oldStatus} -> ${status}. Reason: ${reason}`,
+    );
+
+    return transaction;
   }
 }

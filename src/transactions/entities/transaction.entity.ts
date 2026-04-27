@@ -1,5 +1,6 @@
 import {
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
@@ -12,6 +13,7 @@ import { User } from '../../users/user.entity';
 export enum TransactionType {
   DEPOSIT = 'DEPOSIT',
   WITHDRAW = 'WITHDRAW',
+  SWAP = 'SWAP',
 }
 
 export enum TransactionStatus {
@@ -21,6 +23,10 @@ export enum TransactionStatus {
   CANCELLED = 'CANCELLED',
 }
 
+// Optimizes scheduled-job scans of pending transactions ordered by creation time.
+@Index(['status', 'createdAt'])
+// Optimizes user transaction list filtering by status.
+@Index(['userId', 'status'])
 @Entity('transactions')
 export class Transaction {
   @PrimaryGeneratedColumn('uuid')
@@ -56,20 +62,35 @@ export class Transaction {
   status: TransactionStatus;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  txHash: string;
+  txHash: string | null;
 
   @Column({ type: 'text', nullable: true })
-  failureReason: string;
+  failureReason: string | null;
 
   @Column({ type: 'decimal', precision: 20, scale: 8, nullable: true })
-  feeAmount: string;
+  feeAmount: string | null;
 
   @Column({ type: 'varchar', length: 10, nullable: true })
-  feeCurrency: string;
+  feeCurrency: string | null;
+
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  toCurrency: string | null;
+
+  @Column({ type: 'decimal', precision: 20, scale: 8, nullable: true })
+  toAmount: string | null;
 
   @CreateDateColumn()
   createdAt: Date;
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  @Column({ type: 'timestamp', nullable: true })
+  processingLockedAt: Date | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  processingLockedBy: string | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  metadata: any;
 }

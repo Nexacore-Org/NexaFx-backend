@@ -1,4 +1,12 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, Request, Req } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  HttpCode,
+  HttpStatus,
+  Request,
+  Req,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { Public } from './decorators/public.decorator';
@@ -93,7 +101,10 @@ export class AuthController {
       },
     },
   })
-  @ApiResponse({ status: 401, description: 'Invalid or expired 2FA token/code' })
+  @ApiResponse({
+    status: 401,
+    description: 'Invalid or expired 2FA token/code',
+  })
   async verifyTwoFactor(@Body() verifyDto: VerifyTwoFactorDto) {
     return this.authService.verifyTwoFactor(verifyDto);
   }
@@ -259,7 +270,7 @@ export class AuthController {
     const tokenId = req.user.jti; // JWT ID
     const ipAddress = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('User-Agent');
-    
+
     return this.authService.logout(userId, tokenId, ipAddress, userAgent);
   }
 
@@ -281,7 +292,7 @@ export class AuthController {
     const userId = req.user.userId;
     const ipAddress = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('User-Agent');
-    
+
     return this.authService.logoutAllDevices(userId, ipAddress, userAgent);
   }
 }

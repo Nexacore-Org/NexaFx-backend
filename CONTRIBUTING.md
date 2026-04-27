@@ -83,6 +83,28 @@ type(scope): description
 
 ---
 
+## 🔐 Security Scanning and TruffleHog False Positives
+
+Pull requests are blocked when security checks fail. This includes TruffleHog secret scanning, npm audit, and CodeQL checks.
+
+If TruffleHog flags a potential secret:
+
+1. Treat it as real first.
+   - If it might be a real credential, revoke/rotate it immediately.
+   - Remove the exposed value from git history when required.
+
+2. Confirm whether it is a false positive.
+   - Template placeholders in `.env.example` are allowlisted in `.trufflehog.yml`.
+   - For non-sensitive test data in other files, add a short justification in your PR.
+
+3. Resolve false positives in a traceable way.
+   - Prefer using a line-level `trufflehog:ignore` annotation where supported.
+   - If a path-level allowlist is necessary, update `.trufflehog.yml` with the smallest possible scope and include a reason in the PR description.
+
+4. Re-run checks and verify they pass before requesting review.
+
+---
+
 ## 📥 Submitting a Pull Request
 
 1. Push your changes to your forked repo:

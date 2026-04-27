@@ -3,21 +3,25 @@ import {
   BadRequestException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ThrottlerException } from '@nestjs/throttler';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan, IsNull } from 'typeorm';
 import * as crypto from 'crypto';
 import { Otp, OtpType } from './otp.entity';
 import { User } from '../users/user.entity';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class OtpsService {
   private readonly OTP_LENGTH = 6;
+  private readonly MAX_FAILED_ATTEMPTS = 5;
 
   constructor(
     @InjectRepository(Otp)
     private readonly otpRepository: Repository<Otp>,
     private readonly configService: ConfigService,
+    private readonly usersService: UsersService,
   ) {}
 
   async generateOtp(user: User, type: OtpType): Promise<string> {
@@ -51,6 +55,16 @@ export class OtpsService {
       throw new BadRequestException('Invalid user');
     }
 
+    const lockedUntil = this.getUserLockedUntil(user);
+    if (lockedUntil && lockedUntil > new Date()) {
+      const remainingMinutes = Math.ceil(
+        (lockedUntil.getTime() - Date.now()) / 60000,
+      );
+      throw new ThrottlerException(
+        `Too many failed attempts. Please try again in ${remainingMinutes} minute(s)`,
+      );
+    }
+
     if (!code || code.length !== this.OTP_LENGTH) {
       throw new UnauthorizedException('Invalid OTP format');
     }
@@ -75,6 +89,7 @@ export class OtpsService {
     const isValid = this.timingSafeEqualHex(otp.codeHash, expectedHash);
 
     if (!isValid) {
+      await this.handleFailedOtpAttempt(user);
       throw new UnauthorizedException('Invalid OTP code');
     }
 
@@ -108,6 +123,37 @@ export class OtpsService {
       .execute();
 
     return result.affected || 0;
+  }
+
+  private getUserLockedUntil(user: User): Date | null {
+    if (!user.lockedUntil) return null;
+    if (new Date() >= user.lockedUntil) return null;
+    return user.lockedUntil;
+  }
+
+  private async handleFailedOtpAttempt(user: User): Promise<void> {
+    const lockoutMinutes = this.getLockoutDurationMinutes();
+    const newAttempts = (user.failedLoginAttempts || 0) + 1;
+
+    if (newAttempts >= this.MAX_FAILED_ATTEMPTS) {
+      const lockedUntil = new Date();
+      lockedUntil.setMinutes(lockedUntil.getMinutes() + lockoutMinutes);
+      await this.usersService.updateByUserId(user.id, {
+        failedLoginAttempts: newAttempts,
+        lockedUntil,
+      });
+    } else {
+      await this.usersService.updateByUserId(user.id, {
+        failedLoginAttempts: newAttempts,
+      });
+    }
+  }
+
+  private getLockoutDurationMinutes(): number {
+    const v = this.configService.get<string>('AUTH_LOCKOUT_DURATION_MINUTES');
+    const parsed = v ? Number(v) : 15;
+    if (!Number.isFinite(parsed) || parsed <= 0) return 15;
+    return parsed;
   }
 
   private generateSecureOtp(): string {

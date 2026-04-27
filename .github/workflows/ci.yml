@@ -1,0 +1,87 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    # Required for tests needing a real DB connection
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: nexafx_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type Check
+        run: npx tsc --noEmit
+
+      - name: Run Unit Tests
+        env:
+          NODE_ENV: test
+          # Use GitHub Secrets if present, otherwise fallback to dummy values for CI environment
+          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://postgres:password@localhost:5432/nexafx_test' }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET || 'test_jwt_secret_must_be_32_chars_long' }}
+          # Mocking external service requirements to ensure CI doesn't crash
+          OTP_SECRET: 'dummy_otp_secret_32_chars_long_123'
+          STELLAR_NETWORK: 'TESTNET'
+          STELLAR_HORIZON_URL: 'https://horizon-testnet.stellar.org'
+          STELLAR_BASE_FEE: '100'
+          STELLAR_HOT_WALLET_SECRET: 'SC_DUMMY_SECRET'
+          WALLET_ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
+          MAILGUN_API_KEY: 'dummy_mailgun_key'
+          MAILGUN_DOMAIN: 'test.nexafx.com'
+          MAILGUN_FROM_EMAIL: 'test@nexafx.com'
+          FRONTEND_URL: 'http://localhost:3001'
+        run: npm run test -- --forceExit
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload Coverage Report
+        uses: actions/upload-artifact@v4
+        if: always() # Uploads even if previous steps fail
+        with:
+          name: coverage-report-node-${{ matrix.node-version }}
+          path: coverage/

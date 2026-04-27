@@ -14,6 +14,14 @@ import {
   ExchangeRatesCache,
   ExchangeRateCacheEntry,
 } from './cache/exchange-rates.cache';
+import { Subject } from 'rxjs';
+
+export interface RateUpdateEvent {
+  from: string;
+  to: string;
+  rate: number;
+  fetchedAt: string;
+}
 
 export interface ExchangeRateResult {
   from: string;
@@ -33,6 +41,8 @@ export interface ExchangeRateConversionResult {
 @Injectable()
 export class ExchangeRatesService {
   private readonly logger = new Logger(ExchangeRatesService.name);
+  private readonly rateUpdatesSubject = new Subject<RateUpdateEvent>();
+  readonly rateUpdates$ = this.rateUpdatesSubject.asObservable();
 
   constructor(
     private readonly currenciesService: CurrenciesService,
@@ -57,6 +67,7 @@ export class ExchangeRatesService {
         rate: 1,
         fetchedAt: new Date().toISOString(),
       });
+      this.notifyRateUpdate(fromCode, toCode, entry);
       return this.toRateResult(fromCode, toCode, entry);
     }
 
@@ -69,6 +80,7 @@ export class ExchangeRatesService {
         rate: providerRate.rate,
         fetchedAt: providerRate.fetchedAt,
       });
+      this.notifyRateUpdate(fromCode, toCode, entry);
       return this.toRateResult(fromCode, toCode, entry);
     } catch (error) {
       this.logger.error(
@@ -104,7 +116,7 @@ export class ExchangeRatesService {
     };
   }
 
-  private async validateCurrencyPair(from: string, to: string): Promise<void> {
+  async validateCurrencyPair(from: string, to: string): Promise<void> {
     try {
       await Promise.all([
         this.currenciesService.validateCurrency(from),
@@ -200,5 +212,18 @@ export class ExchangeRatesService {
     )}`;
 
     return Number(resultStr);
+  }
+
+  private notifyRateUpdate(
+    from: string,
+    to: string,
+    entry: ExchangeRateCacheEntry,
+  ): void {
+    this.rateUpdatesSubject.next({
+      from,
+      to,
+      rate: entry.rate,
+      fetchedAt: entry.fetchedAt,
+    });
   }
 }

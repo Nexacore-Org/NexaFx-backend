@@ -35,7 +35,9 @@ describe('ExchangeRatesService', () => {
 
   beforeEach(async () => {
     jest.useFakeTimers();
-    const cache = new ExchangeRatesCache(mockConfigService as ConfigService);
+    const cache = new ExchangeRatesCache(
+      mockConfigService as unknown as ConfigService,
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -126,6 +128,60 @@ describe('ExchangeRatesService', () => {
       await expect(service.getRate('NGN', 'USD')).rejects.toBeInstanceOf(
         BadGatewayException,
       );
+    });
+
+    it('should emit rate update when cache is set', async () => {
+      mockCurrenciesService.validateCurrency.mockResolvedValue(undefined);
+      const fetchedAt = new Date().toISOString();
+      mockProviderClient.fetchRate.mockResolvedValue({
+        rate: 3,
+        fetchedAt,
+      });
+
+      const updates: any[] = [];
+      service.rateUpdates$.subscribe((u) => updates.push(u));
+
+      await service.getRate('BTC', 'USD');
+
+      expect(updates.length).toBe(1);
+      expect(updates[0]).toEqual({
+        from: 'BTC',
+        to: 'USD',
+        rate: 3,
+        fetchedAt,
+      });
+    });
+
+    it('should emit rate update for same-currency pair (from === to)', async () => {
+      mockCurrenciesService.validateCurrency.mockResolvedValue(undefined);
+
+      const updates: any[] = [];
+      service.rateUpdates$.subscribe((u) => updates.push(u));
+
+      await service.getRate('USD', 'USD');
+
+      expect(updates.length).toBe(1);
+      expect(updates[0]).toMatchObject({
+        from: 'USD',
+        to: 'USD',
+        rate: 1,
+      });
+    });
+
+    it('should NOT emit rate update on cache hit', async () => {
+      mockCurrenciesService.validateCurrency.mockResolvedValue(undefined);
+      mockProviderClient.fetchRate.mockResolvedValue({
+        rate: 1.2,
+        fetchedAt: new Date().toISOString(),
+      });
+
+      const updates: any[] = [];
+      service.rateUpdates$.subscribe((u) => updates.push(u));
+
+      await service.getRate('EUR', 'USD');
+      await service.getRate('EUR', 'USD'); // cache hit
+
+      expect(updates.length).toBe(1);
     });
   });
 

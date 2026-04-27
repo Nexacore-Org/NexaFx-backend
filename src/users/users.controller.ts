@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Post,
   Patch,
   Delete,
   Body,
@@ -21,6 +22,7 @@ import {
   ProfileResponseDto,
   WalletBalancesResponseDto,
   WalletPortfolioResponseDto,
+  DeviceTokenDto,
 } from './dto';
 
 @ApiTags('Users')
@@ -98,6 +100,38 @@ export class UsersController {
     @Body() updateProfileDto: UpdateProfileDto,
   ): Promise<ProfileResponseDto> {
     return this.usersService.updateProfile(req.user.userId, updateProfileDto);
+  }
+
+  @Post('device-token')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Register a device token for push notifications' })
+  @ApiBody({ type: DeviceTokenDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Device token registered successfully',
+  })
+  async registerDeviceToken(
+    @Request() req: { user: { userId: string } },
+    @Body() body: DeviceTokenDto,
+  ): Promise<{ message: string }> {
+    await this.usersService.registerDeviceToken(req.user.userId, body.token);
+    return { message: 'Device token registered successfully' };
+  }
+
+  @Delete('device-token')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remove a device token for push notifications' })
+  @ApiBody({ type: DeviceTokenDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Device token removed successfully',
+  })
+  async removeDeviceToken(
+    @Request() req: { user: { userId: string } },
+    @Body() body: DeviceTokenDto,
+  ): Promise<{ message: string }> {
+    await this.usersService.removeDeviceToken(req.user.userId, body.token);
+    return { message: 'Device token removed successfully' };
   }
 
   @Delete('profile')

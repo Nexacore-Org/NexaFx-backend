@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { Repository } from 'typeorm';
+import { Repository, LessThan, Not, IsNull } from 'typeorm';
+import * as os from 'os';
 import {
   Transaction,
   TransactionStatus,
@@ -10,6 +11,7 @@ import { TransactionsService } from '../transactions/services/transaction.servic
 import { StellarService } from '../blockchain/stellar/stellar.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
+import { CurrencyPairService } from '../currencies/services/currency-pair.service';
 import {
   NotificationType,
   NotificationStatus,
@@ -17,10 +19,13 @@ import {
 } from '../notifications/entities/notification.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { RateAlertsService } from '../rate-alerts/rate-alerts.service';
+import { WebhookService } from '../webhooks/services/webhook.service';
 
 @Injectable()
 export class ScheduledJobsService {
   private readonly logger = new Logger(ScheduledJobsService.name);
+  private readonly LOCK_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+  private readonly instanceId: string;
   private processingTransactionIds = new Set<string>();
 
   constructor(
@@ -33,7 +38,49 @@ export class ScheduledJobsService {
     private readonly notificationsService: NotificationsService,
     private readonly usersService: UsersService,
     private readonly rateAlertsService: RateAlertsService,
-  ) {}
+    private readonly webhookService: WebhookService,
+    private readonly currencyPairService: CurrencyPairService,
+  ) {
+    // Truncate hostname to 255 characters to match DB column constraint
+    this.instanceId = os.hostname().substring(0, 255);
+  }
+
+  /**
+   * Auto-resume suspended currency pairs every minute
+   */
+  @Cron(CronExpression.EVERY_MINUTE)
+  async autoResumePairs(): Promise<void> {
+    try {
+      const resumedCount = await this.currencyPairService.autoResumePairs();
+      if (resumedCount > 0) {
+        this.logger.log(`[Scheduled Job] Auto-resumed ${resumedCount} currency pairs`);
+      }
+    } catch (error) {
+      this.logger.error('[Scheduled Job] Auto-resume pairs failed:', error);
+    }
+  }
+
+  /**
+   * Sync wallet balance snapshots every 10 minutes
+   * Updates the cached balance snapshot from live Stellar data
+   */
+  @Cron('0 */10 * * * *')
+  async syncWalletBalances(): Promise<void> {
+    this.logger.log('[Scheduled Job] Starting wallet balance snapshot sync');
+
+    try {
+      const result = await this.usersService.syncWalletBalanceSnapshots();
+      this.logger.log(
+        `[Scheduled Job] Wallet balance sync completed: ${result.updated} synced, ${result.failed} failed out of ${result.processed} processed`,
+      );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `[Scheduled Job] Wallet balance sync failed: ${errorMessage}`,
+      );
+    }
+  }
 
   /**
    * Reconcile pending transactions every 2 minutes
@@ -46,8 +93,8 @@ export class ScheduledJobsService {
     );
 
     try {
-      // Fetch all pending transactions
-      const pendingTransactions = await this.getPendingTransactions();
+      // Atomically claim pending transactions for this instance
+      const pendingTransactions = await this.claimPendingTransactions();
 
       if (pendingTransactions.length === 0) {
         this.logger.log('[Scheduled Job] No pending transactions to reconcile');
@@ -55,21 +102,12 @@ export class ScheduledJobsService {
       }
 
       this.logger.log(
-        `[Scheduled Job] Found ${pendingTransactions.length} pending transactions`,
+        `[Scheduled Job] Claimed ${pendingTransactions.length} pending transactions`,
       );
 
-      // Process each transaction sequentially to avoid race conditions
+      // Process each transaction sequentially
       for (const transaction of pendingTransactions) {
-        // Skip if already being processed
-        if (this.processingTransactionIds.has(transaction.id)) {
-          this.logger.debug(
-            `[Scheduled Job] Skipping transaction ${transaction.id} - already being processed`,
-          );
-          continue;
-        }
-
         try {
-          this.processingTransactionIds.add(transaction.id);
           await this.reconcileTransaction(transaction);
         } catch (error) {
           this.logger.error(
@@ -77,7 +115,8 @@ export class ScheduledJobsService {
             error,
           );
         } finally {
-          this.processingTransactionIds.delete(transaction.id);
+          // Clear the lock after processing (success or failure)
+          await this.clearTransactionLock(transaction.id);
         }
       }
 
@@ -125,12 +164,13 @@ export class ScheduledJobsService {
       );
 
       for (const transaction of recentFailedTxs) {
-        if (this.processingTransactionIds.has(transaction.id)) {
+        // Try to claim the transaction for retry
+        const claimed = await this.claimTransactionForRetry(transaction.id);
+        if (!claimed) {
           continue;
         }
 
         try {
-          this.processingTransactionIds.add(transaction.id);
           await this.retryTransaction(transaction);
         } catch (error) {
           this.logger.error(
@@ -138,7 +178,8 @@ export class ScheduledJobsService {
             error,
           );
         } finally {
-          this.processingTransactionIds.delete(transaction.id);
+          // Clear the lock after processing (success or failure)
+          await this.clearTransactionLock(transaction.id);
         }
       }
 
@@ -163,6 +204,11 @@ export class ScheduledJobsService {
       this.logger.log(
         `[Scheduled Job] Rate alerts checked=${result.checked}, triggered=${result.triggered}, reactivated=${result.reactivated}`,
       );
+
+      // Dispatch webhooks for triggered alerts if needed
+      // result.triggeredAlerts.forEach(alert => {
+      //   this.webhookService.dispatch('rate_alert.triggered', alert, alert.userId);
+      // });
     } catch (error) {
       this.logger.error(
         '[Scheduled Job] Fatal error while checking rate alerts:',
@@ -253,6 +299,18 @@ export class ScheduledJobsService {
   }
 
   /**
+   * Process failed webhook deliveries every minute
+   */
+  @Cron(CronExpression.EVERY_MINUTE)
+  async processWebhookRetries(): Promise<void> {
+    try {
+      await this.webhookService.processRetries();
+    } catch (error) {
+      this.logger.error('[Scheduled Job] Webhook retry process failed:', error);
+    }
+  }
+
+  /**
    * Helper method to reconcile a single transaction
    */
   private async reconcileTransaction(transaction: Transaction): Promise<void> {
@@ -337,9 +395,14 @@ export class ScheduledJobsService {
           ? `Your deposit of ${transaction.amount} ${transaction.currency} has been confirmed`
           : `Your withdrawal of ${transaction.amount} ${transaction.currency} has been confirmed`;
 
+      const notificationType =
+        transaction.type === TransactionType.DEPOSIT
+          ? NotificationType.DEPOSIT_CONFIRMED
+          : NotificationType.WITHDRAWAL_PROCESSED;
+
       await this.notificationsService.create({
         userId: transaction.userId,
-        type: NotificationType.TRANSACTION,
+        type: notificationType,
         title: `${transaction.type} Confirmed`,
         message: notificationMessage,
         relatedId: transaction.id,
@@ -361,6 +424,10 @@ export class ScheduledJobsService {
         error,
       );
     }
+
+    // Dispatch Webhook
+    this.webhookService.dispatch('transaction.completed', transaction, transaction.userId)
+      .catch(e => this.logger.error(`Webhook dispatch failed: ${e.message}`));
   }
 
   /**
@@ -408,7 +475,7 @@ export class ScheduledJobsService {
 
       await this.notificationsService.create({
         userId: transaction.userId,
-        type: NotificationType.TRANSACTION,
+        type: NotificationType.TRANSACTION_FAILED,
         title: `${transaction.type} Failed`,
         message: notificationMessage,
         relatedId: transaction.id,
@@ -430,6 +497,10 @@ export class ScheduledJobsService {
         error,
       );
     }
+
+    // Dispatch Webhook
+    this.webhookService.dispatch('transaction.failed', transaction, transaction.userId)
+      .catch(e => this.logger.error(`Webhook dispatch failed: ${e.message}`));
   }
 
   /**
@@ -439,6 +510,11 @@ export class ScheduledJobsService {
     this.logger.log(
       `[Retry] Attempting to re-verify failed transaction ${transaction.id}`,
     );
+
+    if (!transaction.txHash) {
+      this.logger.warn(`[Retry] Cannot retry transaction ${transaction.id} because it has no hash`);
+      return;
+    }
 
     try {
       const verificationResult = await this.stellarService.verifyTransaction(
@@ -465,14 +541,87 @@ export class ScheduledJobsService {
   }
 
   /**
-   * Get all pending transactions
+   * Atomically claim pending transactions for processing by this instance.
+   * Uses DB-level UPDATE with WHERE clause to prevent race conditions.
+   * Only claims transactions that are:
+   * - Status is PENDING
+   * - Not currently locked (processingLockedAt IS NULL)
+   * - Or lock has expired (processingLockedAt < expiry timestamp)
    */
-  private async getPendingTransactions(): Promise<Transaction[]> {
+  private async claimPendingTransactions(): Promise<Transaction[]> {
+    const expiryTimestamp = new Date(Date.now() - this.LOCK_EXPIRY_MS);
+
+    // Atomic UPDATE to claim transactions
+    const updateResult = await this.transactionRepository
+      .createQueryBuilder()
+      .update(Transaction)
+      .set({
+        processingLockedAt: new Date(),
+        processingLockedBy: this.instanceId,
+      })
+      .where(
+        'status = :status AND ("processingLockedAt" IS NULL OR "processingLockedAt" < :expiry)',
+        {
+          status: TransactionStatus.PENDING,
+          expiry: expiryTimestamp,
+        },
+      )
+      .execute();
+
+    const claimedCount = updateResult.affected ?? 0;
+
+    if (claimedCount === 0) {
+      return [];
+    }
+
+    // Fetch only transactions claimed by this instance
     return this.transactionRepository.find({
-      where: { status: TransactionStatus.PENDING },
+      where: {
+        status: TransactionStatus.PENDING,
+        processingLockedBy: this.instanceId,
+      },
       relations: ['user'],
       order: { createdAt: 'ASC' },
     });
+  }
+
+  /**
+   * Clear the processing lock for a transaction after processing.
+   */
+  private async clearTransactionLock(transactionId: string): Promise<void> {
+    await this.transactionRepository.update(transactionId, {
+      processingLockedAt: null,
+      processingLockedBy: null,
+    });
+  }
+
+  /**
+   * Atomically claim a single transaction for retry by this instance.
+   * Returns true if the transaction was successfully claimed.
+   */
+  private async claimTransactionForRetry(
+    transactionId: string,
+  ): Promise<boolean> {
+    const expiryTimestamp = new Date(Date.now() - this.LOCK_EXPIRY_MS);
+
+    const updateResult = await this.transactionRepository
+      .createQueryBuilder()
+      .update(Transaction)
+      .set({
+        processingLockedAt: new Date(),
+        processingLockedBy: this.instanceId,
+      })
+      .where(
+        'id = :id AND status = :status AND ("processingLockedAt" IS NULL OR "processingLockedAt" < :expiry)',
+        {
+          id: transactionId,
+          status: TransactionStatus.FAILED,
+          expiry: expiryTimestamp,
+        },
+      )
+      .execute();
+
+    return (updateResult.affected ?? 0) > 0;
   }
 
   /**

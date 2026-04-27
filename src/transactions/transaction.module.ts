@@ -9,6 +9,9 @@ import { ExchangeRatesModule } from '../exchange-rates/exchange-rates.module';
 import { BlockchainModule } from '../blockchain/blockchain.module';
 import { UsersModule } from '../users/users.module';
 import { ReferralsModule } from '../referrals/referrals.module';
+import { FeesModule } from '../fees/fees.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { BeneficiariesModule } from '../beneficiaries/beneficiaries.module';
 
 @Module({
   imports: [
@@ -18,6 +21,9 @@ import { ReferralsModule } from '../referrals/referrals.module';
     BlockchainModule,
     UsersModule,
     ReferralsModule,
+    FeesModule,
+    NotificationsModule,
+    BeneficiariesModule,
   ],
   controllers: [TransactionsController],
   providers: [TransactionsService, TransactionVerificationService],

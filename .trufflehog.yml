@@ -1,0 +1,4 @@
+allowlist:
+  description: Ignore placeholder values in environment template file.
+  paths:
+    - '^\.env\.example$'

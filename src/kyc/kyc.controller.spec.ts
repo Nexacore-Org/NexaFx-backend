@@ -87,7 +87,7 @@ describe('KycController', () => {
       { documentFrontUrl?: string; selfieUrl?: string },
     ][];
     const payload = calledArgs[0][1];
-    expect(payload.documentFrontUrl).toContain('uploads/kyc/user-123/v1');
-    expect(payload.selfieUrl).toContain('uploads/kyc/user-123/v1');
+    expect(payload.documentFrontUrl.replace(/\\/g, '/')).toContain('uploads/kyc/user-123/v1');
+    expect(payload.selfieUrl.replace(/\\/g, '/')).toContain('uploads/kyc/user-123/v1');
   });
 });

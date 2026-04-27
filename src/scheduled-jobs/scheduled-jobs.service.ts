@@ -511,6 +511,11 @@ export class ScheduledJobsService {
       `[Retry] Attempting to re-verify failed transaction ${transaction.id}`,
     );
 
+    if (!transaction.txHash) {
+      this.logger.warn(`[Retry] Cannot retry transaction ${transaction.id} because it has no hash`);
+      return;
+    }
+
     try {
       const verificationResult = await this.stellarService.verifyTransaction(
         transaction.txHash,

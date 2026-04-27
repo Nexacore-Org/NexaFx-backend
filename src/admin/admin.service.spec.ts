@@ -31,6 +31,16 @@ describe('AdminService', () => {
     currency: 'USD',
     status: TransactionStatus.SUCCESS,
     createdAt: new Date(),
+    userId: 'user-123',
+    txHash: null,
+    failureReason: null,
+    feeAmount: null,
+    feeCurrency: null,
+    toCurrency: null,
+    toAmount: null,
+    metadata: null,
+    processingLockedAt: null,
+    processingLockedBy: null,
   } as Transaction;
 
   beforeEach(async () => {
@@ -65,6 +75,8 @@ describe('AdminService', () => {
           useValue: {
             count: jest.fn(),
             find: jest.fn(),
+            findOne: jest.fn(),
+            save: jest.fn(),
             createQueryBuilder: jest.fn(() => ({
               select: jest.fn().mockReturnThis(),
               addSelect: jest.fn().mockReturnThis(),
@@ -141,7 +153,6 @@ describe('AdminService', () => {
       expect(result.meta.total).toBe(1);
     });
   });
-});
 
   it('should be defined', () => {
     expect(service).toBeDefined();
@@ -275,9 +286,11 @@ describe('AdminService', () => {
       amount: '100.00',
       currency: 'USD',
       status: TransactionStatus.PENDING,
-      failureReason: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      toCurrency: null,
+      toAmount: null,
+      metadata: null,
+      processingLockedAt: null,
+      processingLockedBy: null,
     } as Transaction;
 
     beforeEach(() => {

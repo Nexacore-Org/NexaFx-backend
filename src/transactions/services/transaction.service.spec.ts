@@ -20,6 +20,12 @@ import {
   FeeTransactionType,
   FeeType,
 } from '../../fees/entities/fee-config.entity';
+import { CurrencyPairService } from '../../currencies/services/currency-pair.service';
+import { FirebaseService } from '../../firebase/firebase.service';
+import { WebhookService } from '../../webhooks/services/webhook.service';
+import { TransactionType } from '../entities/transaction.entity';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { BeneficiariesService } from '../../beneficiaries/beneficiaries.service';
 
 describe('TransactionsService fee integration behavior', () => {
   let service: TransactionsService;
@@ -33,6 +39,12 @@ describe('TransactionsService fee integration behavior', () => {
       id: payload.id ?? 'tx-123',
       ...payload,
     })),
+    findOne: jest.fn(),
+  };
+
+  const currencyPairService = {
+    validatePair: jest.fn(async () => ({ spreadPercent: 0.5 })),
+    findByCodes: jest.fn(async () => ({ spreadPercent: 0.5 })),
   };
 
   const currenciesService = {
@@ -47,6 +59,14 @@ describe('TransactionsService fee integration behavior', () => {
     createTransaction: jest.fn(async () => ({})),
     signTransaction: jest.fn(async () => ({})),
     submitTransaction: jest.fn(async () => ({ hash: 'stellar-hash' })),
+    findBestPath: jest.fn(async () => [
+      {
+        source_amount: '100',
+        destination_amount: '100',
+        path: [],
+      },
+    ]),
+    buildPathPaymentOp: jest.fn(() => ({})),
   };
 
   const usersService = {
@@ -79,8 +99,22 @@ describe('TransactionsService fee integration behavior', () => {
   };
 
   const configService = {
-    get: jest.fn(() => 'S_TEST_HOT_WALLET_SECRET'),
+    get: jest.fn((key: string) => {
+      if (key === 'SWAP_SLIPPAGE_PERCENT') return '0.005';
+      return 'S_TEST_HOT_WALLET_SECRET';
+    }),
   };
+
+  const firebaseService = {};
+  const webhookService = {
+    dispatch: jest.fn(async () => undefined),
+  };
+
+  const notificationsService = {
+    create: jest.fn(async () => undefined),
+  };
+
+  const beneficiariesService = {};
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -93,6 +127,7 @@ describe('TransactionsService fee integration behavior', () => {
           useValue: transactionRepository,
         },
         { provide: CurrenciesService, useValue: currenciesService },
+        { provide: CurrencyPairService, useValue: currencyPairService },
         { provide: ExchangeRatesService, useValue: exchangeRatesService },
         { provide: StellarService, useValue: stellarService },
         { provide: ConfigService, useValue: configService },
@@ -100,6 +135,10 @@ describe('TransactionsService fee integration behavior', () => {
         { provide: UsersService, useValue: usersService },
         { provide: AuditLogsService, useValue: auditLogsService },
         { provide: ReferralsService, useValue: referralsService },
+        { provide: FirebaseService, useValue: firebaseService },
+        { provide: WebhookService, useValue: webhookService },
+        { provide: NotificationsService, useValue: notificationsService },
+        { provide: BeneficiariesService, useValue: beneficiariesService },
       ],
     }).compile();
 

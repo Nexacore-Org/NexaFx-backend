@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { Repository, LessThan, Not, IsNull } from 'typeorm';
+import { Repository } from 'typeorm';
 import * as os from 'os';
 import {
   Transaction,
@@ -20,6 +20,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { RateAlertsService } from '../rate-alerts/rate-alerts.service';
 import { WebhookService } from '../webhooks/services/webhook.service';
 import { IdempotencyRecord } from '../common/entities/idempotency-record.entity';
+import { DataRequest } from '../users/entities/data-request.entity';
+import { DataSource } from 'typeorm';
 
 @Injectable()
 export class ScheduledJobsService {
@@ -33,14 +35,17 @@ export class ScheduledJobsService {
     private readonly transactionRepository: Repository<Transaction>,
     @InjectRepository(Notification)
     private readonly notificationRepository: Repository<Notification>,
+    @InjectRepository(DataRequest)
+    private readonly dataRequestRepository: Repository<DataRequest>,
+    @InjectRepository(IdempotencyRecord)
+    private readonly idempotencyRepository: Repository<IdempotencyRecord>,
     private readonly transactionsService: TransactionsService,
     private readonly stellarService: StellarService,
     private readonly notificationsService: NotificationsService,
     private readonly usersService: UsersService,
     private readonly rateAlertsService: RateAlertsService,
     private readonly webhookService: WebhookService,
-  @InjectRepository(IdempotencyRecord)
-  private readonly idempotencyRepository: Repository<IdempotencyRecord>,
+    private readonly dataSource: DataSource,
   ) {
     // Truncate hostname to 255 characters to match DB column constraint
     this.instanceId = os.hostname().substring(0, 255);
@@ -643,36 +648,84 @@ export class ScheduledJobsService {
 
     await this.usersService.update(userId, { balances: user.balances });
 
-     this.logger.debug(
-       `[Balance Update] Balance updated for user ${userId}: ${currentBalance} -> ${newBalance} ${currency}`,
-     );
-   }
+    this.logger.debug(
+      `[Balance Update] Balance updated for user ${userId}: ${currentBalance} -> ${newBalance} ${currency}`,
+    );
+  }
 
-   /**
-    * Clean up expired idempotency records every day at 3 AM.
-    * Deletes records where expiresAt < NOW().
-    */
-   @Cron('0 3 * * *')
-   async cleanupExpiredIdempotencyRecords(): Promise<void> {
-     this.logger.log('[Scheduled Job] Starting expired idempotency records cleanup');
+  /**
+   * Clean up expired idempotency records every day at 3 AM.
+   * Deletes records where expiresAt < NOW().
+   */
+  @Cron('0 3 * * *')
+  async cleanupExpiredIdempotencyRecords(): Promise<void> {
+    this.logger.log(
+      '[Scheduled Job] Starting expired idempotency records cleanup',
+    );
 
-     try {
-       const result = await this.idempotencyRepository
-         .createQueryBuilder()
-         .delete()
-         .from(IdempotencyRecord)
-         .where('expiresAt < NOW()')
-         .execute();
+    try {
+      const result = await this.idempotencyRepository
+        .createQueryBuilder()
+        .delete()
+        .from(IdempotencyRecord)
+        .where('expiresAt < NOW()')
+        .execute();
 
-       const deletedCount = result.affected ?? 0;
-       this.logger.log(
-         `[Scheduled Job] Idempotency records cleanup completed — ${deletedCount} expired records removed`,
-       );
-     } catch (error) {
-       this.logger.error(
-         '[Scheduled Job] Fatal error in idempotency records cleanup:',
-         error,
-       );
-     }
-   }
+      const deletedCount = result.affected ?? 0;
+      this.logger.log(
+        `[Scheduled Job] Idempotency records cleanup completed — ${deletedCount} expired records removed`,
+      );
+    } catch (error) {
+      this.logger.error(
+        '[Scheduled Job] Fatal error in idempotency records cleanup:',
+        error,
+      );
+    }
+  }
+
+  /**
+   * Perform hard delete of user data 30 days after account deletion request
+   * (GDPR Article 17 - right to erasure hard delete)
+   */
+  @Cron(CronExpression.EVERY_DAY_AT_2AM)
+  async hardDeleteExpiredAccounts(): Promise<void> {
+    this.logger.log(
+      '[Scheduled Job] Starting hard delete of expired anonymized accounts',
+    );
+
+    try {
+      const result = await this.dataSource.manager.query(`
+        DELETE FROM "refresh_token" WHERE "userId" IN (
+          SELECT u.id FROM users u
+          JOIN data_requests dr ON dr."userId" = u.id
+          WHERE u."isDeleted" = true
+          AND dr.type = 'DELETION'
+          AND dr.status = 'COMPLETE'
+          AND dr."completedAt" < NOW() - INTERVAL '30 days'
+        );
+      `);
+
+      const deletedUsers = await this.dataSource.manager
+        .createQueryBuilder()
+        .delete()
+        .from('users')
+        .where('"isDeleted" = true')
+        .andWhere(
+          'id IN (SELECT "userId" FROM data_requests WHERE type = \'DELETION\' AND status = \'COMPLETE\' AND "completedAt" < :cutoff)',
+          {
+            cutoff: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+          },
+        )
+        .execute();
+
+      this.logger.log(
+        `[Scheduled Job] Hard delete completed — ${deletedUsers.affected} users permanently removed`,
+      );
+    } catch (error) {
+      this.logger.error(
+        '[Scheduled Job] Fatal error in hard delete of expired accounts:',
+        error,
+      );
+    }
+  }
 }

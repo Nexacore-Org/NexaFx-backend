@@ -117,6 +117,13 @@ export class ReferralsService {
     }));
   }
 
+  async findByUserId(userId: string): Promise<Referral[]> {
+    return this.referralsRepository.find({
+      where: [{ referrerId: userId }, { refereeId: userId }],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
   async processReferralReward(refereeId: string): Promise<void> {
     const referee = await this.usersRepository.findOne({
       where: { id: refereeId },

@@ -62,22 +62,22 @@ export class Transaction {
   status: TransactionStatus;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  txHash: string;
+  txHash: string | null;
 
   @Column({ type: 'text', nullable: true })
-  failureReason: string;
+  failureReason: string | null;
 
   @Column({ type: 'decimal', precision: 20, scale: 8, nullable: true })
-  feeAmount: string;
+  feeAmount: string | null;
 
   @Column({ type: 'varchar', length: 10, nullable: true })
-  feeCurrency: string;
+  feeCurrency: string | null;
 
   @Column({ type: 'varchar', length: 10, nullable: true })
-  toCurrency: string;
+  toCurrency: string | null;
 
   @Column({ type: 'decimal', precision: 20, scale: 8, nullable: true })
-  toAmount: string;
+  toAmount: string | null;
 
   @CreateDateColumn()
   createdAt: Date;
@@ -90,4 +90,7 @@ export class Transaction {
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   processingLockedBy: string | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  metadata: any;
 }

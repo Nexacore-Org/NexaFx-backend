@@ -125,6 +125,21 @@ export class TransactionsController {
     ) as unknown as SwapResponseDto;
   }
 
+  @Get('swap/preview')
+  @ApiOperation({ summary: 'Preview a currency swap transaction' })
+  @ApiResponse({
+    status: 200,
+    description: 'Available swap paths and amounts',
+  })
+  async getSwapPreview(
+    @Query('from') from: string,
+    @Query('to') to: string,
+    @Query('amount') amount: number,
+    @Query('mode') mode: 'strict-send' | 'strict-receive' = 'strict-send',
+  ) {
+    return this.transactionsService.getSwapPreview(from, to, amount, mode);
+  }
+
   @Post(':id/verify')
   @ApiOperation({ summary: 'Manually verify a pending transaction' })
   @ApiParam({

@@ -15,8 +15,13 @@ describe('AppController', () => {
   });
 
   describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe('Hello World!');
+    it('should return a status payload', () => {
+      const result = appController.getStatus() as {
+        status: string;
+        service: string;
+      };
+      expect(result.status).toBe('ok');
+      expect(result.service).toBe('NexaFX API');
     });
   });
 });

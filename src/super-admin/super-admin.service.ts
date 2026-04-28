@@ -21,6 +21,7 @@ import { CreateManagedAdminDto } from './dto/create-managed-admin.dto';
 import { UpdateManagedAdminRoleDto } from './dto/update-managed-admin-role.dto';
 import { UpdatePlatformConfigDto } from './dto/update-platform-config.dto';
 import { PlatformConfig } from './entities/platform-config.entity';
+import { WalletsService } from '../wallets/wallets.service';
 
 @Injectable()
 export class SuperAdminService {
@@ -37,6 +38,7 @@ export class SuperAdminService {
     private readonly stellarService: StellarService,
     private readonly encryptionService: EncryptionService,
     private readonly auditLogsService: AuditLogsService,
+    private readonly walletsService: WalletsService,
   ) {}
 
   async createAdmin(
@@ -71,6 +73,12 @@ export class SuperAdminService {
       referralCode,
       role,
     });
+
+    await this.walletsService.seedPrimaryWalletFromUserCredentials(
+      createdUser.id,
+      wallet.publicKey,
+      walletSecretKeyEncrypted,
+    );
 
     await this.usersService.verifyUser(createdUser.id);
 

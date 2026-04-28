@@ -8,6 +8,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { UsersModule } from '../users/users.module';
 import { Notification } from '../notifications/entities/notification.entity';
 import { RateAlertsModule } from '../rate-alerts/rate-alerts.module';
+import { CurrenciesModule } from '../currencies/currencies.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { RateAlertsModule } from '../rate-alerts/rate-alerts.module';
     NotificationsModule,
     UsersModule,
     RateAlertsModule,
+    CurrenciesModule,
   ],
   providers: [ScheduledJobsService],
   exports: [ScheduledJobsService],

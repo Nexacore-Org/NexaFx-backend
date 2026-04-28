@@ -20,6 +20,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { RateAlertsService } from '../rate-alerts/rate-alerts.service';
 import { WebhookService } from '../webhooks/services/webhook.service';
+import { ProposalService } from '../dao/services/proposal.service';
 
 @Injectable()
 export class ScheduledJobsService {
@@ -40,6 +41,7 @@ export class ScheduledJobsService {
     private readonly rateAlertsService: RateAlertsService,
     private readonly webhookService: WebhookService,
     private readonly currencyPairService: CurrencyPairService,
+    private readonly proposalService: ProposalService,
   ) {
     // Truncate hostname to 255 characters to match DB column constraint
     this.instanceId = os.hostname().substring(0, 255);
@@ -669,5 +671,21 @@ export class ScheduledJobsService {
     this.logger.debug(
       `[Balance Update] Balance updated for user ${userId}: ${currentBalance} -> ${newBalance} ${currency}`,
     );
+  }
+
+  /**
+   * Finalize expired DAO governance proposals every 5 minutes
+   * Checks ACTIVE proposals past votingEndAt, calculates results, and submits on-chain if passing
+   */
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async finalizeExpiredProposals(): Promise<void> {
+    try {
+      await this.proposalService.finalizeExpiredProposals();
+    } catch (error) {
+      this.logger.error(
+        '[Scheduled Job] Failed to finalize expired proposals:',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   }
 }

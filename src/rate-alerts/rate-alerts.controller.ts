@@ -1,3 +1,33 @@
+import { Controller, Post, Body, Get, Query, Delete, Param, Patch } from '@nestjs/common';
+import { RateAlertsService } from './rate-alerts.service';
+import { CreateRateAlertDto } from './dto/create-rate-alert.dto';
+import { ListRateAlertsDto } from './dto/list-rate-alert.dto';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+
+@Controller('rate-alerts')
+export class RateAlertsController {
+  constructor(private readonly rateAlertsService: RateAlertsService) {}
+
+  @Post()
+  async create(@CurrentUser() user: any, @Body() dto: CreateRateAlertDto) {
+    return this.rateAlertsService.create(user.userId, dto);
+  }
+
+  @Get()
+  async list(@CurrentUser() user: any, @Query() query: ListRateAlertsDto) {
+    return this.rateAlertsService.listByUser(user.userId, query.page, query.limit);
+  }
+
+  @Delete(':id')
+  async remove(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.rateAlertsService.delete(user.userId, id);
+  }
+
+  @Patch(':id/reset')
+  async reset(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.rateAlertsService.reset(user.userId, id);
+  }
+}
 import {
   Controller,
   Post,

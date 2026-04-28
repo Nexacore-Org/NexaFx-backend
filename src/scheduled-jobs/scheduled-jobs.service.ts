@@ -12,6 +12,7 @@ import { StellarService } from '../blockchain/stellar/stellar.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
 import { CurrencyPairService } from '../currencies/services/currency-pair.service';
+import { LedgerVerificationService } from '../ledger/services/ledger-verification.service';
 import {
   NotificationType,
   NotificationStatus,
@@ -40,6 +41,7 @@ export class ScheduledJobsService {
     private readonly rateAlertsService: RateAlertsService,
     private readonly webhookService: WebhookService,
     private readonly currencyPairService: CurrencyPairService,
+    private readonly ledgerVerificationService: LedgerVerificationService,
   ) {
     // Truncate hostname to 255 characters to match DB column constraint
     this.instanceId = os.hostname().substring(0, 255);
@@ -216,6 +218,31 @@ export class ScheduledJobsService {
         '[Scheduled Job] Fatal error while checking rate alerts:',
         error,
       );
+    }
+  }
+
+  /**
+   * Verify the double-entry ledger every 6 hours and notify admins on mismatch.
+   */
+  @Cron('0 0 */6 * * *')
+  async verifyLedgerIntegrity(): Promise<void> {
+    this.logger.log('[Scheduled Job] Starting ledger verification');
+
+    try {
+      const result = await this.ledgerVerificationService.verify();
+
+      if (result.status === 'BALANCED') {
+        this.logger.log('[Scheduled Job] Ledger verification completed: balanced');
+        return;
+      }
+
+      this.logger.warn(
+        `[Scheduled Job] Ledger discrepancy detected: ${result.discrepancies
+          .map((item) => `${item.currency}=${item.amountDelta}`)
+          .join(', ')}`,
+      );
+    } catch (error) {
+      this.logger.error('[Scheduled Job] Ledger verification failed:', error);
     }
   }
 

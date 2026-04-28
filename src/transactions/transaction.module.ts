@@ -13,6 +13,7 @@ import { FeesModule } from '../fees/fees.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { BeneficiariesModule } from '../beneficiaries/beneficiaries.module';
 import { WalletsModule } from '../wallets/wallets.module';
+import { LedgerModule } from '../ledger/ledger.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { WalletsModule } from '../wallets/wallets.module';
     NotificationsModule,
     BeneficiariesModule,
     WalletsModule,
+    LedgerModule,
   ],
   controllers: [TransactionsController],
   providers: [TransactionsService, TransactionVerificationService],

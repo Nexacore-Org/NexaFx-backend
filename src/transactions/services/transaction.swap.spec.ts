@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { DataSource } from 'typeorm';
 import { TransactionsService } from './transaction.service';
 import {
   Transaction,
@@ -25,6 +26,7 @@ import { EncryptionService } from '../../common/services/encryption.service';
 import { FirebaseService } from '../../firebase/firebase.service';
 import { WebhookService } from '../../webhooks/services/webhook.service';
 import { BeneficiariesService } from '../../beneficiaries/beneficiaries.service';
+import { LedgerService } from '../../ledger/services/ledger.service';
 
 // Mock Stellar SDK components
 jest.mock('stellar-sdk', () => {
@@ -80,6 +82,22 @@ describe('TransactionsService.createSwap', () => {
     notificationsService = {
       create: jest.fn(async () => ({})),
     };
+    const ledgerService = {
+      record: jest.fn(async () => undefined),
+    };
+    const queryRunner = {
+      connect: jest.fn(async () => undefined),
+      startTransaction: jest.fn(async () => undefined),
+      commitTransaction: jest.fn(async () => undefined),
+      rollbackTransaction: jest.fn(async () => undefined),
+      release: jest.fn(async () => undefined),
+      manager: {
+        save: jest.fn(async (_entity: unknown, payload: any) => payload),
+      },
+    };
+    const dataSource = {
+      createQueryRunner: jest.fn(() => queryRunner),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -88,6 +106,7 @@ describe('TransactionsService.createSwap', () => {
           provide: getRepositoryToken(Transaction),
           useValue: transactionRepository,
         },
+        { provide: DataSource, useValue: dataSource },
         {
           provide: CurrenciesService,
           useValue: {
@@ -164,6 +183,7 @@ describe('TransactionsService.createSwap', () => {
           useValue: { dispatch: jest.fn(() => Promise.resolve()) },
         },
         { provide: BeneficiariesService, useValue: {} },
+        { provide: LedgerService, useValue: ledgerService },
       ],
     }).compile();
 

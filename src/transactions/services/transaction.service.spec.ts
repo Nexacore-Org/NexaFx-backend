@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { DataSource } from 'typeorm';
 import { TransactionsService } from './transaction.service';
 import { Transaction, TransactionStatus } from '../entities/transaction.entity';
 import { CurrenciesService } from '../../currencies/currencies.service';
@@ -28,6 +29,7 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import { BeneficiariesService } from '../../beneficiaries/beneficiaries.service';
 import { WalletsService } from '../../wallets/wallets.service';
 import { EncryptionService } from '../../common/services/encryption.service';
+import { LedgerService } from '../../ledger/services/ledger.service';
 
 describe('TransactionsService fee integration behavior', () => {
   let service: TransactionsService;
@@ -132,6 +134,22 @@ describe('TransactionsService fee integration behavior', () => {
       () => 'SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
     ),
   };
+  const ledgerService = {
+    record: jest.fn(async () => undefined),
+  };
+  const queryRunner = {
+    connect: jest.fn(async () => undefined),
+    startTransaction: jest.fn(async () => undefined),
+    commitTransaction: jest.fn(async () => undefined),
+    rollbackTransaction: jest.fn(async () => undefined),
+    release: jest.fn(async () => undefined),
+    manager: {
+      save: jest.fn(async (_entity: unknown, payload: any) => payload),
+    },
+  };
+  const dataSource = {
+    createQueryRunner: jest.fn(() => queryRunner),
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -148,6 +166,7 @@ describe('TransactionsService fee integration behavior', () => {
         { provide: ExchangeRatesService, useValue: exchangeRatesService },
         { provide: StellarService, useValue: stellarService },
         { provide: ConfigService, useValue: configService },
+        { provide: DataSource, useValue: dataSource },
         { provide: FeesService, useValue: feesService },
         { provide: UsersService, useValue: usersService },
         { provide: AuditLogsService, useValue: auditLogsService },
@@ -158,6 +177,7 @@ describe('TransactionsService fee integration behavior', () => {
         { provide: BeneficiariesService, useValue: beneficiariesService },
         { provide: WalletsService, useValue: walletsService },
         { provide: EncryptionService, useValue: encryptionService },
+        { provide: LedgerService, useValue: ledgerService },
       ],
     }).compile();
 

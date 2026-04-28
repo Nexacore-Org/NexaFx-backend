@@ -19,6 +19,12 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import { NotificationType } from '../../notifications/entities/notification.entity';
 import { FeeType } from '../../fees/entities/fee-config.entity';
 import { Asset, Operation } from 'stellar-sdk';
+import { CurrencyPairService } from '../../currencies/services/currency-pair.service';
+import { WalletsService } from '../../wallets/wallets.service';
+import { EncryptionService } from '../../common/services/encryption.service';
+import { FirebaseService } from '../../firebase/firebase.service';
+import { WebhookService } from '../../webhooks/services/webhook.service';
+import { BeneficiariesService } from '../../beneficiaries/beneficiaries.service';
 
 // Mock Stellar SDK components
 jest.mock('stellar-sdk', () => {
@@ -60,6 +66,15 @@ describe('TransactionsService.createSwap', () => {
       createTransaction: jest.fn(async () => ({})),
       signTransaction: jest.fn(async () => ({})),
       submitTransaction: jest.fn(async () => ({ hash: 'stellar-hash' })),
+      findBestPath: jest.fn(async () => [
+        {
+          source_amount: '100',
+          destination_amount: '100',
+          path: [],
+        },
+      ]),
+      buildPathPaymentOp: jest.fn(() => ({})),
+      getAsset: jest.fn(() => ({ isNative: () => true })),
     };
 
     notificationsService = {
@@ -123,6 +138,32 @@ describe('TransactionsService.createSwap', () => {
           },
         },
         { provide: NotificationsService, useValue: notificationsService },
+        {
+          provide: CurrencyPairService,
+          useValue: {
+            validatePair: jest.fn(async () => ({ spreadPercent: 0.5 })),
+            findByCodes: jest.fn(async () => ({ spreadPercent: 0.5 })),
+          },
+        },
+        {
+          provide: WalletsService,
+          useValue: {
+            resolveWalletForTransaction: jest.fn(async () => ({
+              publicKey: 'G123',
+              encryptedSecretKey: 'enc',
+            })),
+          },
+        },
+        {
+          provide: EncryptionService,
+          useValue: { decrypt: jest.fn(() => 'S123') },
+        },
+        { provide: FirebaseService, useValue: {} },
+        {
+          provide: WebhookService,
+          useValue: { dispatch: jest.fn(() => Promise.resolve()) },
+        },
+        { provide: BeneficiariesService, useValue: {} },
       ],
     }).compile();
 
@@ -139,7 +180,7 @@ describe('TransactionsService.createSwap', () => {
       amount: 10,
       fromCurrency: 'XLM',
       toCurrency: 'USDC',
-      sourceAddress: 'G_SOURCE',
+      sourceAddress: 'G123',
     };
 
     const result = await service.createSwap('user-1', dto);
@@ -149,7 +190,7 @@ describe('TransactionsService.createSwap', () => {
     expect(result.txHash).toBe('stellar-hash');
     expect(result.amount).toBe('10');
     expect(result.toCurrency).toBe('USDC');
-    expect(result.toAmount).toBe('5.00000000');
+    expect(result.toAmount).toBe('99.50000000');
 
     expect(stellarService.submitTransaction).toHaveBeenCalled();
     expect(notificationsService.create).toHaveBeenCalledWith(
@@ -181,7 +222,7 @@ describe('TransactionsService.createSwap', () => {
       amount: 10,
       fromCurrency: 'XLM',
       toCurrency: 'USDC',
-      sourceAddress: 'G_SOURCE',
+      sourceAddress: 'G123',
     };
 
     await expect(service.createSwap('user-1', dto)).rejects.toThrow(

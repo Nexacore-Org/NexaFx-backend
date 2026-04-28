@@ -45,6 +45,8 @@ import {
 import { BeneficiariesService } from '../../beneficiaries/beneficiaries.service'; // ← NEW
 import { FirebaseService } from '../../firebase/firebase.service';
 import { WebhookService } from '../../webhooks/services/webhook.service';
+import { WalletsService } from '../../wallets/wallets.service';
+import { EncryptionService } from '../../common/services/encryption.service';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -151,6 +153,8 @@ export class TransactionsService {
     private readonly firebaseService: FirebaseService,
     private readonly webhookService: WebhookService,
     private readonly currencyPairService: CurrencyPairService,
+    private readonly walletsService: WalletsService,
+    private readonly encryptionService: EncryptionService,
   ) {}
 
   /**
@@ -226,7 +230,10 @@ export class TransactionsService {
         },
       );
 
-      const destinationAddress = await this.getUserStellarAddress(userId);
+      const destinationAddress = await this.getUserStellarAddress(
+        userId,
+        createDepositDto.walletId,
+      );
 
       const paymentOperation = Operation.payment({
         destination: destinationAddress,
@@ -440,7 +447,10 @@ export class TransactionsService {
         },
       );
 
-      const sourceAddress = await this.getUserStellarAddress(userId);
+      const sourceAddress = await this.getUserStellarAddress(
+        userId,
+        createWithdrawalDto.walletId,
+      );
 
       const paymentOperation = Operation.payment({
         destination: destinationAddress,
@@ -454,7 +464,10 @@ export class TransactionsService {
         memo: `WITHDRAW-${transaction.id}`,
       });
 
-      const secretKey = await this.getUserStellarSecretKey(userId);
+      const secretKey = await this.getUserStellarSecretKey(
+        userId,
+        createWithdrawalDto.walletId,
+      );
 
       const signedTx: StellarTransaction =
         await this.stellarService.signTransaction(stellarTx, secretKey);
@@ -532,7 +545,8 @@ export class TransactionsService {
     ipAddress?: string,
     userAgent?: string,
   ): Promise<Transaction> {
-    const { amount, fromCurrency, toCurrency, sourceAddress } = createSwapDto;
+    const { amount, fromCurrency, toCurrency, sourceAddress, walletId } =
+      createSwapDto;
 
     this.logger.log(
       `Creating swap for user ${userId}: ${amount} ${fromCurrency} to ${toCurrency}`,
@@ -566,6 +580,16 @@ export class TransactionsService {
     if (parseFloat(userBalance) < amount + fee.feeAmount) {
       throw new BadRequestException(
         'Insufficient balance to cover the swap amount and fee',
+      );
+    }
+
+    const txWallet = await this.walletsService.resolveWalletForTransaction(
+      userId,
+      walletId,
+    );
+    if (sourceAddress !== txWallet.publicKey) {
+      throw new BadRequestException(
+        'sourceAddress must match the public key of the wallet used for this swap',
       );
     }
 
@@ -645,7 +669,7 @@ export class TransactionsService {
           },
         );
 
-        const destinationAddress = await this.getUserStellarAddress(userId);
+        const destinationAddress = txWallet.publicKey;
         const slippageTolerance = parseFloat(
           process.env.SWAP_SLIPPAGE_PERCENT || '0.005',
         );
@@ -664,12 +688,12 @@ export class TransactionsService {
         });
 
         const stellarTx = await this.stellarService.createTransaction({
-          sourcePublicKey: sourceAddress,
+          sourcePublicKey: txWallet.publicKey,
           operations: [swapOperation],
           memo: `SWAP-${transaction.id}`,
         });
 
-        const secretKey = await this.getUserStellarSecretKey(userId);
+        const secretKey = await this.getUserStellarSecretKey(userId, walletId);
         const signedTx = await this.stellarService.signTransaction(
           stellarTx,
           secretKey,
@@ -1191,36 +1215,31 @@ export class TransactionsService {
 
   // ── Private helpers ─────────────────────────────────────────────────────────
 
-  private async getUserStellarAddress(userId: string): Promise<string> {
-    const user = await this.usersService.findById(userId);
-
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    if (!user.walletPublicKey) {
-      throw new BadRequestException(
-        'User does not have a Stellar wallet configured',
-      );
-    }
-
-    return user.walletPublicKey;
+  private async getUserStellarAddress(
+    userId: string,
+    walletId?: string,
+  ): Promise<string> {
+    const ctx = await this.walletsService.resolveWalletForTransaction(
+      userId,
+      walletId,
+    );
+    return ctx.publicKey;
   }
 
-  private async getUserStellarSecretKey(userId: string): Promise<string> {
-    const user = await this.usersService.findById(userId);
-
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    if (!user.walletSecretKeyEncrypted) {
+  private async getUserStellarSecretKey(
+    userId: string,
+    walletId?: string,
+  ): Promise<string> {
+    const ctx = await this.walletsService.resolveWalletForTransaction(
+      userId,
+      walletId,
+    );
+    if (!ctx.encryptedSecretKey) {
       throw new BadRequestException(
-        'User does not have a Stellar secret key configured',
+        'This wallet is watch-only and cannot sign transactions',
       );
     }
-
-    return user.walletSecretKeyEncrypted;
+    return this.encryptionService.decrypt(ctx.encryptedSecretKey);
   }
 
   private async getStellarSecretKey(): Promise<string> {

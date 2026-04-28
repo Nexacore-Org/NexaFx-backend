@@ -31,6 +31,7 @@ import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import { ReferralsService } from '../referrals/referrals.service';
 import { TwoFactorService } from '../two-factor/two-factor.service';
+import { WalletsService } from '../wallets/wallets.service';
 
 @Injectable()
 export class AuthService {
@@ -46,6 +47,7 @@ export class AuthService {
     private readonly auditLogsService: AuditLogsService,
     private readonly referralsService: ReferralsService,
     private readonly twoFactorService: TwoFactorService,
+    private readonly walletsService: WalletsService,
     @InjectRepository(PasswordResetAttempt)
     private readonly passwordResetAttemptRepository: Repository<PasswordResetAttempt>,
   ) {}
@@ -418,6 +420,12 @@ export class AuthService {
       referralCode: generatedReferralCode,
       referredBy,
     });
+
+    await this.walletsService.seedPrimaryWalletFromUserCredentials(
+      user.id,
+      wallet.publicKey,
+      encryptedSecretKey,
+    );
 
     if (referredBy) {
       await this.referralsService.createPendingReferral(referredBy, user.id);

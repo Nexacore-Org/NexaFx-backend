@@ -30,6 +30,7 @@ import { JwtPayload } from './strategies/jwt.strategy';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import { ReferralsService } from '../referrals/referrals.service';
+import { TwoFactorService } from '../two-factor/two-factor.service';
 
 @Injectable()
 export class AuthService {
@@ -44,6 +45,7 @@ export class AuthService {
     private readonly encryptionService: EncryptionService,
     private readonly auditLogsService: AuditLogsService,
     private readonly referralsService: ReferralsService,
+    private readonly twoFactorService: TwoFactorService,
     @InjectRepository(PasswordResetAttempt)
     private readonly passwordResetAttemptRepository: Repository<PasswordResetAttempt>,
   ) {}
@@ -151,11 +153,10 @@ export class AuthService {
           sub: user.id,
           email: user.email,
           role: user.role,
-          authStage: '2fa_pending',
+          authStage: 'partial_auth',
         },
         {
           expiresIn: '5m',
-          secret: this.getTwoFactorChallengeSecret(),
         },
       );
 
@@ -169,6 +170,8 @@ export class AuthService {
       return {
         requiresTwoFactor: true,
         twoFactorToken,
+        accessToken: twoFactorToken,
+        expiresIn: 300,
         message: 'Two-factor authentication code is required',
       };
     }
@@ -195,14 +198,12 @@ export class AuthService {
     let decoded: JwtPayload & { authStage?: string };
 
     try {
-      decoded = this.jwtService.verify(verifyDto.twoFactorToken, {
-        secret: this.getTwoFactorChallengeSecret(),
-      });
+      decoded = this.jwtService.verify(verifyDto.twoFactorToken);
     } catch {
       throw new UnauthorizedException('Invalid or expired two-factor token');
     }
 
-    if (decoded.authStage !== '2fa_pending') {
+    if (decoded.authStage !== 'partial_auth') {
       throw new UnauthorizedException('Invalid two-factor token');
     }
 
@@ -212,12 +213,12 @@ export class AuthService {
       throw new UnauthorizedException('Invalid two-factor verification state');
     }
 
-    const isValid = await (this as any).twoFactorService?.verifyTotpCode(
+    const isValid = await this.twoFactorService.verifyTotpCode(
       user.id,
       verifyDto.totpCode,
     );
 
-    if (!isValid && (this as any).twoFactorService) {
+    if (!isValid) {
       await this.auditLogsService.logAuthEvent(
         user.id,
         AuditAction.FAILED_LOGIN,
@@ -623,8 +624,30 @@ export class AuthService {
     await new Promise((resolve) => setTimeout(resolve, delay));
   }
 
-  private getTwoFactorChallengeSecret(): string {
-    return this.configService.get<string>('JWT_TWO_FACTOR_SECRET') || 'secret';
+  async issueFullAccessToken(
+    userId: string,
+  ): Promise<{ accessToken: string; expiresIn: number }> {
+    const user = await this.usersService.findById(userId);
+    if (!user || !user.isVerified) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    return this.issueAuthTokens(user.id, user.email, user.role);
+  }
+
+  getUserIdFromPartialAuth(token: string): string {
+    let decoded: JwtPayload & { authStage?: string };
+
+    try {
+      decoded = this.jwtService.verify(token);
+    } catch {
+      throw new UnauthorizedException('Invalid or expired two-factor token');
+    }
+
+    if (decoded.authStage !== 'partial_auth') {
+      throw new UnauthorizedException('Invalid two-factor token');
+    }
+
+    return decoded.sub;
   }
 
   private async issueAuthTokens(userId: string, email: string, role: string) {

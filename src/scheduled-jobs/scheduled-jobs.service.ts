@@ -53,7 +53,9 @@ export class ScheduledJobsService {
     try {
       const resumedCount = await this.currencyPairService.autoResumePairs();
       if (resumedCount > 0) {
-        this.logger.log(`[Scheduled Job] Auto-resumed ${resumedCount} currency pairs`);
+        this.logger.log(
+          `[Scheduled Job] Auto-resumed ${resumedCount} currency pairs`,
+        );
       }
     } catch (error) {
       this.logger.error('[Scheduled Job] Auto-resume pairs failed:', error);
@@ -514,7 +516,9 @@ export class ScheduledJobsService {
     );
 
     if (!transaction.txHash) {
-      this.logger.warn(`[Retry] Cannot retry transaction ${transaction.id} because it has no hash`);
+      this.logger.warn(
+        `[Retry] Cannot retry transaction ${transaction.id} because it has no hash`,
+      );
       return;
     }
 

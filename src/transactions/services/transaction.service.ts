@@ -545,7 +545,10 @@ export class TransactionsService {
     }
 
     // 1. Validate Currency Pair
-    const pair = await this.currencyPairService.validatePair(fromCurrency, toCurrency);
+    const pair = await this.currencyPairService.validatePair(
+      fromCurrency,
+      toCurrency,
+    );
 
     // 2. Check Balance (including fee)
     const userBalance = await this.getUserBalance(userId, fromCurrency);
@@ -567,8 +570,12 @@ export class TransactionsService {
     }
 
     // 4. Find Best Path
-    const fromAsset = this.stellarService['getAsset'] ? (this.stellarService as any).getAsset(fromCurrency) : this.getAssetHelper(fromCurrency);
-    const toAsset = this.stellarService['getAsset'] ? (this.stellarService as any).getAsset(toCurrency) : this.getAssetHelper(toCurrency);
+    const fromAsset = this.stellarService['getAsset']
+      ? (this.stellarService as any).getAsset(fromCurrency)
+      : this.getAssetHelper(fromCurrency);
+    const toAsset = this.stellarService['getAsset']
+      ? (this.stellarService as any).getAsset(toCurrency)
+      : this.getAssetHelper(toCurrency);
 
     const paths = await this.stellarService.findBestPath(
       fromAsset,
@@ -587,14 +594,15 @@ export class TransactionsService {
     // We'll try the paths in order
     let lastError: any = null;
     const maxRetries = 1; // Retry once with next best path
-    
+
     for (let i = 0; i <= Math.min(maxRetries, paths.length - 1); i++) {
       const bestPath = paths[i];
       const destinationAmount = parseFloat(bestPath.destination_amount);
       const rate = destinationAmount / amount;
 
       // Apply pair spread
-      const effectiveAmount = destinationAmount * (1 - pair.spreadPercent / 100);
+      const effectiveAmount =
+        destinationAmount * (1 - pair.spreadPercent / 100);
       const effectiveRate = effectiveAmount / amount;
 
       const transaction = this.transactionRepository.create({
@@ -612,7 +620,7 @@ export class TransactionsService {
           path: bestPath.path,
           originalDestinationAmount: destinationAmount,
           spreadPercent: pair.spreadPercent,
-        }
+        },
       });
 
       await this.transactionRepository.save(transaction);
@@ -638,7 +646,9 @@ export class TransactionsService {
         );
 
         const destinationAddress = await this.getUserStellarAddress(userId);
-        const slippageTolerance = parseFloat(process.env.SWAP_SLIPPAGE_PERCENT || '0.005');
+        const slippageTolerance = parseFloat(
+          process.env.SWAP_SLIPPAGE_PERCENT || '0.005',
+        );
 
         const swapOperation = this.stellarService.buildPathPaymentOp({
           sendAsset: fromAsset,
@@ -646,14 +656,16 @@ export class TransactionsService {
           destAsset: toAsset,
           destAmount: destinationAmount.toString(),
           destination: destinationAddress,
-          path: bestPath.path.map(p => new Asset(p.asset_code, p.asset_issuer)),
+          path: bestPath.path.map(
+            (p) => new Asset(p.asset_code, p.asset_issuer),
+          ),
           mode: 'strict-send',
           slippageTolerance,
         });
 
         const stellarTx = await this.stellarService.createTransaction({
           sourcePublicKey: sourceAddress,
-          operations: [swapOperation as any],
+          operations: [swapOperation],
           memo: `SWAP-${transaction.id}`,
         });
 
@@ -691,14 +703,19 @@ export class TransactionsService {
           `Swap transaction completed successfully: ${transaction.id} (Attempt ${i})`,
         );
 
-        this.webhookService.dispatch('transaction.completed', transaction, userId)
-          .catch(e => this.logger.error(`Webhook dispatch failed: ${e.message}`));
+        this.webhookService
+          .dispatch('transaction.completed', transaction, userId)
+          .catch((e) =>
+            this.logger.error(`Webhook dispatch failed: ${e.message}`),
+          );
 
         return transaction;
       } catch (err) {
         const error = toError(err);
-        this.logger.warn(`Failed attempt ${i} to execute swap: ${error.message}`);
-        
+        this.logger.warn(
+          `Failed attempt ${i} to execute swap: ${error.message}`,
+        );
+
         transaction.status = TransactionStatus.FAILED;
         transaction.failureReason = error.message;
         await this.transactionRepository.save(transaction);
@@ -706,26 +723,34 @@ export class TransactionsService {
         lastError = error;
 
         // Check if error is slippage-related (op_under_dest_min or similar)
-        const isSlippageError = error.message.includes('op_under_dest_min') || 
-                                error.message.includes('tx_too_late') ||
-                                error.message.includes('op_over_source_max');
-        
+        const isSlippageError =
+          error.message.includes('op_under_dest_min') ||
+          error.message.includes('tx_too_late') ||
+          error.message.includes('op_over_source_max');
+
         if (!isSlippageError || i === Math.min(maxRetries, paths.length - 1)) {
           throw new BadRequestException(`Swap failed: ${error.message}`);
         }
-        
-        this.logger.log(`Retrying swap with next best path due to slippage error...`);
+
+        this.logger.log(
+          `Retrying swap with next best path due to slippage error...`,
+        );
       }
     }
 
-    throw new BadRequestException(`Swap failed: ${lastError?.message || 'Unknown error'}`);
+    throw new BadRequestException(
+      `Swap failed: ${lastError?.message || 'Unknown error'}`,
+    );
   }
 
   private getAssetHelper(code: string): Asset {
     if (code === 'XLM') return Asset.native();
     // In a real app, you'd fetch the issuer from the database or config
     // Using a default issuer for demonstration as seen in the original code
-    return new Asset(code, 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335XPB7X3NCQXMK3SBEG3CIFE7G');
+    return new Asset(
+      code,
+      'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335XPB7X3NCQXMK3SBEG3CIFE7G',
+    );
   }
 
   private swapPreviewCache = new Map<string, { data: any; expiry: number }>();
@@ -738,7 +763,7 @@ export class TransactionsService {
   ): Promise<any> {
     const cacheKey = `${fromCurrency}-${toCurrency}-${amount}-${mode}`;
     const cached = this.swapPreviewCache.get(cacheKey);
-    
+
     if (cached && cached.expiry > Date.now()) {
       this.logger.debug(`Returning cached swap preview for ${cacheKey}`);
       return cached.data;
@@ -761,21 +786,26 @@ export class TransactionsService {
       });
     }
 
-    const pair = await this.currencyPairService.findByCodes(fromCurrency, toCurrency);
+    const pair = await this.currencyPairService.findByCodes(
+      fromCurrency,
+      toCurrency,
+    );
     const spreadPercent = pair ? pair.spreadPercent : 0;
 
-    const results = paths.map(path => {
+    const results = paths.map((path) => {
       const destAmount = parseFloat(path.destination_amount);
       const sourceAmount = parseFloat(path.source_amount);
-      
+
       // Apply spread
-      const effectiveDestAmount = mode === 'strict-send' 
-        ? destAmount * (1 - spreadPercent / 100)
-        : destAmount;
-      
-      const effectiveSourceAmount = mode === 'strict-receive'
-        ? sourceAmount * (1 + spreadPercent / 100)
-        : sourceAmount;
+      const effectiveDestAmount =
+        mode === 'strict-send'
+          ? destAmount * (1 - spreadPercent / 100)
+          : destAmount;
+
+      const effectiveSourceAmount =
+        mode === 'strict-receive'
+          ? sourceAmount * (1 + spreadPercent / 100)
+          : sourceAmount;
 
       return {
         sourceAsset: path.source_asset_code || 'XLM',
@@ -903,7 +933,7 @@ export class TransactionsService {
           transaction.userId,
           transaction,
           transaction.status,
-          transaction.failureReason,
+          transaction.failureReason ?? undefined,
         ).catch((e) =>
           this.logger.error(`Failed to send push notification: ${e.message}`),
         );
@@ -987,7 +1017,7 @@ export class TransactionsService {
         transaction.userId,
         transaction,
         status,
-        transaction.failureReason,
+        transaction.failureReason ?? undefined,
       ).catch((e) =>
         this.logger.error(`Failed to send push notification: ${e.message}`),
       );
@@ -1084,8 +1114,12 @@ export class TransactionsService {
       new Set(
         transactions
           .map((t) => t.currency)
-          .filter((c) => c)
-          .concat(transactions.map((t) => t.feeCurrency).filter((c) => c)),
+          .filter((c): c is string => !!c)
+          .concat(
+            transactions
+              .map((t) => t.feeCurrency)
+              .filter((c): c is string => !!c),
+          ),
       ),
     );
 

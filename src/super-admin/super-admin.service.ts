@@ -18,9 +18,7 @@ import { StellarService } from '../blockchain/stellar/stellar.service';
 import { UsersService } from '../users/users.service';
 import { User, UserRole } from '../users/user.entity';
 import { CreateManagedAdminDto } from './dto/create-managed-admin.dto';
-import {
-  UpdateManagedAdminRoleDto,
-} from './dto/update-managed-admin-role.dto';
+import { UpdateManagedAdminRoleDto } from './dto/update-managed-admin-role.dto';
 import { UpdatePlatformConfigDto } from './dto/update-platform-config.dto';
 import { PlatformConfig } from './entities/platform-config.entity';
 
@@ -44,7 +42,9 @@ export class SuperAdminService {
   async createAdmin(
     actorUserId: string,
     dto: CreateManagedAdminDto,
-  ): Promise<Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'>> {
+  ): Promise<
+    Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'>
+  > {
     const actor = await this.requireSuperAdmin(actorUserId);
     const role = dto.role ?? UserRole.ADMIN;
 
@@ -96,7 +96,9 @@ export class SuperAdminService {
     actorUserId: string,
     targetUserId: string,
     dto: UpdateManagedAdminRoleDto,
-  ): Promise<Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'>> {
+  ): Promise<
+    Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'>
+  > {
     const actor = await this.requireSuperAdmin(actorUserId);
     const target = await this.requireUser(targetUserId);
 
@@ -106,7 +108,9 @@ export class SuperAdminService {
       );
     }
 
-    if (![UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN].includes(dto.role)) {
+    if (
+      ![UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN].includes(dto.role)
+    ) {
       throw new BadRequestException('Unsupported managed role');
     }
 
@@ -140,7 +144,9 @@ export class SuperAdminService {
   async demoteAdmin(
     actorUserId: string,
     targetUserId: string,
-  ): Promise<Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'>> {
+  ): Promise<
+    Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'>
+  > {
     return this.updateManagedAdminRole(actorUserId, targetUserId, {
       role: UserRole.USER,
     });
@@ -227,9 +233,7 @@ export class SuperAdminService {
           feeConfig.maxFee !== null &&
           parseFloat(feeConfig.minFee) > parseFloat(feeConfig.maxFee)
         ) {
-          throw new BadRequestException(
-            'minFee cannot be greater than maxFee',
-          );
+          throw new BadRequestException('minFee cannot be greater than maxFee');
         }
 
         await this.feeConfigRepository.save(feeConfig);
@@ -292,9 +296,7 @@ export class SuperAdminService {
       });
 
       if (totalSuperAdmins <= 1) {
-        throw new BadRequestException(
-          'Cannot demote the last SUPER_ADMIN',
-        );
+        throw new BadRequestException('Cannot demote the last SUPER_ADMIN');
       }
     }
   }
@@ -337,12 +339,8 @@ export class SuperAdminService {
   private sanitizeUser(
     user: User,
   ): Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'> {
-    const {
-      password,
-      walletSecretKeyEncrypted,
-      twoFactorSecret,
-      ...safeUser
-    } = user;
+    const { password, walletSecretKeyEncrypted, twoFactorSecret, ...safeUser } =
+      user;
 
     return safeUser;
   }

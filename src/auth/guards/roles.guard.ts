@@ -30,8 +30,7 @@ export class RolesGuard implements CanActivate {
 
     if (user.role === UserRole.SUPER_ADMIN) {
       return requiredRoles.some(
-        (role) =>
-          role === UserRole.SUPER_ADMIN || role === UserRole.ADMIN,
+        (role) => role === UserRole.SUPER_ADMIN || role === UserRole.ADMIN,
       );
     }
 

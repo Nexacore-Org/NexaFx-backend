@@ -910,11 +910,17 @@ export class TransactionsService {
       }
 
       if (transaction.status === TransactionStatus.SUCCESS) {
-        this.webhookService.dispatch('transaction.completed', transaction, transaction.userId)
-          .catch(e => this.logger.error(`Webhook dispatch failed: ${e.message}`));
+        this.webhookService
+          .dispatch('transaction.completed', transaction, transaction.userId)
+          .catch((e) =>
+            this.logger.error(`Webhook dispatch failed: ${e.message}`),
+          );
       } else if (transaction.status === TransactionStatus.FAILED) {
-        this.webhookService.dispatch('transaction.failed', transaction, transaction.userId)
-          .catch(e => this.logger.error(`Webhook dispatch failed: ${e.message}`));
+        this.webhookService
+          .dispatch('transaction.failed', transaction, transaction.userId)
+          .catch((e) =>
+            this.logger.error(`Webhook dispatch failed: ${e.message}`),
+          );
       }
 
       return transaction;

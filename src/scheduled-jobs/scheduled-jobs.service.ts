@@ -19,6 +19,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { RateAlertsService } from '../rate-alerts/rate-alerts.service';
 import { WebhookService } from '../webhooks/services/webhook.service';
+import { IdempotencyRecord } from '../common/entities/idempotency-record.entity';
 
 @Injectable()
 export class ScheduledJobsService {
@@ -38,6 +39,8 @@ export class ScheduledJobsService {
     private readonly usersService: UsersService,
     private readonly rateAlertsService: RateAlertsService,
     private readonly webhookService: WebhookService,
+  @InjectRepository(IdempotencyRecord)
+  private readonly idempotencyRepository: Repository<IdempotencyRecord>,
   ) {
     // Truncate hostname to 255 characters to match DB column constraint
     this.instanceId = os.hostname().substring(0, 255);
@@ -640,8 +643,36 @@ export class ScheduledJobsService {
 
     await this.usersService.update(userId, { balances: user.balances });
 
-    this.logger.debug(
-      `[Balance Update] Balance updated for user ${userId}: ${currentBalance} -> ${newBalance} ${currency}`,
-    );
-  }
+     this.logger.debug(
+       `[Balance Update] Balance updated for user ${userId}: ${currentBalance} -> ${newBalance} ${currency}`,
+     );
+   }
+
+   /**
+    * Clean up expired idempotency records every day at 3 AM.
+    * Deletes records where expiresAt < NOW().
+    */
+   @Cron('0 3 * * *')
+   async cleanupExpiredIdempotencyRecords(): Promise<void> {
+     this.logger.log('[Scheduled Job] Starting expired idempotency records cleanup');
+
+     try {
+       const result = await this.idempotencyRepository
+         .createQueryBuilder()
+         .delete()
+         .from(IdempotencyRecord)
+         .where('expiresAt < NOW()')
+         .execute();
+
+       const deletedCount = result.affected ?? 0;
+       this.logger.log(
+         `[Scheduled Job] Idempotency records cleanup completed — ${deletedCount} expired records removed`,
+       );
+     } catch (error) {
+       this.logger.error(
+         '[Scheduled Job] Fatal error in idempotency records cleanup:',
+         error,
+       );
+     }
+   }
 }

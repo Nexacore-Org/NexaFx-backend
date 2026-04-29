@@ -24,10 +24,13 @@
     "seed:fresh": "ts-node src/database/seed-fresh.ts"
   },
   "dependencies": {
+    "@apollo/server": "^5.5.0",
+    "@nestjs/apollo": "^13.3.0",
     "@nestjs/axios": "^4.0.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.0",
     "@nestjs/core": "^11.0.1",
+    "@nestjs/graphql": "^13.3.0",
     "@nestjs/jwt": "^11.0.0",
     "@nestjs/passport": "^11.0.0",
     "@nestjs/platform-express": "^11.0.1",
@@ -46,6 +49,7 @@
     "fast-csv": "^5.0.5",
     "firebase-admin": "^13.7.0",
     "form-data": "^4.0.5",
+    "graphql": "^16.13.2",
     "helmet": "^8.1.0",
     "mailgun.js": "^12.7.0",
     "passport": "^0.7.0",

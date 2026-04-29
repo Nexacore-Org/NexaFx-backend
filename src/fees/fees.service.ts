@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import {
   FeeConfig,
   FeeTransactionType,
@@ -84,6 +84,7 @@ export class FeesService {
     transactionId: string,
     userId: string,
     fee: CalculatedFee,
+    manager?: EntityManager,
   ): Promise<FeeRecord> {
     const record = this.feeRecordRepository.create({
       transactionId,
@@ -92,6 +93,10 @@ export class FeesService {
       feeCurrency: fee.feeCurrency,
       feeType: fee.feeType,
     });
+
+    if (manager) {
+      return manager.save(FeeRecord, record);
+    }
 
     return this.feeRecordRepository.save(record);
   }

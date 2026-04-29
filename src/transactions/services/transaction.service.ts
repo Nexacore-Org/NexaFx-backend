@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import {
   Operation,
   Asset,
@@ -37,7 +37,7 @@ import { AuditLogsService } from '../../audit-logs/audit-logs.service';
 import { AuditAction } from '../../audit-logs/enums/audit-action.enum';
 import { UserRole } from '../../users/user.entity';
 import { ReferralsService } from '../../referrals/referrals.service';
-import { FeesService } from '../../fees/fees.service';
+import { CalculatedFee, FeesService } from '../../fees/fees.service';
 import {
   FeeTransactionType,
   FeeType,
@@ -47,6 +47,7 @@ import { FirebaseService } from '../../firebase/firebase.service';
 import { WebhookService } from '../../webhooks/services/webhook.service';
 import { WalletsService } from '../../wallets/wallets.service';
 import { EncryptionService } from '../../common/services/encryption.service';
+import { LedgerService } from '../../ledger/services/ledger.service';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -140,6 +141,7 @@ export class TransactionsService {
   constructor(
     @InjectRepository(Transaction)
     private readonly transactionRepository: Repository<Transaction>,
+    private readonly dataSource: DataSource,
     private readonly currenciesService: CurrenciesService,
     private readonly exchangeRatesService: ExchangeRatesService,
     private readonly stellarService: StellarService,
@@ -155,6 +157,7 @@ export class TransactionsService {
     private readonly currencyPairService: CurrencyPairService,
     private readonly walletsService: WalletsService,
     private readonly encryptionService: EncryptionService,
+    private readonly ledgerService: LedgerService,
   ) {}
 
   /**
@@ -198,7 +201,7 @@ export class TransactionsService {
       TransactionType.DEPOSIT,
       currency,
       amount,
-    )) || { feeAmount: 0, feeCurrency: currency };
+    )) || { feeAmount: 0, feeCurrency: currency, feeType: FeeType.FLAT };
 
     const transaction = this.transactionRepository.create({
       userId,
@@ -211,10 +214,8 @@ export class TransactionsService {
       status: TransactionStatus.PENDING,
     });
 
-    await this.transactionRepository.save(transaction);
-
     try {
-      await (this as any).feesService?.recordFee(transaction.id, userId, fee);
+      await this.persistTransactionArtifacts(transaction, fee);
 
       await this.auditLogsService.logTransactionEvent(
         userId,
@@ -400,7 +401,7 @@ export class TransactionsService {
       TransactionType.WITHDRAW,
       currency,
       amount,
-    )) || { feeAmount: 0, feeCurrency: currency };
+    )) || { feeAmount: 0, feeCurrency: currency, feeType: FeeType.FLAT };
 
     const totalDeduction = amount + fee.feeAmount;
     if (parseFloat(userBalance) < totalDeduction) {
@@ -427,10 +428,8 @@ export class TransactionsService {
       status: TransactionStatus.PENDING,
     });
 
-    await this.transactionRepository.save(transaction);
-
     try {
-      await (this as any).feesService?.recordFee(transaction.id, userId, fee);
+      await this.persistTransactionArtifacts(transaction, fee);
 
       await this.auditLogsService.logTransactionEvent(
         userId,
@@ -480,8 +479,6 @@ export class TransactionsService {
       }
 
       transaction.txHash = rawResult.hash;
-      await this.transactionRepository.save(transaction);
-
       await this.updateUserBalance(userId, currency, -amount);
 
       if (beneficiaryId) {
@@ -647,10 +644,8 @@ export class TransactionsService {
         },
       });
 
-      await this.transactionRepository.save(transaction);
-
       try {
-        await this.feesService.recordFee(transaction.id, userId, fee);
+        await this.persistTransactionArtifacts(transaction, fee);
 
         await this.auditLogsService.logTransactionEvent(
           userId,
@@ -1344,6 +1339,37 @@ export class TransactionsService {
       });
     } catch (e) {
       // Intentionally swallow errors so it doesn't break flows
+    }
+  }
+
+  private async persistTransactionArtifacts(
+    transaction: Transaction,
+    fee: CalculatedFee,
+  ): Promise<void> {
+    const queryRunner = this.dataSource.createQueryRunner();
+
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const savedTransaction = await queryRunner.manager.save(
+        Transaction,
+        transaction,
+      );
+      Object.assign(transaction, savedTransaction);
+      await this.feesService.recordFee(
+        transaction.id,
+        transaction.userId,
+        fee,
+        queryRunner.manager,
+      );
+      await this.ledgerService.record(transaction, queryRunner);
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
   }
 }

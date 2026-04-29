@@ -31,6 +31,7 @@ import { SuperAdminModule } from './super-admin/super-admin.module';
 import { GatewaysModule } from './gateways/gateways.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { WalletsModule } from './wallets/wallets.module';
+import { LedgerModule } from './ledger/ledger.module';
 
 @Module({
   imports: [
@@ -87,6 +88,7 @@ import { WalletsModule } from './wallets/wallets.module';
     GraphQLApiModule,
     WebhooksModule,
     WalletsModule,
+    LedgerModule,
   ],
   controllers: [AppController],
   providers: [

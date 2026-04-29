@@ -43,7 +43,12 @@ import { WalletsModule } from './wallets/wallets.module';
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
         url: configService.get<string>('DATABASE_URL'),
-        synchronize: true,
+        synchronize:
+          process.env.NODE_ENV !== 'production' &&
+          process.env.NODE_ENV !== 'staging',
+        migrationsRun:
+          process.env.NODE_ENV === 'production' ||
+          process.env.NODE_ENV === 'staging',
         ssl:
           process.env.NODE_ENV === 'production'
             ? { rejectUnauthorized: false }

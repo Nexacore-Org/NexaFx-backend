@@ -45,6 +45,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new ForbiddenException('Account is suspended');
     }
 
+    if (user.isDeleted) {
+      throw new UnauthorizedException('Account has been deleted');
+    }
+
     return {
       userId: user.id,
       email: user.email,

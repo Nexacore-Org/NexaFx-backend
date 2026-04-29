@@ -37,6 +37,8 @@ import { MetricsQueryDto } from './dto/metrics-query.dto';
 import * as csv from 'fast-csv';
 import { OverrideTransactionDto } from './dto/override-transaction.dto';
 import { Logger } from '@nestjs/common';
+import { DataRequest } from '../users/entities/data-request.entity';
+import { DataRequestType } from '../users/entities/data-request.entity';
 import { UpdateUserPlanDto } from './dto/update-user-plan.dto';
 
 @Injectable()
@@ -48,6 +50,8 @@ export class AdminService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(Transaction)
     private readonly transactionRepository: Repository<Transaction>,
+    @InjectRepository(DataRequest)
+    private readonly dataRequestRepository: Repository<DataRequest>,
     private readonly auditLogsService: AuditLogsService,
   ) {}
 
@@ -572,5 +576,140 @@ export class AdminService {
     );
 
     return user;
+  }
+
+  async updateUserPlan(
+    id: string,
+    updateDto: UpdateUserPlanDto,
+    adminId: string,
+  ) {
+    const user = await this.getUserById(id);
+
+    // No restrictions on changing plan for any role? Allow.
+    if (user.plan === updateDto.plan) {
+      return user;
+    }
+
+    const oldPlan = user.plan;
+    user.plan = updateDto.plan;
+    await this.userRepository.save(user);
+
+    await this.auditLogsService.logAuthEvent(
+      adminId,
+      AuditAction.PLAN_CHANGE,
+      {
+        targetUserId: id,
+        oldPlan,
+        newPlan: user.plan,
+      },
+      true,
+    );
+
+    return user;
+  }
+
+  async getUserRequests(id: string, type?: DataRequestType) {
+    const user = await this.getUserById(id);
+
+    const query = this.dataRequestRepository.createQueryBuilder('dr')
+      .where('dr."userId" = :userId', { userId: id })
+      .orderBy('dr."requestedAt"', 'DESC');
+
+    if (type) {
+      query.andWhere('dr.type = :type', { type });
+    }
+
+    const requests = await query.getMany();
+    return { userId: user.id, requests };
+  }
+
+  async processDataRequest(userId: string, requestId: string) {
+    const user = await this.getUserById(userId);
+
+    const request = await this.dataRequestRepository.findOne({
+      where: { id: requestId, userId: user.id },
+    });
+
+    if (!request) {
+      throw new NotFoundException('Data request not found');
+    }
+
+    if (request.status === DataRequestStatus.COMPLETE) {
+      return { message: 'Request already processed', request };
+    }
+
+    request.status = DataRequestStatus.PROCESSING;
+    await this.dataRequestRepository.save(request);
+
+    // In a real implementation, processing would happen asynchronously
+    // For now, mark as complete immediately
+    request.status = DataRequestStatus.COMPLETE;
+    request.completedAt = new Date();
+    request.downloadUrl = `/api/data-exports/download/${request.id}`;
+    request.expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await this.dataRequestRepository.save(request);
+
+    await this.auditLogsService.logAuthEvent(
+      user.id,
+      AuditAction.DATA_EXPORT_PROCESSED,
+      {
+        requestId: request.id,
+        type: request.type,
+      },
+      true,
+    );
+
+    return { message: 'Request processed successfully', request };
+  }
+
+  async cancelDataRequest(userId: string, requestId: string) {
+    const user = await this.getUserById(userId);
+
+    const request = await this.dataRequestRepository.findOne({
+      where: { id: requestId, userId: user.id },
+    });
+
+    if (!request) {
+      throw new NotFoundException('Data request not found');
+    }
+
+    if (request.status !== DataRequestStatus.PENDING) {
+      throw new BadRequestException(
+        'Only pending requests can be cancelled',
+      );
+    }
+
+    request.status = DataRequestStatus.FAILED;
+    request.completedAt = new Date();
+    await this.dataRequestRepository.save(request);
+
+    await this.auditLogsService.logAuthEvent(
+      user.id,
+      AuditAction.DATA_EXPORT_CANCELLED,
+      {
+        requestId: request.id,
+        type: request.type,
+      },
+      true,
+    );
+
+    return { message: 'Request cancelled successfully', request };
+  }
+
+  async getAllRequests(type?: DataRequestType, status?: string) {
+    const query = this.dataRequestRepository.createQueryBuilder('dr')
+      .leftJoinAndSelect('dr.user', 'user')
+      .orderBy('dr."requestedAt"', 'DESC');
+
+    if (type) {
+      query.andWhere('dr.type = :type', { type });
+    }
+
+    if (status) {
+      query.andWhere('dr.status = :status', { status });
+    }
+
+    const requests = await query.getMany();
+    return { requests };
   }
 }

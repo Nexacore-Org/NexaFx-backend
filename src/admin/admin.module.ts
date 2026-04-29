@@ -5,9 +5,14 @@ import { AdminService } from './admin.service';
 import { User } from '../users/user.entity';
 import { Transaction } from '../transactions/entities/transaction.entity';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User, Transaction]), AuditLogsModule],
+  imports: [
+    TypeOrmModule.forFeature([User, Transaction]),
+    AuditLogsModule,
+    ReportsModule,
+  ],
   controllers: [AdminController],
   providers: [AdminService],
 })

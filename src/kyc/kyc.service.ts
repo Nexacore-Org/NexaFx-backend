@@ -139,6 +139,13 @@ export class KycService {
     });
   }
 
+  async findByUserId(userId: string): Promise<KycRecord[]> {
+    return this.kycRepository.find({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
   async reviewKyc(kycId: string, decision: KycStatus, reason?: string) {
     return this.dataSource.transaction(async (manager) => {
       const kyc = await manager.findOne(KycRecord, {

@@ -16,6 +16,7 @@ import { StellarService } from '../blockchain/stellar/stellar.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
 import { RateAlertsService } from '../rate-alerts/rate-alerts.service';
+import { LedgerVerificationService } from '../ledger/services/ledger-verification.service';
 
 describe('ScheduledJobsService', () => {
   let service: ScheduledJobsService;
@@ -39,6 +40,9 @@ describe('ScheduledJobsService', () => {
   };
   const mockRateAlertsService = {
     checkAndTriggerAlerts: jest.fn(),
+  };
+  const mockLedgerVerificationService = {
+    verify: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -72,6 +76,10 @@ describe('ScheduledJobsService', () => {
         {
           provide: RateAlertsService,
           useValue: mockRateAlertsService,
+        },
+        {
+          provide: LedgerVerificationService,
+          useValue: mockLedgerVerificationService,
         },
       ],
     }).compile();
@@ -127,6 +135,10 @@ describe('ScheduledJobsService', () => {
         checked: 0,
         triggered: 0,
         reactivated: 0,
+      });
+      mockLedgerVerificationService.verify.mockResolvedValue({
+        status: 'BALANCED',
+        discrepancies: [],
       });
 
       await expect(callCron()).resolves.toBeUndefined();

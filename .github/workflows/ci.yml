@@ -57,6 +57,12 @@ jobs:
       - name: Type Check
         run: npx tsc --noEmit
 
+      - name: Run TypeORM migrations (ensure DB schema is up to date)
+        env:
+          NODE_ENV: test
+          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://postgres:password@localhost:5432/nexafx_test' }}
+        run: npm run typeorm:migration:run
+
       - name: Run Unit Tests
         env:
           NODE_ENV: test
@@ -75,6 +81,12 @@ jobs:
           MAILGUN_FROM_EMAIL: 'test@nexafx.com'
           FRONTEND_URL: 'http://localhost:3001'
         run: npm run test -- --forceExit
+
+      - name: Check for migration drift (fail if entity changes are not migrated)
+        env:
+          NODE_ENV: test
+          DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://postgres:password@localhost:5432/nexafx_test' }}
+        run: npm run typeorm:migration:generate -- --check
 
       - name: Build
         run: npm run build

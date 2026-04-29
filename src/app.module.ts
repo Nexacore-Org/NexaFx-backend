@@ -26,10 +26,13 @@ import { AdminModule } from './admin/admin.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { DaoModule } from './dao/dao.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { GraphQLApiModule } from './graphql/graphql.module';
 import { SuperAdminModule } from './super-admin/super-admin.module';
 import { GatewaysModule } from './gateways/gateways.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { WalletsModule } from './wallets/wallets.module';
+import { RateAlertsModule } from './rate-alerts/rate-alerts.module';
+import { LedgerModule } from './ledger/ledger.module';
 
 @Module({
   imports: [
@@ -79,12 +82,16 @@ import { WalletsModule } from './wallets/wallets.module';
     ReceiptsModule,
     FeesModule,
     PushNotificationsModule,
+    // Rate alerts: user-configured exchange rate notifications
+    RateAlertsModule,
     AdminModule,
     SuperAdminModule,
     // DAO module provides Stellar Soroban contract interaction for reward distribution
     DaoModule,
+    GraphQLApiModule,
     WebhooksModule,
     WalletsModule,
+    LedgerModule,
   ],
   controllers: [AppController],
   providers: [

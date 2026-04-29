@@ -380,7 +380,7 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    await this.userRepository.delete(userId);
+    await this.userRepository.update(userId, { isDeleted: true });
   }
 
   private async mapWalletBalance(balance: WalletBalanceResult): Promise<{

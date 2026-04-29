@@ -88,6 +88,9 @@ export class User {
   @Column({ type: 'int', default: 0 })
   failedLoginAttempts: number;
 
+  @Column({ type: 'boolean', default: false })
+  isDeleted: boolean;
+
   @Column({ type: 'timestamp with time zone', nullable: true })
   lockedUntil: Date | null;
 

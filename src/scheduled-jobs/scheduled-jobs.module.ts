@@ -10,6 +10,7 @@ import { Notification } from '../notifications/entities/notification.entity';
 import { RateAlertsModule } from '../rate-alerts/rate-alerts.module';
 import { CurrenciesModule } from '../currencies/currencies.module';
 import { DaoModule } from '../dao/dao.module';
+import { LedgerModule } from '../ledger/ledger.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { DaoModule } from '../dao/dao.module';
     RateAlertsModule,
     CurrenciesModule,
     DaoModule,
+    LedgerModule,
   ],
   providers: [ScheduledJobsService],
   exports: [ScheduledJobsService],

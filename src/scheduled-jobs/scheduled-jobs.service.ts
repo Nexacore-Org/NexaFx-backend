@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { Repository, LessThan, Not, IsNull } from 'typeorm';
+import { Repository } from 'typeorm';
 import * as os from 'os';
 import {
   Transaction,
@@ -12,6 +12,7 @@ import { StellarService } from '../blockchain/stellar/stellar.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
 import { CurrencyPairService } from '../currencies/services/currency-pair.service';
+import { LedgerVerificationService } from '../ledger/services/ledger-verification.service';
 import {
   NotificationType,
   NotificationStatus,
@@ -21,6 +22,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { RateAlertsService } from '../rate-alerts/rate-alerts.service';
 import { WebhookService } from '../webhooks/services/webhook.service';
 import { ProposalService } from '../dao/services/proposal.service';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { IdempotencyRecord } from '../common/entities/idempotency-record.entity';
+import { DataRequest } from '../users/entities/data-request.entity';
+import { DataSource } from 'typeorm';
 
 @Injectable()
 export class ScheduledJobsService {
@@ -34,14 +39,23 @@ export class ScheduledJobsService {
     private readonly transactionRepository: Repository<Transaction>,
     @InjectRepository(Notification)
     private readonly notificationRepository: Repository<Notification>,
+    @InjectRepository(DataRequest)
+    private readonly dataRequestRepository: Repository<DataRequest>,
+    @InjectRepository(IdempotencyRecord)
+    private readonly idempotencyRepository: Repository<IdempotencyRecord>,
     private readonly transactionsService: TransactionsService,
     private readonly stellarService: StellarService,
     private readonly notificationsService: NotificationsService,
     private readonly usersService: UsersService,
     private readonly rateAlertsService: RateAlertsService,
     private readonly webhookService: WebhookService,
+    private readonly dataSource: DataSource,
+  @InjectRepository(IdempotencyRecord)
+  private readonly idempotencyRepository: Repository<IdempotencyRecord>,
     private readonly currencyPairService: CurrencyPairService,
     private readonly proposalService: ProposalService,
+    private readonly auditLogsService: AuditLogsService,
+    private readonly ledgerVerificationService: LedgerVerificationService,
   ) {
     // Truncate hostname to 255 characters to match DB column constraint
     this.instanceId = os.hostname().substring(0, 255);
@@ -222,6 +236,31 @@ export class ScheduledJobsService {
   }
 
   /**
+   * Verify the double-entry ledger every 6 hours and notify admins on mismatch.
+   */
+  @Cron('0 0 */6 * * *')
+  async verifyLedgerIntegrity(): Promise<void> {
+    this.logger.log('[Scheduled Job] Starting ledger verification');
+
+    try {
+      const result = await this.ledgerVerificationService.verify();
+
+      if (result.status === 'BALANCED') {
+        this.logger.log('[Scheduled Job] Ledger verification completed: balanced');
+        return;
+      }
+
+      this.logger.warn(
+        `[Scheduled Job] Ledger discrepancy detected: ${result.discrepancies
+          .map((item) => `${item.currency}=${item.amountDelta}`)
+          .join(', ')}`,
+      );
+    } catch (error) {
+      this.logger.error('[Scheduled Job] Ledger verification failed:', error);
+    }
+  }
+
+  /**
    * Clean up old notifications every day at 2 AM.
    * - READ notifications older than 30 days are deleted.
    * - UNREAD notifications older than 90 days are deleted.
@@ -297,6 +336,26 @@ export class ScheduledJobsService {
     } catch (error) {
       this.logger.error(
         '[Scheduled Job] Fatal error in wallet balances snapshot sync:',
+        error,
+      );
+    }
+  }
+
+  /**
+   * Process scheduled audit log exports every day at 1 AM
+   */
+  @Cron('0 1 * * *')
+  async processScheduledAuditExports(): Promise<void> {
+    this.logger.log('[Scheduled Job] Starting scheduled audit log exports processing');
+
+    try {
+      const result = await this.auditLogsService.processScheduledExports();
+      this.logger.log(
+        `[Scheduled Job] Scheduled audit exports processed: ${result.processed} succeeded, ${result.failed} failed`,
+      );
+    } catch (error) {
+      this.logger.error(
+        '[Scheduled Job] Fatal error in scheduled audit exports:',
         error,
       );
     }
@@ -685,6 +744,77 @@ export class ScheduledJobsService {
       this.logger.error(
         '[Scheduled Job] Failed to finalize expired proposals:',
         error instanceof Error ? error.message : String(error),
+   * Clean up expired idempotency records every day at 3 AM.
+   * Deletes records where expiresAt < NOW().
+   */
+  @Cron('0 3 * * *')
+  async cleanupExpiredIdempotencyRecords(): Promise<void> {
+    this.logger.log(
+      '[Scheduled Job] Starting expired idempotency records cleanup',
+    );
+
+    try {
+      const result = await this.idempotencyRepository
+        .createQueryBuilder()
+        .delete()
+        .from(IdempotencyRecord)
+        .where('expiresAt < NOW()')
+        .execute();
+
+      const deletedCount = result.affected ?? 0;
+      this.logger.log(
+        `[Scheduled Job] Idempotency records cleanup completed — ${deletedCount} expired records removed`,
+      );
+    } catch (error) {
+      this.logger.error(
+        '[Scheduled Job] Fatal error in idempotency records cleanup:',
+        error,
+      );
+    }
+  }
+
+  /**
+   * Perform hard delete of user data 30 days after account deletion request
+   * (GDPR Article 17 - right to erasure hard delete)
+   */
+  @Cron(CronExpression.EVERY_DAY_AT_2AM)
+  async hardDeleteExpiredAccounts(): Promise<void> {
+    this.logger.log(
+      '[Scheduled Job] Starting hard delete of expired anonymized accounts',
+    );
+
+    try {
+      const result = await this.dataSource.manager.query(`
+        DELETE FROM "refresh_token" WHERE "userId" IN (
+          SELECT u.id FROM users u
+          JOIN data_requests dr ON dr."userId" = u.id
+          WHERE u."isDeleted" = true
+          AND dr.type = 'DELETION'
+          AND dr.status = 'COMPLETE'
+          AND dr."completedAt" < NOW() - INTERVAL '30 days'
+        );
+      `);
+
+      const deletedUsers = await this.dataSource.manager
+        .createQueryBuilder()
+        .delete()
+        .from('users')
+        .where('"isDeleted" = true')
+        .andWhere(
+          'id IN (SELECT "userId" FROM data_requests WHERE type = \'DELETION\' AND status = \'COMPLETE\' AND "completedAt" < :cutoff)',
+          {
+            cutoff: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+          },
+        )
+        .execute();
+
+      this.logger.log(
+        `[Scheduled Job] Hard delete completed — ${deletedUsers.affected} users permanently removed`,
+      );
+    } catch (error) {
+      this.logger.error(
+        '[Scheduled Job] Fatal error in hard delete of expired accounts:',
+        error,
       );
     }
   }

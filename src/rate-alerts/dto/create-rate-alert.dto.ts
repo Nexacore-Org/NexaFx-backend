@@ -1,3 +1,24 @@
+import { IsString, IsNumberString, IsIn, IsBoolean, IsOptional } from 'class-validator';
+import { RateAlertDirection } from '../entities/rate-alert.entity';
+
+export class CreateRateAlertDto {
+  @IsString()
+  fromCurrency: string;
+
+  @IsString()
+  toCurrency: string;
+
+  // Accept numeric string to avoid JS float issues at the boundary
+  @IsNumberString()
+  targetRate: string;
+
+  @IsIn([RateAlertDirection.ABOVE, RateAlertDirection.BELOW])
+  direction: RateAlertDirection;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsEnum,

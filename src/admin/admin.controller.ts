@@ -21,6 +21,7 @@ import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { DataRequestType } from '../users/entities/data-request.entity';
 import { UserRole } from '../users/user.entity';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UserQueryDto } from './dto/user-query.dto';
@@ -147,6 +148,62 @@ export class AdminController {
     @CurrentUser() admin: { userId: string },
   ) {
     return this.adminService.unsuspendUser(id, admin.userId);
+  }
+
+  @Get('users/:id/data-requests')
+  @ApiOperation({ summary: 'Get all data requests for a user (Admin only)' })
+  @ApiParam({ name: 'id', type: String, description: 'User UUID' })
+  @ApiResponse({ status: 200, description: 'Returns data requests for the user' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async getUserRequests(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('type') type?: DataRequestType,
+  ) {
+    return this.adminService.getUserRequests(id, type);
+  }
+
+  @Patch('users/:id/data-requests/:requestId/process')
+  @ApiOperation({ summary: 'Process a data export request (Admin only)' })
+  @ApiParam({ name: 'id', type: String, description: 'User UUID' })
+  @ApiParam({ name: 'requestId', type: String, description: 'Request UUID' })
+  @ApiResponse({ status: 200, description: 'Request processed successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
+  @ApiResponse({ status: 404, description: 'Request not found' })
+  async processDataRequest(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('requestId', ParseUUIDPipe) requestId: string,
+  ) {
+    return this.adminService.processDataRequest(id, requestId);
+  }
+
+  @Patch('users/:id/data-requests/:requestId/cancel')
+  @ApiOperation({ summary: 'Cancel a data request (Admin only)' })
+  @ApiParam({ name: 'id', type: String, description: 'User UUID' })
+  @ApiParam({ name: 'requestId', type: String, description: 'Request UUID' })
+  @ApiResponse({ status: 200, description: 'Request cancelled successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
+  @ApiResponse({ status: 404, description: 'Request not found' })
+  async cancelDataRequest(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('requestId', ParseUUIDPipe) requestId: string,
+  ) {
+    return this.adminService.cancelDataRequest(id, requestId);
+  }
+
+  @Get('data-requests')
+  @ApiOperation({ summary: 'List all data requests (Admin only)' })
+  @ApiResponse({ status: 200, description: 'Returns all data requests' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
+  async getAllRequests(
+    @Query('type') type?: DataRequestType,
+    @Query('status') status?: string,
+  ) {
+    return this.adminService.getAllRequests(type, status);
   }
 
   @Get('transactions')

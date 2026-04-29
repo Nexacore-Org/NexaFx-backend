@@ -42,6 +42,7 @@ export class ScheduledJobsService {
     private readonly webhookService: WebhookService,
   @InjectRepository(IdempotencyRecord)
   private readonly idempotencyRepository: Repository<IdempotencyRecord>,
+    private readonly currencyPairService: CurrencyPairService,
   ) {
     // Truncate hostname to 255 characters to match DB column constraint
     this.instanceId = os.hostname().substring(0, 255);

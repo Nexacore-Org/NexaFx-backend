@@ -9,6 +9,7 @@ import { UsersModule } from '../users/users.module';
 import { Notification } from '../notifications/entities/notification.entity';
 import { RateAlertsModule } from '../rate-alerts/rate-alerts.module';
 import { CurrenciesModule } from '../currencies/currencies.module';
+import { DaoModule } from '../dao/dao.module';
 import { LedgerModule } from '../ledger/ledger.module';
 
 @Module({
@@ -20,6 +21,7 @@ import { LedgerModule } from '../ledger/ledger.module';
     UsersModule,
     RateAlertsModule,
     CurrenciesModule,
+    DaoModule,
     LedgerModule,
   ],
   providers: [ScheduledJobsService],

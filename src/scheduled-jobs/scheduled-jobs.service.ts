@@ -21,6 +21,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { RateAlertsService } from '../rate-alerts/rate-alerts.service';
 import { WebhookService } from '../webhooks/services/webhook.service';
+import { ProposalService } from '../dao/services/proposal.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { IdempotencyRecord } from '../common/entities/idempotency-record.entity';
 import { DataRequest } from '../users/entities/data-request.entity';
@@ -52,6 +53,7 @@ export class ScheduledJobsService {
   @InjectRepository(IdempotencyRecord)
   private readonly idempotencyRepository: Repository<IdempotencyRecord>,
     private readonly currencyPairService: CurrencyPairService,
+    private readonly proposalService: ProposalService,
     private readonly auditLogsService: AuditLogsService,
     private readonly ledgerVerificationService: LedgerVerificationService,
   ) {
@@ -731,6 +733,17 @@ export class ScheduledJobsService {
   }
 
   /**
+   * Finalize expired DAO governance proposals every 5 minutes
+   * Checks ACTIVE proposals past votingEndAt, calculates results, and submits on-chain if passing
+   */
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async finalizeExpiredProposals(): Promise<void> {
+    try {
+      await this.proposalService.finalizeExpiredProposals();
+    } catch (error) {
+      this.logger.error(
+        '[Scheduled Job] Failed to finalize expired proposals:',
+        error instanceof Error ? error.message : String(error),
    * Clean up expired idempotency records every day at 3 AM.
    * Deletes records where expiresAt < NOW().
    */

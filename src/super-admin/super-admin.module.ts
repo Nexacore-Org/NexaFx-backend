@@ -9,6 +9,7 @@ import { UsersModule } from '../users/users.module';
 import { PlatformConfig } from './entities/platform-config.entity';
 import { SuperAdminController } from './super-admin.controller';
 import { SuperAdminService } from './super-admin.service';
+import { WalletsModule } from '../wallets/wallets.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { SuperAdminService } from './super-admin.service';
     UsersModule,
     StellarModule,
     AuditLogsModule,
+    WalletsModule,
   ],
   controllers: [SuperAdminController],
   providers: [SuperAdminService],

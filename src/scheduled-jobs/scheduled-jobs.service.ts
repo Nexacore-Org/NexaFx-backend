@@ -11,6 +11,7 @@ import { TransactionsService } from '../transactions/services/transaction.servic
 import { StellarService } from '../blockchain/stellar/stellar.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
+import { CurrencyPairService } from '../currencies/services/currency-pair.service';
 import {
   NotificationType,
   NotificationStatus,
@@ -41,9 +42,27 @@ export class ScheduledJobsService {
     private readonly webhookService: WebhookService,
   @InjectRepository(IdempotencyRecord)
   private readonly idempotencyRepository: Repository<IdempotencyRecord>,
+    private readonly currencyPairService: CurrencyPairService,
   ) {
     // Truncate hostname to 255 characters to match DB column constraint
     this.instanceId = os.hostname().substring(0, 255);
+  }
+
+  /**
+   * Auto-resume suspended currency pairs every minute
+   */
+  @Cron(CronExpression.EVERY_MINUTE)
+  async autoResumePairs(): Promise<void> {
+    try {
+      const resumedCount = await this.currencyPairService.autoResumePairs();
+      if (resumedCount > 0) {
+        this.logger.log(
+          `[Scheduled Job] Auto-resumed ${resumedCount} currency pairs`,
+        );
+      }
+    } catch (error) {
+      this.logger.error('[Scheduled Job] Auto-resume pairs failed:', error);
+    }
   }
 
   /**
@@ -498,6 +517,13 @@ export class ScheduledJobsService {
     this.logger.log(
       `[Retry] Attempting to re-verify failed transaction ${transaction.id}`,
     );
+
+    if (!transaction.txHash) {
+      this.logger.warn(
+        `[Retry] Cannot retry transaction ${transaction.id} because it has no hash`,
+      );
+      return;
+    }
 
     try {
       const verificationResult = await this.stellarService.verifyTransaction(

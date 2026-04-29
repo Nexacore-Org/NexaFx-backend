@@ -1,0 +1,11 @@
+node_modules
+test
+.git
+coverage
+*.spec.ts
+jest_error.json
+tsc_output.txt
+tsc_final.txt
+jest-out.txt
+.env
+src

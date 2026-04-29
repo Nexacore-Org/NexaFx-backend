@@ -1,3 +1,48 @@
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
+
+export enum RateAlertDirection {
+  ABOVE = 'ABOVE',
+  BELOW = 'BELOW',
+}
+
+@Entity({ name: 'rate_alerts' })
+export class RateAlert {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ type: 'uuid' })
+  userId: string;
+
+  @Column({ length: 10 })
+  @Index()
+  fromCurrency: string;
+
+  @Column({ length: 10 })
+  @Index()
+  toCurrency: string;
+
+  // store as numeric string to preserve precision; use Decimal.js for comparisons
+  @Column('numeric', { precision: 20, scale: 8 })
+  targetRate: string;
+
+  @Column({ type: 'enum', enum: RateAlertDirection })
+  direction: RateAlertDirection;
+
+  @Column({ default: false })
+  isTriggered: boolean;
+
+  @Column({ default: true })
+  isActive: boolean;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  triggeredAt: Date | null;
+
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
+}
 import {
   Entity,
   PrimaryGeneratedColumn,

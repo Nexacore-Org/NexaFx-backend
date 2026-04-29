@@ -21,6 +21,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { RateAlertsService } from '../rate-alerts/rate-alerts.service';
 import { WebhookService } from '../webhooks/services/webhook.service';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { IdempotencyRecord } from '../common/entities/idempotency-record.entity';
 import { DataRequest } from '../users/entities/data-request.entity';
 import { DataSource } from 'typeorm';
@@ -51,6 +52,7 @@ export class ScheduledJobsService {
   @InjectRepository(IdempotencyRecord)
   private readonly idempotencyRepository: Repository<IdempotencyRecord>,
     private readonly currencyPairService: CurrencyPairService,
+    private readonly auditLogsService: AuditLogsService,
     private readonly ledgerVerificationService: LedgerVerificationService,
   ) {
     // Truncate hostname to 255 characters to match DB column constraint
@@ -332,6 +334,26 @@ export class ScheduledJobsService {
     } catch (error) {
       this.logger.error(
         '[Scheduled Job] Fatal error in wallet balances snapshot sync:',
+        error,
+      );
+    }
+  }
+
+  /**
+   * Process scheduled audit log exports every day at 1 AM
+   */
+  @Cron('0 1 * * *')
+  async processScheduledAuditExports(): Promise<void> {
+    this.logger.log('[Scheduled Job] Starting scheduled audit log exports processing');
+
+    try {
+      const result = await this.auditLogsService.processScheduledExports();
+      this.logger.log(
+        `[Scheduled Job] Scheduled audit exports processed: ${result.processed} succeeded, ${result.failed} failed`,
+      );
+    } catch (error) {
+      this.logger.error(
+        '[Scheduled Job] Fatal error in scheduled audit exports:',
         error,
       );
     }

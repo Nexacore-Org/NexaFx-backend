@@ -1,0 +1,21 @@
+type ExchangeRate {
+  from: String!
+  to: String!
+  rate: Float!
+  timestamp: String
+}
+
+type Currency {
+  id: ID!
+  code: String!
+  name: String!
+  symbol: String
+  decimals: Int!
+  isBase: Boolean!
+  isActive: Boolean!
+}
+
+extend type Query {
+  exchangeRate(from: String!, to: String!): ExchangeRate!
+  currencies: [Currency!]!
+}

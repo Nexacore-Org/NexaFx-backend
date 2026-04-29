@@ -19,7 +19,11 @@ export class WebhookService {
     private readonly deliveryRepo: Repository<WebhookDelivery>,
   ) {}
 
-  async createEndpoint(userId: string, url: string, events: string[]): Promise<WebhookEndpoint> {
+  async createEndpoint(
+    userId: string,
+    url: string,
+    events: string[],
+  ): Promise<WebhookEndpoint> {
     if (!url.startsWith('https://')) {
       throw new BadRequestException('Webhook URL must use HTTPS');
     }
@@ -35,13 +39,17 @@ export class WebhookService {
     return this.endpointRepo.save(endpoint);
   }
 
-  async dispatch(eventType: string, payload: any, userId: string): Promise<void> {
+  async dispatch(
+    eventType: string,
+    payload: any,
+    userId: string,
+  ): Promise<void> {
     const endpoints = await this.endpointRepo.find({
       where: { userId, isActive: true },
     });
 
-    const relevantEndpoints = endpoints.filter(e => 
-      e.events.includes(eventType) || e.events.includes('*')
+    const relevantEndpoints = endpoints.filter(
+      (e) => e.events.includes(eventType) || e.events.includes('*'),
     );
 
     for (const endpoint of relevantEndpoints) {
@@ -54,13 +62,18 @@ export class WebhookService {
       await this.deliveryRepo.save(delivery);
 
       // Asynchronous delivery - do not await
-      this.executeDelivery(delivery, endpoint).catch(err => {
-        this.logger.error(`Initial delivery failed for ${endpoint.url}: ${err.message}`);
+      this.executeDelivery(delivery, endpoint).catch((err) => {
+        this.logger.error(
+          `Initial delivery failed for ${endpoint.url}: ${err.message}`,
+        );
       });
     }
   }
 
-  async executeDelivery(delivery: WebhookDelivery, endpoint: WebhookEndpoint): Promise<void> {
+  async executeDelivery(
+    delivery: WebhookDelivery,
+    endpoint: WebhookEndpoint,
+  ): Promise<void> {
     const payloadString = JSON.stringify(delivery.payload);
     const signature = crypto
       .createHmac('sha256', endpoint.secret)
@@ -68,7 +81,7 @@ export class WebhookService {
       .digest('hex');
 
     delivery.attemptCount++;
-    
+
     try {
       const response = await axios.post(endpoint.url, delivery.payload, {
         headers: {
@@ -80,13 +93,18 @@ export class WebhookService {
       });
 
       delivery.responseStatus = response.status;
-      delivery.responseBody = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+      delivery.responseBody =
+        typeof response.data === 'string'
+          ? response.data
+          : JSON.stringify(response.data);
       delivery.deliveredAt = new Date();
       delivery.nextRetryAt = null;
     } catch (error) {
       delivery.responseStatus = error.response?.status || 0;
-      delivery.responseBody = error.response?.data 
-        ? (typeof error.response.data === 'string' ? error.response.data : JSON.stringify(error.response.data))
+      delivery.responseBody = error.response?.data
+        ? typeof error.response.data === 'string'
+          ? error.response.data
+          : JSON.stringify(error.response.data)
         : error.message;
 
       if (delivery.attemptCount < this.MAX_ATTEMPTS) {
@@ -110,7 +128,9 @@ export class WebhookService {
     });
 
     for (const delivery of pendingDeliveries) {
-      const endpoint = await this.endpointRepo.findOne({ where: { id: delivery.endpointId } });
+      const endpoint = await this.endpointRepo.findOne({
+        where: { id: delivery.endpointId },
+      });
       if (endpoint && endpoint.isActive) {
         await this.executeDelivery(delivery, endpoint);
       }
@@ -125,11 +145,20 @@ export class WebhookService {
     await this.endpointRepo.delete({ id, userId });
   }
 
-  async getDeliveryHistory(endpointId: string, userId: string): Promise<WebhookDelivery[]> {
-    const endpoint = await this.endpointRepo.findOne({ where: { id: endpointId, userId } });
+  async getDeliveryHistory(
+    endpointId: string,
+    userId: string,
+  ): Promise<WebhookDelivery[]> {
+    const endpoint = await this.endpointRepo.findOne({
+      where: { id: endpointId, userId },
+    });
     if (!endpoint) {
       throw new BadRequestException('Endpoint not found');
     }
-    return this.deliveryRepo.find({ where: { endpointId }, order: { createdAt: 'DESC' }, take: 100 });
+    return this.deliveryRepo.find({
+      where: { endpointId },
+      order: { createdAt: 'DESC' },
+      take: 100,
+    });
   }
 }

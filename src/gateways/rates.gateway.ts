@@ -8,7 +8,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { UseGuards, Logger } from '@nestjs/common';
-import { ExchangeRatesService } from './exchange-rates.service';
+import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
 import { WsJwtGuard } from './ws-jwt.guard';
 
 @WebSocketGateway({

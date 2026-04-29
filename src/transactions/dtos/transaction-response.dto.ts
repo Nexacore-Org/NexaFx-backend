@@ -26,23 +26,29 @@ export class TransactionResponseDto {
   @ApiPropertyOptional({ example: 'Stellar Lumens' })
   currencyDisplayName?: string;
 
-  @ApiPropertyOptional({ example: '0.12345678' })
-  rate: string;
+  @ApiPropertyOptional({ nullable: true, example: '0.12345678' })
+  rate: string | null;
 
   @ApiProperty({ enum: TransactionStatus, example: TransactionStatus.PENDING })
   status: TransactionStatus;
 
-  @ApiPropertyOptional({ example: 'abc123def456...' })
-  txHash: string;
+  @ApiPropertyOptional({
+    nullable: true,
+    example: 'abc123def456...',
+  })
+  txHash: string | null;
 
-  @ApiPropertyOptional({ example: 'Insufficient funds on-chain' })
-  failureReason: string;
+  @ApiPropertyOptional({
+    nullable: true,
+    example: 'Insufficient funds on-chain',
+  })
+  failureReason: string | null;
 
-  @ApiPropertyOptional({ example: '0.50000000' })
-  feeAmount: string;
+  @ApiPropertyOptional({ nullable: true, example: '0.50000000' })
+  feeAmount: string | null;
 
-  @ApiPropertyOptional({ example: 'XLM' })
-  feeCurrency: string;
+  @ApiPropertyOptional({ nullable: true, example: 'XLM' })
+  feeCurrency: string | null;
 
   @ApiProperty({ example: '2024-01-15T10:30:00.000Z' })
   createdAt: Date;
@@ -74,11 +80,11 @@ export class TransactionListResponseDto {
 }
 
 export class SwapResponseDto extends TransactionResponseDto {
-  @ApiProperty({ example: 'USDC' })
-  toCurrency: string;
+  @ApiProperty({ nullable: true, example: 'USDC' })
+  toCurrency: string | null;
 
-  @ApiProperty({ example: '12.50000000' })
-  toAmount: string;
+  @ApiProperty({ nullable: true, example: '12.50000000' })
+  toAmount: string | null;
 
   @ApiProperty({
     example: 'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOUJ3UHMNGUAO7UP',

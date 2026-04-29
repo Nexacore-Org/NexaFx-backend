@@ -527,7 +527,90 @@ http://localhost:3000/api/docs
 
 ---
 
-## 🔗 Related Repositories & Resources
+## � Monitoring
+
+The NexaFX API provides health check endpoints for monitoring and uptime verification. These endpoints are designed for use with load balancers, orchestration platforms (e.g., Render, Kubernetes), and monitoring systems.
+
+### Root Status Endpoint (`GET /`)
+
+Returns the current status of the API service without making database queries. This endpoint is used by Render and other platforms to verify service liveness.
+
+**Request:**
+```bash
+curl http://localhost:3000/
+```
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "service": "NexaFX API",
+  "version": "1.0.0",
+  "timestamp": "2024-04-24T10:30:45.123Z",
+  "environment": "production"
+}
+```
+
+**Status Code**: `200 OK`  
+**Response Time**: < 100ms (no database calls)  
+**Authentication**: Not required (`@Public()`)
+
+### Health Check Endpoint (`GET /health`)
+
+Performs a comprehensive health check including database connectivity and Stellar blockchain status. This endpoint is used for readiness probes to verify the service is fully operational.
+
+**Request:**
+```bash
+curl http://localhost:3000/health
+```
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "details": {
+    "database": "ok",
+    "stellar": "ok",
+    "cache": "ok"
+  }
+}
+```
+
+**Status Codes**:
+- `200 OK` - Service and all dependencies are healthy
+- `503 Service Unavailable` - One or more dependencies are down
+
+**Authentication**: Not required (`@Public()`)
+
+### Usage with Render
+
+Render's infrastructure uses the `GET /` endpoint (HEAD requests) to verify service availability during deployments:
+
+1. **Liveness Check**: Render sends `HEAD /` every 30 seconds
+2. **Readiness Check**: Render sends `GET /health` before marking service as healthy
+3. **Configuration**: No additional setup needed; Render uses the default health check
+
+To monitor in Render's dashboard:
+- View live logs: Check **Logs** tab for "GET /" requests
+- Monitor uptime: Verify zero `Cannot HEAD /` errors in error logs
+- Check dependencies: Use `GET /health` endpoint manually if database appears down
+
+### Manual Health Verification
+
+```bash
+# Test liveness (quick check)
+curl -i http://localhost:3000/
+
+# Test readiness (full health check)
+curl -i http://localhost:3000/health
+
+# Monitor logs (development)
+npm run start:dev | grep -i "health\|head\|404"
+```
+
+---
+
+## �🔗 Related Repositories & Resources
 
 | Resource | URL | Purpose |
 |----------|-----|---------|

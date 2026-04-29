@@ -20,6 +20,14 @@ import {
   FeeTransactionType,
   FeeType,
 } from '../../fees/entities/fee-config.entity';
+import { CurrencyPairService } from '../../currencies/services/currency-pair.service';
+import { FirebaseService } from '../../firebase/firebase.service';
+import { WebhookService } from '../../webhooks/services/webhook.service';
+import { TransactionType } from '../entities/transaction.entity';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { BeneficiariesService } from '../../beneficiaries/beneficiaries.service';
+import { WalletsService } from '../../wallets/wallets.service';
+import { EncryptionService } from '../../common/services/encryption.service';
 
 describe('TransactionsService fee integration behavior', () => {
   let service: TransactionsService;
@@ -33,6 +41,12 @@ describe('TransactionsService fee integration behavior', () => {
       id: payload.id ?? 'tx-123',
       ...payload,
     })),
+    findOne: jest.fn(),
+  };
+
+  const currencyPairService = {
+    validatePair: jest.fn(async () => ({ spreadPercent: 0.5 })),
+    findByCodes: jest.fn(async () => ({ spreadPercent: 0.5 })),
   };
 
   const currenciesService = {
@@ -47,6 +61,14 @@ describe('TransactionsService fee integration behavior', () => {
     createTransaction: jest.fn(async () => ({})),
     signTransaction: jest.fn(async () => ({})),
     submitTransaction: jest.fn(async () => ({ hash: 'stellar-hash' })),
+    findBestPath: jest.fn(async () => [
+      {
+        source_amount: '100',
+        destination_amount: '100',
+        path: [],
+      },
+    ]),
+    buildPathPaymentOp: jest.fn(() => ({})),
   };
 
   const usersService = {
@@ -79,7 +101,36 @@ describe('TransactionsService fee integration behavior', () => {
   };
 
   const configService = {
-    get: jest.fn(() => 'S_TEST_HOT_WALLET_SECRET'),
+    get: jest.fn((key: string) => {
+      if (key === 'SWAP_SLIPPAGE_PERCENT') return '0.005';
+      return 'S_TEST_HOT_WALLET_SECRET';
+    }),
+  };
+
+  const firebaseService = {};
+  const webhookService = {
+    dispatch: jest.fn(async () => undefined),
+  };
+
+  const notificationsService = {
+    create: jest.fn(async () => undefined),
+  };
+
+  const beneficiariesService = {};
+
+  const walletsService = {
+    resolveWalletForTransaction: jest.fn(async () => ({
+      publicKey:
+        'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+      encryptedSecretKey:
+        'SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    })),
+  };
+
+  const encryptionService = {
+    decrypt: jest.fn(
+      () => 'SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    ),
   };
 
   beforeEach(async () => {
@@ -93,6 +144,7 @@ describe('TransactionsService fee integration behavior', () => {
           useValue: transactionRepository,
         },
         { provide: CurrenciesService, useValue: currenciesService },
+        { provide: CurrencyPairService, useValue: currencyPairService },
         { provide: ExchangeRatesService, useValue: exchangeRatesService },
         { provide: StellarService, useValue: stellarService },
         { provide: ConfigService, useValue: configService },
@@ -100,6 +152,12 @@ describe('TransactionsService fee integration behavior', () => {
         { provide: UsersService, useValue: usersService },
         { provide: AuditLogsService, useValue: auditLogsService },
         { provide: ReferralsService, useValue: referralsService },
+        { provide: FirebaseService, useValue: firebaseService },
+        { provide: WebhookService, useValue: webhookService },
+        { provide: NotificationsService, useValue: notificationsService },
+        { provide: BeneficiariesService, useValue: beneficiariesService },
+        { provide: WalletsService, useValue: walletsService },
+        { provide: EncryptionService, useValue: encryptionService },
       ],
     }).compile();
 
@@ -192,31 +250,27 @@ describe('TransactionsService fee integration behavior', () => {
   });
 
   describe('cancelTransaction', () => {
-    const mockPendingTransaction: Partial<Transaction> = {
-      id: 'tx-cancel-test',
-      userId: 'user-1',
-      status: TransactionStatus.PENDING,
-      type: TransactionType.DEPOSIT,
-      amount: '100',
-      currency: 'XLM',
-      txHash: null,
-    };
-
-    const mockSuccessTransaction: Partial<Transaction> = {
-      ...mockPendingTransaction,
-      status: TransactionStatus.SUCCESS,
-    };
+    const makePending = (overrides: Partial<Transaction> = {}): Transaction =>
+      ({
+        id: 'tx-cancel-test',
+        userId: 'user-1',
+        status: TransactionStatus.PENDING,
+        type: TransactionType.DEPOSIT,
+        amount: '100',
+        currency: 'XLM',
+        txHash: null,
+        ...overrides,
+      }) as Transaction;
 
     beforeEach(() => {
       jest.clearAllMocks();
     });
 
     it('should cancel a PENDING transaction owned by the user', async () => {
-      transactionRepository.findOne.mockResolvedValue(
-        mockPendingTransaction as Transaction,
-      );
+      const pending = makePending();
+      transactionRepository.findOne.mockResolvedValue(pending);
       transactionRepository.save.mockResolvedValue({
-        ...mockPendingTransaction,
+        ...pending,
         status: TransactionStatus.CANCELLED,
       } as Transaction);
 
@@ -243,10 +297,9 @@ describe('TransactionsService fee integration behavior', () => {
     });
 
     it('should throw ForbiddenException when user tries to cancel another user transaction', async () => {
-      transactionRepository.findOne.mockResolvedValue({
-        ...mockPendingTransaction,
-        userId: 'different-user',
-      } as Transaction);
+      transactionRepository.findOne.mockResolvedValue(
+        makePending({ userId: 'different-user' }),
+      );
 
       await expect(
         service.cancelTransaction('tx-cancel-test', 'user-1'),
@@ -257,7 +310,7 @@ describe('TransactionsService fee integration behavior', () => {
 
     it('should throw BadRequestException when cancelling a non-PENDING transaction', async () => {
       transactionRepository.findOne.mockResolvedValue(
-        mockSuccessTransaction as Transaction,
+        makePending({ status: TransactionStatus.SUCCESS }),
       );
 
       await expect(
@@ -284,14 +337,11 @@ describe('TransactionsService fee integration behavior', () => {
     });
 
     it('should log a warning when cancelling a transaction that has a txHash', async () => {
-      const transactionWithHash = {
-        ...mockPendingTransaction,
+      const transactionWithHash = makePending({
         txHash: 'stellar-hash-123',
-      };
+      });
 
-      transactionRepository.findOne.mockResolvedValue(
-        transactionWithHash as Transaction,
-      );
+      transactionRepository.findOne.mockResolvedValue(transactionWithHash);
       transactionRepository.save.mockResolvedValue({
         ...transactionWithHash,
         status: TransactionStatus.CANCELLED,

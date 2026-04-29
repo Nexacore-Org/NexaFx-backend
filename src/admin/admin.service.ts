@@ -12,7 +12,7 @@ import {
   MoreThanOrEqual,
   LessThanOrEqual,
 } from 'typeorm';
-import { User, UserRole } from '../users/user.entity';
+import { User, UserRole, UserPlan } from '../users/user.entity';
 import {
   Transaction,
   TransactionStatus,
@@ -37,6 +37,7 @@ import { MetricsQueryDto } from './dto/metrics-query.dto';
 import * as csv from 'fast-csv';
 import { OverrideTransactionDto } from './dto/override-transaction.dto';
 import { Logger } from '@nestjs/common';
+import { UpdateUserPlanDto } from './dto/update-user-plan.dto';
 
 @Injectable()
 export class AdminService {
@@ -354,6 +355,15 @@ export class AdminService {
     adminId: string,
   ) {
     const user = await this.getUserById(id);
+    const touchesAdminTier = [user.role, updateDto.role].some(
+      (role) => role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN,
+    );
+
+    if (touchesAdminTier) {
+      throw new ForbiddenException(
+        'Admin-tier role assignments must be managed through SUPER_ADMIN controls',
+      );
+    }
 
     if (user.role === updateDto.role) {
       return user;
@@ -532,5 +542,35 @@ export class AdminService {
     );
 
     return transaction;
+  }
+
+  async updateUserPlan(
+    id: string,
+    updateDto: UpdateUserPlanDto,
+    adminId: string,
+  ) {
+    const user = await this.getUserById(id);
+
+    // No restrictions on changing plan for any role? Allow.
+    if (user.plan === updateDto.plan) {
+      return user;
+    }
+
+    const oldPlan = user.plan;
+    user.plan = updateDto.plan;
+    await this.userRepository.save(user);
+
+    await this.auditLogsService.logAuthEvent(
+      adminId,
+      AuditAction.PLAN_CHANGE,
+      {
+        targetUserId: id,
+        oldPlan,
+        newPlan: user.plan,
+      },
+      true,
+    );
+
+    return user;
   }
 }

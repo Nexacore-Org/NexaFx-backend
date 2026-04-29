@@ -14,6 +14,14 @@ import { KycRecord } from '../kyc/entities/kyc.entity';
 export enum UserRole {
   USER = 'USER',
   ADMIN = 'ADMIN',
+  SUPER_ADMIN = 'SUPER_ADMIN',
+}
+
+export enum UserPlan {
+  FREE = 'FREE',
+  BASIC = 'BASIC',
+  PREMIUM = 'PREMIUM',
+  ENTERPRISE = 'ENTERPRISE',
 }
 
 @Entity('users')
@@ -89,6 +97,13 @@ export class User {
     default: UserRole.USER,
   })
   role: UserRole;
+
+  @Column({
+    type: 'enum',
+    enum: UserPlan,
+    default: UserPlan.FREE,
+  })
+  plan: UserPlan;
 
   @Column({ type: 'timestamp with time zone', nullable: true })
   balanceLastSyncedAt: Date | null;

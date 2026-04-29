@@ -11,6 +11,7 @@ import { TransactionsService } from '../transactions/services/transaction.servic
 import { StellarService } from '../blockchain/stellar/stellar.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
+import { CurrencyPairService } from '../currencies/services/currency-pair.service';
 import {
   NotificationType,
   NotificationStatus,
@@ -18,6 +19,7 @@ import {
 } from '../notifications/entities/notification.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { RateAlertsService } from '../rate-alerts/rate-alerts.service';
+import { WebhookService } from '../webhooks/services/webhook.service';
 
 @Injectable()
 export class ScheduledJobsService {
@@ -36,9 +38,28 @@ export class ScheduledJobsService {
     private readonly notificationsService: NotificationsService,
     private readonly usersService: UsersService,
     private readonly rateAlertsService: RateAlertsService,
+    private readonly webhookService: WebhookService,
+    private readonly currencyPairService: CurrencyPairService,
   ) {
     // Truncate hostname to 255 characters to match DB column constraint
     this.instanceId = os.hostname().substring(0, 255);
+  }
+
+  /**
+   * Auto-resume suspended currency pairs every minute
+   */
+  @Cron(CronExpression.EVERY_MINUTE)
+  async autoResumePairs(): Promise<void> {
+    try {
+      const resumedCount = await this.currencyPairService.autoResumePairs();
+      if (resumedCount > 0) {
+        this.logger.log(
+          `[Scheduled Job] Auto-resumed ${resumedCount} currency pairs`,
+        );
+      }
+    } catch (error) {
+      this.logger.error('[Scheduled Job] Auto-resume pairs failed:', error);
+    }
   }
 
   /**
@@ -185,6 +206,11 @@ export class ScheduledJobsService {
       this.logger.log(
         `[Scheduled Job] Rate alerts checked=${result.checked}, triggered=${result.triggered}, reactivated=${result.reactivated}`,
       );
+
+      // Dispatch webhooks for triggered alerts if needed
+      // result.triggeredAlerts.forEach(alert => {
+      //   this.webhookService.dispatch('rate_alert.triggered', alert, alert.userId);
+      // });
     } catch (error) {
       this.logger.error(
         '[Scheduled Job] Fatal error while checking rate alerts:',
@@ -271,6 +297,18 @@ export class ScheduledJobsService {
         '[Scheduled Job] Fatal error in wallet balances snapshot sync:',
         error,
       );
+    }
+  }
+
+  /**
+   * Process failed webhook deliveries every minute
+   */
+  @Cron(CronExpression.EVERY_MINUTE)
+  async processWebhookRetries(): Promise<void> {
+    try {
+      await this.webhookService.processRetries();
+    } catch (error) {
+      this.logger.error('[Scheduled Job] Webhook retry process failed:', error);
     }
   }
 
@@ -388,6 +426,11 @@ export class ScheduledJobsService {
         error,
       );
     }
+
+    // Dispatch Webhook
+    this.webhookService
+      .dispatch('transaction.completed', transaction, transaction.userId)
+      .catch((e) => this.logger.error(`Webhook dispatch failed: ${e.message}`));
   }
 
   /**
@@ -457,6 +500,11 @@ export class ScheduledJobsService {
         error,
       );
     }
+
+    // Dispatch Webhook
+    this.webhookService
+      .dispatch('transaction.failed', transaction, transaction.userId)
+      .catch((e) => this.logger.error(`Webhook dispatch failed: ${e.message}`));
   }
 
   /**
@@ -466,6 +514,13 @@ export class ScheduledJobsService {
     this.logger.log(
       `[Retry] Attempting to re-verify failed transaction ${transaction.id}`,
     );
+
+    if (!transaction.txHash) {
+      this.logger.warn(
+        `[Retry] Cannot retry transaction ${transaction.id} because it has no hash`,
+      );
+      return;
+    }
 
     try {
       const verificationResult = await this.stellarService.verifyTransaction(

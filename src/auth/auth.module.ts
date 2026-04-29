@@ -1,9 +1,8 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import type { StringValue } from 'ms';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
@@ -14,6 +13,10 @@ import { OtpsModule } from '../otps/otps.module';
 import { TokensModule } from '../tokens/tokens.module';
 import { StellarModule } from '../blockchain/stellar/stellar.module';
 import { ReferralsModule } from '../referrals/referrals.module';
+import { TwoFactorModule } from '../two-factor/two-factor.module';
+import { WalletsModule } from '../wallets/wallets.module';
+
+type JwtExpiryValue = `${number}${'s' | 'm' | 'h' | 'd'}`;
 
 @Module({
   imports: [
@@ -23,6 +26,8 @@ import { ReferralsModule } from '../referrals/referrals.module';
     TokensModule,
     StellarModule,
     ReferralsModule,
+    forwardRef(() => TwoFactorModule),
+    WalletsModule,
     PassportModule,
     TypeOrmModule.forFeature([PasswordResetAttempt]),
     JwtModule.registerAsync({
@@ -37,7 +42,7 @@ import { ReferralsModule } from '../referrals/referrals.module';
         }
 
         const expiresIn = (configService.get<string>('JWT_EXPIRES_IN') ??
-          '15m') as StringValue;
+          '15m') as JwtExpiryValue;
 
         return {
           secret: secret ?? 'default-secret-change-in-production',

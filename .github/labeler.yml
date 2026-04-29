@@ -1,0 +1,113 @@
+admin:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/admin/**'
+
+auth:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/auth/**'
+
+beneficiaries:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/beneficiaries/**'
+
+blockchain:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/blockchain/**'
+
+currencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/currencies/**'
+
+dao:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/dao/**'
+
+database:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/database/**'
+          - 'src/migrations/**'
+
+exchange-rates:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/exchange-rates/**'
+
+fees:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/fees/**'
+
+health:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/health/**'
+
+kyc:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/kyc/**'
+
+notifications:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/notifications/**'
+          - 'src/push-notifications/**'
+
+receipts:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/receipts/**'
+
+referrals:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/referrals/**'
+
+transactions:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/transactions/**'
+
+two-factor:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/two-factor/**'
+
+users:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/users/**'
+
+rate-alerts:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/rate-alerts/**'
+
+audit-logs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/audit-logs/**'
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/**'
+
+dependencies:
+  - any-glob-to-any-file:
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - 'nest-cli.json'
+
+backend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/**'

@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ScheduleModule } from '@nestjs/schedule';
 import { ScheduledJobsService } from './scheduled-jobs.service';
 import { Transaction } from '../transactions/entities/transaction.entity';
 import { TransactionsModule } from '../transactions/transaction.module';
@@ -9,16 +8,17 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { UsersModule } from '../users/users.module';
 import { Notification } from '../notifications/entities/notification.entity';
 import { RateAlertsModule } from '../rate-alerts/rate-alerts.module';
+import { CurrenciesModule } from '../currencies/currencies.module';
 
 @Module({
   imports: [
-    ScheduleModule,
     TypeOrmModule.forFeature([Transaction, Notification]),
     TransactionsModule,
     BlockchainModule,
     NotificationsModule,
     UsersModule,
     RateAlertsModule,
+    CurrenciesModule,
   ],
   providers: [ScheduledJobsService],
   exports: [ScheduledJobsService],

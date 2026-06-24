@@ -70,18 +70,38 @@ export class AdminService {
   }
 
   async upsertTransactionLimit(dto: UpsertTransactionLimitDto) {
-    return this.transactionLimitService.upsertLimit(dto.tier, {
-      dailyLimitUsd: dto.dailyLimitUsd,
-      monthlyLimitUsd: dto.monthlyLimitUsd,
-      singleTxLimitUsd: dto.singleTxLimitUsd,
-    });
+    return this.transactionLimitService.upsertLimit(
+      dto.tier,
+      dto.transactionType,
+      dto.currency,
+      {
+        singleTransactionMax: dto.singleTransactionMax,
+        dailyMax: dto.dailyMax,
+        monthlyMax: dto.monthlyMax,
+        isActive: dto.isActive,
+      },
+    );
   }
 
   async patchTransactionLimit(tier: UserKycTier, dto: PatchTransactionLimitDto) {
-    return this.transactionLimitService.upsertLimit(tier, {
-      dailyLimitUsd: dto.dailyLimitUsd,
-      monthlyLimitUsd: dto.monthlyLimitUsd,
-      singleTxLimitUsd: dto.singleTxLimitUsd,
+    return this.transactionLimitService.upsertLimit(tier, 'SEND', 'USD', {
+      singleTransactionMax: dto.singleTransactionMax,
+      dailyMax: dto.dailyMax,
+      monthlyMax: dto.monthlyMax,
+      isActive: dto.isActive,
+    });
+  }
+
+  async getTransactionLimitById(id: string) {
+    return this.transactionLimitService.getLimitById(id);
+  }
+
+  async updateTransactionLimit(id: string, dto: PatchTransactionLimitDto) {
+    return this.transactionLimitService.updateLimit(id, {
+      singleTransactionMax: dto.singleTransactionMax,
+      dailyMax: dto.dailyMax,
+      monthlyMax: dto.monthlyMax,
+      isActive: dto.isActive,
     });
   }
 

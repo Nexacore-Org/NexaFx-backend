@@ -38,10 +38,10 @@ export class AddKycTierAndTransactionLimits1761000000000
 
     await queryRunner.query(`
       INSERT INTO "transaction_limits" ("tier", "dailyLimitUsd", "monthlyLimitUsd", "singleTxLimitUsd") VALUES
-      ('UNVERIFIED', 100, 1000, 100),
-      ('BASIC', 1000, 15000, 1000),
-      ('ENHANCED', 10000, 150000, 10000),
-      ('FULL', 50000, 500000, 50000)
+      ('UNVERIFIED', 0, 0, 0),
+      ('BASIC', 5000, 50000, 500),
+      ('ENHANCED', 50000, 500000, 10000),
+      ('FULL', 50000, 500000, 10000)
     `);
   }
 

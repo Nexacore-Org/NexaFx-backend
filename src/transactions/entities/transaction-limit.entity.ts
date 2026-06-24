@@ -4,10 +4,12 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 import { UserKycTier } from '../../users/user.entity';
 
 @Entity('transaction_limits')
+@Index(['tier', 'transactionType', 'currency'], { unique: true })
 export class TransactionLimit {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -15,18 +17,26 @@ export class TransactionLimit {
   @Column({
     type: 'enum',
     enum: UserKycTier,
-    unique: true,
   })
   tier: UserKycTier;
 
-  @Column({ type: 'decimal', precision: 20, scale: 8 })
-  dailyLimitUsd: string;
+  @Column({ type: 'varchar', length: 50 })
+  transactionType: string;
+
+  @Column({ type: 'varchar', length: 10 })
+  currency: string;
 
   @Column({ type: 'decimal', precision: 20, scale: 8 })
-  monthlyLimitUsd: string;
+  singleTransactionMax: string;
 
   @Column({ type: 'decimal', precision: 20, scale: 8 })
-  singleTxLimitUsd: string;
+  dailyMax: string;
+
+  @Column({ type: 'decimal', precision: 20, scale: 8 })
+  monthlyMax: string;
+
+  @Column({ type: 'boolean', default: true })
+  isActive: boolean;
 
   @CreateDateColumn({ type: 'timestamp with time zone' })
   createdAt: Date;

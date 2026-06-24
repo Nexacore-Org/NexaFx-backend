@@ -269,10 +269,39 @@ export class AdminController {
     return this.adminService.listTransactionLimits();
   }
 
+  @Get('transaction-limits/:id')
+  @ApiOperation({ summary: 'Get transaction limit by ID (Admin only)' })
+  @ApiParam({
+    name: 'id',
+    description: 'Transaction limit UUID',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+  })
+  @ApiResponse({ status: 200, description: 'Limit configuration retrieved' })
+  @ApiResponse({ status: 404, description: 'Limit not found' })
+  async getTransactionLimit(@Param('id', ParseUUIDPipe) id: string) {
+    return this.adminService.getTransactionLimitById(id);
+  }
+
   @Post('transaction-limits')
   @ApiOperation({ summary: 'Create or replace KYC tier transaction limit' })
   async upsertTransactionLimit(@Body() dto: UpsertTransactionLimitDto) {
     return this.adminService.upsertTransactionLimit(dto);
+  }
+
+  @Patch('transaction-limits/:id')
+  @ApiOperation({ summary: 'Update transaction limit by ID (Admin only)' })
+  @ApiParam({
+    name: 'id',
+    description: 'Transaction limit UUID',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+  })
+  @ApiResponse({ status: 200, description: 'Limit updated successfully' })
+  @ApiResponse({ status: 404, description: 'Limit not found' })
+  async updateTransactionLimit(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: PatchTransactionLimitDto,
+  ) {
+    return this.adminService.updateTransactionLimit(id, dto);
   }
 
   @Patch('transaction-limits/:tier')

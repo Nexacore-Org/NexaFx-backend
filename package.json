@@ -126,5 +126,20 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
+    ,
+    "coveragePathIgnorePatterns": [
+      "<rootDir>/.+\\.module\\.ts$",
+      "<rootDir>/.+\\.entity\\.ts$",
+      "<rootDir>/main.ts$",
+      "<rootDir>/migrations/"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "lines": 80,
+        "functions": 75,
+        "branches": 70,
+        "statements": 80
+      }
+    }
   }
 }

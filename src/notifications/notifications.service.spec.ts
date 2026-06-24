@@ -169,4 +169,104 @@ describe('NotificationsService', () => {
       );
     });
   });
+
+  describe('dispatch', () => {
+    it('should create notification record in DB', async () => {
+      mockPreferenceService.getPreference.mockResolvedValue({
+        digestMode: NotificationDigestMode.IMMEDIATE,
+      });
+      mockPreferenceService.isChannelEnabled.mockResolvedValue(true);
+      repository.create.mockReturnValue(mockNotification);
+      repository.save.mockResolvedValue(mockNotification);
+
+      await service.create({
+        userId: 'user-123',
+        type: NotificationType.TRANSACTION,
+        title: 'Transaction Successful',
+        message: 'Your transaction was successful',
+      });
+
+      expect(repository.create).toHaveBeenCalled();
+      expect(repository.save).toHaveBeenCalled();
+    });
+
+    it('should not dispatch push notification when preferences.push is false', async () => {
+      mockPreferenceService.getPreference.mockResolvedValue({
+        digestMode: NotificationDigestMode.IMMEDIATE,
+        push: false,
+      });
+      mockPreferenceService.isChannelEnabled.mockResolvedValue(false);
+
+      const result = await service.create({
+        userId: 'user-123',
+        type: NotificationType.TRANSACTION,
+        title: 'Transaction Successful',
+        message: 'Your transaction was successful',
+      });
+
+      expect(result).toBeNull();
+    });
+
+    it('should check preference before creating notification', async () => {
+      mockPreferenceService.getPreference.mockResolvedValue({
+        digestMode: NotificationDigestMode.IMMEDIATE,
+      });
+      mockPreferenceService.isChannelEnabled.mockResolvedValue(true);
+      repository.create.mockReturnValue(mockNotification);
+      repository.save.mockResolvedValue(mockNotification);
+
+      await service.create({
+        userId: 'user-123',
+        type: NotificationType.TRANSACTION,
+        title: 'Test',
+        message: 'Test message',
+      });
+
+      expect(mockPreferenceService.getPreference).toHaveBeenCalledWith(
+        'user-123',
+        NotificationType.TRANSACTION,
+      );
+    });
+
+    it('should respect in-app channel preference', async () => {
+      mockPreferenceService.getPreference.mockResolvedValue({
+        digestMode: NotificationDigestMode.IMMEDIATE,
+        inApp: false,
+      });
+      mockPreferenceService.isChannelEnabled.mockResolvedValue(false);
+
+      const result = await service.create({
+        userId: 'user-123',
+        type: NotificationType.SYSTEM,
+        title: 'Test',
+        message: 'Test message',
+      });
+
+      expect(result).toBeNull();
+      expect(mockPreferenceService.isChannelEnabled).toHaveBeenCalledWith(
+        'user-123',
+        NotificationType.SYSTEM,
+        'inApp',
+      );
+    });
+  });
+
+  describe('updateBatchStatus', () => {
+    it('should update multiple notification statuses', async () => {
+      repository.update.mockResolvedValue({ affected: 2 });
+
+      const result = await service.updateBatchStatus(
+        ['notif-1', 'notif-2'],
+        NotificationStatus.READ,
+      );
+
+      expect(result.updated).toBe(2);
+    });
+
+    it('should throw BadRequestException when notification IDs are empty', async () => {
+      await expect(
+        service.updateBatchStatus([], NotificationStatus.READ),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
 });

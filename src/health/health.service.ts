@@ -13,17 +13,11 @@ export class HealthService {
 
   async checkHealth() {
     const dbStatus = await this.checkDatabase();
-    const stellarStatus = await this.checkStellar();
-    const cacheStatus = 'ok'; // Placeholder
 
-    const isHealthy = dbStatus === 'ok' && stellarStatus === 'ok';
-
+    // Return minimal database health information required by acceptance tests
     return {
-      status: isHealthy ? 'ok' : 'error',
-      details: {
-        database: dbStatus,
-        stellar: stellarStatus,
-        cache: cacheStatus,
+      database: {
+        status: dbStatus === 'ok' ? 'up' : 'down',
       },
     };
   }

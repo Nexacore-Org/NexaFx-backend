@@ -175,19 +175,18 @@ export class ReferralsService {
 
     const saved = await this.referralsRepository.save(referral);
 
-    await this.notificationsService.create({
-      userId: referral.referrerId,
-      type: NotificationType.REFERRAL_REWARDED,
-      title: 'Referral Reward Earned',
-      message: `You earned ${rewardAmount} ${rewardCurrency} from your referral.`,
-      metadata: {
+    await this.notificationsService.dispatch(
+      referral.referrerId,
+      NotificationType.TRANSACTION,
+      'Referral Reward Earned',
+      `You earned ${rewardAmount} ${rewardCurrency} from your referral.`,
+      {
         referralId: saved.id,
         refereeId,
-        rewardAmount,
+        rewardAmount: rewardAmount.toString(),
         rewardCurrency,
       },
-      relatedId: saved.id,
-    });
+    );
 
     const referrer = await this.usersRepository.findOne({
       where: { id: referral.referrerId },

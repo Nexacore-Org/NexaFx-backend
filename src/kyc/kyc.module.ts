@@ -10,6 +10,7 @@ import { join } from 'path';
 import * as fs from 'fs';
 import type { Request } from 'express';
 import { randomUUID } from 'crypto';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 // runtime type guard to satisfy strict ESLint rules about unsafe member access
 function isMulterFile(x: unknown): x is Express.Multer.File {
@@ -25,6 +26,7 @@ const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'application/pdf'];
 @Module({
   imports: [
     TypeOrmModule.forFeature([KycRecord, User]),
+    NotificationsModule,
     MulterModule.register({
       storage: diskStorage({
         destination: (

@@ -34,6 +34,12 @@ describe('UsersService', () => {
     plan: UserPlan.FREE,
     isDeleted: false,
     fcmTokens: [],
+    notificationPreferences: {
+      email: true,
+      push: true,
+      types: { TRANSACTION: true, KYC: true, RATE_ALERT: true },
+    },
+    fcmToken: null,
     failedLoginAttempts: 0,
     lockedUntil: null,
     createdAt: new Date('2025-01-01T00:00:00Z'),

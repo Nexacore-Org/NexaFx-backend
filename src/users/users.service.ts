@@ -14,6 +14,7 @@ import {
   WalletBalancesResponseDto,
   WalletPortfolioResponseDto,
   PortfolioHoldingDto,
+  UpdateNotificationPreferencesDto,
 } from './dto';
 import { StellarService } from '../blockchain/stellar/stellar.service';
 import { WalletBalanceResult } from '../blockchain/stellar/stellar.types';
@@ -502,5 +503,55 @@ export class UsersService {
       resetAt,
       isUnlimited,
     };
+  }
+
+  async updateNotificationPreferences(
+    userId: string,
+    dto: UpdateNotificationPreferencesDto,
+  ): Promise<User> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const currentPreferences = user.notificationPreferences || {
+      email: true,
+      push: true,
+      types: { TRANSACTION: true, KYC: true, RATE_ALERT: true },
+    };
+
+    user.notificationPreferences = {
+      email: dto.email !== undefined ? dto.email : currentPreferences.email,
+      push: dto.push !== undefined ? dto.push : currentPreferences.push,
+      types: {
+        TRANSACTION:
+          dto.types?.TRANSACTION !== undefined
+            ? dto.types.TRANSACTION
+            : currentPreferences.types.TRANSACTION,
+        KYC:
+          dto.types?.KYC !== undefined
+            ? dto.types.KYC
+            : currentPreferences.types.KYC,
+        RATE_ALERT:
+          dto.types?.RATE_ALERT !== undefined
+            ? dto.types.RATE_ALERT
+            : currentPreferences.types.RATE_ALERT,
+      },
+    };
+
+    return this.userRepository.save(user);
+  }
+
+  async updateFcmToken(userId: string, fcmToken: string): Promise<void> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    user.fcmToken = fcmToken;
+    const currentTokens = user.fcmTokens || [];
+    if (!currentTokens.includes(fcmToken)) {
+      user.fcmTokens = [...currentTokens, fcmToken];
+    }
+    await this.userRepository.save(user);
   }
 }

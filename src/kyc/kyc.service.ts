@@ -12,11 +12,10 @@ import { ApproveKycDto } from './dtos/kyc-approve';
 import { User } from '../users/user.entity';
 import { SubmitKycDto } from './dtos/kyc-submit';
 import { ConfigService } from '@nestjs/config';
-import { Notification } from '../notifications/entities/notification.entity';
 import { NotificationType } from '../notifications/entities/notification.entity';
-import { NotificationStatus } from '../notifications/entities/notification.entity';
 import { FirebaseService } from '../firebase/firebase.service';
 import { UserKycTier } from '../users/user.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class KycService {
@@ -30,6 +29,7 @@ export class KycService {
     private configService: ConfigService,
     private readonly dataSource: DataSource,
     private readonly firebaseService: FirebaseService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async submitKyc(
@@ -148,7 +148,7 @@ export class KycService {
   }
 
   async reviewKyc(kycId: string, decision: KycStatus, reason?: string) {
-    return this.dataSource.transaction(async (manager) => {
+    const result = await this.dataSource.transaction(async (manager) => {
       const kyc = await manager.findOne(KycRecord, {
         where: { id: kycId },
       });
@@ -176,7 +176,12 @@ export class KycService {
         throw new BadRequestException('User not found');
       }
 
-      let notificationPayload: Partial<Notification>;
+      let title = '';
+      let body = '';
+      const data: Record<string, any> = {
+        entity: 'KYC',
+        kycStatus: decision.toLowerCase(),
+      };
 
       if (decision === KycStatus.APPROVED) {
         kyc.status = KycStatus.APPROVED;
@@ -192,67 +197,45 @@ export class KycService {
         user.isVerified = true;
         user.kycTier = tier;
 
-        notificationPayload = {
-          userId: user.id,
-          type: NotificationType.SYSTEM,
-          title: 'KYC Approved',
-          message:
-            'Your identity verification has been approved. You now have full access to higher transaction limits.',
-          status: NotificationStatus.UNREAD,
-          relatedId: kyc.id,
-          metadata: {
-            entity: 'KYC',
-            kycStatus: 'approved',
-            tier,
-          },
-        };
+        title = 'KYC Approved';
+        body =
+          'Your identity verification has been approved. You now have full access to higher transaction limits.';
+        data.tier = tier;
       } else {
         kyc.status = KycStatus.REJECTED;
         kyc.rejectionReason = reason || 'KYC rejected';
         kyc.reviewedAt = new Date();
 
         user.isVerified = false;
-  user.kycTier = UserKycTier.UNVERIFIED;
+        user.kycTier = UserKycTier.UNVERIFIED;
 
-        notificationPayload = {
-          userId: user.id,
-          type: NotificationType.SYSTEM,
-          title: 'KYC Rejected',
-          message: `Your KYC submission was rejected. Reason: ${kyc.rejectionReason}`,
-          status: NotificationStatus.UNREAD,
-          relatedId: kyc.id,
-          metadata: {
-            entity: 'KYC',
-            kycStatus: 'rejected',
-            reason: kyc.rejectionReason,
-          },
-        };
+        title = 'KYC Rejected';
+        body = `Your KYC submission was rejected. Reason: ${kyc.rejectionReason}`;
+        data.reason = kyc.rejectionReason;
       }
 
       await manager.save(kyc);
       await manager.save(user);
-      await manager.save(Notification, notificationPayload);
-
-      if (user.fcmTokens && user.fcmTokens.length > 0) {
-        this.firebaseService
-          .sendToTokens(
-            user.fcmTokens,
-            notificationPayload.title!,
-            notificationPayload.message!,
-            {
-              entity: 'KYC',
-              kycStatus: decision.toLowerCase(),
-            },
-          )
-          .catch((err) =>
-            this.logger.error(`Failed to send KYC FCM: ${err.message}`),
-          );
-      }
 
       return {
-        message: `KYC ${decision} successfully`,
+        userId: user.id,
+        title,
+        body,
+        data,
       };
     });
+
+    await this.notificationsService.dispatch(
+      result.userId,
+      NotificationType.KYC,
+      result.title,
+      result.body,
+      result.data,
+    );
+
+    return {
+      message: `KYC ${decision} successfully`,
+    };
   }
 
   private resolveUserKycTier(kyc: KycRecord): UserKycTier {

@@ -33,6 +33,7 @@ import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import { ReferralsService } from '../referrals/referrals.service';
 import { TwoFactorService } from '../two-factor/two-factor.service';
 import { WalletsService } from '../wallets/wallets.service';
+import { GdprService } from '../modules/gdpr/gdpr.service';
 
 @Injectable()
 export class AuthService {
@@ -49,6 +50,7 @@ export class AuthService {
     private readonly referralsService: ReferralsService,
     private readonly twoFactorService: TwoFactorService,
     private readonly walletsService: WalletsService,
+    private readonly gdprService: GdprService,
     @InjectRepository(PasswordResetAttempt)
     private readonly passwordResetAttemptRepository: Repository<PasswordResetAttempt>,
   ) {}
@@ -360,7 +362,11 @@ export class AuthService {
     };
   }
 
-  async signup(signupDto: SignupDto): Promise<{ message: string }> {
+  async signup(
+    signupDto: SignupDto,
+    ipAddress: string | null = null,
+    userAgent: string | null = null,
+  ): Promise<{ message: string }> {
     const normalizedEmail = signupDto.email.toLowerCase().trim();
     const normalizedReferralCode = signupDto.referralCode?.toUpperCase().trim();
     const genericMessage =
@@ -420,7 +426,19 @@ export class AuthService {
       walletSecretKeyEncrypted: encryptedSecretKey,
       referralCode: generatedReferralCode,
       referredBy,
+      consentGdpr: signupDto.consentGdpr,
+      consentGdprAt: new Date(),
+      consentGdprVersion: this.configService.get<string>('PRIVACY_POLICY_VERSION') || '1.0',
     });
+
+    if (signupDto.consentGdpr) {
+      await this.gdprService.recordConsent(
+        user.id,
+        this.configService.get<string>('PRIVACY_POLICY_VERSION') || '1.0',
+        ipAddress,
+        userAgent,
+      );
+    }
 
     await this.walletsService.seedPrimaryWalletFromUserCredentials(
       user.id,

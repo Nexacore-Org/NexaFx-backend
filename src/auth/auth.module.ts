@@ -15,6 +15,7 @@ import { StellarModule } from '../blockchain/stellar/stellar.module';
 import { ReferralsModule } from '../referrals/referrals.module';
 import { TwoFactorModule } from '../two-factor/two-factor.module';
 import { WalletsModule } from '../wallets/wallets.module';
+import { GdprModule } from '../modules/gdpr/gdpr.module';
 
 type JwtExpiryValue = `${number}${'s' | 'm' | 'h' | 'd'}`;
 
@@ -28,6 +29,7 @@ type JwtExpiryValue = `${number}${'s' | 'm' | 'h' | 'd'}`;
     ReferralsModule,
     forwardRef(() => TwoFactorModule),
     WalletsModule,
+    GdprModule,
     PassportModule,
     TypeOrmModule.forFeature([PasswordResetAttempt]),
     JwtModule.registerAsync({

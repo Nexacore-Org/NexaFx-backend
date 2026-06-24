@@ -93,6 +93,9 @@ export class UsersService {
     referralCode: string;
     referredBy?: string | null;
     role?: UserRole;
+    consentGdpr?: boolean;
+    consentGdprAt?: Date;
+    consentGdprVersion?: string;
   }): Promise<
     Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'>
   > {
@@ -125,6 +128,9 @@ export class UsersService {
       referredBy: params.referredBy ?? null,
       role: params.role || UserRole.USER,
       isVerified: false,
+      consentGdpr: params.consentGdpr ?? false,
+      consentGdprAt: params.consentGdprAt ?? null,
+      consentGdprVersion: params.consentGdprVersion ?? null,
     });
 
     const savedUser = await this.userRepository.save(user);

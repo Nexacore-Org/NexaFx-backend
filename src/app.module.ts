@@ -3,6 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { BullModule } from '@nestjs/bullmq';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -14,6 +15,7 @@ import { PlanThrottlerGuard } from './common/guards/plan-throttler.guard';
 import { HealthModule } from './health/health.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { GdprModule } from './modules/gdpr/gdpr.module';
 import { TransactionsModule } from './transactions/transaction.module';
 import { BeneficiariesModule } from './beneficiaries/beneficiaries.module';
 import { KycModule } from './kyc/kyc.module';
@@ -68,6 +70,16 @@ import { UsersModule } from './users/users.module';
       ],
       inject: [ConfigService],
     }),
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => ({
+        connection: {
+          host: configService.get('REDIS_HOST') || 'localhost',
+          port: configService.get('REDIS_PORT') || 6379,
+        },
+      }),
+      inject: [ConfigService],
+    }),
     CommonModule,
     AuthModule,
     CurrenciesModule,
@@ -96,6 +108,7 @@ import { UsersModule } from './users/users.module';
     WalletsModule,
     LedgerModule,
     UsersModule,
+    GdprModule,
   ],
   controllers: [AppController],
   providers: [

@@ -12,10 +12,10 @@ async function main() {
   }
   // Drop all tables
   execSync(
-    'npm run typeorm migration:revert -- -d src/database/data-source.ts || true',
+    'npm run typeorm migration:revert -- -d src/database/datasource.ts || true',
     { stdio: 'inherit' },
   );
-  execSync('npm run typeorm migration:run -- -d src/database/data-source.ts', {
+  execSync('npm run typeorm migration:run -- -d src/database/datasource.ts', {
     stdio: 'inherit',
   });
   execSync('ts-node src/database/seed.ts', { stdio: 'inherit' });

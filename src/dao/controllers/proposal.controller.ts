@@ -21,6 +21,7 @@ import { ProposalService } from '../services/proposal.service';
 import { CreateProposalDto } from '../dto/create-proposal.dto';
 import { CastVoteDto } from '../dto/cast-vote.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { FeatureFlagGuard } from '../../common/guards/feature-flag.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { UserRole } from '../../users/user.entity';
@@ -33,7 +34,7 @@ export class ProposalController {
   constructor(private readonly proposalService: ProposalService) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, FeatureFlagGuard('dao_voting'))
   @Roles(UserRole.ADMIN)
   @HttpCode(201)
   @ApiOperation({
@@ -76,7 +77,7 @@ export class ProposalController {
   }
 
   @Post(':id/vote')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, FeatureFlagGuard('dao_voting'))
   @HttpCode(201)
   @ApiOperation({
     summary: 'Cast a vote on a proposal',
@@ -124,7 +125,7 @@ export class ProposalController {
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, FeatureFlagGuard('dao_voting'))
   @ApiOperation({
     summary: 'Get proposal detail with current vote counts',
   })
@@ -167,7 +168,7 @@ export class ProposalController {
   }
 
   @Get(':id/results')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, FeatureFlagGuard('dao_voting'))
   @ApiOperation({
     summary: 'Get voting results for a proposal',
   })
@@ -206,7 +207,7 @@ export class ProposalController {
   }
 
   @Get()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, FeatureFlagGuard('dao_voting'))
   @ApiOperation({
     summary: 'List all proposals with pagination',
   })
@@ -263,7 +264,7 @@ export class ProposalController {
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, FeatureFlagGuard('dao_voting'))
   @Roles(UserRole.ADMIN)
   @ApiOperation({
     summary: 'Cancel a proposal (ADMIN only)',

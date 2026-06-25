@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TerminusModule } from '@nestjs/terminus';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { envValidationSchema } from './config/env.validation';
 import { AppController } from './app.controller';
@@ -11,7 +12,6 @@ import { CurrenciesModule } from './currencies/currencies.module';
 import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
 import { CommonModule } from './common/common.module';
 import { PlanThrottlerGuard } from './common/guards/plan-throttler.guard';
-import { HealthModule } from './health/health.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { TransactionsModule } from './transactions/transaction.module';
@@ -36,6 +36,7 @@ import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
 import { StellarModule } from './modules/stellar/stellar.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
+import { FlagsModule } from './modules/flags/flags.module';
 
 @Module({
   imports: [
@@ -81,6 +82,7 @@ import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
     ExchangeRatesModule,
     GatewaysModule,
     HealthModule,
+    FlagsModule,
   ],
   controllers: [AppController],
   providers: [],

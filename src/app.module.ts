@@ -34,6 +34,7 @@ import { WalletsModule } from './wallets/wallets.module';
 import { RateAlertsModule } from './rate-alerts/rate-alerts.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
+import { VaultsModule } from './vaults/vaults.module';
 
 @Module({
   imports: [
@@ -96,6 +97,7 @@ import { UsersModule } from './users/users.module';
     WalletsModule,
     LedgerModule,
     UsersModule,
+    VaultsModule,
   ],
   controllers: [AppController],
   providers: [

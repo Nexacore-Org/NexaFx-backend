@@ -27,12 +27,13 @@ export class AuditLogsRepository extends Repository<AuditLog> {
       }
 
       return savedLog;
-    } catch (error) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       this.logger.error(
-        `Failed to create audit log: ${error.message}`,
-        error.stack,
+        `Failed to create audit log: ${err.message}`,
+        err.stack,
       );
-      throw error;
+      throw err;
     }
   }
 

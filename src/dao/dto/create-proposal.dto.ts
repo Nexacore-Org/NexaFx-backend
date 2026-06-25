@@ -5,6 +5,7 @@ import {
   IsNumber,
   Min,
   Max,
+  IsOptional,
 } from 'class-validator';
 
 export class CreateProposalDto {
@@ -15,6 +16,10 @@ export class CreateProposalDto {
   @IsString()
   @IsNotEmpty()
   description: string;
+
+  @IsDateString()
+  @IsNotEmpty()
+  votingStartAt: string;
 
   @IsDateString()
   @IsNotEmpty()
@@ -31,4 +36,8 @@ export class CreateProposalDto {
   @Max(100)
   @IsNotEmpty()
   passThresholdPercent: number;
+
+  @IsOptional()
+  @IsString()
+  stellarContractId?: string;
 }

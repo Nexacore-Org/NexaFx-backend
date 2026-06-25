@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Delete,
   Body,
   Param,
   Query,
@@ -37,7 +38,8 @@ export class ProposalController {
   @HttpCode(201)
   @ApiOperation({
     summary: 'Create a new governance proposal (ADMIN only)',
-    description: 'Voting opens immediately upon creation',
+    description:
+      'Voting opens at votingStartAt. Body includes optional stellarContractId for on-chain invocation.',
   })
   @ApiResponse({
     status: 201,
@@ -52,6 +54,7 @@ export class ProposalController {
         votingEndAt: '2026-05-05T10:00:00Z',
         quorumPercent: 50,
         passThresholdPercent: 66,
+        stellarContractId: null,
         createdAt: '2026-04-28T10:00:00Z',
       },
     },
@@ -59,7 +62,7 @@ export class ProposalController {
   @ApiResponse({ status: 403, description: 'Only ADMIN can create proposals' })
   @ApiResponse({
     status: 400,
-    description: 'votingEndAt must be in the future',
+    description: 'votingStartAt/votingEndAt validation failed',
   })
   async createProposal(
     @Request() req: { user: { userId: string; user: any } },
@@ -78,7 +81,7 @@ export class ProposalController {
   @ApiOperation({
     summary: 'Cast a vote on a proposal',
     description:
-      'Weight is based on voter XLM balance at votingStartAt. Duplicate votes return 409.',
+      'Weight is based on voter XLM balance snapshot. Duplicate votes return 409.',
   })
   @ApiResponse({
     status: 201,
@@ -103,6 +106,10 @@ export class ProposalController {
     status: 409,
     description: 'Voter has already voted on this proposal',
   })
+  @ApiResponse({
+    status: 422,
+    description: 'Cannot vote on a cancelled proposal',
+  })
   async castVote(
     @Param('id') proposalId: string,
     @Request() req: { user: { userId: string; user: any } },
@@ -116,6 +123,49 @@ export class ProposalController {
     );
   }
 
+  @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Get proposal detail with current vote counts',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Proposal detail with current vote breakdown',
+    schema: {
+      example: {
+        proposal: {
+          id: 'uuid',
+          title: 'Increase BTC pair liquidity',
+          description: 'Proposal to increase liquidity for BTC trading pairs',
+          proposerId: 'uuid',
+          status: 'ACTIVE',
+          votingStartAt: '2026-04-28T10:00:00Z',
+          votingEndAt: '2026-05-05T10:00:00Z',
+          quorumPercent: 50,
+          passThresholdPercent: 66,
+          stellarContractId: null,
+        },
+        currentVotes: {
+          yesPercent: 75.5,
+          noPercent: 20.3,
+          abstainPercent: 4.2,
+          totalWeight: 10000.25,
+          yesWeight: 7550.1875,
+          noWeight: 2030.075,
+          abstainWeight: 420.0875,
+          quorumReached: true,
+          passing: true,
+          totalVotes: 15,
+          totalEligibleVoters: 200,
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Proposal not found' })
+  async getProposalDetail(@Param('id') proposalId: string) {
+    return this.proposalService.getProposalDetail(proposalId);
+  }
+
   @Get(':id/results')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
@@ -123,7 +173,7 @@ export class ProposalController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Proposal results',
+    description: 'Proposal results with percentages',
     schema: {
       example: {
         proposal: {
@@ -210,5 +260,34 @@ export class ProposalController {
     @Query('status') status?: ProposalStatus,
   ) {
     return this.proposalService.listProposals(page, limit, status);
+  }
+
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Cancel a proposal (ADMIN only)',
+    description: 'Only ACTIVE proposals can be cancelled.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Proposal cancelled',
+    schema: {
+      example: {
+        id: 'uuid',
+        status: 'CANCELLED',
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Proposal not found' })
+  @ApiResponse({
+    status: 400,
+    description: 'Only ACTIVE proposals can be cancelled',
+  })
+  async cancelProposal(
+    @Param('id') proposalId: string,
+    @Request() req: { user: { userId: string } },
+  ) {
+    return this.proposalService.cancelProposal(proposalId);
   }
 }

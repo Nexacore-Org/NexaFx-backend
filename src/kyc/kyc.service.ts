@@ -16,6 +16,7 @@ import { NotificationType } from '../notifications/entities/notification.entity'
 import { FirebaseService } from '../firebase/firebase.service';
 import { UserKycTier } from '../users/user.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { WebhookService } from '../webhooks/services/webhook.service';
 
 @Injectable()
 export class KycService {
@@ -30,6 +31,7 @@ export class KycService {
     private readonly dataSource: DataSource,
     private readonly firebaseService: FirebaseService,
     private readonly notificationsService: NotificationsService,
+    private readonly webhookService: WebhookService,
   ) {}
 
   async submitKyc(
@@ -212,10 +214,37 @@ export class KycService {
         title = 'KYC Rejected';
         body = `Your KYC submission was rejected. Reason: ${kyc.rejectionReason}`;
         data.reason = kyc.rejectionReason;
+        notificationPayload = {
+          userId: user.id,
+          type: NotificationType.SYSTEM,
+          title: 'KYC Rejected',
+          message: `Your KYC submission was rejected. Reason: ${kyc.rejectionReason}`,
+          status: NotificationStatus.UNREAD,
+          relatedId: kyc.id,
+          metadata: {
+            entity: 'KYC',
+            kycStatus: 'rejected',
+            reason: kyc.rejectionReason,
+          },
+        };
       }
 
       await manager.save(kyc);
       await manager.save(user);
+
+      if (decision === KycStatus.APPROVED) {
+        this.webhookService
+          .dispatch('kyc.approved', kyc, user.id)
+          .catch((err) =>
+            this.logger.error(`Webhook dispatch failed: ${err.message}`),
+          );
+      } else if (decision === KycStatus.REJECTED) {
+        this.webhookService
+          .dispatch('kyc.rejected', kyc, user.id)
+          .catch((err) =>
+            this.logger.error(`Webhook dispatch failed: ${err.message}`),
+          );
+      }
 
       return {
         userId: user.id,

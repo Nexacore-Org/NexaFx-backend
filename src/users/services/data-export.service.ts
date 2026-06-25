@@ -217,7 +217,10 @@ export class DataExportService {
     const zipFileName = `nexafx-export_${safeUserId}_${timestamp}.zip`;
     const zipFilePath = path.join(this.EXPORT_DIR, zipFileName);
     // Guard: ensure the resolved path stays inside EXPORT_DIR
-    if (!zipFilePath.startsWith(this.EXPORT_DIR + path.sep) && zipFilePath !== this.EXPORT_DIR) {
+    if (
+      !zipFilePath.startsWith(this.EXPORT_DIR + path.sep) &&
+      zipFilePath !== this.EXPORT_DIR
+    ) {
       throw new Error('Invalid export path detected');
     }
 

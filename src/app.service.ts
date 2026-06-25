@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { version } from '../package.json';
 
 @Injectable()
 export class AppService {
@@ -10,7 +11,7 @@ export class AppService {
     return {
       status: 'ok',
       service: 'NexaFX API',
-      version: process.env.npm_package_version || 'unknown',
+      version,
       timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV || 'development',
     };

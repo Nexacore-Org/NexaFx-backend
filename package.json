@@ -1,6 +1,6 @@
 {
   "name": "nexafx-backend",
-  "version": "0.0.1",
+  "version": "2.0.0",
   "description": "",
   "author": "",
   "private": true,
@@ -21,7 +21,10 @@
     "typeorm": "typeorm-ts-node-commonjs",
     "typeorm:migration:run": "npm run typeorm migration:run -- -d src/database/data-source.ts",
     "seed": "ts-node src/database/seed.ts",
-    "seed:fresh": "ts-node src/database/seed-fresh.ts"
+    "seed:fresh": "ts-node src/database/seed-fresh.ts",
+    "commitlint": "commitlint --config commitlint.config.js",
+    "release": "semantic-release",
+    "release:prerelease": "semantic-release --branch v2"
   },
   "dependencies": {
     "@apollo/server": "^5.5.0",
@@ -69,6 +72,15 @@
     "typeorm": "^0.3.20"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.1.0",
+    "@commitlint/config-conventional": "^21.1.0",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/exec": "^7.1.0",
+    "@semantic-release/github": "^12.0.8",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/release-notes-generator": "^14.1.1",
+    "semantic-release": "^25.0.5",
     "@eslint/eslintrc": "^3.2.0",
     "@eslint/js": "^9.18.0",
     "@nestjs/cli": "^11.0.21",

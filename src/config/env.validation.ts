@@ -17,4 +17,7 @@ export const envValidationSchema = Joi.object({
   MAILGUN_DOMAIN: Joi.string().optional(),
   MAILGUN_FROM_EMAIL: Joi.string().optional(),
   MAILGUN_FROM_NAME: Joi.string().optional(),
+  MAXMIND_DB_PATH: Joi.string().allow('', null),
+  BLOCKED_COUNTRIES: Joi.string().allow('', null),
+  REDIS_URL: Joi.string().allow('', null),
 });

@@ -13,6 +13,7 @@ import { Public } from './decorators/public.decorator';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
+import { VerifyFraudOtpDto } from './dto/verify-fraud-otp.dto';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -28,12 +29,29 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { limit: 5, ttl: 15 * 60 * 1000 } })
+  @Throttle({
+    default: {
+      ttl: 15 * 60 * 1000,
+      limit: Number(process.env.THROTTLE_AUTH_LIMIT ?? 5),
+    },
+  })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Authenticate a user and return JWT tokens' })
-  async login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+  async login(@Body() loginDto: LoginDto, @Req() req: any) {
+    const ipAddress = req.ip || req.connection?.remoteAddress || '';
+    return this.authService.login(loginDto, ipAddress);
+  }
+
+  @Public()
+  @Post('verify-fraud-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Verify fraud OTP sent when risk score ≥ 50, then receive full JWT tokens',
+  })
+  async verifyFraudOtp(@Body() verifyDto: VerifyFraudOtpDto) {
+    return this.authService.verifyFraudOtp(verifyDto);
   }
 
   @Public()

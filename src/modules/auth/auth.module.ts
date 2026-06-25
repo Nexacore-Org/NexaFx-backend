@@ -8,6 +8,9 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { User } from '../../modules/users/entities/user.entity';
 import { RedisModule } from '../redis/redis.module';
+import { FraudModule } from '../fraud/fraud.module';
+import { OtpsModule } from '../../otps/otps.module';
+import { OtpDeliveryService } from '../../auth/email/otp-delivery.service';
 
 @Module({
   imports: [
@@ -35,9 +38,11 @@ import { RedisModule } from '../redis/redis.module';
       },
       inject: [ConfigService],
     }),
+    FraudModule,
+    OtpsModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, OtpDeliveryService],
   exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

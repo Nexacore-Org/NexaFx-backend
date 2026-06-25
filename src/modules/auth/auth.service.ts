@@ -1,6 +1,8 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -13,8 +15,13 @@ import { User, UserRole } from '../../modules/users/entities/user.entity';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
+import { VerifyFraudOtpDto } from './dto/verify-fraud-otp.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { RedisService } from '../redis/redis.service';
+import { FraudService } from '../fraud/fraud.service';
+import { OtpsService } from '../../otps/otps.service';
+import { OtpType } from '../../otps/otp.entity';
+import { OtpDeliveryService } from '../../auth/email/otp-delivery.service';
 
 type AuthUser = Pick<
   User,
@@ -28,6 +35,7 @@ type AuthUser = Pick<
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly bcryptRounds = 12;
   private readonly accessTokenExpiresIn = '15m';
   private readonly refreshTokenExpiresIn = '7d';
@@ -42,6 +50,9 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly redisService: RedisService,
+    private readonly fraudService: FraudService,
+    private readonly otpsService: OtpsService,
+    private readonly otpDeliveryService: OtpDeliveryService,
   ) {}
 
   async register(registerDto: RegisterDto) {
@@ -76,7 +87,7 @@ export class AuthService {
     return this.issueTokenPair(savedUser);
   }
 
-  async login(loginDto: LoginDto) {
+  async login(loginDto: LoginDto, ipAddress?: string) {
     const email = this.normalizeEmail(loginDto.email);
     const user = await this.findAuthUserByEmail(email);
 
@@ -94,6 +105,92 @@ export class AuthService {
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
+
+    const ip = ipAddress || '';
+    const riskResult = await this.fraudService.assessLoginRisk(
+      user.id,
+      email,
+      ip,
+    );
+
+    await this.fraudService.recordLoginAttempt(
+      user.id,
+      email,
+      ip,
+      riskResult,
+      riskResult.isBlocked,
+    );
+
+    if (riskResult.isBlocked) {
+      throw new ForbiddenException('Access not available in your region');
+    }
+
+    if (riskResult.requiresVerification) {
+      const fraudOtp = await this.otpsService.generateOtp(
+        user as any,
+        OtpType.LOGIN,
+      );
+      await this.otpDeliveryService.sendOtp({
+        email: user.email,
+        type: OtpType.LOGIN,
+        otp: fraudOtp,
+      });
+
+      const fraudToken = this.jwtService.sign(
+        {
+          sub: user.id,
+          email: user.email,
+          role: user.role,
+          authStage: 'fraud_verification',
+        },
+        { expiresIn: '10m' },
+      );
+
+      return {
+        requiresFraudVerification: true,
+        fraudToken,
+        message:
+          'Additional verification required. Check your email for an OTP.',
+      };
+    }
+
+    if (
+      riskResult.geoData.latitude != null &&
+      riskResult.geoData.longitude != null
+    ) {
+      await this.fraudService.updateLoginLocation(
+        user.id,
+        riskResult.geoData.latitude,
+        riskResult.geoData.longitude,
+      );
+    }
+
+    return this.issueTokenPair(user);
+  }
+
+  async verifyFraudOtp(verifyDto: VerifyFraudOtpDto) {
+    let decoded: JwtPayload & { authStage?: string };
+
+    try {
+      decoded = this.jwtService.verify(verifyDto.fraudToken);
+    } catch {
+      throw new UnauthorizedException('Invalid or expired verification token');
+    }
+
+    if (decoded.authStage !== 'fraud_verification') {
+      throw new UnauthorizedException('Invalid verification token');
+    }
+
+    const user = await this.findAuthUserById(decoded.sub);
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    await this.otpsService.validateOtp(
+      user as any,
+      verifyDto.otp,
+      OtpType.LOGIN,
+    );
 
     return this.issueTokenPair(user);
   }

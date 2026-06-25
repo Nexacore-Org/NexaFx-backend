@@ -26,6 +26,7 @@ import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { IdempotencyRecord } from '../common/entities/idempotency-record.entity';
 import { DataRequest } from '../users/entities/data-request.entity';
 import { DataSource } from 'typeorm';
+import { VaultsService } from '../vaults/vaults.service';
 
 @Injectable()
 export class ScheduledJobsService {
@@ -54,6 +55,7 @@ export class ScheduledJobsService {
     private readonly proposalService: ProposalService,
     private readonly auditLogsService: AuditLogsService,
     private readonly ledgerVerificationService: LedgerVerificationService,
+    private readonly vaultsService: VaultsService,
   ) {
     // Truncate hostname to 255 characters to match DB column constraint
     this.instanceId = os.hostname().substring(0, 255);
@@ -776,6 +778,73 @@ export class ScheduledJobsService {
       this.logger.error(
         '[Scheduled Job] Fatal error in idempotency records cleanup:',
         error,
+      );
+    }
+  }
+
+  /**
+   * Accrue interest on all ACTIVE savings vaults daily at 00:05 UTC.
+   */
+  @Cron('5 0 * * *')
+  async accrueVaultInterest(): Promise<void> {
+    this.logger.log('[Scheduled Job] Starting vault interest accrual');
+
+    try {
+      const processed = await this.vaultsService.accrueInterest();
+      this.logger.log(
+        `[Scheduled Job] Vault interest accrual completed — ${processed} vaults processed`,
+      );
+    } catch (error) {
+      this.logger.error(
+        '[Scheduled Job] Fatal error in vault interest accrual:',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  /**
+   * Process maturing savings vaults every hour.
+   * Finds ACTIVE vaults where unlockAt <= NOW(), credits accrued interest
+   * to currentBalance, and sets status = MATURED.
+   */
+  @Cron(CronExpression.EVERY_HOUR)
+  async processVaultMaturity(): Promise<void> {
+    this.logger.log('[Scheduled Job] Starting vault maturity processing');
+
+    try {
+      const maturedCount =
+        await this.vaultsService.processMaturity();
+      if (maturedCount > 0) {
+        this.logger.log(
+          `[Scheduled Job] Vault maturity processing completed — ${maturedCount} vaults matured`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        '[Scheduled Job] Fatal error in vault maturity processing:',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  /**
+   * Process auto-deposits for savings vaults daily at 08:00 UTC.
+   * Deducts from main wallet balance and credits the vault.
+   */
+  @Cron('0 8 * * *')
+  async processVaultAutoDeposits(): Promise<void> {
+    this.logger.log('[Scheduled Job] Starting vault auto-deposit processing');
+
+    try {
+      const result = await this.vaultsService.processAutoDeposits();
+      this.logger.log(
+        `[Scheduled Job] Vault auto-deposits completed — ` +
+        `${result.processed} processed, ${result.skipped} skipped`,
+      );
+    } catch (error) {
+      this.logger.error(
+        '[Scheduled Job] Fatal error in vault auto-deposit processing:',
+        error instanceof Error ? error.message : String(error),
       );
     }
   }

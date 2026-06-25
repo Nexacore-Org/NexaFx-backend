@@ -8,10 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ExchangeRatesService } from '../../exchange-rates/exchange-rates.service';
 import { User, UserKycTier } from '../../users/user.entity';
-import {
-  Transaction,
-  TransactionStatus,
-} from '../entities/transaction.entity';
+import { Transaction, TransactionStatus } from '../entities/transaction.entity';
 import { TransactionLimit } from '../entities/transaction-limit.entity';
 
 interface UsageSummary {
@@ -89,13 +86,21 @@ export class TransactionLimitService {
       singleTxLimitUsd: number;
     },
   ): Promise<TransactionLimit> {
-    if (data.dailyLimitUsd < 0 || data.monthlyLimitUsd < 0 || data.singleTxLimitUsd < 0) {
-      throw new BadRequestException('Limit values must be greater than or equal to 0');
+    if (
+      data.dailyLimitUsd < 0 ||
+      data.monthlyLimitUsd < 0 ||
+      data.singleTxLimitUsd < 0
+    ) {
+      throw new BadRequestException(
+        'Limit values must be greater than or equal to 0',
+      );
     }
 
     await this.ensureDefaultLimits();
 
-    const existing = await this.transactionLimitRepository.findOne({ where: { tier } });
+    const existing = await this.transactionLimitRepository.findOne({
+      where: { tier },
+    });
     if (!existing) {
       return this.transactionLimitRepository.save(
         this.transactionLimitRepository.create({
@@ -113,11 +118,7 @@ export class TransactionLimitService {
     return this.transactionLimitRepository.save(existing);
   }
 
-  async check(
-    userId: string,
-    amount: number,
-    currency: string,
-  ): Promise<void> {
+  async check(userId: string, amount: number, currency: string): Promise<void> {
     const status = await this.getUserLimitStatus(userId);
     const amountUsd = await this.convertToUsd(currency, amount);
 
@@ -205,7 +206,9 @@ export class TransactionLimitService {
     const dayStart = new Date(now);
     dayStart.setUTCHours(0, 0, 0, 0);
 
-    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const monthStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    );
 
     const [dayRows, monthRows] = await Promise.all([
       this.transactionRepository
@@ -255,13 +258,19 @@ export class TransactionLimitService {
     return sumUsd;
   }
 
-  private async convertToUsd(currency: string, amount: number): Promise<number> {
+  private async convertToUsd(
+    currency: string,
+    amount: number,
+  ): Promise<number> {
     const normalizedCurrency = currency.toUpperCase();
     if (normalizedCurrency === 'USD') {
       return amount;
     }
 
-    const rate = await this.exchangeRatesService.getRate(normalizedCurrency, 'USD');
+    const rate = await this.exchangeRatesService.getRate(
+      normalizedCurrency,
+      'USD',
+    );
     return amount * rate.rate;
   }
 }

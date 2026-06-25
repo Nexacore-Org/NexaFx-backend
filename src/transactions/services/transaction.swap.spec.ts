@@ -78,6 +78,7 @@ describe('TransactionsService.createSwap', () => {
       ]),
       buildPathPaymentOp: jest.fn(() => ({})),
       getAsset: jest.fn(() => ({ isNative: () => true })),
+      getAssetWithDefaultIssuer: jest.fn(() => ({ isNative: () => true })),
     };
 
     notificationsService = {

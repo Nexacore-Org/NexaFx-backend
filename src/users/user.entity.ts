@@ -50,6 +50,14 @@ export class User {
   @Exclude({ toPlainOnly: true })
   password: string;
 
+  @Column({ type: 'varchar', length: 255, select: false })
+  @Exclude({ toPlainOnly: true })
+  passwordHash?: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true, select: false })
+  @Exclude({ toPlainOnly: true })
+  refreshTokenHash?: string | null;
+
   @OneToMany(() => KycRecord, (kyc) => kyc.user)
   kycRecords: KycRecord[];
 
@@ -85,6 +93,12 @@ export class User {
 
   @Column({ type: 'boolean', default: false })
   isVerified: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  isEmailVerified?: boolean;
+
+  @Column({ type: 'boolean', default: true })
+  isActive?: boolean;
 
   @Column({
     type: 'enum',

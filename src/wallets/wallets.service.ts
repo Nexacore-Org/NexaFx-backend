@@ -160,6 +160,12 @@ export class WalletsService {
     });
     const saved = await this.walletRepository.save(wallet);
 
+    try {
+      await this.stellarService.fundTestnetWallet(saved.publicKey);
+    } catch {
+      // Friendbot funding is best-effort for newly generated wallets.
+    }
+
     return {
       id: saved.id,
       publicKey: saved.publicKey,

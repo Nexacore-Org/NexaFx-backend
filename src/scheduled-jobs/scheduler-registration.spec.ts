@@ -63,20 +63,83 @@ describe('Scheduler registration', () => {
         ScheduledJobsService,
         TransactionVerificationService,
         { provide: TransactionsService, useValue: serviceMock },
-        { provide: UsersService, useValue: { syncWalletBalanceSnapshots: jest.fn().mockResolvedValue({ processed: 0, updated: 0, failed: 0 }) } },
-        { provide: RateAlertsService, useValue: { checkAndTriggerAlerts: jest.fn().mockResolvedValue({ checked: 0, triggered: 0, reactivated: 0 }) } },
+        {
+          provide: UsersService,
+          useValue: {
+            syncWalletBalanceSnapshots: jest
+              .fn()
+              .mockResolvedValue({ processed: 0, updated: 0, failed: 0 }),
+          },
+        },
+        {
+          provide: RateAlertsService,
+          useValue: {
+            checkAndTriggerAlerts: jest
+              .fn()
+              .mockResolvedValue({ checked: 0, triggered: 0, reactivated: 0 }),
+          },
+        },
         { provide: NotificationsService, useValue: serviceMock },
-        { provide: StellarService, useValue: { verifyTransaction: jest.fn(), getWalletBalances: jest.fn() } },
-        { provide: AuditLogsService, useValue: { logEvent: jest.fn(), createLog: jest.fn(), logTransactionEvent: jest.fn() } },
+        {
+          provide: StellarService,
+          useValue: {
+            verifyTransaction: jest.fn(),
+            getWalletBalances: jest.fn(),
+          },
+        },
+        {
+          provide: AuditLogsService,
+          useValue: {
+            logEvent: jest.fn(),
+            createLog: jest.fn(),
+            logTransactionEvent: jest.fn(),
+          },
+        },
         { provide: WebhookService, useValue: { dispatch: jest.fn() } },
         { provide: CurrencyPairService, useValue: serviceMock },
-        { provide: ProposalService, useValue: { getExpiredActiveProposals: jest.fn().mockResolvedValue([]), finalizeProposal: jest.fn() } },
-        { provide: LedgerVerificationService, useValue: { verify: jest.fn().mockResolvedValue({ status: 'BALANCED', discrepancies: [] }) } },
-        { provide: DataSource, useValue: { createQueryRunner: jest.fn(() => ({ connect: jest.fn(), startTransaction: jest.fn(), commitTransaction: jest.fn(), rollbackTransaction: jest.fn(), release: jest.fn(), manager: { save: jest.fn() } })) } },
+        {
+          provide: ProposalService,
+          useValue: {
+            getExpiredActiveProposals: jest.fn().mockResolvedValue([]),
+            finalizeProposal: jest.fn(),
+          },
+        },
+        {
+          provide: LedgerVerificationService,
+          useValue: {
+            verify: jest
+              .fn()
+              .mockResolvedValue({ status: 'BALANCED', discrepancies: [] }),
+          },
+        },
+        {
+          provide: DataSource,
+          useValue: {
+            createQueryRunner: jest.fn(() => ({
+              connect: jest.fn(),
+              startTransaction: jest.fn(),
+              commitTransaction: jest.fn(),
+              rollbackTransaction: jest.fn(),
+              release: jest.fn(),
+              manager: { save: jest.fn() },
+            })),
+          },
+        },
         { provide: getRepositoryToken(Transaction), useValue: repositoryMock },
         { provide: getRepositoryToken(Notification), useValue: repositoryMock },
         { provide: getRepositoryToken(DataRequest), useValue: repositoryMock },
-        { provide: getRepositoryToken(IdempotencyRecord), useValue: { ...repositoryMock, createQueryBuilder: jest.fn(() => ({ delete: jest.fn().mockReturnThis(), from: jest.fn().mockReturnThis(), where: jest.fn().mockReturnThis(), execute: jest.fn().mockResolvedValue({ affected: 0 }) })) } },
+        {
+          provide: getRepositoryToken(IdempotencyRecord),
+          useValue: {
+            ...repositoryMock,
+            createQueryBuilder: jest.fn(() => ({
+              delete: jest.fn().mockReturnThis(),
+              from: jest.fn().mockReturnThis(),
+              where: jest.fn().mockReturnThis(),
+              execute: jest.fn().mockResolvedValue({ affected: 0 }),
+            })),
+          },
+        },
       ],
     }).compile();
   });

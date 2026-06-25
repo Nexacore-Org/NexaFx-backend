@@ -64,6 +64,10 @@ describe('TransactionsService fee integration behavior', () => {
     createTransaction: jest.fn(async () => ({})),
     signTransaction: jest.fn(async () => ({})),
     submitTransaction: jest.fn(async () => ({ hash: 'stellar-hash' })),
+    sendPayment: jest.fn(async () => ({ hash: 'stellar-hash' })),
+    getWalletBalances: jest.fn(async () => [{ asset: 'XLM', balance: '100' }]),
+    getAssetWithDefaultIssuer: jest.fn((code: string) => ({ code })),
+    getAsset: jest.fn((code: string) => ({ code })),
     findBestPath: jest.fn(async () => [
       {
         source_amount: '100',

@@ -4,6 +4,7 @@ import { KycService } from './kyc.service';
 import { KycController } from './kyc.controller';
 import { KycRecord } from './entities/kyc.entity';
 import { User } from '../users/user.entity';
+import { WebhooksModule } from '../webhooks/webhooks.module';
 import { MulterModule } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { join } from 'path';
@@ -25,6 +26,7 @@ const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'application/pdf'];
 @Module({
   imports: [
     TypeOrmModule.forFeature([KycRecord, User]),
+    WebhooksModule,
     MulterModule.register({
       storage: diskStorage({
         destination: (

@@ -30,7 +30,8 @@ export class WebhookController {
 
   @Get()
   async list(@Request() req) {
-    return this.webhookService.listEndpoints(req.user.id);
+    const endpoints = await this.webhookService.listEndpoints(req.user.id);
+    return endpoints.map(({ secret, ...rest }) => rest);
   }
 
   @Delete(':id')
@@ -42,5 +43,21 @@ export class WebhookController {
   @Get(':id/deliveries')
   async getDeliveries(@Request() req, @Param('id') id: string) {
     return this.webhookService.getDeliveryHistory(id, req.user.id);
+  }
+
+  @Post(':id/test')
+  async testEndpoint(@Request() req, @Param('id') id: string) {
+    await this.webhookService.testEndpoint(id, req.user.id);
+    return { success: true };
+  }
+
+  @Post(':id/redeliver/:deliveryId')
+  async redeliver(
+    @Request() req,
+    @Param('id') id: string,
+    @Param('deliveryId') deliveryId: string,
+  ) {
+    await this.webhookService.redeliver(id, deliveryId, req.user.id);
+    return { success: true };
   }
 }

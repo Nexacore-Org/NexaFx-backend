@@ -25,7 +25,10 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SignupDto } from './dto/signup.dto';
 import { VerifySignupOtpDto } from './dto/verify-signup-otp.dto';
 import { VerifySignupResponseDto } from './dto/signup-response.dto';
-import { AuthUserResponseDto, VerifyLoginOtpResponseDto } from './dto/signup-response.dto';
+import {
+  AuthUserResponseDto,
+  VerifyLoginOtpResponseDto,
+} from './dto/signup-response.dto';
 import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
@@ -428,6 +431,12 @@ export class AuthService {
       encryptedSecretKey,
     );
 
+    try {
+      await this.stellarService.fundTestnetWallet(wallet.publicKey);
+    } catch {
+      // Friendbot funding is best-effort during signup.
+    }
+
     if (referredBy) {
       await this.referralsService.createPendingReferral(referredBy, user.id);
     }
@@ -660,7 +669,11 @@ export class AuthService {
     return decoded.sub;
   }
 
-  private async issueAuthTokens(userId: string, email: string, role: string): Promise<VerifyLoginOtpResponseDto> {
+  private async issueAuthTokens(
+    userId: string,
+    email: string,
+    role: string,
+  ): Promise<VerifyLoginOtpResponseDto> {
     const user = await this.usersService.findById(userId);
     const payload = { sub: userId, email, role };
     const authUser: AuthUserResponseDto = {

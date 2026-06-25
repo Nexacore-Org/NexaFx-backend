@@ -116,6 +116,7 @@ export class UsersService {
     const user = this.userRepository.create({
       email: normalizedEmail,
       password: hashedPassword,
+      passwordHash: hashedPassword,
       firstName: params.firstName || null,
       lastName: params.lastName || null,
       phone: params.phone || null,
@@ -125,6 +126,9 @@ export class UsersService {
       referredBy: params.referredBy ?? null,
       role: params.role || UserRole.USER,
       isVerified: false,
+      isEmailVerified: false,
+      isActive: true,
+      refreshTokenHash: null,
     });
 
     const savedUser = await this.userRepository.save(user);
@@ -150,6 +154,7 @@ export class UsersService {
 
     await this.userRepository.update(userId, {
       password: hashedPassword,
+      passwordHash: hashedPassword,
     });
   }
 
@@ -161,6 +166,7 @@ export class UsersService {
 
     await this.userRepository.update(userId, {
       isVerified: true,
+      isEmailVerified: true,
     });
   }
 

@@ -64,6 +64,9 @@ export class Transaction {
   @Column({ type: 'varchar', length: 255, nullable: true })
   txHash: string | null;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  stellarTxHash: string | null;
+
   @Column({ type: 'text', nullable: true })
   failureReason: string | null;
 

@@ -4,6 +4,7 @@ import {
   BadRequestException,
   Logger,
   Inject,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
@@ -25,6 +26,7 @@ import {
   StorageService,
 } from '../modules/storage/storage.service';
 import { scanBuffer } from '../common/helpers/virus-scanner.helper';
+import { SanctionsService } from '../sanctions/sanctions.service';
 
 const SIGNED_URL_EXPIRY_SECONDS = 900;
 
@@ -44,6 +46,8 @@ export class KycService {
     @Inject(STORAGE_SERVICE_TOKEN)
     private readonly storageService: StorageService,
     private readonly kycEmailService: KycEmailService,
+    @Optional()
+    private readonly sanctionsService?: SanctionsService,
   ) { }
 
   async submitKyc(
@@ -332,9 +336,15 @@ export class KycService {
           user.fcmTokens,
           'KYC Approved',
           'Your identity verification has been approved. You now have higher transaction limits.',
+          { entity: 'KYC', kycStatus: 'approved' },
           {
-            entity: 'KYC',
-            kycStatus: 'approved',
+            notificationId: notificationPayload.id ?? '',
+            type: 'KYC_APPROVED',
+            deepLink: 'nexafx://kyc/status',
+            actionType: 'KYC_APPROVED',
+            resourceId: kycRecord.id,
+            resourceType: 'kyc',
+            timestamp: new Date().toISOString(),
           },
         )
         .catch((err: Error) =>
@@ -356,6 +366,13 @@ export class KycService {
       .dispatch('kyc.approved', kyc, user.id)
       .catch((err: Error) =>
         this.logger.error(`Webhook dispatch failed: ${err.message}`),
+      );
+
+    // Trigger sanctions screening asynchronously
+    this.sanctionsService
+      ?.screenUser(user.id)
+      .catch((err: Error) =>
+        this.logger.error(`Sanctions screening failed: ${err.message}`),
       );
 
     return {
@@ -450,19 +467,44 @@ export class KycService {
           this.logger.error(`Webhook dispatch failed: ${err.message}`),
         );
 
-      // Send rejection email
-      this.kycEmailService
-        .sendRejectionEmail(
-          user.email,
-          user.firstName ?? 'User',
-          reason,
-          newStatus === KycStatus.RESUBMISSION_REQUIRED,
+ // Send rejection email
+    this.kycEmailService
+      .sendRejectionEmail(
+        user.email,
+        user.firstName ?? 'User',
+        reason,
+        newStatus === KycStatus.RESUBMISSION_REQUIRED,
+      )
+      .catch((err: Error) =>
+        this.logger.error(
+          `Failed to send KYC rejection email: ${err.message}`,
+        ),
+      );
+
+    // Send push notification via Firebase
+    if (user.fcmTokens && user.fcmTokens.length > 0) {
+      this.firebaseService
+        .sendToTokens(
+          user.fcmTokens,
+          notificationPayload.title!,
+          notificationPayload.message!,
+          { entity: 'KYC', kycStatus: decision.toLowerCase() },
+          {
+            notificationId: notificationPayload.id ?? '',
+            type: 'KYC_REJECTED',
+            deepLink: 'nexafx://kyc/status',
+            actionType: 'KYC_REJECTED',
+            resourceId: kyc.id,
+            resourceType: 'kyc',
+            timestamp: new Date().toISOString(),
+          },
         )
         .catch((err: Error) =>
           this.logger.error(
-            `Failed to send KYC rejection email: ${err.message}`,
+            `Failed to send KYC push notification: ${err.message}`,
           ),
         );
+    }
 
       return {
         message:

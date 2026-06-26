@@ -121,6 +121,44 @@ export class LedgerService {
       ];
     }
 
+    if (transaction.type === TransactionType.LOAN_DISBURSEMENT) {
+      return [
+        {
+          transactionId: transaction.id,
+          accountType: LedgerAccountType.USER,
+          direction: LedgerDirection.CREDIT,
+          amount,
+          currency,
+        },
+        {
+          transactionId: transaction.id,
+          accountType: LedgerAccountType.PLATFORM_LIABILITY,
+          direction: LedgerDirection.DEBIT,
+          amount,
+          currency,
+        },
+      ];
+    }
+
+    if (transaction.type === TransactionType.LOAN_REPAYMENT) {
+      return [
+        {
+          transactionId: transaction.id,
+          accountType: LedgerAccountType.USER,
+          direction: LedgerDirection.DEBIT,
+          amount,
+          currency,
+        },
+        {
+          transactionId: transaction.id,
+          accountType: LedgerAccountType.PLATFORM_ASSET,
+          direction: LedgerDirection.CREDIT,
+          amount,
+          currency,
+        },
+      ];
+    }
+
     throw new BadRequestException(
       `Unsupported transaction type: ${transaction.type}`,
     );

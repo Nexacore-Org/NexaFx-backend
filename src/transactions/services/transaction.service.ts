@@ -1401,10 +1401,21 @@ export class TransactionsService {
         return;
       }
 
-      await this.firebaseService.sendToTokens(user.fcmTokens, title, body, {
-        transactionId: transaction.id,
-        type: transaction.type,
-      });
+      await this.firebaseService.sendToTokens(
+        user.fcmTokens,
+        title,
+        body,
+        { transactionId: transaction.id, type: transaction.type },
+        {
+          notificationId: transaction.id,
+          type: transaction.type,
+          deepLink: `nexafx://transactions/${transaction.id}`,
+          actionType: transaction.type,
+          resourceId: transaction.id,
+          resourceType: 'transaction',
+          timestamp: new Date().toISOString(),
+        },
+      );
     } catch (e) {
       // Intentionally swallow errors so it doesn't break flows
     }

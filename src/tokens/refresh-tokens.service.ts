@@ -3,38 +3,57 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull, MoreThan } from 'typeorm';
 import * as crypto from 'crypto';
+import { JwtService } from '@nestjs/jwt';
 import { RefreshToken } from './refresh-token.entity';
+import { RedisService } from '../redis/redis.service';
 
 @Injectable()
 export class RefreshTokensService {
-  private readonly TOKEN_BYTES = 48; // 48 bytes -> 64 chars base64url-ish when encoded without padding
-
   constructor(
     @InjectRepository(RefreshToken)
     private readonly refreshTokenRepository: Repository<RefreshToken>,
     private readonly configService: ConfigService,
+    private readonly jwtService: JwtService,
+    private readonly redisService: RedisService,
   ) {}
 
-  async createRefreshToken(userId: string): Promise<string> {
-    const token = this.generateSecureToken();
-    const tokenHash = this.hashRefreshToken(token);
-
+  async createRefreshToken(userId: string, jti: string): Promise<string> {
+    const expiresDays = this.getRefreshTokenExpiryDays();
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + this.getRefreshTokenExpiryDays());
+    expiresAt.setDate(expiresAt.getDate() + expiresDays);
+
+    const payload = {
+      sub: userId,
+      jti,
+    };
+
+    const token = this.jwtService.sign(payload, {
+      secret: this.getRefreshTokenSecret(),
+      expiresIn: `${expiresDays}d`,
+    });
+
+    const tokenHash = this.hashRefreshToken(token);
 
     const refreshToken = this.refreshTokenRepository.create({
       userId,
       tokenHash,
       expiresAt,
       revokedAt: null,
+      jti,
     });
 
     await this.refreshTokenRepository.save(refreshToken);
+
+    // Save in Redis
+    const redisKey = `nexafx:refresh:${userId}:${jti}`;
+    const ttlSeconds = expiresDays * 24 * 60 * 60;
+    await this.redisService.set(redisKey, 'active', ttlSeconds);
 
     return token;
   }
 
   async revokeAllUserTokens(userId: string): Promise<void> {
+    // Revoke all in DB
     await this.refreshTokenRepository.update(
       {
         userId,
@@ -44,16 +63,77 @@ export class RefreshTokensService {
         revokedAt: new Date(),
       },
     );
+
+    // Find all active JTIs to delete from Redis
+    const activeTokens = await this.refreshTokenRepository.find({
+      where: {
+        userId,
+        jti: IsNull() ? undefined : MoreThan(''), // non-empty/null JTIs
+      },
+    });
+
+    for (const token of activeTokens) {
+      if (token.jti) {
+        const redisKey = `nexafx:refresh:${userId}:${token.jti}`;
+        await this.redisService.del(redisKey);
+      }
+    }
   }
 
   async revokeToken(tokenHash: string): Promise<void> {
+    const token = await this.refreshTokenRepository.findOne({
+      where: { tokenHash },
+    });
+
+    if (token) {
+      token.revokedAt = new Date();
+      await this.refreshTokenRepository.save(token);
+
+      if (token.jti) {
+        const redisKey = `nexafx:refresh:${token.userId}:${token.jti}`;
+        await this.redisService.del(redisKey);
+      }
+    }
+  }
+
+  async revokeTokenByJti(userId: string, jti: string): Promise<void> {
     await this.refreshTokenRepository.update(
-      { tokenHash },
-      { revokedAt: new Date() },
+      {
+        userId,
+        jti,
+        revokedAt: IsNull(),
+      },
+      {
+        revokedAt: new Date(),
+      },
     );
+
+    const redisKey = `nexafx:refresh:${userId}:${jti}`;
+    await this.redisService.del(redisKey);
   }
 
   async validateRefreshToken(token: string): Promise<RefreshToken> {
+    let payload: any;
+    try {
+      payload = this.jwtService.verify(token, {
+        secret: this.getRefreshTokenSecret(),
+      });
+    } catch (err) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    const { sub: userId, jti } = payload;
+    if (!userId || !jti) {
+      throw new UnauthorizedException('Invalid refresh token payload');
+    }
+
+    // Check Redis key existence
+    const redisKey = `nexafx:refresh:${userId}:${jti}`;
+    const redisVal = await this.redisService.get(redisKey);
+    if (!redisVal) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
     const tokenHash = this.hashRefreshToken(token);
     const stored = await this.refreshTokenRepository.findOne({
       where: {
@@ -63,8 +143,10 @@ export class RefreshTokensService {
       },
     });
 
-    if (!stored)
+    if (!stored) {
       throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
     return stored;
   }
 
@@ -78,16 +160,6 @@ export class RefreshTokensService {
       .execute();
 
     return result.affected || 0;
-  }
-
-  private generateSecureToken(): string {
-    // base64url without padding; keeps token shorter than hex and URL-safe
-    return crypto
-      .randomBytes(this.TOKEN_BYTES)
-      .toString('base64')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/g, '');
   }
 
   private getRefreshTokenSecret(): string {
@@ -106,7 +178,6 @@ export class RefreshTokensService {
   }
 
   private hashRefreshToken(token: string): string {
-    // Strong one-way hash; DB lookup is by hash so we never need to scan/compare all tokens.
     return crypto
       .createHmac('sha256', this.getRefreshTokenSecret())
       .update(token)

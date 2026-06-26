@@ -26,6 +26,9 @@ export class RefreshToken {
   @Column({ type: 'varchar', length: 255, unique: true })
   tokenHash: string;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  jti: string | null;
+
   @Column({ type: 'timestamp with time zone' })
   expiresAt: Date;
 

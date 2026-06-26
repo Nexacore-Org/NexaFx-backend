@@ -13,6 +13,7 @@ export interface JwtPayload {
   email: string;
   role: string;
   authStage?: 'partial_auth';
+  jti?: string;
 }
 
 @Injectable()
@@ -54,6 +55,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       email: user.email,
       role: user.role,
       authStage: payload.authStage,
+      jti: payload.jti,
     };
   }
 }

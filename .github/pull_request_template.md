@@ -1,35 +1,30 @@
 ## Description
-
-<!-- What does this PR do? What problem does it solve? What are the changes? -->
+<!-- What does this PR do? -->
 
 ## Related Issue
+Closes #
 
-<!-- Link to the related issue, e.g., Closes #123 -->
+## Branch
+<!-- Confirm: this PR targets the correct branch (v1 or v2) -->
+- [ ] I confirm this PR targets the correct branch
 
 ## Type of Change
+- [ ] Bug fix
+- [ ] New feature
+- [ ] Refactor
+- [ ] CI/Tooling
+- [ ] Documentation
+- [ ] Test
 
-- [ ] Bug fix (non-breaking change that fixes an issue)
-- [ ] New feature (non-breaking change that adds functionality)
-- [ ] Refactor (code change that neither fixes a bug nor adds a feature)
-- [ ] CI/CD (changes to CI/CD configuration or scripts)
-- [ ] Documentation (changes to documentation only)
-- [ ] Test (adds or updates tests only)
-
-## Testing Steps
-
-<!-- How was this tested? Include steps to reproduce, commands run, etc. -->
-
-## Screenshots (if applicable)
-
-<!-- Add screenshots to help reviewers understand the changes -->
+## Testing
+<!-- How did you test this? -->
+- [ ] Unit tests added/updated
+- [ ] E2E tests added/updated
+- [ ] Tested manually (describe steps)
 
 ## Checklist
-
-- [ ] My code follows the project's coding standards
-- [ ] I have performed a self-review of my code
-- [ ] I have commented my code where necessary
-- [ ] My changes generate no new warnings
-- [ ] Tests pass locally with `npm run test`
-- [ ] Lint passes locally with `npm run lint`
-- [ ] Documentation has been updated if needed
-- [ ] I have added tests that prove my fix is effective or my feature works
+- [ ] `npm run lint` passes locally
+- [ ] `npm run test` passes locally
+- [ ] `npm run build` passes locally
+- [ ] No secrets or credentials in this PR
+- [ ] Swagger docs updated if new endpoints added

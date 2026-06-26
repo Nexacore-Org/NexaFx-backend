@@ -19,6 +19,7 @@ import { NotificationType } from '../notifications/entities/notification.entity'
 import { ReferralStatsDto } from './dto/referral-stats.dto';
 import { ReferralItemDto } from './dto/referral-item.dto';
 import { FirebaseService } from '../firebase/firebase.service';
+import { WebhookService } from '../webhooks/services/webhook.service';
 
 @Injectable()
 export class ReferralsService {
@@ -34,6 +35,7 @@ export class ReferralsService {
     private readonly notificationsService: NotificationsService,
     private readonly configService: ConfigService,
     private readonly firebaseService: FirebaseService,
+    private readonly webhookService: WebhookService,
   ) {}
 
   async createPendingReferral(
@@ -210,5 +212,11 @@ export class ReferralsService {
     this.logger.log(
       `Referral reward issued for referrer ${referral.referrerId} and referee ${refereeId}`,
     );
+
+    this.webhookService
+      .dispatch('referral.rewarded', saved, saved.referrerId)
+      .catch((err) =>
+        this.logger.error(`Webhook dispatch failed: ${err.message}`),
+      );
   }
 }

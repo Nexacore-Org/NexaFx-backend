@@ -46,9 +46,13 @@ export class User {
   @Column({ type: 'varchar', length: 100, nullable: true })
   lastName: string | null;
 
-  @Column({ type: 'varchar', length: 255 })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   @Exclude({ toPlainOnly: true })
-  password: string;
+  password: string | null;
+
+  @Column({ type: 'varchar', length: 255, select: false })
+  @Exclude({ toPlainOnly: true })
+  passwordHash?: string;
 
   @OneToMany(() => KycRecord, (kyc) => kyc.user)
   kycRecords: KycRecord[];
@@ -56,6 +60,13 @@ export class User {
   @Column({ type: 'varchar', length: 20, nullable: true, unique: true })
   @Index()
   phone: string | null;
+
+  @Column({ type: 'varchar', length: 20, nullable: true, unique: true })
+  @Index()
+  phoneNumber: string | null;
+
+  @Column({ type: 'boolean', default: false })
+  isPhoneVerified: boolean;
 
   @Column({ type: 'varchar', length: 56 })
   @Index()
@@ -85,6 +96,12 @@ export class User {
 
   @Column({ type: 'boolean', default: false })
   isVerified: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  isEmailVerified?: boolean;
+
+  @Column({ type: 'boolean', default: true })
+  isActive?: boolean;
 
   @Column({
     type: 'enum',

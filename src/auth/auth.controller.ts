@@ -53,8 +53,10 @@ export class AuthController {
     },
   })
   @ApiResponse({ status: 400, description: 'Invalid request body' })
-  async login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+  async login(@Body() loginDto: LoginDto, @Req() req: any) {
+    const ipAddress = req.ip || req.connection?.remoteAddress;
+    const userAgent = req.get('User-Agent');
+    return this.authService.login(loginDto, ipAddress, userAgent);
   }
 
   @Public()
@@ -70,8 +72,19 @@ export class AuthController {
   })
   @ApiResponse({ status: 401, description: 'Invalid or expired OTP' })
   @ApiResponse({ status: 400, description: 'Invalid request body' })
-  async verifyLoginOtp(@Body() verifyDto: VerifyLoginOtpDto) {
-    return this.authService.verifyLoginOtp(verifyDto);
+  async verifyLoginOtp(@Body() verifyDto: VerifyLoginOtpDto, @Req() req: any) {
+    const ipAddress = req.ip || req.connection?.remoteAddress;
+    const userAgent = req.get('User-Agent');
+    const country =
+      req.headers['cf-ipcountry'] || req.headers['x-country'] || 'Unknown';
+    const city = req.headers['cf-ipcity'] || req.headers['x-city'] || 'Unknown';
+    return this.authService.verifyLoginOtp(
+      verifyDto,
+      ipAddress,
+      userAgent,
+      country,
+      city,
+    );
   }
 
   @Public()
@@ -83,15 +96,30 @@ export class AuthController {
   @ApiBody({ type: VerifyTwoFactorDto })
   @ApiResponse({
     status: 200,
-    description: '2FA verified. Returns full auth tokens + user object (including name).',
+    description:
+      '2FA verified. Returns full auth tokens + user object (including name).',
     type: VerifyLoginOtpResponseDto,
   })
   @ApiResponse({
     status: 401,
     description: 'Invalid or expired 2FA token/code',
   })
-  async verifyTwoFactor(@Body() verifyDto: VerifyTwoFactorDto) {
-    return this.authService.verifyTwoFactor(verifyDto);
+  async verifyTwoFactor(
+    @Body() verifyDto: VerifyTwoFactorDto,
+    @Req() req: any,
+  ) {
+    const ipAddress = req.ip || req.connection?.remoteAddress;
+    const userAgent = req.get('User-Agent');
+    const country =
+      req.headers['cf-ipcountry'] || req.headers['x-country'] || 'Unknown';
+    const city = req.headers['cf-ipcity'] || req.headers['x-city'] || 'Unknown';
+    return this.authService.verifyTwoFactor(
+      verifyDto,
+      ipAddress,
+      userAgent,
+      country,
+      city,
+    );
   }
 
   @Public()
@@ -241,8 +269,22 @@ export class AuthController {
     status: 400,
     description: 'Account already verified or invalid request',
   })
-  async verifySignupOtp(@Body() verifyDto: VerifySignupOtpDto) {
-    return this.authService.verifySignupOtp(verifyDto);
+  async verifySignupOtp(
+    @Body() verifyDto: VerifySignupOtpDto,
+    @Req() req: any,
+  ) {
+    const ipAddress = req.ip || req.connection?.remoteAddress;
+    const userAgent = req.get('User-Agent');
+    const country =
+      req.headers['cf-ipcountry'] || req.headers['x-country'] || 'Unknown';
+    const city = req.headers['cf-ipcity'] || req.headers['x-city'] || 'Unknown';
+    return this.authService.verifySignupOtp(
+      verifyDto,
+      ipAddress,
+      userAgent,
+      country,
+      city,
+    );
   }
 
   @Public()

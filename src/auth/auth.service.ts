@@ -3,6 +3,8 @@ import {
   UnauthorizedException,
   ConflictException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { ThrottlerException } from '@nestjs/throttler';
 import { JwtService } from '@nestjs/jwt';
@@ -10,6 +12,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { UsersService } from '../users/users.service';
 import { OtpsService } from '../otps/otps.service';
 import { OtpType } from '../otps/otp.entity';
@@ -25,7 +28,10 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SignupDto } from './dto/signup.dto';
 import { VerifySignupOtpDto } from './dto/verify-signup-otp.dto';
 import { VerifySignupResponseDto } from './dto/signup-response.dto';
-import { AuthUserResponseDto, VerifyLoginOtpResponseDto } from './dto/signup-response.dto';
+import {
+  AuthUserResponseDto,
+  VerifyLoginOtpResponseDto,
+} from './dto/signup-response.dto';
 import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
@@ -33,6 +39,7 @@ import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import { ReferralsService } from '../referrals/referrals.service';
 import { TwoFactorService } from '../two-factor/two-factor.service';
 import { WalletsService } from '../wallets/wallets.service';
+import { SessionsService } from '../modules/sessions/sessions.service';
 
 @Injectable()
 export class AuthService {
@@ -49,6 +56,8 @@ export class AuthService {
     private readonly referralsService: ReferralsService,
     private readonly twoFactorService: TwoFactorService,
     private readonly walletsService: WalletsService,
+    @Inject(forwardRef(() => SessionsService))
+    private readonly sessionsService: SessionsService,
     @InjectRepository(PasswordResetAttempt)
     private readonly passwordResetAttemptRepository: Repository<PasswordResetAttempt>,
   ) {}
@@ -126,6 +135,8 @@ export class AuthService {
     verifyDto: VerifyLoginOtpDto,
     ipAddress?: string,
     userAgent?: string,
+    country?: string,
+    city?: string,
   ): Promise<any> {
     const user = await this.usersService.findByEmail(verifyDto.email);
     if (!user || !user.isVerified) {
@@ -151,35 +162,52 @@ export class AuthService {
     });
 
     if (user.isTwoFactorEnabled) {
-      const twoFactorToken = this.jwtService.sign(
-        {
-          sub: user.id,
-          email: user.email,
-          role: user.role,
-          authStage: 'partial_auth',
-        },
-        {
-          expiresIn: '5m',
-        },
+      // Check if this device is trusted
+      const isTrusted = await this.sessionsService.isDeviceTrusted(
+        user.id,
+        userAgent || '',
+        ipAddress || '',
       );
 
-      await this.auditLogsService.logAuthEvent(user.id, AuditAction.LOGIN, {
-        method: 'email',
-        status: '2fa_required',
-        ip: ipAddress,
-        device: userAgent,
-      });
+      if (!isTrusted) {
+        const twoFactorToken = this.jwtService.sign(
+          {
+            sub: user.id,
+            email: user.email,
+            role: user.role,
+            authStage: 'partial_auth',
+          },
+          {
+            expiresIn: '5m',
+          },
+        );
 
-      return {
-        requiresTwoFactor: true,
-        twoFactorToken,
-        accessToken: twoFactorToken,
-        expiresIn: 300,
-        message: 'Two-factor authentication code is required',
-      };
+        await this.auditLogsService.logAuthEvent(user.id, AuditAction.LOGIN, {
+          method: 'email',
+          status: '2fa_required',
+          ip: ipAddress,
+          device: userAgent,
+        });
+
+        return {
+          requiresTwoFactor: true,
+          twoFactorToken,
+          accessToken: twoFactorToken,
+          expiresIn: 300,
+          message: 'Two-factor authentication code is required',
+        };
+      }
     }
 
-    const tokens = await this.issueAuthTokens(user.id, user.email, user.role);
+    const tokens = await this.issueAuthTokens(
+      user.id,
+      user.email,
+      user.role,
+      ipAddress,
+      userAgent,
+      country,
+      city,
+    );
 
     await this.auditLogsService.logAuthEvent(user.id, AuditAction.LOGIN, {
       method: 'email',
@@ -187,7 +215,8 @@ export class AuthService {
       ip: ipAddress,
       device: userAgent,
       hasOtp: true,
-      hasTwoFactor: false,
+      hasTwoFactor: user.isTwoFactorEnabled, // true if user has 2FA but skipped it
+      skipped2FA: user.isTwoFactorEnabled,
     });
 
     return tokens;
@@ -197,6 +226,8 @@ export class AuthService {
     verifyDto: VerifyTwoFactorDto,
     ipAddress?: string,
     userAgent?: string,
+    country?: string,
+    city?: string,
   ): Promise<any> {
     let decoded: JwtPayload & { authStage?: string };
 
@@ -239,7 +270,15 @@ export class AuthService {
       lockedUntil: null,
     });
 
-    const tokens = await this.issueAuthTokens(user.id, user.email, user.role);
+    const tokens = await this.issueAuthTokens(
+      user.id,
+      user.email,
+      user.role,
+      ipAddress,
+      userAgent,
+      country,
+      city,
+    );
 
     await this.auditLogsService.logAuthEvent(user.id, AuditAction.LOGIN, {
       method: 'email+totp',
@@ -450,6 +489,10 @@ export class AuthService {
 
   async verifySignupOtp(
     verifyDto: VerifySignupOtpDto,
+    ipAddress?: string,
+    userAgent?: string,
+    country?: string,
+    city?: string,
   ): Promise<VerifySignupResponseDto> {
     const user = await this.usersService.findByEmail(verifyDto.email);
 
@@ -471,34 +514,27 @@ export class AuthService {
     // Mark user as verified
     await this.usersService.verifyUser(user.id);
 
-    // Generate tokens
-    const payload: JwtPayload = {
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-    };
-
-    const accessToken = this.jwtService.sign(payload);
-    const refreshToken = await this.refreshTokensService.createRefreshToken(
+    // Issue tokens using unified method
+    const tokens = await this.issueAuthTokens(
       user.id,
+      user.email,
+      user.role,
+      ipAddress,
+      userAgent,
+      country,
+      city,
     );
-    const expiresIn = this.getAccessTokenExpirySeconds();
 
     return {
-      accessToken,
-      refreshToken,
-      expiresIn,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresIn: tokens.expiresIn,
       user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        name: `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim(),
+        ...tokens.user,
         phone: user.phone,
-        isVerified: true,
-        role: user.role,
-        walletPublicKey: user.walletPublicKey,
+        isVerified: user.isVerified,
         createdAt: user.createdAt,
+        walletPublicKey: user.walletPublicKey || '',
       },
     };
   }
@@ -636,12 +672,24 @@ export class AuthService {
 
   async issueFullAccessToken(
     userId: string,
+    ipAddress?: string,
+    userAgent?: string,
+    country?: string,
+    city?: string,
   ): Promise<ReturnType<AuthService['issueAuthTokens']>> {
     const user = await this.usersService.findById(userId);
     if (!user || !user.isVerified) {
       throw new UnauthorizedException('Invalid credentials');
     }
-    return this.issueAuthTokens(user.id, user.email, user.role);
+    return this.issueAuthTokens(
+      user.id,
+      user.email,
+      user.role,
+      ipAddress,
+      userAgent,
+      country,
+      city,
+    );
   }
 
   getUserIdFromPartialAuth(token: string): string {
@@ -660,9 +708,18 @@ export class AuthService {
     return decoded.sub;
   }
 
-  private async issueAuthTokens(userId: string, email: string, role: string): Promise<VerifyLoginOtpResponseDto> {
+  private async issueAuthTokens(
+    userId: string,
+    email: string,
+    role: string,
+    ipAddress?: string,
+    userAgent?: string,
+    country?: string,
+    city?: string,
+  ): Promise<VerifyLoginOtpResponseDto> {
     const user = await this.usersService.findById(userId);
-    const payload = { sub: userId, email, role };
+    const jti = crypto.randomUUID();
+    const payload = { sub: userId, email, role, jti };
     const authUser: AuthUserResponseDto = {
       id: userId,
       email,
@@ -672,9 +729,25 @@ export class AuthService {
       role: role as any,
       walletPublicKey: user?.walletPublicKey ?? null,
     };
+
+    const accessToken = this.jwtService.sign(payload);
+    const refreshToken = await this.refreshTokensService.createRefreshToken(
+      userId,
+      jti,
+    );
+
+    await this.sessionsService.createSession(
+      userId,
+      jti,
+      userAgent || '',
+      ipAddress || '',
+      country || 'Unknown',
+      city || 'Unknown',
+    );
+
     return {
-      accessToken: this.jwtService.sign(payload),
-      refreshToken: await this.refreshTokensService.createRefreshToken(userId),
+      accessToken,
+      refreshToken,
       expiresIn: this.getAccessTokenExpirySeconds(),
       user: authUser,
     };

@@ -8,10 +8,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { KycRecord, KycStatus, KycTier } from './entities/kyc.entity';
-import { ApproveKycDto } from './dtos/kyc-approve';
-import { User } from '../users/user.entity';
+import { User, UserKycTier } from '../users/user.entity';
 import { SubmitKycDto } from './dtos/kyc-submit';
 import { ResubmitKycDto } from './dtos/kyc-resubmit';
+import { KycEmailService } from './kyc-email.service';
 import { ConfigService } from '@nestjs/config';
 import {
   Notification,
@@ -43,6 +43,7 @@ export class KycService {
     private readonly webhookService: WebhookService,
     @Inject(STORAGE_SERVICE_TOKEN)
     private readonly storageService: StorageService,
+    private readonly kycEmailService: KycEmailService,
   ) { }
 
   async submitKyc(
@@ -58,7 +59,7 @@ export class KycService {
     const existingActiveKyc = await this.kycRepository.findOne({
       where: [
         { userId, status: KycStatus.PENDING },
-        { userId, status: KycStatus.UNDER_REVIEW },
+        { userId, status: KycStatus.RESUBMISSION_REQUIRED },
       ],
     });
 
@@ -116,15 +117,14 @@ export class KycService {
       submittedAt: new Date(),
     });
 
-    await manager.save(newKyc);
+    await this.kycRepository.save(newKyc);
 
     return {
       message: 'KYC submitted successfully',
       status: newKyc.status,
       tier: newKyc.tier,
     };
-  });
-}
+  }
 
   async resubmitKyc(
   userId: string,
@@ -365,140 +365,113 @@ export class KycService {
 }
 
   async rejectKyc(
-  kycId: string,
-  reviewerId: string,
-  reason: string,
-  requireResubmission: boolean = false,
-) {
-  return this.dataSource.transaction(async (manager) => {
-    const kyc = await manager.findOne(KycRecord, { where: { id: kycId } });
+    kycId: string,
+    reviewerId: string,
+    reason: string,
+    requireResubmission: boolean = false,
+  ) {
+    return this.dataSource.transaction(async (manager) => {
+      const kyc = await manager.findOne(KycRecord, { where: { id: kycId } });
 
-    if (!kyc) throw new BadRequestException('KYC record not found');
+      if (!kyc) throw new BadRequestException('KYC record not found');
 
-    if (
-      kyc.status === KycStatus.APPROVED ||
-      kyc.status === KycStatus.REJECTED
-    ) {
-      throw new BadRequestException('KYC already reviewed');
-    }
+      if (
+        kyc.status === KycStatus.APPROVED ||
+        kyc.status === KycStatus.REJECTED ||
+        kyc.status === KycStatus.RESUBMISSION_REQUIRED
+      ) {
+        throw new BadRequestException('KYC already reviewed');
+      }
 
-    if (
-      decision !== KycStatus.APPROVED &&
-      decision !== KycStatus.REJECTED
-    ) {
-      throw new BadRequestException('Invalid decision');
-    }
+      const user = await manager.findOne(User, { where: { id: kyc.userId } });
+      if (!user) throw new BadRequestException('User not found');
 
-    const user = await manager.findOne(User, { where: { id: kyc.userId } });
-    if (!user) throw new BadRequestException('User not found');
+      const newStatus = requireResubmission
+        ? KycStatus.RESUBMISSION_REQUIRED
+        : KycStatus.REJECTED;
 
-    let notificationPayload: Partial<Notification>;
-
-    if (decision === KycStatus.APPROVED) {
-      kyc.status = KycStatus.APPROVED;
-      const tier = this.resolveUserKycTier(kyc);
-      kyc.tier =
-        tier === UserKycTier.BASIC
-          ? KycTier.TIER_1
-          : tier === UserKycTier.UNVERIFIED
-            ? KycTier.TIER_0
-            : KycTier.TIER_2;
+      kyc.status = newStatus;
+      kyc.rejectionReason = reason || (requireResubmission ? 'Resubmission required' : 'KYC rejected');
+      kyc.reviewedBy = reviewerId;
       kyc.reviewedAt = new Date();
-      user.isVerified = true;
-      user.kycTier = tier;
 
-      notificationPayload = {
-        userId: user.id,
-        type: NotificationType.SYSTEM,
-        title: 'KYC Approved',
-        message:
-          'Your identity verification has been approved. You now have full access to higher transaction limits.',
-        status: NotificationStatus.UNREAD,
-        relatedId: kyc.id,
-        metadata: { entity: 'KYC', kycStatus: 'approved', tier },
-      };
-    } else {
-      kyc.status = KycStatus.REJECTED;
-      kyc.rejectionReason = reason || 'KYC rejected';
-      kyc.reviewedAt = new Date();
       user.isVerified = false;
       user.kycTier = UserKycTier.UNVERIFIED;
-    }
 
-    await manager.save(kyc);
-    await manager.save(user);
+      await manager.save(kyc);
+      await manager.save(user);
 
-    // Create in-app notification
-    const notificationMessage =
-      newStatus === KycStatus.RESUBMISSION_REQUIRED
-        ? `Your KYC submission requires changes. Reason: ${reason}`
-        : `Your KYC submission was rejected. Reason: ${reason}`;
-
-    const notificationPayload: Partial<Notification> = {
-      userId: user.id,
-      type: NotificationType.SYSTEM,
-      title:
+      // Create in-app notification
+      const notificationMessage =
         newStatus === KycStatus.RESUBMISSION_REQUIRED
-          ? 'KYC Resubmission Required'
-          : 'KYC Rejected',
-      message: notificationMessage,
-      status: NotificationStatus.UNREAD,
-      relatedId: kyc.id,
-      metadata: {
-        entity: 'KYC',
-        kycStatus: newStatus,
-        reason,
-      },
-    };
-    await manager.save(Notification, notificationPayload);
+          ? `Your KYC submission requires changes. Reason: ${reason}`
+          : `Your KYC submission was rejected. Reason: ${reason}`;
 
-    // Send push notification via Firebase
-    if (user.fcmTokens && user.fcmTokens.length > 0) {
-      this.firebaseService
-        .sendToTokens(
-          user.fcmTokens,
-          notificationPayload.title!,
-          notificationPayload.message!,
-          { entity: 'KYC', kycStatus: decision.toLowerCase() },
+      const notificationPayload: Partial<Notification> = {
+        userId: user.id,
+        type: NotificationType.SYSTEM,
+        title:
+          newStatus === KycStatus.RESUBMISSION_REQUIRED
+            ? 'KYC Resubmission Required'
+            : 'KYC Rejected',
+        message: notificationMessage,
+        status: NotificationStatus.UNREAD,
+        relatedId: kyc.id,
+        metadata: {
+          entity: 'KYC',
+          kycStatus: newStatus,
+          reason,
+        },
+      };
+      await manager.save(Notification, notificationPayload);
+
+      // Send push notification via Firebase
+      if (user.fcmTokens && user.fcmTokens.length > 0) {
+        this.firebaseService
+          .sendToTokens(
+            user.fcmTokens,
+            notificationPayload.title!,
+            notificationPayload.message!,
+            { entity: 'KYC', kycStatus: newStatus.toLowerCase() },
+          )
+          .catch((err: Error) =>
+            this.logger.error(`Failed to send KYC FCM: ${err.message}`),
+          );
+      }
+
+      // Dispatch webhook
+      const webhookEvent =
+        newStatus === KycStatus.RESUBMISSION_REQUIRED
+          ? 'kyc.resubmission_required'
+          : 'kyc.rejected';
+      this.webhookService
+        .dispatch(webhookEvent, kyc, user.id)
+        .catch((err: Error) =>
+          this.logger.error(`Webhook dispatch failed: ${err.message}`),
+        );
+
+      // Send rejection email
+      this.kycEmailService
+        .sendRejectionEmail(
+          user.email,
+          user.firstName ?? 'User',
+          reason,
+          newStatus === KycStatus.RESUBMISSION_REQUIRED,
         )
         .catch((err: Error) =>
-          this.logger.error(`Failed to send KYC FCM: ${err.message}`),
+          this.logger.error(
+            `Failed to send KYC rejection email: ${err.message}`,
+          ),
         );
-    }
 
-    // Dispatch webhook
-    const webhookEvent =
-      newStatus === KycStatus.RESUBMISSION_REQUIRED
-        ? 'kyc.resubmission_required'
-        : 'kyc.rejected';
-    this.webhookService
-      .dispatch(webhookEvent, kyc, user.id)
-      .catch((err: Error) =>
-        this.logger.error(`Webhook dispatch failed: ${err.message}`),
-      );
-
-    // Send rejection email
-    this.kycEmailService
-      .sendRejectionEmail(
-        user.email,
-        user.firstName ?? 'User',
-        reason,
-        newStatus === KycStatus.RESUBMISSION_REQUIRED,
-      )
-      .catch((err: Error) =>
-        this.logger.error(
-          `Failed to send KYC rejection email: ${err.message}`,
-        ),
-      );
-
-    return {
-      message:
-        newStatus === KycStatus.RESUBMISSION_REQUIRED
-          ? 'KYC resubmission requested successfully'
-          : 'KYC rejected successfully',
-    };
-  });
-}
+      return {
+        message:
+          newStatus === KycStatus.RESUBMISSION_REQUIRED
+            ? 'KYC resubmission requested successfully'
+            : 'KYC rejected successfully',
+      };
+    });
+  }
 
   /** Convert a KycRecord to a review DTO with temporary signed URLs */
   async toReviewDto(kyc: KycRecord): Promise < object > {

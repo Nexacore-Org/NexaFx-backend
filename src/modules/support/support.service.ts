@@ -445,7 +445,7 @@ export class SupportService {
         // Send notifications to the admin team
         await this.notifyAdminTeam(ticket);
       }
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`SLA breach cron failed: ${error.message}`, error.stack);
     }
   }
@@ -502,7 +502,7 @@ export class SupportService {
           this.logger.error(`Failed to notify admin ${admin.id}: ${err.message}`),
         );
       }
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`Failed to notify admin team: ${error.message}`, error.stack);
     }
   }
@@ -534,7 +534,7 @@ export class SupportService {
         text,
       });
       this.logger.log(`Email sent successfully to ${to} with subject "${subject}"`);
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`Failed to send email to ${to}: ${error.message}`, error.stack);
     }
   }

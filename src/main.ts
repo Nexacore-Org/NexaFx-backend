@@ -1,7 +1,5 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import {
   ClassSerializerInterceptor,
   Logger,
@@ -19,10 +17,8 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TransformResponseInterceptor } from './common/interceptors/transform-response.interceptor';
 import helmet from 'helmet';
 import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
-import {createAdminQueueAuthMiddleware} from './modules/queues/admin-queue-auth.middleware';
+import { createAdminQueueAuthMiddleware } from './modules/queues/admin-queue-auth.middleware';
 import { QueuesDashboardService } from './modules/queues/queues-dashboard.service';
-import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { join } from 'path';
 import * as compression from 'compression';
 
@@ -72,9 +68,7 @@ async function bootstrap() {
     .map((origin) => origin.trim())
     .filter(Boolean);
 
-
   const jwtService = app.get(JwtService);
-  const configService = app.get(ConfigService);
   const queuesDashboard = app.get(QueuesDashboardService);
 
   app.use(

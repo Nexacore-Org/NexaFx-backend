@@ -90,7 +90,7 @@ describe('ExchangeRateResolver', () => {
         inverseRate: 11.1,
         provider: 'coingecko',
         expiresAt: new Date(Date.now() + 60000).toISOString(),
-      });
+      } as any);
 
       const result = await resolver.exchangeRate('XLM', 'USD');
 

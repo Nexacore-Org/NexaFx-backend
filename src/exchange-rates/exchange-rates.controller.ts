@@ -48,10 +48,10 @@ export class ExchangeRatesController {
   }
 
   @Public()
-  @Get('currencies')
+  @Get('pairs')
   @ApiOperation({ summary: 'Get supported currency pairs configured by provider' })
   @ApiResponse({ status: 200, description: 'Supported currency pairs returned successfully' })
-  async getCurrencies(): Promise<string[]> {
+  async getSupportedPairs(): Promise<string[]> {
     return this.exchangeRatesService.getSupportedPairs();
   }
 

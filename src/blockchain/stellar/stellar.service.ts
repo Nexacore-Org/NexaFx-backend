@@ -223,7 +223,7 @@ export class StellarService {
       });
 
       for (const operation of params.operations) {
-        builder.addOperation(operation);
+        builder.addOperation(operation as any);
       }
 
       const transaction = builder.setTimeout(180).build();

@@ -28,6 +28,9 @@ import { DataRequest } from '../users/entities/data-request.entity';
 import { RedisService } from '../common/services/redis.service';
 import { DataSource } from 'typeorm';
 import { AnalyticsService } from '../analytics/analytics.service';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { TAX_QUEUE } from '../modules/queues/queue.constants';
 
 @Injectable()
 export class ScheduledJobsService {
@@ -58,6 +61,8 @@ export class ScheduledJobsService {
     private readonly ledgerVerificationService: LedgerVerificationService,
     private readonly analyticsService: AnalyticsService,
     private readonly redisService: RedisService,
+    @InjectQueue(TAX_QUEUE)
+    private readonly taxQueue: Queue,
   ) {
     // Truncate hostname to 255 characters to match DB column constraint
     this.instanceId = os.hostname().substring(0, 255);
@@ -460,6 +465,10 @@ export class ScheduledJobsService {
     transaction.status = TransactionStatus.SUCCESS;
     await this.transactionRepository.save(transaction);
     await this.redisService.del('admin_stats');
+
+    this.taxQueue.add('process-transaction', { transactionId: transaction.id }).catch((e) =>
+      this.logger.error(`Failed to enqueue tax processing for reconciled transaction ${transaction.id}: ${e.message}`)
+    );
 
     // Update user balance for deposits
     if (transaction.type === TransactionType.DEPOSIT) {

@@ -30,6 +30,7 @@ import { TwoFactorService } from '../two-factor/two-factor.service';
 import { WalletsService } from '../wallets/wallets.service';
 import { PasswordResetAttempt } from './entities/password-reset-attempt.entity';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { SessionsService } from '../modules/sessions/sessions.service';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -47,7 +48,9 @@ const makeUser = (overrides: Partial<any> = {}) => ({
   ...overrides,
 });
 
-const makeResetDto = (overrides: Partial<ResetPasswordDto> = {}): ResetPasswordDto =>
+const makeResetDto = (
+  overrides: Partial<ResetPasswordDto> = {},
+): ResetPasswordDto =>
   Object.assign(new ResetPasswordDto(), {
     email: 'trader@nexafx.com',
     otp: '123456',
@@ -80,13 +83,20 @@ const mockAuditLogsService = {
 
 // Minimal stubs for services not under test
 const mockOtpDeliveryService = { sendOtp: jest.fn() };
-const mockJwtService = { sign: jest.fn().mockReturnValue('token'), verify: jest.fn() };
+const mockJwtService = {
+  sign: jest.fn().mockReturnValue('token'),
+  verify: jest.fn(),
+};
 const mockConfigService = { get: jest.fn().mockReturnValue('15m') };
 const mockStellarService = { generateWallet: jest.fn() };
 const mockEncryptionService = { encrypt: jest.fn() };
 const mockReferralsService = { createPendingReferral: jest.fn() };
 const mockTwoFactorService = { verifyTotpCode: jest.fn() };
 const mockWalletsService = { seedPrimaryWalletFromUserCredentials: jest.fn() };
+const mockSessionsService = {
+  isDeviceTrusted: jest.fn(),
+  createSession: jest.fn(),
+};
 const mockPasswordResetAttemptRepository = {
   count: jest.fn().mockResolvedValue(0),
   save: jest.fn(),
@@ -117,6 +127,7 @@ describe('AuthService.resetPassword()', () => {
         { provide: ReferralsService, useValue: mockReferralsService },
         { provide: TwoFactorService, useValue: mockTwoFactorService },
         { provide: WalletsService, useValue: mockWalletsService },
+        { provide: SessionsService, useValue: mockSessionsService },
         {
           provide: getRepositoryToken(PasswordResetAttempt),
           useValue: mockPasswordResetAttemptRepository,
@@ -179,7 +190,9 @@ describe('AuthService.resetPassword()', () => {
       mockOtpsService.invalidateAllUserOtps.mockResolvedValue(undefined);
       mockAuditLogsService.logAuthEvent.mockResolvedValue(undefined);
 
-      await service.resetPassword(makeResetDto({ newPassword: 'AnotherPass!99' }));
+      await service.resetPassword(
+        makeResetDto({ newPassword: 'AnotherPass!99' }),
+      );
 
       expect(mockUsersService.updatePassword).toHaveBeenCalledWith(
         user.id,
@@ -216,7 +229,9 @@ describe('AuthService.resetPassword()', () => {
 
       await service.resetPassword(makeResetDto());
 
-      expect(mockOtpsService.invalidateAllUserOtps).toHaveBeenCalledWith(user.id);
+      expect(mockOtpsService.invalidateAllUserOtps).toHaveBeenCalledWith(
+        user.id,
+      );
     });
 
     it('emits a PASSWORD_RESET_COMPLETE audit event on success', async () => {
@@ -327,7 +342,9 @@ describe('AuthService.resetPassword()', () => {
         UnauthorizedException,
       );
 
-      expect(mockRefreshTokensService.revokeAllUserTokens).not.toHaveBeenCalled();
+      expect(
+        mockRefreshTokensService.revokeAllUserTokens,
+      ).not.toHaveBeenCalled();
     });
   });
 });

@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  # ... existing database/redis setups ...
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: nexafx-jaeger
+    ports:
+      - '16686:16686'  # Jaeger Web Query Dashboard UI
+      - '4318:4318'    # OTLP Receiver HTTP Endpoint
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true

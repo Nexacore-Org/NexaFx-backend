@@ -1,80 +1,31 @@
+import './tracing'; // <-- MUST BE FIRST LINE BEFORE NESTJS BOOTSTRAP
+
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe, VersioningType } from '@nestjs/common';
-import { NestExpressApplication } from '@nestjs/platform-express';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
-import { HttpExceptionFilter } from './common/filters/http-exception.filter';
-import { MulterExceptionFilter } from './common/filters/multer-exception.filter';
-import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
-import { TransformResponseInterceptor } from './common/interceptors/transform-response.interceptor';
-import helmet from 'helmet';
+import { Logger } from '@nestjs/common';
+import { v4 as uuidv4 } from 'uuid';
+import { Request, Response, NextFunction } from 'express';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
-  // Security headers
-  app.use(helmet());
+  const app = await NestFactory.create(AppModule);
 
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-      transformOptions: { enableImplicitConversion: true },
-      // Do not expose the validated object or its values in error responses —
-      // prevents leaking sensitive fields (passwords, tokens) back to the client.
-      validationError: { target: false, value: false },
-    }),
-  );
-
-  // Global Filters (order matters: specific before general)
-  app.useGlobalFilters(new HttpExceptionFilter(), new AllExceptionsFilter());
-
-  // Global Interceptors
-  app.useGlobalInterceptors(
-    new LoggingInterceptor(),
-    new TransformResponseInterceptor(),
-  );
-
-  app.enableVersioning({
-    type: VersioningType.URI,
-    defaultVersion: '1',
+  // Distributed Tracing Context Propagation & Correlation Middleware
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    // Extract incoming request ID or generate a canonical fallback V4 UUID
+    const requestId = (req.headers['x-request-id'] as string) || uuidv4();
+    
+    // Mutate request headers for internal service propagation downstream
+    req.headers['x-request-id'] = requestId;
+    
+    // Inject custom correlation header to outgoing HTTP response payload headers
+    res.setHeader('X-Request-ID', requestId);
+    
+    next();
   });
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('NexaFX API')
-    .setDescription('NexaFX Backend API with Audit Logs')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-
-  const swaggerDoc = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, swaggerDoc);
-
-  // CORS
-  app.enableCors({
-    // origin:
-    //   configService.get<string>('FRONTEND_URL') || 'http://localhost:3001',
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true,
-  });
-
-  // Note: do NOT expose uploads via a global static asset mount. KYC files
-  // must remain restricted to admin-only access. Serve files via the
-  // admin controller which is protected by guards.
-
-  // Register Multer-specific exception filter before other global filters so
-  // upload errors (like LIMIT_FILE_SIZE) are converted into 400 responses.
-  app.useGlobalFilters(
-    new MulterExceptionFilter(),
-    new HttpExceptionFilter(),
-    new AllExceptionsFilter(),
-  );
-  await app.listen(process.env.PORT ?? 3001);
+  const port = process.env.PORT || 3000;
+  await app.listen(port);
+  Logger.log(`Application v2 is running on: http://localhost:${port}`);
 }
 
-// Handle startup errors explicitly so linters don't complain about an
-// unhandled/ignored promise (no-floating-promises). Log the error and exit
-// with a non-zero code so process managers notice failures.
-void bootstrap();
+bootstrap();

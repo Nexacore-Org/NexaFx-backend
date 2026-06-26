@@ -77,7 +77,10 @@ export class AdminService {
     });
   }
 
-  async patchTransactionLimit(tier: UserKycTier, dto: PatchTransactionLimitDto) {
+  async patchTransactionLimit(
+    tier: UserKycTier,
+    dto: PatchTransactionLimitDto,
+  ) {
     return this.transactionLimitService.upsertLimit(tier, {
       dailyLimitUsd: dto.dailyLimitUsd,
       monthlyLimitUsd: dto.monthlyLimitUsd,

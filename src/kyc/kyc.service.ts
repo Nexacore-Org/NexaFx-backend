@@ -212,7 +212,7 @@ export class KycService {
         kyc.reviewedAt = new Date();
 
         user.isVerified = false;
-  user.kycTier = UserKycTier.UNVERIFIED;
+        user.kycTier = UserKycTier.UNVERIFIED;
 
         notificationPayload = {
           userId: user.id,

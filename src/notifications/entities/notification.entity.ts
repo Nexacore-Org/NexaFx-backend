@@ -72,4 +72,7 @@ export class Notification {
 
   @Column({ type: 'timestamp', nullable: true })
   readAt?: Date;
+
+  @Column({ type: 'tsvector', nullable: true })
+  searchVector: string | null;
 }

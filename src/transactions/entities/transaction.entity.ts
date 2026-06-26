@@ -64,6 +64,12 @@ export class Transaction {
   @Column({ type: 'varchar', length: 255, nullable: true })
   txHash: string | null;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  counterpartyMemo: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  reference: string | null;
+
   @Column({ type: 'text', nullable: true })
   failureReason: string | null;
 
@@ -93,4 +99,7 @@ export class Transaction {
 
   @Column({ type: 'jsonb', nullable: true })
   metadata: any;
+
+  @Column({ type: 'tsvector', nullable: true })
+  searchVector: string | null;
 }

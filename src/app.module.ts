@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -34,9 +34,14 @@ import { WalletsModule } from './wallets/wallets.module';
 import { RateAlertsModule } from './rate-alerts/rate-alerts.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
+import { RedisModule } from './redis/redis.module';
+import { SessionsModule } from './modules/sessions/sessions.module';
+import { SessionActivityInterceptor } from './common/interceptors/session-activity.interceptor';
 
 @Module({
   imports: [
+    RedisModule,
+    SessionsModule,
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
@@ -107,6 +112,10 @@ import { UsersModule } from './users/users.module';
     {
       provide: APP_GUARD,
       useClass: PlanThrottlerGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: SessionActivityInterceptor,
     },
   ],
 })

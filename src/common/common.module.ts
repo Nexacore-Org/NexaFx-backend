@@ -9,7 +9,17 @@ import { IdempotencyRecord } from './entities/idempotency-record.entity';
 @Global()
 @Module({
   imports: [TypeOrmModule.forFeature([IdempotencyRecord])],
-  providers: [PaginationService, DateService, EncryptionService, IdempotencyService],
-  exports: [PaginationService, DateService, EncryptionService, IdempotencyService],
+  providers: [
+    PaginationService,
+    DateService,
+    EncryptionService,
+    IdempotencyService,
+  ],
+  exports: [
+    PaginationService,
+    DateService,
+    EncryptionService,
+    IdempotencyService,
+  ],
 })
 export class CommonModule {}

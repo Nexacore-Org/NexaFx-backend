@@ -25,7 +25,9 @@ import { ProposalService } from '../dao/services/proposal.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { IdempotencyRecord } from '../common/entities/idempotency-record.entity';
 import { DataRequest } from '../users/entities/data-request.entity';
+import { RedisService } from '../common/services/redis.service';
 import { DataSource } from 'typeorm';
+import { AnalyticsService } from '../analytics/analytics.service';
 
 @Injectable()
 export class ScheduledJobsService {
@@ -54,6 +56,8 @@ export class ScheduledJobsService {
     private readonly proposalService: ProposalService,
     private readonly auditLogsService: AuditLogsService,
     private readonly ledgerVerificationService: LedgerVerificationService,
+    private readonly analyticsService: AnalyticsService,
+    private readonly redisService: RedisService,
   ) {
     // Truncate hostname to 255 characters to match DB column constraint
     this.instanceId = os.hostname().substring(0, 255);
@@ -342,6 +346,29 @@ export class ScheduledJobsService {
   }
 
   /**
+   * Record daily balance snapshots for all users at 23:55 UTC
+   */
+  @Cron('55 23 * * *')
+  async recordDailyBalanceSnapshots(): Promise<void> {
+    this.logger.log(
+      '[Scheduled Job] Starting daily balance snapshot recording',
+    );
+
+    try {
+      const count =
+        await this.analyticsService.recordBalanceSnapshotsForAllUsers();
+      this.logger.log(
+        `[Scheduled Job] Balance snapshots recorded for ${count} users`,
+      );
+    } catch (error) {
+      this.logger.error(
+        '[Scheduled Job] Fatal error recording balance snapshots:',
+        error,
+      );
+    }
+  }
+
+  /**
    * Process scheduled audit log exports every day at 1 AM
    */
   @Cron('0 1 * * *')
@@ -432,6 +459,7 @@ export class ScheduledJobsService {
     // Update transaction status
     transaction.status = TransactionStatus.SUCCESS;
     await this.transactionRepository.save(transaction);
+    await this.redisService.del('admin_stats');
 
     // Update user balance for deposits
     if (transaction.type === TransactionType.DEPOSIT) {

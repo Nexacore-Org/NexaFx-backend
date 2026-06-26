@@ -32,14 +32,56 @@ export class AuditLogsService {
     private readonly exportJobRepository: AuditLogExportJobRepository,
     private readonly scheduleRepository: AuditLogScheduleRepository,
     private readonly configService: ConfigService,
-  ) {}
+  ) { }
 
   async createLog(createAuditLogDto: CreateAuditLogDto): Promise<void> {
     try {
-      await this.auditLogsRepository.createAuditLog(createAuditLogDto);
+      const actorId = createAuditLogDto.actorId || createAuditLogDto.userId;
+      const resourceType = createAuditLogDto.resourceType || createAuditLogDto.entity;
+      const resourceId = createAuditLogDto.resourceId || createAuditLogDto.entityId;
+
+      await this.auditLogsRepository.createAuditLog({
+        ...createAuditLogDto,
+        actorId,
+        resourceType,
+        resourceId,
+        status: createAuditLogDto.status || 'SUCCESS',
+      } as any);
     } catch (error) {
       this.logger.error(
         `Failed to create audit log: ${error.message}`,
+        error.stack,
+      );
+      // Don't throw error to prevent breaking main functionality
+    }
+  }
+
+  async log(
+    actorId: string | null,
+    action: string,
+    resourceType: string,
+    resourceId: string | null,
+    status: 'SUCCESS' | 'FAILURE',
+    metadata?: Record<string, any>,
+    request?: any,
+  ): Promise<void> {
+    try {
+      const ipAddress = request ? this.getClientIp(request) : null;
+      const userAgent = request ? request.headers?.['user-agent'] : null;
+
+      await this.auditLogsRepository.createAuditLog({
+        actorId,
+        action,
+        resourceType,
+        resourceId,
+        status: status as any,
+        metadata,
+        ipAddress,
+        userAgent,
+      } as any);
+    } catch (error) {
+      this.logger.error(
+        `[CRITICAL] Failed to write audit log: ${error.message}`,
         error.stack,
       );
       // Don't throw error to prevent breaking main functionality
@@ -225,17 +267,18 @@ export class AuditLogsService {
       });
 
       return { jobId: job.id, data: isAsync ? undefined : buffer, isAsync };
-    } catch (error) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       this.logger.error(
-        `Export job ${job.id} failed: ${error.message}`,
-        error.stack,
+        `Export job ${job.id} failed: ${err.message}`,
+        err.stack,
       );
       await this.exportJobRepository.updateJobStatus(
         job.id,
         ExportJobStatus.FAILED,
-        { errorMessage: error.message },
+        { errorMessage: err.message },
       );
-      throw error;
+      throw err;
     }
   }
 
@@ -519,9 +562,10 @@ export class AuditLogsService {
             this.logger.log(
               `Sent monthly audit export to ${schedule.adminEmail}`,
             );
-          } catch (e) {
+          } catch (e: unknown) {
+            const err = e instanceof Error ? e : new Error(String(e));
             this.logger.warn(
-              `Failed to email export to ${schedule.adminEmail}: ${e.message}`,
+              `Failed to email export to ${schedule.adminEmail}: ${err.message}`,
             );
           }
 
@@ -530,9 +574,10 @@ export class AuditLogsService {
           await this.scheduleRepository.updateLastRun(schedule.id, nextRun);
 
           processed += 1;
-        } catch (error) {
+        } catch (error: unknown) {
+          const err = error instanceof Error ? error : new Error(String(error));
           this.logger.error(
-            `Failed to process schedule ${schedule.id}: ${error.message}`,
+            `Failed to process schedule ${schedule.id}: ${err.message}`,
           );
           failed += 1;
         }

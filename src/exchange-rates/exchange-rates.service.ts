@@ -1,53 +1,55 @@
 import {
-  ServiceUnavailableException,
-  BadRequestException,
   Injectable,
   Logger,
-  NotFoundException,
+  ServiceUnavailableException,
+  Inject,
+  BadRequestException,
 } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, MoreThan } from 'typeorm';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { CurrenciesService } from '../currencies/currencies.service';
-import {
-  ExchangeRatesProviderClient,
-  ExchangeRatesProviderError,
-} from './providers/exchange-rates.provider';
-import {
-  ExchangeRatesCache,
-  ExchangeRateCacheEntry,
-} from './cache/exchange-rates.cache';
-import { Subject } from 'rxjs';
+import { ExchangeRatesProviderClient } from './providers/exchange-rates.provider';
+import { ExchangeRateSnapshot } from './entities/exchange-rate-snapshot.entity';
+import Decimal from 'decimal.js';
+import { Subject, Observable } from 'rxjs';
 
-export interface RateUpdateEvent {
+export interface ExchangeRateResponseDto {
   from: string;
   to: string;
   rate: number;
-  fetchedAt: string;
-}
-
-export interface ExchangeRateResult {
-  from: string;
-  to: string;
-  rate: number;
-  fetchedAt?: string;
-  expiresAt?: string;
-}
-
-export interface ExchangeRateConversionResult {
-  rate: number;
-  convertedAmount: number;
-  fetchedAt?: string;
-  expiresAt?: string;
+  inverseRate: number;
+  provider: string;
+  cachedAt: string;
+  expiresAt: string;
+  stale?: boolean;
 }
 
 @Injectable()
 export class ExchangeRatesService {
   private readonly logger = new Logger(ExchangeRatesService.name);
-  private readonly rateUpdatesSubject = new Subject<RateUpdateEvent>();
-  readonly rateUpdates$ = this.rateUpdatesSubject.asObservable();
+
+  private readonly rateUpdatesSubject = new Subject<{
+    from: string;
+    to: string;
+    rate: number;
+    fetchedAt: string;
+  }>();
+
+  public readonly rateUpdates$: Observable<{
+    from: string;
+    to: string;
+    rate: number;
+    fetchedAt: string;
+  }> = this.rateUpdatesSubject.asObservable();
 
   constructor(
     private readonly currenciesService: CurrenciesService,
     private readonly providerClient: ExchangeRatesProviderClient,
-    private readonly cache: ExchangeRatesCache,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    @InjectRepository(ExchangeRateSnapshot)
+    private readonly snapshotRepository: Repository<ExchangeRateSnapshot>,
   ) {}
 
   async getRate(from: string, to: string): Promise<ExchangeRateResult> {
@@ -57,26 +59,69 @@ export class ExchangeRatesService {
     await this.validateCurrencyPair(fromCode, toCode);
 
     const cacheKey = this.getCacheKey(fromCode, toCode);
-    const cached = this.cache.get(cacheKey);
+    const cached = await this.cache.get(cacheKey);
     if (cached) {
       return this.toRateResult(fromCode, toCode, cached);
     }
 
     if (fromCode === toCode) {
-      const entry = this.cache.set(cacheKey, {
+      const entry = await this.cache.set(cacheKey, {
         rate: 1,
         fetchedAt: new Date().toISOString(),
       });
       this.notifyRateUpdate(fromCode, toCode, entry);
       return this.toRateResult(fromCode, toCode, entry);
+  /**
+   * Validate a currency pair (both currencies must be valid)
+   */
+  async validateCurrencyPair(from: string, to: string): Promise<void> {
+    const fromCode = from.trim().toUpperCase();
+    const toCode = to.trim().toUpperCase();
+    await this.validateCurrency(fromCode);
+    await this.validateCurrency(toCode);
+  }
+
+  /**
+   * Fetch exchange rate for a currency pair with caching and failure handling
+   */
+  async getRate(from: string, to: string): Promise<ExchangeRateResponseDto> {
+    const fromCode = from.trim().toUpperCase();
+    const toCode = to.trim().toUpperCase();
+
+    // Validate currencies
+    await this.validateCurrency(fromCode);
+    await this.validateCurrency(toCode);
+
+    const cacheKey = `rate:${fromCode}:${toCode}`;
+
+    // Look up cached rate
+    const cachedEntry = await this.cacheManager.get<any>(cacheKey);
+
+    if (cachedEntry) {
+      const now = Date.now();
+      const expiresAtMs = new Date(cachedEntry.expiresAt).getTime();
+
+      // Check if cache is still valid (60 seconds)
+      if (now < expiresAtMs) {
+        return {
+          from: cachedEntry.from,
+          to: cachedEntry.to,
+          rate: cachedEntry.rate,
+          inverseRate: cachedEntry.inverseRate,
+          provider: cachedEntry.provider,
+          cachedAt: cachedEntry.cachedAt,
+          expiresAt: cachedEntry.expiresAt,
+        };
+      }
     }
 
+    // Cache expired or not found - attempt external provider fetch
     try {
       const providerRate = await this.providerClient.fetchRate(
         fromCode,
         toCode,
       );
-      const entry = this.cache.set(cacheKey, {
+      const entry = await this.cache.set(cacheKey, {
         rate: providerRate.rate,
         fetchedAt: providerRate.fetchedAt,
       });
@@ -90,140 +135,147 @@ export class ExchangeRatesService {
 
       if (error instanceof ExchangeRatesProviderError) {
         throw new ServiceUnavailableException(error.message);
+      const fetched = await this.providerClient.fetchRate(fromCode, toCode);
+
+      const cachedAt = new Date().toISOString();
+      const expiresAt = new Date(Date.now() + 60000).toISOString(); // 60 seconds TTL
+
+      const rateDecimal = new Decimal(fetched.rate);
+      const inverseRateDecimal = rateDecimal.isZero() ? new Decimal(0) : new Decimal(1).div(rateDecimal);
+
+      const response: ExchangeRateResponseDto = {
+        from: fromCode,
+        to: toCode,
+        rate: rateDecimal.toNumber(),
+        inverseRate: inverseRateDecimal.toNumber(),
+        provider: 'coingecko',
+        cachedAt,
+        expiresAt,
+      };
+
+      // Cache the rate (use long cache-manager TTL since we handle expiration manually)
+      await this.cacheManager.set(cacheKey, response, 86400 * 1000); // 24 hours
+
+      // Emit the rate update
+      try {
+        this.rateUpdatesSubject.next({
+          from: fromCode,
+          to: toCode,
+          rate: response.rate,
+          fetchedAt: cachedAt,
+        });
+      } catch (emitErr) {
+        this.logger.warn(`Failed to emit rate update event: ${emitErr}`);
       }
 
-      throw new ServiceUnavailableException('Failed to fetch exchange rate');
-    }
-  }
-
-  async convert(
-    from: string,
-    to: string,
-    amount: number,
-  ): Promise<ExchangeRateConversionResult> {
-    const fromCode = this.normalizeCurrencyCode(from, 'from');
-    const toCode = this.normalizeCurrencyCode(to, 'to');
-    this.validateAmount(amount);
-
-    const rateResult = await this.getRate(fromCode, toCode);
-    const convertedAmount = this.multiplyAmount(amount, rateResult.rate);
-
-    return {
-      rate: rateResult.rate,
-      convertedAmount,
-      fetchedAt: rateResult.fetchedAt,
-      expiresAt: rateResult.expiresAt,
-    };
-  }
-
-  async validateCurrencyPair(from: string, to: string): Promise<void> {
-    try {
-      await Promise.all([
-        this.currenciesService.validateCurrency(from),
-        this.currenciesService.validateCurrency(to),
-      ]);
-    } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw new BadRequestException(error.message);
+      // Save database snapshot for history bonus
+      try {
+        const snapshot = this.snapshotRepository.create({
+          from: fromCode,
+          to: toCode,
+          rate: rateDecimal.toFixed(8),
+        });
+        await this.snapshotRepository.save(snapshot);
+      } catch (dbErr) {
+        this.logger.warn(`Failed to persist exchange rate snapshot: ${dbErr}`);
       }
-      throw error;
-    }
-  }
 
-  private validateAmount(amount: number): void {
-    if (!Number.isFinite(amount)) {
-      throw new BadRequestException('Amount must be a finite number');
-    }
-    if (amount < 0) {
-      throw new BadRequestException(
-        'Amount must be greater than or equal to 0',
+      return response;
+    } catch (providerErr) {
+      this.logger.warn(
+        `Provider fetch failed for ${fromCode}->${toCode}: ${providerErr}. Checking stale cache...`,
+      );
+
+      // Attempt cached lookup for stale fallback
+      if (cachedEntry) {
+        return {
+          from: cachedEntry.from,
+          to: cachedEntry.to,
+          rate: cachedEntry.rate,
+          inverseRate: cachedEntry.inverseRate,
+          provider: cachedEntry.provider,
+          cachedAt: cachedEntry.cachedAt,
+          expiresAt: cachedEntry.expiresAt,
+          stale: true,
+        };
+      }
+
+      // If no cache exists, raise Service Unavailable (never 500)
+      throw new ServiceUnavailableException(
+        `Exchange rate provider is currently unavailable for pair ${fromCode}->${toCode}`,
       );
     }
   }
 
-  private normalizeCurrencyCode(code: string, field: string): string {
-    if (typeof code !== 'string' || !code.trim()) {
-      throw new BadRequestException(`Currency '${field}' is required`);
-    }
-    return code.trim().toUpperCase();
+  /**
+   * Return supported currency pairs
+   */
+  async getSupportedPairs(): Promise<string[]> {
+    return [
+      'XLM-NGN',
+      'NGN-XLM',
+      'XLM-USD',
+      'USD-XLM',
+      'XLM-EUR',
+      'EUR-XLM',
+      'XLM-GBP',
+      'GBP-XLM',
+      'USDC-NGN',
+      'NGN-USDC',
+      'USDT-NGN',
+      'NGN-USDT',
+    ];
   }
 
-  private getCacheKey(from: string, to: string): string {
-    return `${from}_${to}`;
-  }
-
-  private toRateResult(
+  /**
+   * Return daily OHLC data for historical exchange rates
+   */
+  async getDailyOHLCHistory(
     from: string,
     to: string,
-    entry: ExchangeRateCacheEntry,
-  ): ExchangeRateResult {
-    return {
-      from,
-      to,
-      rate: entry.rate,
-      fetchedAt: entry.fetchedAt,
-      expiresAt: entry.expiresAt,
-    };
-  }
+    days: number,
+  ): Promise<any[]> {
+    const fromCode = from.trim().toUpperCase();
+    const toCode = to.trim().toUpperCase();
+    const numDays = Math.max(1, Math.min(30, days || 7));
 
-  private multiplyAmount(amount: number, rate: number): number {
-    const result = this.multiplyDecimal(amount, rate);
-    if (!Number.isFinite(result)) {
-      return amount * rate;
-    }
-    return result;
-  }
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - numDays);
 
-  private multiplyDecimal(a: number, b: number): number {
-    const aStr = a.toString();
-    const bStr = b.toString();
-
-    if (aStr.includes('e') || aStr.includes('E')) {
-      return a * b;
-    }
-    if (bStr.includes('e') || bStr.includes('E')) {
-      return a * b;
-    }
-
-    const aParts = aStr.split('.');
-    const bParts = bStr.split('.');
-    const aDecimals = aParts[1]?.length ?? 0;
-    const bDecimals = bParts[1]?.length ?? 0;
-    const scale = aDecimals + bDecimals;
-
-    const aDigits = aParts.join('');
-    const bDigits = bParts.join('');
-
-    if (!/^[0-9]+$/.test(aDigits) || !/^[0-9]+$/.test(bDigits)) {
-      return a * b;
-    }
-
-    const product = BigInt(aDigits) * BigInt(bDigits);
-    const productStr = product.toString();
-
-    if (scale === 0) {
-      return Number(productStr);
-    }
-
-    const padded = productStr.padStart(scale + 1, '0');
-    const decimalIndex = padded.length - scale;
-    const resultStr = `${padded.slice(0, decimalIndex)}.${padded.slice(
-      decimalIndex,
-    )}`;
-
-    return Number(resultStr);
-  }
-
-  private notifyRateUpdate(
-    from: string,
-    to: string,
-    entry: ExchangeRateCacheEntry,
-  ): void {
-    this.rateUpdatesSubject.next({
-      from,
-      to,
-      rate: entry.rate,
-      fetchedAt: entry.fetchedAt,
+    const snapshots = await this.snapshotRepository.find({
+      where: {
+        from: fromCode,
+        to: toCode,
+        timestamp: MoreThan(startDate),
+      },
+      order: { timestamp: 'ASC' },
     });
+
+    const grouped: Record<string, ExchangeRateSnapshot[]> = {};
+    for (const snap of snapshots) {
+      const dateStr = new Date(snap.timestamp).toISOString().split('T')[0];
+      grouped[dateStr] ??= [];
+      grouped[dateStr].push(snap);
+    }
+
+    return Object.keys(grouped).map((date) => {
+      const snaps = grouped[date];
+      const rates = snaps.map((s) => parseFloat(s.rate));
+      return {
+        date,
+        open: rates[0],
+        high: Math.max(...rates),
+        low: Math.min(...rates),
+        close: rates[rates.length - 1],
+      };
+    });
+  }
+
+  private async validateCurrency(code: string): Promise<void> {
+    try {
+      await this.currenciesService.validateCurrency(code);
+    } catch (err: any) {
+      throw new BadRequestException(err.message || `Currency '${code}' is invalid`);
+    }
   }
 }

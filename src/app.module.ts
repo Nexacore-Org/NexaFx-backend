@@ -54,6 +54,7 @@ import { MailModule } from './modules/mail/mail.module';
 import { IpBlocklistModule } from './modules/ip-blocklist/ip-blocklist.module';
 import { IpBlocklistGuard } from './modules/ip-blocklist/ip-blocklist.guard';
 import { StorageModule } from './modules/storage/storage.module';
+import { SmsModule } from './modules/sms/sms.module';
 
 @Module({
   imports: [
@@ -72,6 +73,11 @@ import { StorageModule } from './modules/storage/storage.module';
         JWT_REFRESH_SECRET: Joi.string().optional(),
         THROTTLE_TTL: Joi.number().default(60),
         THROTTLE_LIMIT: Joi.number().default(100),
+        TWILIO_ACCOUNT_SID: Joi.string().optional(),
+        TWILIO_AUTH_TOKEN: Joi.string().optional(),
+        TWILIO_PHONE_NUMBER: Joi.string().optional(),
+        SMS_OTP_EXPIRY_SECONDS: Joi.number().default(300),
+        SMS_CONFIRMATION_THRESHOLD_USD: Joi.number().default(1000),
       }).unknown(true),
     }),
     RedisModule,
@@ -139,6 +145,7 @@ import { StorageModule } from './modules/storage/storage.module';
     MailModule,
     CommonModule,
     StellarModule,
+    SmsModule,
     AuthModule,
     CurrenciesModule,
     ExchangeRatesModule,

@@ -61,6 +61,13 @@ export class User {
   @Index()
   phone: string | null;
 
+  @Column({ type: 'varchar', length: 20, nullable: true, unique: true })
+  @Index()
+  phoneNumber: string | null;
+
+  @Column({ type: 'boolean', default: false })
+  isPhoneVerified: boolean;
+
   @Column({ type: 'varchar', length: 56 })
   @Index()
   walletPublicKey: string;

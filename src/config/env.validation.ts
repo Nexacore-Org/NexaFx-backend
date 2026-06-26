@@ -17,4 +17,9 @@ export const envValidationSchema = Joi.object({
   MAILGUN_DOMAIN: Joi.string().optional(),
   MAILGUN_FROM_EMAIL: Joi.string().optional(),
   MAILGUN_FROM_NAME: Joi.string().optional(),
+  TWILIO_ACCOUNT_SID: Joi.string().optional(),
+  TWILIO_AUTH_TOKEN: Joi.string().optional(),
+  TWILIO_PHONE_NUMBER: Joi.string().optional(),
+  SMS_OTP_EXPIRY_SECONDS: Joi.number().default(300),
+  SMS_CONFIRMATION_THRESHOLD_USD: Joi.number().default(1000),
 });

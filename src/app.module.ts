@@ -3,6 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { BullModule } from '@nestjs/bullmq';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -34,6 +35,7 @@ import { WalletsModule } from './wallets/wallets.module';
 import { RateAlertsModule } from './rate-alerts/rate-alerts.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
+import { MessagingModule } from './messaging/messaging.module';
 
 @Module({
   imports: [
@@ -55,6 +57,15 @@ import { UsersModule } from './users/users.module';
             ? { rejectUnauthorized: false }
             : false,
         autoLoadEntities: true,
+      }),
+      inject: [ConfigService],
+    }),
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => ({
+        connection: {
+          url: configService.get<string>('REDIS_URL') || 'redis://localhost:6379',
+        },
       }),
       inject: [ConfigService],
     }),
@@ -96,6 +107,7 @@ import { UsersModule } from './users/users.module';
     WalletsModule,
     LedgerModule,
     UsersModule,
+    MessagingModule,
   ],
   controllers: [AppController],
   providers: [

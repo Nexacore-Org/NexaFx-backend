@@ -19,6 +19,7 @@ import { FirebaseModule } from '../firebase/firebase.module';
 import { WebhooksModule } from '../webhooks/webhooks.module';
 import { CommonModule } from '../common/common.module';
 import { TransactionLimitsModule } from './transaction-limits.module';
+import { ComplianceModule } from '../modules/compliance/compliance.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { TransactionLimitsModule } from './transaction-limits.module';
     WebhooksModule,
     CommonModule,
     TransactionLimitsModule,
+    ComplianceModule,
   ],
   controllers: [TransactionsController],
   providers: [TransactionsService, TransactionVerificationService],

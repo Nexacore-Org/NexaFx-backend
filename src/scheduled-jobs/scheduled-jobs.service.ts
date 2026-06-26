@@ -25,6 +25,7 @@ import { ProposalService } from '../dao/services/proposal.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { IdempotencyRecord } from '../common/entities/idempotency-record.entity';
 import { DataRequest } from '../users/entities/data-request.entity';
+import { AmlService } from '../modules/compliance/aml.service';
 import { DataSource } from 'typeorm';
 
 @Injectable()
@@ -54,6 +55,7 @@ export class ScheduledJobsService {
     private readonly proposalService: ProposalService,
     private readonly auditLogsService: AuditLogsService,
     private readonly ledgerVerificationService: LedgerVerificationService,
+    private readonly amlService: AmlService,
   ) {
     // Truncate hostname to 255 characters to match DB column constraint
     this.instanceId = os.hostname().substring(0, 255);
@@ -494,6 +496,11 @@ export class ScheduledJobsService {
     this.webhookService
       .dispatch('transaction.completed', transaction, transaction.userId)
       .catch((e) => this.logger.error(`Webhook dispatch failed: ${e.message}`));
+
+    // Enqueue AML compliance check
+    this.amlService
+      .enqueue(transaction.id)
+      .catch((e) => this.logger.error(`AML enqueue failed: ${e.message}`));
   }
 
   /**

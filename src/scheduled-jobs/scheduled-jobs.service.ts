@@ -7,6 +7,7 @@ import {
   TransactionStatus,
   TransactionType,
 } from '../transactions/entities/transaction.entity';
+import { LoansService } from '../loans/loans.service';
 import { TransactionsService } from '../transactions/services/transaction.service';
 import { StellarService } from '../blockchain/stellar/stellar.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -25,7 +26,9 @@ import { ProposalService } from '../dao/services/proposal.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { IdempotencyRecord } from '../common/entities/idempotency-record.entity';
 import { DataRequest } from '../users/entities/data-request.entity';
+import { RedisService } from '../common/services/redis.service';
 import { DataSource } from 'typeorm';
+import { VaultsService } from '../vaults/vaults.service';
 
 @Injectable()
 export class ScheduledJobsService {
@@ -54,6 +57,7 @@ export class ScheduledJobsService {
     private readonly proposalService: ProposalService,
     private readonly auditLogsService: AuditLogsService,
     private readonly ledgerVerificationService: LedgerVerificationService,
+    private readonly vaultsService: VaultsService,
   ) {
     // Truncate hostname to 255 characters to match DB column constraint
     this.instanceId = os.hostname().substring(0, 255);
@@ -342,6 +346,29 @@ export class ScheduledJobsService {
   }
 
   /**
+   * Record daily balance snapshots for all users at 23:55 UTC
+   */
+  @Cron('55 23 * * *')
+  async recordDailyBalanceSnapshots(): Promise<void> {
+    this.logger.log(
+      '[Scheduled Job] Starting daily balance snapshot recording',
+    );
+
+    try {
+      const count =
+        await this.analyticsService.recordBalanceSnapshotsForAllUsers();
+      this.logger.log(
+        `[Scheduled Job] Balance snapshots recorded for ${count} users`,
+      );
+    } catch (error) {
+      this.logger.error(
+        '[Scheduled Job] Fatal error recording balance snapshots:',
+        error,
+      );
+    }
+  }
+
+  /**
    * Process scheduled audit log exports every day at 1 AM
    */
   @Cron('0 1 * * *')
@@ -432,6 +459,7 @@ export class ScheduledJobsService {
     // Update transaction status
     transaction.status = TransactionStatus.SUCCESS;
     await this.transactionRepository.save(transaction);
+    await this.redisService.del('admin_stats');
 
     // Update user balance for deposits
     if (transaction.type === TransactionType.DEPOSIT) {
@@ -781,6 +809,68 @@ export class ScheduledJobsService {
   }
 
   /**
+   * Sync OFAC SDN list every Sunday at 02:00 UTC
+   */
+  @Cron('0 2 * * 0')
+  async syncOfacList(): Promise<void> {
+    this.logger.log('[Scheduled Job] Starting weekly OFAC SDN list sync');
+    try {
+      const count = await this.sanctionsService.syncOfacList();
+      this.logger.log(`[Scheduled Job] OFAC sync complete: ${count} entries`);
+    } catch (error) {
+      this.logger.error(
+        '[Scheduled Job] OFAC sync failed:',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  /**
+   * Re-screen all approved KYC users on the 1st of every month at 03:00 UTC
+   */
+  @Cron('0 3 1 * *')
+  async rescreenAllUsers(): Promise<void> {
+    this.logger.log('[Scheduled Job] Starting monthly KYC re-screening');
+    try {
+      const result = await this.sanctionsService.rescreenAllUsers();
+      this.logger.log(
+        `[Scheduled Job] Re-screening complete: ${result.processed} processed, ${result.failed} failed`,
+      );
+    } catch (error) {
+      this.logger.error(
+        '[Scheduled Job] Re-screening failed:',
+        error instanceof Error ? error.message : String(error),
+        );
+    }
+  }
+   * Daily loan repayment processing — auto-debits scheduled repayments and
+   * applies overdue penalties. Runs at midnight every day.
+   */
+  @Cron('0 0 0 * * *')
+  async processLoanRepayments(): Promise<void> {
+    this.logger.log('[Scheduled Job] Starting daily loan repayment processing');
+    try {
+      await this.loansService.processScheduledRepayments();
+      this.logger.log('[Scheduled Job] Scheduled repayments processed');
+    } catch (error) {
+      this.logger.error(
+        '[Scheduled Job] Failed to process scheduled repayments:',
+        error,
+      );
+    }
+
+    try {
+      await this.loansService.applyOverduePenalties();
+      this.logger.log('[Scheduled Job] Overdue penalties applied');
+    } catch (error) {
+      this.logger.error(
+        '[Scheduled Job] Failed to apply overdue penalties:',
+        error,
+      );
+    }
+  }
+
+  /**
    * Perform hard delete of user data 30 days after account deletion request
    * (GDPR Article 17 - right to erasure hard delete)
    */
@@ -821,6 +911,48 @@ export class ScheduledJobsService {
     } catch (error) {
       this.logger.error(
         '[Scheduled Job] Fatal error in hard delete of expired accounts:',
+        error,
+      );
+    }
+  }
+
+  @Cron('5 0 * * *')
+  async accrueVaultInterest(): Promise<void> {
+    this.logger.log('[Scheduled Job] Starting vault interest accrual');
+    try {
+      await this.vaultsService.accrueInterest();
+      this.logger.log('[Scheduled Job] Vault interest accrual completed');
+    } catch (error) {
+      this.logger.error(
+        '[Scheduled Job] Vault interest accrual failed:',
+        error,
+      );
+    }
+  }
+
+  @Cron('0 * * * *')
+  async processVaultMaturity(): Promise<void> {
+    this.logger.log('[Scheduled Job] Starting vault maturity check');
+    try {
+      await this.vaultsService.processMaturity();
+      this.logger.log('[Scheduled Job] Vault maturity check completed');
+    } catch (error) {
+      this.logger.error(
+        '[Scheduled Job] Vault maturity check failed:',
+        error,
+      );
+    }
+  }
+
+  @Cron('0 6 * * *')
+  async processVaultAutoDeposits(): Promise<void> {
+    this.logger.log('[Scheduled Job] Starting vault auto-deposits');
+    try {
+      await this.vaultsService.processAutoDeposits();
+      this.logger.log('[Scheduled Job] Vault auto-deposits completed');
+    } catch (error) {
+      this.logger.error(
+        '[Scheduled Job] Vault auto-deposits failed:',
         error,
       );
     }

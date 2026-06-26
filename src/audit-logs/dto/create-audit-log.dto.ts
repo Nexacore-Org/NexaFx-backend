@@ -15,15 +15,32 @@ export class CreateAuditLogDto {
   @IsUUID()
   userId?: string;
 
+  @IsOptional()
+  @IsUUID()
+  actorId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  targetId?: string;
+
   @IsString()
   action: string;
 
+  @IsOptional()
   @IsEnum(AuditEntityType)
-  entity: AuditEntityType;
+  entity?: AuditEntityType;
+
+  @IsOptional()
+  @IsString()
+  resourceType?: string;
 
   @IsOptional()
   @IsUUID()
   entityId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  resourceId?: string;
 
   @IsOptional()
   @IsObject()
@@ -41,4 +58,8 @@ export class CreateAuditLogDto {
   @IsOptional()
   @IsBoolean()
   isSensitive?: boolean;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
 }

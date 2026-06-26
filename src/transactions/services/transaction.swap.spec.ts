@@ -28,6 +28,7 @@ import { WebhookService } from '../../webhooks/services/webhook.service';
 import { BeneficiariesService } from '../../beneficiaries/beneficiaries.service';
 import { LedgerService } from '../../ledger/services/ledger.service';
 import { TransactionLimitService } from './transaction-limit.service';
+import { RedisService } from '../../common/services/redis.service';
 
 // Mock Stellar SDK components
 jest.mock('stellar-sdk', () => {
@@ -57,6 +58,10 @@ describe('TransactionsService.createSwap', () => {
   let stellarService: any;
   let notificationsService: any;
 
+  const mockRedisService = {
+    del: jest.fn(),
+  }
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -78,6 +83,7 @@ describe('TransactionsService.createSwap', () => {
       ]),
       buildPathPaymentOp: jest.fn(() => ({})),
       getAsset: jest.fn(() => ({ isNative: () => true })),
+      getAssetWithDefaultIssuer: jest.fn(() => ({ isNative: () => true })),
     };
 
     notificationsService = {
@@ -114,6 +120,7 @@ describe('TransactionsService.createSwap', () => {
             findOne: jest.fn(async () => ({ isActive: true })),
           },
         },
+        { provide: RedisService, useValue: mockRedisService },
         {
           provide: ExchangeRatesService,
           useValue: {
@@ -197,7 +204,7 @@ describe('TransactionsService.createSwap', () => {
     (service as any).getUserBalance = jest.fn(async () => '100');
     (service as any).getUserStellarAddress = jest.fn(async () => 'G123');
     (service as any).getUserStellarSecretKey = jest.fn(async () => 'S123');
-    (service as any).updateUserBalance = jest.fn(async () => {});
+    (service as any).updateUserBalance = jest.fn(async () => { });
   });
 
   it('should successfully create a swap transaction', async () => {

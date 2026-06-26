@@ -11,9 +11,9 @@ import { User } from '../../users/user.entity';
 
 export enum KycStatus {
   PENDING = 'pending',
-  UNDER_REVIEW = 'under_review',
   APPROVED = 'approved',
   REJECTED = 'rejected',
+  RESUBMISSION_REQUIRED = 'resubmission_required',
 }
 
 export enum KycTier {
@@ -33,7 +33,7 @@ export class KycRecord {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  // 🔥 Proper relation
+  // Proper relation
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
   user: User;
@@ -72,20 +72,30 @@ export class KycRecord {
   @Column()
   documentNumber: string;
 
-  @Column()
-  documentFrontUrl: string;
+  /** Storage key returned by StorageService.upload() — never a URL or local path */
+  @Column({ name: 'documentFrontKey' })
+  documentFrontKey: string;
 
-  @Column({ nullable: true })
-  documentBackUrl: string;
+  /** Storage key for the back of the document (optional) */
+  @Column({ name: 'documentBackKey', nullable: true })
+  documentBackKey: string;
 
-  @Column()
-  selfieUrl: string;
+  /** Storage key for the selfie image */
+  @Column({ name: 'selfieKey' })
+  selfieKey: string;
 
   @Column({ nullable: true })
   rejectionReason: string;
 
+  @Column({ type: 'uuid', nullable: true })
+  reviewedBy: string | null;
+
+  @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'reviewedBy' })
+  reviewer: User | null;
+
   @Column({ type: 'timestamp', nullable: true })
-  reviewedAt: Date;
+  reviewedAt: Date | null;
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   submittedAt: Date;

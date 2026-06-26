@@ -348,6 +348,62 @@ export class StellarService {
     }
   }
 
+  async sendPayment(
+    params: {
+      sourcePublicKey: string;
+      destination: string;
+      asset: string | Asset;
+      amount: string;
+      secretKey: string;
+      memo?: string;
+      memoType?: string;
+      userId?: string;
+    },
+  ) {
+    const asset =
+      typeof params.asset === 'string'
+        ? this.parseAsset(params.asset)
+        : params.asset;
+
+    const transaction = await this.createTransaction({
+      sourcePublicKey: params.sourcePublicKey,
+      operations: [
+        {
+          type: 'payment',
+          destination: params.destination,
+          asset,
+          amount: params.amount,
+        },
+      ],
+      memo: params.memo,
+      memoType: params.memoType,
+      userId: params.userId,
+    });
+
+    const signed = await this.signTransaction(
+      transaction,
+      params.secretKey,
+      params.userId,
+    );
+
+    return this.submitTransaction(signed, params.userId);
+  }
+
+  private parseAsset(asset: string): Asset {
+    if (asset === 'XLM') {
+      return Asset.native();
+    }
+
+    const issuer = process.env.STELLAR_ASSET_ISSUER;
+    if (!issuer) {
+      throw new TransactionBuildError(
+        'Non-native Stellar assets require STELLAR_ASSET_ISSUER',
+      );
+    }
+
+    return new Asset(asset, issuer);
+  }
+
   async verifyTransaction(
     txHash: string,
     userId?: string,

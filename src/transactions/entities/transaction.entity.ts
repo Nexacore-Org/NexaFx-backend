@@ -9,11 +9,14 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { User } from '../../users/user.entity';
+import { TransactionCategory } from '../../analytics/entities/transaction-category.entity';
 
 export enum TransactionType {
   DEPOSIT = 'DEPOSIT',
   WITHDRAW = 'WITHDRAW',
   SWAP = 'SWAP',
+  LOAN_DISBURSEMENT = 'LOAN_DISBURSEMENT',
+  LOAN_REPAYMENT = 'LOAN_REPAYMENT',
 }
 
 export enum TransactionStatus {
@@ -64,6 +67,9 @@ export class Transaction {
   @Column({ type: 'varchar', length: 255, nullable: true })
   txHash: string | null;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  stellarTxHash: string | null;
+
   @Column({ type: 'text', nullable: true })
   failureReason: string | null;
 
@@ -90,6 +96,16 @@ export class Transaction {
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   processingLockedBy: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  categoryId: string | null;
+
+  @ManyToOne(() => TransactionCategory, {
+    onDelete: 'SET NULL',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'categoryId' })
+  category: TransactionCategory | null;
 
   @Column({ type: 'jsonb', nullable: true })
   metadata: any;

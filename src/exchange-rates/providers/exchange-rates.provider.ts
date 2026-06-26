@@ -1,17 +1,44 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
+import { AxiosError } from 'axios';
 import { firstValueFrom } from 'rxjs';
+
+const DEFAULT_PROVIDER_URL = 'https://api.exchangerate.host';
+const DEFAULT_TIMEOUT_MS = 5000;
+const CURRENCY_REGEX = /^[A-Z]{3}$/;
+
+interface ExchangeRateResponse {
+  success?: boolean;
+  result?: number;
+  rates?: Record<string, number>;
+  info?: {
+    rate?: number;
+  };
+  error?: {
+    info?: string;
+  };
+}
+
+export interface ExchangeRateResult {
+  rate: number;
+  fetchedAt: string;
+  source: string;
+}
 
 export class ExchangeRatesProviderError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'ExchangeRatesProviderError';
+    this.name = ExchangeRatesProviderError.name;
   }
 }
 
 @Injectable()
 export class ExchangeRatesProviderClient {
+  private readonly logger = new Logger(
+    ExchangeRatesProviderClient.name,
+  );
+
   private readonly baseUrl: string;
   private readonly apiKey?: string;
   private readonly timeoutMs: number;
@@ -20,36 +47,45 @@ export class ExchangeRatesProviderClient {
     private readonly configService: ConfigService,
     private readonly httpService: HttpService,
   ) {
-    this.baseUrl = this.getBaseUrl();
+    this.baseUrl = this.loadBaseUrl();
     this.apiKey = this.configService.get<string>(
       'EXCHANGE_RATES_PROVIDER_API_KEY',
     );
-    this.timeoutMs = this.getTimeoutMs();
+    this.timeoutMs = this.loadTimeout();
   }
 
   async fetchRate(
     from: string,
     to: string,
-  ): Promise<{
-    rate: number;
-    fetchedAt: string;
-    source: string;
-  }> {
-    const url = this.buildLatestUrl(from, to);
+  ): Promise<ExchangeRateResult> {
+    const base = this.normalizeCurrency(from);
+    const target = this.normalizeCurrency(to);
+
+    const url = this.buildLatestUrl(base, target);
+
+    this.logger.debug(`Fetching exchange rate ${base} -> ${target}`);
+
     try {
       const response = await firstValueFrom(
-        this.httpService.get(url, { timeout: this.timeoutMs }),
+        this.httpService.get<ExchangeRateResponse>(url, {
+          timeout: this.timeoutMs,
+        }),
       );
 
-      const data = response.data ?? null;
-      if (!data || data?.success === false) {
-        const message = data?.error?.info || 'Provider returned an error';
-        throw new ExchangeRatesProviderError(message);
+      const data = response.data;
+
+      if (!data || data.success === false) {
+        throw new ExchangeRatesProviderError(
+          data?.error?.info ?? 'Exchange rate provider returned an error.',
+        );
       }
 
-      const rate = this.extractRate(data, to);
+      const rate = this.extractRate(data, target);
+
       if (!Number.isFinite(rate) || rate <= 0) {
-        throw new ExchangeRatesProviderError('Provider returned invalid rate');
+        throw new ExchangeRatesProviderError(
+          'Provider returned an invalid exchange rate.',
+        );
       }
 
       return {
@@ -57,35 +93,24 @@ export class ExchangeRatesProviderClient {
         fetchedAt: new Date().toISOString(),
         source: this.baseUrl,
       };
-    } catch (error: any) {
-      if (error instanceof ExchangeRatesProviderError) {
-        throw error;
-      }
-      if (error?.code === 'ECONNABORTED') {
-        throw new ExchangeRatesProviderError('Provider request timed out');
-      }
-      const status = error?.response?.status;
-      if (status) {
-        throw new ExchangeRatesProviderError(
-          `Provider responded with status ${status}`,
-        );
-      }
-      throw new ExchangeRatesProviderError('Failed to fetch exchange rate');
+    } catch (error) {
+      throw this.handleError(error);
     }
   }
 
-  private extractRate(data: any, to: string): number {
-    const symbol = to.toUpperCase();
-
-    if (data?.rates && typeof data.rates[symbol] !== 'undefined') {
-      return Number(data.rates[symbol]);
+  private extractRate(
+    data: ExchangeRateResponse,
+    currency: string,
+  ): number {
+    if (data.rates?.[currency] !== undefined) {
+      return Number(data.rates[currency]);
     }
 
-    if (typeof data?.result !== 'undefined') {
+    if (data.result !== undefined) {
       return Number(data.result);
     }
 
-    if (typeof data?.info?.rate !== 'undefined') {
+    if (data.info?.rate !== undefined) {
       return Number(data.info.rate);
     }
 
@@ -94,10 +119,9 @@ export class ExchangeRatesProviderClient {
 
   private buildLatestUrl(from: string, to: string): string {
     const url = new URL(this.baseUrl);
-    const basePath = url.pathname.endsWith('/')
-      ? url.pathname
-      : `${url.pathname}/`;
-    url.pathname = `${basePath}latest`;
+
+    url.pathname = `${url.pathname.replace(/\/$/, '')}/latest`;
+
     url.searchParams.set('base', from);
     url.searchParams.set('symbols', to);
 
@@ -108,20 +132,68 @@ export class ExchangeRatesProviderClient {
     return url.toString();
   }
 
-  private getBaseUrl(): string {
-    const raw = this.configService.get<string>(
-      'EXCHANGE_RATES_PROVIDER_BASE_URL',
-    );
-    const base = raw && raw.trim().length > 0 ? raw.trim() : null;
-    return base || 'https://api.exchangerate.host';
+  private normalizeCurrency(currency: string): string {
+    const value = currency.trim().toUpperCase();
+
+    if (!CURRENCY_REGEX.test(value)) {
+      throw new ExchangeRatesProviderError(
+        `Invalid currency code: ${currency}`,
+      );
+    }
+
+    return value;
   }
 
-  private getTimeoutMs(): number {
-    const raw = this.configService.get<string>(
-      'EXCHANGE_RATES_PROVIDER_TIMEOUT_MS',
+  private handleError(error: unknown): ExchangeRatesProviderError {
+    if (error instanceof ExchangeRatesProviderError) {
+      return error;
+    }
+
+    if (error instanceof AxiosError) {
+      if (error.code === 'ECONNABORTED') {
+        return new ExchangeRatesProviderError(
+          'Exchange rate provider request timed out.',
+        );
+      }
+
+      if (error.response) {
+        return new ExchangeRatesProviderError(
+          `Exchange rate provider responded with status ${error.response.status}.`,
+        );
+      }
+
+      if (error.request) {
+        return new ExchangeRatesProviderError(
+          'Exchange rate provider is unreachable.',
+        );
+      }
+    }
+
+    this.logger.error('Unexpected provider error', error);
+
+    return new ExchangeRatesProviderError(
+      'Failed to fetch exchange rate.',
     );
-    const parsed = raw ? Number(raw) : 5000;
-    if (!Number.isFinite(parsed) || parsed <= 0) return 5000;
-    return Math.floor(parsed);
+  }
+
+  private loadBaseUrl(): string {
+    return (
+      this.configService
+        .get<string>('EXCHANGE_RATES_PROVIDER_BASE_URL')
+        ?.trim() || DEFAULT_PROVIDER_URL
+    );
+  }
+
+  private loadTimeout(): number {
+    const timeout = Number(
+      this.configService.get(
+        'EXCHANGE_RATES_PROVIDER_TIMEOUT_MS',
+        DEFAULT_TIMEOUT_MS,
+      ),
+    );
+
+    return Number.isFinite(timeout) && timeout > 0
+      ? Math.floor(timeout)
+      : DEFAULT_TIMEOUT_MS;
   }
 }

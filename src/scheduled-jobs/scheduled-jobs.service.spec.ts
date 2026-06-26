@@ -24,6 +24,7 @@ import { WebhookService } from '../webhooks/services/webhook.service';
 import { CurrencyPairService } from '../currencies/services/currency-pair.service';
 import { ProposalService } from '../dao/services/proposal.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { RedisService } from '../common/services/redis.service';
 
 describe('ScheduledJobsService', () => {
   let service: ScheduledJobsService;
@@ -51,6 +52,10 @@ describe('ScheduledJobsService', () => {
   const mockLedgerVerificationService = {
     verify: jest.fn(),
   };
+
+  const mockRedisService = {
+    del: jest.fn(),
+  }
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -148,6 +153,7 @@ describe('ScheduledJobsService', () => {
             logTransactionEvent: jest.fn(),
           },
         },
+        { provide: RedisService, useValue: mockRedisService }
       ],
     }).compile();
 

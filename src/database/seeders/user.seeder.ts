@@ -18,7 +18,6 @@ export async function seedUsers(dataSource: DataSource) {
             isEmailVerified: true,
             isActive: true,
             isTwoFactorEnabled: false,
-            refreshTokenHash: null,
         },
         {
             id: uuidv5('admin1', NAMESPACE),
@@ -30,7 +29,6 @@ export async function seedUsers(dataSource: DataSource) {
             isEmailVerified: true,
             isActive: true,
             isTwoFactorEnabled: false,
-            refreshTokenHash: null,
         },
         {
             id: uuidv5('admin2', NAMESPACE),
@@ -42,7 +40,6 @@ export async function seedUsers(dataSource: DataSource) {
             isEmailVerified: true,
             isActive: true,
             isTwoFactorEnabled: false,
-            refreshTokenHash: null,
         },
         {
             id: uuidv5('user1', NAMESPACE),
@@ -54,7 +51,6 @@ export async function seedUsers(dataSource: DataSource) {
             isEmailVerified: true,
             isActive: true,
             isTwoFactorEnabled: false,
-            refreshTokenHash: null,
         },
         {
             id: uuidv5('user2', NAMESPACE),
@@ -66,7 +62,6 @@ export async function seedUsers(dataSource: DataSource) {
             isEmailVerified: true,
             isActive: true,
             isTwoFactorEnabled: false,
-            refreshTokenHash: null,
         },
     ];
     await userRepository.upsert(users, ['id']);

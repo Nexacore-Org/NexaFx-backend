@@ -3,6 +3,7 @@ import {
   UnauthorizedException,
   ConflictException,
   BadRequestException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { ThrottlerException } from '@nestjs/throttler';
 import { JwtService } from '@nestjs/jwt';
@@ -36,6 +37,7 @@ import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import { ReferralsService } from '../referrals/referrals.service';
 import { TwoFactorService } from '../two-factor/two-factor.service';
 import { WalletsService } from '../wallets/wallets.service';
+import { OAuthAccount, OAuthProvider } from './entities/oauth-account.entity';
 
 @Injectable()
 export class AuthService {
@@ -54,6 +56,8 @@ export class AuthService {
     private readonly walletsService: WalletsService,
     @InjectRepository(PasswordResetAttempt)
     private readonly passwordResetAttemptRepository: Repository<PasswordResetAttempt>,
+    @InjectRepository(OAuthAccount)
+    private readonly oauthAccountRepository: Repository<OAuthAccount>,
   ) {}
 
   async login(
@@ -75,6 +79,23 @@ export class AuthService {
         {
           email: loginDto.email,
           reason: 'User not found or not verified',
+          ip: ipAddress,
+          device: userAgent,
+        },
+      );
+
+      return { message: genericMessage };
+    }
+
+    if (!user.password) {
+      await this.simulateProcessingDelay();
+
+      await this.auditLogsService.logAuthEvent(
+        user.id,
+        AuditAction.FAILED_LOGIN,
+        {
+          email: loginDto.email,
+          reason: 'OAuth-only account — no password set',
           ip: ipAddress,
           device: userAgent,
         },
@@ -431,12 +452,6 @@ export class AuthService {
       encryptedSecretKey,
     );
 
-    try {
-      await this.stellarService.fundTestnetWallet(wallet.publicKey);
-    } catch {
-      // Friendbot funding is best-effort during signup.
-    }
-
     if (referredBy) {
       await this.referralsService.createPendingReferral(referredBy, user.id);
     }
@@ -667,6 +682,128 @@ export class AuthService {
     }
 
     return decoded.sub;
+  }
+
+  async handleOAuthLogin(params: {
+    provider: OAuthProvider;
+    providerAccountId: string;
+    email: string;
+    firstName: string | null;
+    lastName: string | null;
+    accessToken: string;
+    refreshToken: string | null;
+    profile: Record<string, any>;
+  }): Promise<{ user: any; isNew: boolean }> {
+    const { provider, providerAccountId, email } = params;
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const encryptedAccessToken = this.encryptionService.encrypt(
+      params.accessToken,
+    );
+    const encryptedRefreshToken = params.refreshToken
+      ? this.encryptionService.encrypt(params.refreshToken)
+      : null;
+
+    const existingAccount = await this.oauthAccountRepository.findOne({
+      where: { provider, providerAccountId },
+      relations: ['user'],
+    });
+
+    if (existingAccount) {
+      existingAccount.accessToken = encryptedAccessToken;
+      existingAccount.refreshToken = encryptedRefreshToken;
+      existingAccount.profile = params.profile;
+      await this.oauthAccountRepository.save(existingAccount);
+
+      return { user: existingAccount.user, isNew: false };
+    }
+
+    const user = await this.usersService.findByEmail(normalizedEmail);
+
+    if (user) {
+      await this.oauthAccountRepository.save(
+        this.oauthAccountRepository.create({
+          userId: user.id,
+          provider,
+          providerAccountId,
+          accessToken: encryptedAccessToken,
+          refreshToken: encryptedRefreshToken,
+          profile: params.profile,
+        }),
+      );
+
+      return { user, isNew: false };
+    }
+
+    const wallet = await this.stellarService.generateWallet();
+    const encryptedSecretKey = this.encryptionService.encrypt(wallet.secretKey);
+    const referralCode = await this.generateUniqueReferralCode();
+
+    const createdUser = await this.usersService.createUser({
+      email: normalizedEmail,
+      firstName: params.firstName ?? undefined,
+      lastName: params.lastName ?? undefined,
+      walletPublicKey: wallet.publicKey,
+      walletSecretKeyEncrypted: encryptedSecretKey,
+      referralCode,
+    });
+
+    await this.usersService.verifyUser(createdUser.id);
+    await this.walletsService.seedPrimaryWalletFromUserCredentials(
+      createdUser.id,
+      wallet.publicKey,
+      encryptedSecretKey,
+    );
+
+    await this.oauthAccountRepository.save(
+      this.oauthAccountRepository.create({
+        userId: createdUser.id,
+        provider,
+        providerAccountId,
+        accessToken: encryptedAccessToken,
+        refreshToken: encryptedRefreshToken,
+        profile: params.profile,
+      }),
+    );
+
+    const fullUser = await this.usersService.findById(createdUser.id);
+    return { user: fullUser, isNew: true };
+  }
+
+  async unlinkOAuth(userId: string, provider: OAuthProvider): Promise<void> {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (!user.password) {
+      throw new UnprocessableEntityException(
+        'Cannot unlink the only authentication method. Set a password first.',
+      );
+    }
+
+    const account = await this.oauthAccountRepository.findOne({
+      where: { userId, provider },
+    });
+
+    if (!account) {
+      throw new BadRequestException(`No linked ${provider} account found`);
+    }
+
+    await this.oauthAccountRepository.delete(account.id);
+  }
+
+  async setPassword(userId: string, newPassword: string): Promise<void> {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (user.password) {
+      throw new BadRequestException('User already has a password set');
+    }
+
+    await this.usersService.updatePassword(userId, newPassword);
   }
 
   private async issueAuthTokens(

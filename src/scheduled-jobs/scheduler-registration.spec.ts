@@ -24,6 +24,7 @@ import { WebhookService } from '../webhooks/services/webhook.service';
 import { CurrencyPairService } from '../currencies/services/currency-pair.service';
 import { ProposalService } from '../dao/services/proposal.service';
 import { LedgerVerificationService } from '../ledger/services/ledger-verification.service';
+import { RedisService } from '../common/services/redis.service';
 
 type ProviderWrapper = {
   name: string;
@@ -54,6 +55,10 @@ describe('Scheduler registration', () => {
 
   const serviceMock = {};
 
+  const mockRedisService = {
+    del: jest.fn(),
+  }
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -63,6 +68,7 @@ describe('Scheduler registration', () => {
         ScheduledJobsService,
         TransactionVerificationService,
         { provide: TransactionsService, useValue: serviceMock },
+        { provide: RedisService, useValue: mockRedisService },
         {
           provide: UsersService,
           useValue: {

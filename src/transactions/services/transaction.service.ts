@@ -7,14 +7,16 @@ import {
   Logger,
   ForbiddenException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
+import { RedisService } from '../../common/services/redis.service';
 import {
   Transaction,
   TransactionStatus,
   TransactionType,
 } from '../entities/transaction.entity';
+import { TransactionCategory } from '../../analytics/entities/transaction-category.entity';
 import {
   CreateDepositDto,
   CreateWithdrawalDto,
@@ -44,6 +46,7 @@ import { WalletsService } from '../../wallets/wallets.service';
 import { EncryptionService } from '../../common/services/encryption.service';
 import { LedgerService } from '../../ledger/services/ledger.service';
 import { TransactionLimitService } from './transaction-limit.service';
+import { RedisService } from '../../modules/redis/redis.service';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -137,6 +140,8 @@ export class TransactionsService {
   constructor(
     @InjectRepository(Transaction)
     private readonly transactionRepository: Repository<Transaction>,
+    @InjectRepository(TransactionCategory)
+    private readonly categoryRepository: Repository<TransactionCategory>,
     private readonly dataSource: DataSource,
     private readonly currenciesService: CurrenciesService,
     private readonly exchangeRatesService: ExchangeRatesService,
@@ -155,6 +160,7 @@ export class TransactionsService {
     private readonly encryptionService: EncryptionService,
     private readonly ledgerService: LedgerService,
     private readonly transactionLimitService: TransactionLimitService,
+    private readonly redisService: RedisService,
   ) {}
 
   /**
@@ -259,6 +265,12 @@ export class TransactionsService {
 
       this.logger.log(
         `Deposit transaction created successfully: ${transaction.id}`,
+      );
+
+      this.autoAssignCategory(transaction).catch((e) =>
+        this.logger.warn(
+          `Non-blocking category assignment failed: ${e.message}`,
+        ),
       );
 
       return transaction;
@@ -463,6 +475,12 @@ export class TransactionsService {
 
       this.logger.log(
         `Withdrawal transaction created successfully: ${transaction.id}`,
+      );
+
+      this.autoAssignCategory(transaction).catch((e) =>
+        this.logger.warn(
+          `Non-blocking category assignment failed: ${e.message}`,
+        ),
       );
 
       return transaction;
@@ -671,6 +689,7 @@ export class TransactionsService {
         transaction.stellarTxHash = rawResult.hash;
         transaction.status = TransactionStatus.SUCCESS;
         await this.transactionRepository.save(transaction);
+        await this.redisService.del('admin_stats');
 
         await this.updateUserBalance(
           userId,
@@ -691,6 +710,12 @@ export class TransactionsService {
 
         this.logger.log(
           `Swap transaction completed successfully: ${transaction.id} (Attempt ${i})`,
+        );
+
+        this.autoAssignCategory(transaction).catch((e) =>
+          this.logger.warn(
+            `Non-blocking category assignment failed: ${e.message}`,
+          ),
         );
 
         this.webhookService
@@ -746,6 +771,13 @@ export class TransactionsService {
     mode: 'strict-send' | 'strict-receive' = 'strict-send',
   ): Promise<any> {
     const cacheKey = `${fromCurrency}-${toCurrency}-${amount}-${mode}`;
+    const redisKey = this.redisService.key('quotes', cacheKey);
+    const redisCached = await this.redisService.getJson<any>(redisKey);
+    if (redisCached) {
+      this.logger.debug(`Returning Redis cached swap preview for ${cacheKey}`);
+      return redisCached;
+    }
+
     const cached = this.swapPreviewCache.get(cacheKey);
 
     if (cached && cached.expiry > Date.now()) {
@@ -801,10 +833,12 @@ export class TransactionsService {
       };
     });
 
-    // Cache results for 10 seconds
+    await this.redisService.setJson(redisKey, results, 30);
+
+    // Local fallback cache mirrors Redis TTL for single-instance degradation.
     this.swapPreviewCache.set(cacheKey, {
       data: results,
-      expiry: Date.now() + 10000,
+      expiry: Date.now() + 30000,
     });
 
     return results;
@@ -865,6 +899,7 @@ export class TransactionsService {
 
       if (verificationResult.status === 'SUCCESS') {
         transaction.status = TransactionStatus.SUCCESS;
+        await this.redisService.del('admin_stats');
 
         if (transaction.type === TransactionType.DEPOSIT) {
           await this.updateUserBalance(
@@ -1110,21 +1145,27 @@ export class TransactionsService {
     const currencyLookup: Record<string, any> = {};
 
     try {
+      const allCurrencies = await this.currenciesService.findAll(false);
+      const currencyMap = new Map(allCurrencies.map((c) => [c.code.toUpperCase(), c]));
       for (const currencyCode of uniqueCurrencies) {
-        // @ts-ignore - Pre-existing type issue
-        const currency = await this.currenciesService.getCurrency(currencyCode);
-        // @ts-ignore - Pre-existing type issue
-        currencyLookup[currencyCode] = {
-          symbol: currency.symbol || currencyCode,
-          displayName: currency.name || currencyCode,
-        };
+        const currency = currencyMap.get(currencyCode.toUpperCase());
+        if (currency) {
+          currencyLookup[currencyCode] = {
+            symbol: currency.symbol || currencyCode,
+            displayName: currency.name || currencyCode,
+          };
+        } else {
+          currencyLookup[currencyCode] = {
+            symbol: currencyCode,
+            displayName: currencyCode,
+          };
+        }
       }
     } catch (error) {
       this.logger.warn(
         `Failed to fetch currency metadata: ${error instanceof Error ? error.message : String(error)}`,
       );
       for (const currencyCode of uniqueCurrencies) {
-        // @ts-ignore - Pre-existing type issue
         currencyLookup[currencyCode] = {
           symbol: currencyCode,
           displayName: currencyCode,
@@ -1171,6 +1212,51 @@ export class TransactionsService {
       where: { status: TransactionStatus.PENDING },
       order: { createdAt: 'ASC' },
     });
+  }
+
+  // ── Category auto-assignment ───────────────────────────────────────────────
+
+  private async autoAssignCategory(transaction: Transaction): Promise<void> {
+    try {
+      let categoryName: string;
+
+      switch (transaction.type) {
+        case TransactionType.SWAP:
+          categoryName = 'Exchange';
+          break;
+        case TransactionType.WITHDRAW:
+          categoryName = 'Transfers';
+          break;
+        case TransactionType.DEPOSIT: {
+          const meta = transaction.metadata;
+          if (meta?.source === 'referral') {
+            categoryName = 'Referral Rewards';
+          } else if (meta?.source === 'savings') {
+            categoryName = 'Savings';
+          } else if (meta?.source === 'batch' || meta?.batchPayment) {
+            categoryName = 'Payroll';
+          } else {
+            categoryName = 'Transfers';
+          }
+          break;
+        }
+        default:
+          categoryName = 'Other';
+      }
+
+      const category = await this.categoryRepository.findOne({
+        where: { name: categoryName, isSystem: true },
+      });
+
+      if (category) {
+        transaction.categoryId = category.id;
+        await this.transactionRepository.save(transaction);
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Category auto-assignment failed for transaction ${transaction.id}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────

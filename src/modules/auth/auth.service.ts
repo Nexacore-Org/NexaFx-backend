@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -10,6 +14,7 @@ import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
+import { RedisService } from '../redis/redis.service';
 
 type AuthUser = Pick<
   User,
@@ -18,7 +23,6 @@ type AuthUser = Pick<
   | 'role'
   | 'password'
   | 'passwordHash'
-  | 'refreshTokenHash'
   | 'isActive'
 >;
 
@@ -37,6 +41,7 @@ export class AuthService {
     private readonly userRepository: Repository<User>,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly redisService: RedisService,
   ) {}
 
   async register(registerDto: RegisterDto) {
@@ -65,7 +70,6 @@ export class AuthService {
       isVerified: false,
       isEmailVerified: false,
       isActive: true,
-      refreshTokenHash: null,
     });
 
     const savedUser = await this.userRepository.save(user);
@@ -95,15 +99,13 @@ export class AuthService {
   }
 
   async refresh(refreshTokenDto: RefreshTokenDto) {
+    const decoded = this.decodeRefreshToken(refreshTokenDto.refreshToken);
+    await this.assertRefreshTokenInRedis(refreshTokenDto.refreshToken, decoded);
+
     const payload = await this.verifyRefreshToken(refreshTokenDto.refreshToken);
     const user = await this.findAuthUserById(payload.sub);
 
-    if (!user || !user.isActive || !user.refreshTokenHash) {
-      throw new UnauthorizedException('Invalid or expired refresh token');
-    }
-
-    const presentedHash = this.hashRefreshToken(refreshTokenDto.refreshToken);
-    if (!this.timingSafeHashEquals(user.refreshTokenHash, presentedHash)) {
+    if (!user || !user.isActive) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
@@ -112,21 +114,34 @@ export class AuthService {
     };
   }
 
-  async logout(userId: string) {
-    await this.userRepository.update(userId, {
-      refreshTokenHash: null,
-    });
+  async logout(userId: string, refreshToken?: string) {
+    if (refreshToken) {
+      const decoded = this.decodeRefreshToken(refreshToken);
+      if (decoded.sub === userId && decoded.jti) {
+        await this.redisService.delete(
+          this.redisService.refreshTokenKey(userId, decoded.jti),
+        );
+      }
+    } else {
+      await this.redisService.deleteByPattern(
+        this.redisService.refreshTokenKey(userId, '*'),
+      );
+    }
 
     return { message: 'Logged out successfully' };
   }
 
   private async issueTokenPair(user: AuthUser) {
     const accessToken = await this.signAccessToken(user);
-    const refreshToken = await this.signRefreshToken(user);
+    const tokenId = crypto.randomUUID();
+    const refreshToken = await this.signRefreshToken(user, tokenId);
 
-    await this.userRepository.update(user.id, {
-      refreshTokenHash: this.hashRefreshToken(refreshToken),
-    });
+    const refreshKey = this.redisService.refreshTokenKey(user.id, tokenId);
+    await this.redisService.setString(
+      refreshKey,
+      this.hashRefreshToken(refreshToken),
+      7 * 24 * 60 * 60,
+    );
 
     return {
       accessToken,
@@ -148,7 +163,10 @@ export class AuthService {
     );
   }
 
-  private async signRefreshToken(user: Pick<AuthUser, 'id' | 'email' | 'role'>) {
+  private async signRefreshToken(
+    user: Pick<AuthUser, 'id' | 'email' | 'role'>,
+    tokenId: string,
+  ) {
     return this.jwtService.signAsync(
       {
         sub: user.id,
@@ -158,8 +176,42 @@ export class AuthService {
       {
         secret: this.getRefreshTokenSecret(),
         expiresIn: this.refreshTokenExpiresIn,
+        jwtid: tokenId,
       },
     );
+  }
+
+  private async assertRefreshTokenInRedis(token: string, payload: JwtPayload) {
+    if (!payload.sub || !payload.jti) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    const redisKey = this.redisService.refreshTokenKey(payload.sub, payload.jti);
+    const storedHash = await this.redisService.getString(redisKey);
+
+    // null  → Redis unavailable → fail closed (401)
+    // empty → key missing → token was invalidated (logout) → 401
+    if (!storedHash) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    const presentedHash = this.hashToken(token);
+    if (!this.timingSafeEquals(storedHash, presentedHash)) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+  }
+
+  private decodeRefreshToken(token: string): JwtPayload {
+    const decoded = this.jwtService.decode(token);
+    if (
+      !decoded ||
+      typeof decoded !== 'object' ||
+      typeof decoded.sub !== 'string'
+    ) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    return decoded as JwtPayload;
   }
 
   private async verifyRefreshToken(token: string) {
@@ -181,10 +233,9 @@ export class AuthService {
         role: true,
         password: true,
         passwordHash: true,
-        refreshTokenHash: true,
         isActive: true,
       },
-    }) as Promise<AuthUser | null>;
+    });
   }
 
   private async findAuthUserById(id: string): Promise<AuthUser | null> {
@@ -196,10 +247,9 @@ export class AuthService {
         role: true,
         password: true,
         passwordHash: true,
-        refreshTokenHash: true,
         isActive: true,
       },
-    }) as Promise<AuthUser | null>;
+    });
   }
 
   private normalizeEmail(email: string) {
@@ -212,7 +262,8 @@ export class AuthService {
 
   private getAccessTokenSecret() {
     const secret = this.configService.get<string>('JWT_SECRET');
-    const isProduction = this.configService.get<string>('NODE_ENV') === 'production';
+    const isProduction =
+      this.configService.get<string>('NODE_ENV') === 'production';
 
     if (!secret && isProduction) {
       throw new Error('JWT_SECRET is not configured');

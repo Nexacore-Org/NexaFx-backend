@@ -22,6 +22,7 @@ import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
 import { RateLimitConfig } from './rate-limit-config.entity';
 import { ThrottlerStorageService } from '@nestjs/throttler';
 import { NotificationPreferenceService } from '../notifications/services/notification-preference.service';
+import { RedisService } from '../common/services/redis.service';
 
 interface WalletBalancesCacheEntry {
   expiresAt: number;
@@ -46,6 +47,7 @@ export class UsersService {
     private readonly exchangeRatesService: ExchangeRatesService,
     private readonly throttlerStorageService: ThrottlerStorageService,
     private readonly notificationPreferenceService: NotificationPreferenceService,
+    private readonly redisService: RedisService,
   ) {}
 
   async findByEmail(email: string): Promise<User | null> {
@@ -85,7 +87,7 @@ export class UsersService {
 
   async createUser(params: {
     email: string;
-    password: string;
+    password?: string;
     firstName?: string;
     lastName?: string;
     phone?: string;
@@ -111,8 +113,11 @@ export class UsersService {
       }
     }
 
-    const saltRounds = 12;
-    const hashedPassword = await bcrypt.hash(params.password, saltRounds);
+    let hashedPassword: string | null = null;
+    if (params.password) {
+      const saltRounds = 12;
+      hashedPassword = await bcrypt.hash(params.password, saltRounds);
+    }
 
     const user = this.userRepository.create({
       email: normalizedEmail,
@@ -129,11 +134,11 @@ export class UsersService {
       isVerified: false,
       isEmailVerified: false,
       isActive: true,
-      refreshTokenHash: null,
     });
 
     const savedUser = await this.userRepository.save(user);
     await this.notificationPreferenceService.createDefaults(savedUser.id);
+    await this.redisService.del('admin_stats');
 
     const {
       password: _,

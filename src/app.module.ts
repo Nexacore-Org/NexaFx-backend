@@ -1,15 +1,15 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TerminusModule } from '@nestjs/terminus';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { envValidationSchema } from './config/env.validation';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
-import { HealthModule } from './health/health.module';
 import { AppService } from './app.service';
-import { AuthModule } from './modules/auth/auth.module';
+import { AuthModule } from './auth/auth.module';
 import { CurrenciesModule } from './currencies/currencies.module';
 import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
 import { CommonModule } from './common/common.module';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PlanThrottlerGuard } from './common/guards/plan-throttler.guard';
 import { HealthModule } from './health/health.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
@@ -31,35 +31,28 @@ import { SuperAdminModule } from './super-admin/super-admin.module';
 import { GatewaysModule } from './gateways/gateways.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { WalletsModule } from './wallets/wallets.module';
+import { EscrowModule } from './escrow/escrow.module';
 import { RateAlertsModule } from './rate-alerts/rate-alerts.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
-import { StellarModule } from './modules/stellar/stellar.module';
-import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
-      validationSchema: envValidationSchema,
-      validationOptions: {
-        abortEarly: false,
-        allowUnknown: true,
-      },
     }),
-    TerminusModule,
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
         url: configService.get<string>('DATABASE_URL'),
         synchronize:
-          configService.get<string>('NODE_ENV') !== 'production' &&
-          configService.get<string>('NODE_ENV') !== 'staging',
+          process.env.NODE_ENV !== 'production' &&
+          process.env.NODE_ENV !== 'staging',
         ssl:
-          configService.get<string>('NODE_ENV') === 'production'
+          process.env.NODE_ENV === 'production'
             ? { rejectUnauthorized: false }
             : false,
         autoLoadEntities: true,
@@ -68,21 +61,55 @@ import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
     }),
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        ttl: configService.get<number>('THROTTLE_TTL') ?? 60,
-        limit: configService.get<number>('THROTTLE_LIMIT') ?? 100,
-      }),
+      useFactory: (configService: ConfigService) => [
+        {
+          ttl: (configService.get<number>('THROTTLE_TTL') ?? 60) * 1000,
+          limit: configService.get<number>('THROTTLE_LIMIT') ?? 100,
+        },
+      ],
       inject: [ConfigService],
     }),
     CommonModule,
-    StellarModule,
     AuthModule,
     CurrenciesModule,
     ExchangeRatesModule,
     GatewaysModule,
     HealthModule,
+    AuditLogsModule,
+    NotificationsModule,
+    FirebaseModule,
+    TransactionsModule,
+    ReferralsModule,
+    BeneficiariesModule,
+    KycModule,
+    ScheduledJobsModule,
+    ReceiptsModule,
+    FeesModule,
+    PushNotificationsModule,
+    // Rate alerts: user-configured exchange rate notifications
+    RateAlertsModule,
+    AdminModule,
+    SuperAdminModule,
+    EscrowModule,
+    // DAO module provides Stellar Soroban contract interaction for reward distribution
+    DaoModule,
+    GraphQLApiModule,
+    WebhooksModule,
+    WalletsModule,
+    LedgerModule,
+    UsersModule,
   ],
   controllers: [AppController],
-  providers: [],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: PlanThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}

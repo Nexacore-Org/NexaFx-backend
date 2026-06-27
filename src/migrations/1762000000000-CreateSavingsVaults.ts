@@ -11,7 +11,7 @@ export class CreateSavingsVaults1762000000000 implements MigrationInterface {
     `);
 
     await queryRunner.query(`
-      CREATE TYPE "public"."savings_vaults_autodepositfrequency_enum" AS ENUM (
+      CREATE TYPE "public"."savings_vaults_auto_deposit_frequency_enum" AS ENUM (
         'DAILY', 'WEEKLY', 'MONTHLY'
       )
     `);
@@ -36,7 +36,7 @@ export class CreateSavingsVaults1762000000000 implements MigrationInterface {
         "status" "public"."savings_vaults_status_enum" NOT NULL DEFAULT 'ACTIVE',
         "earlyWithdrawalPenaltyPercent" numeric(5,4) NOT NULL DEFAULT '0.10',
         "autoDepositAmount" numeric(20,8),
-        "autoDepositFrequency" "public"."savings_vaults_autodepositfrequency_enum",
+        "autoDepositFrequency" "public"."savings_vaults_auto_deposit_frequency_enum",
         "lastInterestAccruedAt" TIMESTAMP WITH TIME ZONE,
         "maturedAt" TIMESTAMP WITH TIME ZONE,
         "closedAt" TIMESTAMP WITH TIME ZONE,
@@ -110,7 +110,7 @@ export class CreateSavingsVaults1762000000000 implements MigrationInterface {
       'DROP TYPE IF EXISTS "public"."vault_transactions_type_enum"',
     );
     await queryRunner.query(
-      'DROP TYPE IF EXISTS "public"."savings_vaults_autodepositfrequency_enum"',
+      'DROP TYPE IF EXISTS "public"."savings_vaults_auto_deposit_frequency_enum"',
     );
     await queryRunner.query(
       'DROP TYPE IF EXISTS "public"."savings_vaults_status_enum"',

@@ -28,7 +28,7 @@ import { IdempotencyRecord } from '../common/entities/idempotency-record.entity'
 import { DataRequest } from '../users/entities/data-request.entity';
 import { RedisService } from '../common/services/redis.service';
 import { DataSource } from 'typeorm';
-import { VaultsService } from '../vaults/vaults.service';
+import { VaultsService } from '../modules/vaults/vaults.service';
 
 @Injectable()
 export class ScheduledJobsService {
@@ -916,43 +916,63 @@ export class ScheduledJobsService {
     }
   }
 
+  /**
+   * Accrue interest for all ACTIVE vaults daily at 00:05 UTC
+   */
   @Cron('5 0 * * *')
   async accrueVaultInterest(): Promise<void> {
     this.logger.log('[Scheduled Job] Starting vault interest accrual');
+
     try {
-      await this.vaultsService.accrueInterest();
-      this.logger.log('[Scheduled Job] Vault interest accrual completed');
+      const count = await this.vaultsService.accrueInterest();
+      this.logger.log(
+        `[Scheduled Job] Vault interest accrual completed — ${count} vaults updated`,
+      );
     } catch (error) {
       this.logger.error(
-        '[Scheduled Job] Vault interest accrual failed:',
+        '[Scheduled Job] Fatal error in vault interest accrual:',
         error,
       );
     }
   }
 
+  /**
+   * Process vault maturity every hour
+   */
   @Cron('0 * * * *')
   async processVaultMaturity(): Promise<void> {
     this.logger.log('[Scheduled Job] Starting vault maturity check');
+
     try {
-      await this.vaultsService.processMaturity();
-      this.logger.log('[Scheduled Job] Vault maturity check completed');
+      const count = await this.vaultsService.processMaturity();
+      if (count > 0) {
+        this.logger.log(
+          `[Scheduled Job] Vault maturity processed — ${count} vaults matured`,
+        );
+      }
     } catch (error) {
       this.logger.error(
-        '[Scheduled Job] Vault maturity check failed:',
+        '[Scheduled Job] Fatal error in vault maturity processing:',
         error,
       );
     }
   }
 
-  @Cron('0 6 * * *')
+  /**
+   * Process vault auto-deposits daily at 00:10 UTC
+   */
+  @Cron('10 0 * * *')
   async processVaultAutoDeposits(): Promise<void> {
     this.logger.log('[Scheduled Job] Starting vault auto-deposits');
+
     try {
-      await this.vaultsService.processAutoDeposits();
-      this.logger.log('[Scheduled Job] Vault auto-deposits completed');
+      const result = await this.vaultsService.processAutoDeposits();
+      this.logger.log(
+        `[Scheduled Job] Vault auto-deposits completed — ${result.processed} processed, ${result.skipped} skipped`,
+      );
     } catch (error) {
       this.logger.error(
-        '[Scheduled Job] Vault auto-deposits failed:',
+        '[Scheduled Job] Fatal error in vault auto-deposits:',
         error,
       );
     }

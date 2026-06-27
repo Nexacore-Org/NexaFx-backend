@@ -60,6 +60,14 @@ export class ScheduledJobsService {
   }
 
   /**
+   * Liveness heartbeat — confirms the scheduler is running every minute.
+   */
+  @Cron(CronExpression.EVERY_MINUTE)
+  heartbeat(): void {
+    this.logger.log('[Cron] Heartbeat OK');
+  }
+
+  /**
    * Auto-resume suspended currency pairs every minute
    */
   @Cron(CronExpression.EVERY_MINUTE)

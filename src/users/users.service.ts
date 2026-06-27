@@ -21,6 +21,7 @@ import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
 import { RateLimitConfig } from './rate-limit-config.entity';
 import { ThrottlerStorageService } from '@nestjs/throttler';
 import { NotificationPreferenceService } from '../notifications/services/notification-preference.service';
+import { RedisService } from '../common/services/redis.service';
 
 interface WalletBalancesCacheEntry {
   expiresAt: number;
@@ -45,6 +46,7 @@ export class UsersService {
     private readonly exchangeRatesService: ExchangeRatesService,
     private readonly throttlerStorageService: ThrottlerStorageService,
     private readonly notificationPreferenceService: NotificationPreferenceService,
+    private readonly redisService: RedisService,
   ) {}
 
   async findByEmail(email: string): Promise<User | null> {
@@ -84,7 +86,7 @@ export class UsersService {
 
   async createUser(params: {
     email: string;
-    password: string;
+    password?: string;
     firstName?: string;
     lastName?: string;
     phone?: string;
@@ -110,12 +112,16 @@ export class UsersService {
       }
     }
 
-    const saltRounds = 12;
-    const hashedPassword = await bcrypt.hash(params.password, saltRounds);
+    let hashedPassword: string | null = null;
+    if (params.password) {
+      const saltRounds = 12;
+      hashedPassword = await bcrypt.hash(params.password, saltRounds);
+    }
 
     const user = this.userRepository.create({
       email: normalizedEmail,
       password: hashedPassword,
+      passwordHash: hashedPassword,
       firstName: params.firstName || null,
       lastName: params.lastName || null,
       phone: params.phone || null,
@@ -125,10 +131,13 @@ export class UsersService {
       referredBy: params.referredBy ?? null,
       role: params.role || UserRole.USER,
       isVerified: false,
+      isEmailVerified: false,
+      isActive: true,
     });
 
     const savedUser = await this.userRepository.save(user);
     await this.notificationPreferenceService.createDefaults(savedUser.id);
+    await this.redisService.del('admin_stats');
 
     const {
       password: _,
@@ -150,6 +159,7 @@ export class UsersService {
 
     await this.userRepository.update(userId, {
       password: hashedPassword,
+      passwordHash: hashedPassword,
     });
   }
 
@@ -161,6 +171,7 @@ export class UsersService {
 
     await this.userRepository.update(userId, {
       isVerified: true,
+      isEmailVerified: true,
     });
   }
 

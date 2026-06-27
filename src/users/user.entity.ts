@@ -8,7 +8,10 @@ import {
   OneToMany,
 } from 'typeorm';
 import { Exclude } from 'class-transformer';
-import { Notification } from '../notifications/entities/notification.entity';
+import { OAuthAccount } from '../modules/auth/entities/oauth-account.entity';
+
+  @OneToMany(() => OAuthAccount, (oauth) => oauth.user)
+  oauthAccounts: OAuthAccount[];
 import { KycRecord } from '../kyc/entities/kyc.entity';
 
 export enum UserRole {
@@ -46,9 +49,13 @@ export class User {
   @Column({ type: 'varchar', length: 100, nullable: true })
   lastName: string | null;
 
-  @Column({ type: 'varchar', length: 255 })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   @Exclude({ toPlainOnly: true })
-  password: string;
+  password: string | null;
+
+  @Column({ type: 'varchar', length: 255, select: false })
+  @Exclude({ toPlainOnly: true })
+  passwordHash?: string;
 
   @OneToMany(() => KycRecord, (kyc) => kyc.user)
   kycRecords: KycRecord[];
@@ -85,6 +92,12 @@ export class User {
 
   @Column({ type: 'boolean', default: false })
   isVerified: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  isEmailVerified?: boolean;
+
+  @Column({ type: 'boolean', default: true })
+  isActive?: boolean;
 
   @Column({
     type: 'enum',

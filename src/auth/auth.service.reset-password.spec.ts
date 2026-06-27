@@ -47,7 +47,9 @@ const makeUser = (overrides: Partial<any> = {}) => ({
   ...overrides,
 });
 
-const makeResetDto = (overrides: Partial<ResetPasswordDto> = {}): ResetPasswordDto =>
+const makeResetDto = (
+  overrides: Partial<ResetPasswordDto> = {},
+): ResetPasswordDto =>
   Object.assign(new ResetPasswordDto(), {
     email: 'trader@nexafx.com',
     otp: '123456',
@@ -80,7 +82,10 @@ const mockAuditLogsService = {
 
 // Minimal stubs for services not under test
 const mockOtpDeliveryService = { sendOtp: jest.fn() };
-const mockJwtService = { sign: jest.fn().mockReturnValue('token'), verify: jest.fn() };
+const mockJwtService = {
+  sign: jest.fn().mockReturnValue('token'),
+  verify: jest.fn(),
+};
 const mockConfigService = { get: jest.fn().mockReturnValue('15m') };
 const mockStellarService = { generateWallet: jest.fn() };
 const mockEncryptionService = { encrypt: jest.fn() };
@@ -179,7 +184,9 @@ describe('AuthService.resetPassword()', () => {
       mockOtpsService.invalidateAllUserOtps.mockResolvedValue(undefined);
       mockAuditLogsService.logAuthEvent.mockResolvedValue(undefined);
 
-      await service.resetPassword(makeResetDto({ newPassword: 'AnotherPass!99' }));
+      await service.resetPassword(
+        makeResetDto({ newPassword: 'AnotherPass!99' }),
+      );
 
       expect(mockUsersService.updatePassword).toHaveBeenCalledWith(
         user.id,
@@ -216,7 +223,9 @@ describe('AuthService.resetPassword()', () => {
 
       await service.resetPassword(makeResetDto());
 
-      expect(mockOtpsService.invalidateAllUserOtps).toHaveBeenCalledWith(user.id);
+      expect(mockOtpsService.invalidateAllUserOtps).toHaveBeenCalledWith(
+        user.id,
+      );
     });
 
     it('emits a PASSWORD_RESET_COMPLETE audit event on success', async () => {
@@ -327,7 +336,9 @@ describe('AuthService.resetPassword()', () => {
         UnauthorizedException,
       );
 
-      expect(mockRefreshTokensService.revokeAllUserTokens).not.toHaveBeenCalled();
+      expect(
+        mockRefreshTokensService.revokeAllUserTokens,
+      ).not.toHaveBeenCalled();
     });
   });
 });

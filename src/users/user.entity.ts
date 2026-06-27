@@ -8,7 +8,10 @@ import {
   OneToMany,
 } from 'typeorm';
 import { Exclude } from 'class-transformer';
-import { Notification } from '../notifications/entities/notification.entity';
+import { OAuthAccount } from '../modules/auth/entities/oauth-account.entity';
+
+  @OneToMany(() => OAuthAccount, (oauth) => oauth.user)
+  oauthAccounts: OAuthAccount[];
 import { KycRecord } from '../kyc/entities/kyc.entity';
 
 export enum UserRole {

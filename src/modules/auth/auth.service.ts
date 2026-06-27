@@ -3,7 +3,9 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import { OAuthAccount, OAuthProvider } from '../entities/oauth-account.entity';
 import { ConfigService } from '@nestjs/config';
+import { WalletsService } from '../../wallets/wallets.service';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
@@ -28,6 +30,14 @@ type AuthUser = Pick<
 
 @Injectable()
 export class AuthService {
+  constructor(
+    @InjectRepository(User) private readonly userRepository: Repository<User>,
+    @InjectRepository(OAuthAccount) private readonly oauthAccountRepository: Repository<OAuthAccount>,
+    private readonly configService: ConfigService,
+    private readonly walletsService: WalletsService,
+    private readonly jwtService: JwtService,
+    private readonly redisService: RedisService,
+  ) {}
   private readonly bcryptRounds = 12;
   private readonly accessTokenExpiresIn = '15m';
   private readonly refreshTokenExpiresIn = '7d';
@@ -36,13 +46,7 @@ export class AuthService {
     12,
   );
 
-  constructor(
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
-    private readonly jwtService: JwtService,
-    private readonly configService: ConfigService,
-    private readonly redisService: RedisService,
-  ) {}
+
 
   async register(registerDto: RegisterDto) {
     const email = this.normalizeEmail(registerDto.email);
@@ -297,4 +301,60 @@ export class AuthService {
     const dummyHash = await this.invalidPasswordHashPromise;
     await bcrypt.compare(password, dummyHash);
   }
+  async handleOAuthLogin(
+    provider: OAuthProvider,
+    providerAccountId: string,
+    email?: string,
+    firstName?: string,
+    lastName?: string,
+  ): Promise<{ accessToken: string; refreshToken: string }> {
+    // Find existing OAuth link
+    const existing = await this.oauthAccountRepository.findOne({
+      where: { provider, providerAccountId },
+    });
+
+    if (existing) {
+      const user = await this.userRepository.findOne({
+        where: { id: existing.userId },
+        select: { id: true, email: true, role: true, password: true, passwordHash: true, isActive: true },
+      });
+      if (!user) {
+        throw new ConflictException('Linked user not found');
+      }
+      return this.issueTokenPair(user);
+    }
+
+    // No existing link; create or find user by email
+    if (!email) {
+      throw new ConflictException('Email is required for new OAuth user');
+    }
+    let user = await this.userRepository.findOne({ where: { email } });
+    if (!user) {
+      const randomPassword = crypto.randomBytes(16).toString('hex');
+      const passwordHash = await bcrypt.hash(randomPassword, this.bcryptRounds);
+      user = this.userRepository.create({
+        email,
+        firstName: firstName ?? '',
+        lastName: lastName ?? '',
+        password: passwordHash,
+        passwordHash,
+        role: UserRole.USER,
+        isVerified: true,
+        isEmailVerified: true,
+        isActive: true,
+      });
+      user = await this.userRepository.save(user);
+      await this.walletsService.provisionWallet(user.id);
+    }
+
+    const oauthAccount = this.oauthAccountRepository.create({
+      provider,
+      providerAccountId,
+      userId: user.id,
+    });
+    await this.oauthAccountRepository.save(oauthAccount);
+
+    return this.issueTokenPair(user);
+  }
 }
+

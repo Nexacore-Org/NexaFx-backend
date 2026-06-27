@@ -7,6 +7,7 @@ export const envValidationSchema = Joi.object({
   PORT: Joi.number().default(3000),
   DATABASE_URL: Joi.string().required(),
   JWT_SECRET: Joi.string().min(32).required(),
+  JWT_REFRESH_SECRET: Joi.string().min(32).required(),
   JWT_EXPIRES_IN: Joi.string().required(),
   ALLOWED_ORIGINS: Joi.string().allow('', null),
   SLA_HOURS_LOW: Joi.number().default(72),
@@ -17,4 +18,12 @@ export const envValidationSchema = Joi.object({
   MAILGUN_DOMAIN: Joi.string().optional(),
   MAILGUN_FROM_EMAIL: Joi.string().optional(),
   MAILGUN_FROM_NAME: Joi.string().optional(),
-});
+  GOOGLE_CLIENT_ID: Joi.string().required(),
+  GOOGLE_CLIENT_SECRET: Joi.string().required(),
+  GOOGLE_CALLBACK_URL: Joi.string().uri().required(),
+  GITHUB_CLIENT_ID: Joi.string().required(),
+  GITHUB_CLIENT_SECRET: Joi.string().required(),
+  GITHUB_CALLBACK_URL: Joi.string().uri().required(),
+  OAUTH_SUCCESS_REDIRECT: Joi.string().uri().required(),
+  OAUTH_FAILURE_REDIRECT: Joi.string().uri().required(),
+

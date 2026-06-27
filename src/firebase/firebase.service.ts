@@ -91,6 +91,7 @@ export class FirebaseService implements OnModuleInit {
     title: string,
     body: string,
     data?: Record<string, string>,
+    structuredData?: Record<string, string>,
   ): Promise<void> {
     if (!this.initialized) {
       this.logger.warn(
@@ -104,6 +105,11 @@ export class FirebaseService implements OnModuleInit {
     }
 
     try {
+      const mergedData: Record<string, string> = {
+        ...(data ?? {}),
+        ...(structuredData ?? {}),
+      };
+
       const message: admin.messaging.MulticastMessage = {
         notification: {
           title,
@@ -112,8 +118,8 @@ export class FirebaseService implements OnModuleInit {
         tokens,
       };
 
-      if (data) {
-        message.data = data;
+      if (Object.keys(mergedData).length > 0) {
+        message.data = mergedData;
       }
 
       const response = await admin.messaging().sendEachForMulticast(message);

@@ -9,6 +9,8 @@ import { KycGuard } from '../common/guards/kyc.guard';
 import { User } from '../users/user.entity';
 import { WebhooksModule } from '../webhooks/webhooks.module';
 import { StorageModule } from '../modules/storage/storage.module';
+import { forwardRef } from '@nestjs/common';
+import { SanctionsModule } from '../sanctions/sanctions.module';
 
 // Shared destination builder
 function buildDiskDestination(
@@ -83,6 +85,7 @@ function fileFilter(
       limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB hard limit
     }),
     StorageModule,
+    forwardRef(() => SanctionsModule),
   ],
   controllers: [KycController],
   providers: [KycService, KycEmailService, KycGuard],

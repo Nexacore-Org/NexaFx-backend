@@ -20,7 +20,7 @@ jobs:
         run: |
           # Calculate total added and removed lines, excluding exempted files
           # Exemptions: *.md, openapi.json, and anything with "migration" in the path
-          LINES=$(git diff origin/${{ github.base_ref }}...${{ github.event.pull_request.head.sha }} --numstat | awk '!/\.md$/ && !/openapi\.json$/ && !/migration/ {add+=$1; subs+=$2} END {print add+subs+0}')
+          LINES=$(git diff origin/${{ github.base_ref }}...${{ github.event.pull_request.head.sha }} --numstat | awk '!/\.md$/ && !/openapi\.json$/ && !/package-lock\.json$/ && !/migration/ {add+=$1; subs+=$2} END {print add+subs+0}')
           echo "Total changed lines (excluding exemptions): $LINES"
           echo "lines=$LINES" >> $GITHUB_OUTPUT
 

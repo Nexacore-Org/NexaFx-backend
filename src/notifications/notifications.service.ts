@@ -1,4 +1,22 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
+import { Repository, In } from 'typeorm';
+import {
+  Notification,
+  NotificationStatus,
+  NotificationType,
+} from './entities/notification.entity';
+import { CreateNotificationDto } from './dto/create-notification.dto';
+import { resolveDeepLink } from './deep-links.registry';
+import { UpdateNotificationDto } from './dto/update-notification.dto';
+import {
+  NotificationResponseDto,
+  PaginatedNotificationResponse,
+} from './dto/notification-response.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Notification, NotificationType } from './entities/notification.entity';
@@ -22,21 +40,66 @@ export class NotificationsService {
   ) {}
 
   async create(
-    userId: string,
-    type: NotificationType,
-    title: string,
-    body: string,
-    data?: Record<string, any>,
-  ): Promise<Notification> {
-    const notification = this.notificationRepository.create({
-      userId,
-      type,
-      title,
-      body,
-      data: data || {},
-      isRead: false,
-    });
-    return this.notificationRepository.save(notification);
+    createNotificationDto: CreateNotificationDto,
+  ): Promise<NotificationResponseDto | null> {
+    try {
+      const preference = await this.preferenceService.getPreference(
+        createNotificationDto.userId,
+        createNotificationDto.type,
+      );
+
+      if (
+        !(await this.preferenceService.isChannelEnabled(
+          createNotificationDto.userId,
+          createNotificationDto.type,
+          'inApp',
+        ))
+      ) {
+        return null;
+      }
+
+      const deepLink =
+        createNotificationDto.actionUrl ??
+        resolveDeepLink(createNotificationDto.type, {
+          notificationId: '',
+          resourceId: createNotificationDto.relatedId,
+        });
+
+      const dtoWithDeepLink = { ...createNotificationDto, actionUrl: deepLink };
+
+      const notification = this.notificationsRepository.create(
+        preference.digestMode === NotificationDigestMode.IMMEDIATE
+          ? dtoWithDeepLink
+          : {
+              ...dtoWithDeepLink,
+              metadata: {
+                ...(createNotificationDto.metadata ?? {}),
+                digestMode: preference.digestMode,
+                digestPending: true,
+              },
+            },
+      );
+      const saved = await this.notificationsRepository.save(notification);
+      return this.mapToResponseDto(saved);
+    } catch (error) {
+      this.logger.error('Failed to create notification', error);
+      throw new BadRequestException('Failed to create notification');
+    }
+  }
+  async updateBatchStatus(
+    notificationIds: string[],
+    status: NotificationStatus,
+  ): Promise<{ updated: number }> {
+    if (!notificationIds || notificationIds.length === 0) {
+      throw new BadRequestException('Notification IDs are required');
+    }
+
+    const result = await this.notificationsRepository.update(
+      { id: In(notificationIds) },
+      { status },
+    );
+
+    return { updated: result.affected || 0 };
   }
 
   async dispatch(

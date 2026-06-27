@@ -8,7 +8,8 @@ import axios from 'axios';
 import { URL } from 'url';
 
 // Private IP ranges that must never be targeted by outbound webhook requests
-const BLOCKED_HOSTNAMES = /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|::1|0\.0\.0\.0)/i;
+const BLOCKED_HOSTNAMES =
+  /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|::1|0\.0\.0\.0)/i;
 
 @Injectable()
 export class WebhookService {

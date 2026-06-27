@@ -34,6 +34,9 @@ import { WalletsModule } from './wallets/wallets.module';
 import { RateAlertsModule } from './rate-alerts/rate-alerts.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
+import { TransactionsV2Module } from './transactions/transaction-v2.module';
+import { FiatV2Module } from './fiat/fiat-v2.module';
+import { BatchesV2Module } from './batches/batches-v2.module';
 
 @Module({
   imports: [
@@ -78,6 +81,9 @@ import { UsersModule } from './users/users.module';
     NotificationsModule,
     FirebaseModule,
     TransactionsModule,
+    TransactionsV2Module,
+    FiatV2Module,
+    BatchesV2Module,
     ReferralsModule,
     BeneficiariesModule,
     KycModule,

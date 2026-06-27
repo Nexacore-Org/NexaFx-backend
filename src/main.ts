@@ -8,6 +8,8 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { MulterExceptionFilter } from './common/filters/multer-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TransformResponseInterceptor } from './common/interceptors/transform-response.interceptor';
+import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
+import { IdempotencyService } from './common/services/idempotency.service';
 import helmet from 'helmet';
 
 async function bootstrap() {
@@ -27,6 +29,9 @@ async function bootstrap() {
     }),
   );
 
+  // Get service instance for global interceptor
+  const idempotencyService = app.get(IdempotencyService);
+
   // Global Filters (order matters: specific before general)
   app.useGlobalFilters(new HttpExceptionFilter(), new AllExceptionsFilter());
 
@@ -34,6 +39,7 @@ async function bootstrap() {
   app.useGlobalInterceptors(
     new LoggingInterceptor(),
     new TransformResponseInterceptor(),
+    new IdempotencyInterceptor(idempotencyService),
   );
 
   app.enableVersioning({

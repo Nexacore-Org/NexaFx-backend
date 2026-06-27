@@ -83,7 +83,8 @@ export class AuthController {
   @ApiBody({ type: VerifyTwoFactorDto })
   @ApiResponse({
     status: 200,
-    description: '2FA verified. Returns full auth tokens + user object (including name).',
+    description:
+      '2FA verified. Returns full auth tokens + user object (including name).',
     type: VerifyLoginOtpResponseDto,
   })
   @ApiResponse({

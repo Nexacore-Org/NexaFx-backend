@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddKycTierAndTransactionLimits1761000000000
-  implements MigrationInterface
-{
+export class AddKycTierAndTransactionLimits1761000000000 implements MigrationInterface {
   name = 'AddKycTierAndTransactionLimits1761000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -48,8 +46,12 @@ export class AddKycTierAndTransactionLimits1761000000000
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query('DROP TABLE IF EXISTS "transaction_limits"');
     if (await queryRunner.hasTable('users')) {
-      await queryRunner.query('ALTER TABLE "users" DROP COLUMN IF EXISTS "kycTier"');
+      await queryRunner.query(
+        'ALTER TABLE "users" DROP COLUMN IF EXISTS "kycTier"',
+      );
     }
-    await queryRunner.query('DROP TYPE IF EXISTS "public"."users_kyctier_enum"');
+    await queryRunner.query(
+      'DROP TYPE IF EXISTS "public"."users_kyctier_enum"',
+    );
   }
 }

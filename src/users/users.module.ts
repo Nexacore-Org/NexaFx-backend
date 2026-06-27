@@ -4,7 +4,7 @@ import { ThrottlerModule, ThrottlerStorageService } from '@nestjs/throttler';
 import { User } from './user.entity';
 import { RateLimitConfig } from './rate-limit-config.entity';
 import { UsersService } from './users.service';
-import { UsersController } from './users.controller';
+import { UsersController, UsersV2Controller } from './users.controller';
 import { DataExportService } from './services/data-export.service';
 import { AccountDeletionService } from './services/account-deletion.service';
 import { DataRequest } from './entities/data-request.entity';
@@ -40,7 +40,7 @@ import { TransactionLimitsModule } from '../transactions/transaction-limits.modu
     NotificationsModule,
     TransactionLimitsModule,
   ],
-  controllers: [UsersController],
+  controllers: [UsersController, UsersV2Controller],
   providers: [
     UsersService,
     DataExportService,

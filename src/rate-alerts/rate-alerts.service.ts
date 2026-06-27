@@ -15,6 +15,7 @@ import { NotificationType } from '../notifications/entities/notification.entity'
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import { CurrenciesService } from '../currencies/currencies.service';
+import { WebhookService } from '../webhooks/services/webhook.service';
 
 export interface RateAlertCheckResult {
   checked: number;
@@ -33,6 +34,7 @@ export class RateAlertsService {
     private readonly notificationsService: NotificationsService,
     private readonly auditLogsService: AuditLogsService,
     private readonly currenciesService: CurrenciesService,
+    private readonly webhookService: WebhookService,
   ) {}
 
   async createAlert(
@@ -214,6 +216,12 @@ export class RateAlertsService {
         triggeredAt: now.toISOString(),
       },
     );
+
+    this.webhookService
+      .dispatch('rate_alert.triggered', alert, alert.userId)
+      .catch((err) =>
+        this.logger.error(`Webhook dispatch failed: ${err.message}`),
+      );
   }
 
   private async reactivateRecurringAlerts(): Promise<number> {

@@ -10,6 +10,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { Audit } from '../common/decorators/audit.decorator';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -55,6 +56,7 @@ export class SuperAdminController {
   }
 
   @Patch('admins/:id/role')
+  @Audit('admin.role_change')
   @ApiOperation({
     summary: 'Assign or revoke elevated admin roles for an existing user',
   })
@@ -71,6 +73,7 @@ export class SuperAdminController {
   }
 
   @Delete('admins/:id')
+  @Audit('admin.role_change')
   @ApiOperation({
     summary: 'Demote an ADMIN or SUPER_ADMIN account back to USER',
   })

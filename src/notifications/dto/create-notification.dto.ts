@@ -4,7 +4,6 @@ import {
   IsOptional,
   IsObject,
   IsUUID,
-  IsUrl,
 } from 'class-validator';
 import { NotificationType } from '../entities/notification.entity';
 
@@ -30,6 +29,6 @@ export class CreateNotificationDto {
   relatedId?: string;
 
   @IsOptional()
-  @IsUrl()
+  @IsString()
   actionUrl?: string;
 }

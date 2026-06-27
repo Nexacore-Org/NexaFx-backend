@@ -11,7 +11,7 @@ import {
 } from '../entities/data-request.entity';
 import { Transaction } from '../../transactions/entities/transaction.entity';
 import { Notification } from '../../notifications/entities/notification.entity';
-import { KycRecord } from '../../kyc/entities/kyc.entity';
+import { KYCApplication } from '../kyc/entities/kyc-application.entity';
 import { Beneficiary } from '../../beneficiaries/entities/beneficiary.entity';
 import { AuditLog } from '../../audit-logs/entities/audit-log.entity';
 import { NotificationType } from '../../notifications/entities/notification.entity';
@@ -31,8 +31,8 @@ export class AccountDeletionService {
     private readonly transactionRepository: Repository<Transaction>,
     @InjectRepository(Notification)
     private readonly notificationRepository: Repository<Notification>,
-    @InjectRepository(KycRecord)
-    private readonly kycRepository: Repository<KycRecord>,
+    @InjectRepository(KYCApplication)
+    private readonly kycRepository: Repository<KYCApplication>,
     @InjectRepository(Beneficiary)
     private readonly beneficiaryRepository: Repository<Beneficiary>,
     @InjectRepository(AuditLog)
@@ -130,14 +130,15 @@ export class AccountDeletionService {
         message: `Your account has been anonymized. Your data will be permanently deleted in ${this.HARD_DELETE_DAYS} days.`,
         metadata: { hardDeleteAt: hardDeleteAt.toISOString(), requestId },
       });
-    } catch (error) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       request.status = DataRequestStatus.FAILED;
       request.completedAt = new Date();
       await this.dataRequestRepository.save(request);
 
       this.logger.error(
         `Account deletion failed for user ${userId}, request ${requestId}:`,
-        error,
+        err,
       );
 
       try {
@@ -147,10 +148,14 @@ export class AccountDeletionService {
           title: 'Account Deletion Failed',
           message:
             'Your account deletion request failed. Please try again later.',
-          metadata: { requestId, error: error.message },
+          metadata: { requestId, error: err.message },
         });
-      } catch (notifyError) {
-        this.logger.error('Failed to send failure notification:', notifyError);
+      } catch (notifyError: unknown) {
+        const notifyErr =
+          notifyError instanceof Error
+            ? notifyError
+            : new Error(String(notifyError));
+        this.logger.error('Failed to send failure notification:', notifyErr);
       }
     }
   }
@@ -197,14 +202,14 @@ export class AccountDeletionService {
 
       // Anonymize KYC records
       await queryRunner.manager.update(
-        KycRecord,
+        KYCApplication,
         { userId },
         {
           fullName: 'DELETED',
           documentNumber: 'DELETED',
-          documentFrontUrl: null as any,
-          documentBackUrl: null as any,
-          selfieUrl: null as any,
+          documentFrontKey: null as any,
+          documentBackKey: null as any,
+          selfieKey: null as any,
           rejectionReason: 'Account deleted',
           status: 'rejected' as any,
         },
@@ -336,14 +341,14 @@ export class AccountDeletionService {
 
       // Anonymize KYC records
       await queryRunner.manager.update(
-        KycRecord,
+        KYCApplication,
         { userId },
         {
           fullName: 'DELETED',
           documentNumber: 'DELETED',
-          documentFrontUrl: null as any,
-          documentBackUrl: null as any,
-          selfieUrl: null as any,
+          documentFrontKey: null as any,
+          documentBackKey: null as any,
+          selfieKey: null as any,
           rejectionReason: 'Account deleted',
           status: 'rejected' as any,
         },
@@ -363,7 +368,7 @@ export class AccountDeletionService {
       await queryRunner.manager.delete(Notification, { userId });
 
       // Delete audit logs
-      await queryRunner.manager.delete(AuditLog, { userId });
+      await queryRunner.manager.delete(AuditLog, { actorId: userId });
 
       // Delete price alerts
       await queryRunner.manager.delete('rate_alerts', { userId });

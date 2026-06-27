@@ -8,7 +8,7 @@ import * as archiver from 'archiver';
 import { format } from 'date-fns';
 import { Transaction } from '../../transactions/entities/transaction.entity';
 import { Notification } from '../../notifications/entities/notification.entity';
-import { KycRecord } from '../../kyc/entities/kyc.entity';
+import { KYCApplication } from '../kyc/entities/kyc-application.entity';
 import { Beneficiary } from '../../beneficiaries/entities/beneficiary.entity';
 import { AuditLog } from '../../audit-logs/entities/audit-log.entity';
 import { Referral } from '../../referrals/entities/referral.entity';
@@ -24,7 +24,7 @@ interface ExportData {
   profile: any;
   transactions: any[];
   notifications: any[];
-  kycRecords: any[];
+  KYCApplications: any[];
   beneficiaries: any[];
   auditLogs: any[];
   referrals: any[];
@@ -43,8 +43,8 @@ export class DataExportService {
     private readonly transactionRepository: Repository<Transaction>,
     @InjectRepository(Notification)
     private readonly notificationRepository: Repository<Notification>,
-    @InjectRepository(KycRecord)
-    private readonly kycRepository: Repository<KycRecord>,
+    @InjectRepository(KYCApplication)
+    private readonly kycRepository: Repository<KYCApplication>,
     @InjectRepository(Beneficiary)
     private readonly beneficiaryRepository: Repository<Beneficiary>,
     @InjectRepository(AuditLog)
@@ -174,7 +174,7 @@ export class DataExportService {
     const [
       transactions,
       notifications,
-      kycRecords,
+      KYCApplications,
       beneficiaries,
       auditLogs,
       referrals,
@@ -183,7 +183,7 @@ export class DataExportService {
       this.notificationRepository.find({ where: { userId } }),
       this.kycRepository.find({ where: { userId } }),
       this.beneficiaryRepository.find({ where: { userId } }),
-      this.auditLogRepository.find({ where: { userId } }),
+      this.auditLogRepository.find({ where: { actorId: userId } }),
       this.referralRepository.find({
         where: [{ referrerId: userId }, { refereeId: userId }],
       }),
@@ -200,7 +200,7 @@ export class DataExportService {
       profile: safeProfile,
       transactions: transactions || [],
       notifications: notifications || [],
-      kycRecords: kycRecords || [],
+      KYCApplications: KYCApplications || [],
       beneficiaries: beneficiaries || [],
       auditLogs: auditLogs || [],
       referrals: referrals || [],
@@ -217,7 +217,10 @@ export class DataExportService {
     const zipFileName = `nexafx-export_${safeUserId}_${timestamp}.zip`;
     const zipFilePath = path.join(this.EXPORT_DIR, zipFileName);
     // Guard: ensure the resolved path stays inside EXPORT_DIR
-    if (!zipFilePath.startsWith(this.EXPORT_DIR + path.sep) && zipFilePath !== this.EXPORT_DIR) {
+    if (
+      !zipFilePath.startsWith(this.EXPORT_DIR + path.sep) &&
+      zipFilePath !== this.EXPORT_DIR
+    ) {
       throw new Error('Invalid export path detected');
     }
 
@@ -259,11 +262,11 @@ export class DataExportService {
         });
       }
 
-      if (data.kycRecords && data.kycRecords.length > 0) {
-        archive.append(this.convertToCSV(data.kycRecords), {
+      if (data.KYCApplications && data.KYCApplications.length > 0) {
+        archive.append(this.convertToCSV(data.KYCApplications), {
           name: 'kyc_records.csv',
         });
-        archive.append(JSON.stringify(data.kycRecords, null, 2), {
+        archive.append(JSON.stringify(data.KYCApplications, null, 2), {
           name: 'kyc_records.json',
         });
       }

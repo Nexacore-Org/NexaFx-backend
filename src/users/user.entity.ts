@@ -9,7 +9,7 @@ import {
 } from 'typeorm';
 import { Exclude } from 'class-transformer';
 import { Notification } from '../notifications/entities/notification.entity';
-import { KycRecord } from '../kyc/entities/kyc.entity';
+import { KYCApplication } from '../kyc/entities/kyc-application.entity';
 
 export enum UserRole {
   USER = 'USER',
@@ -25,10 +25,10 @@ export enum UserPlan {
 }
 
 export enum UserKycTier {
-  UNVERIFIED = 'UNVERIFIED',
+  NONE = 'NONE',
   BASIC = 'BASIC',
+  STANDARD = 'STANDARD',
   ENHANCED = 'ENHANCED',
-  FULL = 'FULL',
 }
 
 @Entity('users')
@@ -46,12 +46,16 @@ export class User {
   @Column({ type: 'varchar', length: 100, nullable: true })
   lastName: string | null;
 
-  @Column({ type: 'varchar', length: 255 })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   @Exclude({ toPlainOnly: true })
-  password: string;
+  password: string | null;
 
-  @OneToMany(() => KycRecord, (kyc) => kyc.user)
-  kycRecords: KycRecord[];
+  @Column({ type: 'varchar', length: 255, select: false })
+  @Exclude({ toPlainOnly: true })
+  passwordHash?: string;
+
+  @OneToMany(() => KYCApplication, (app) => app.user)
+  kycApplications: KYCApplication[];
 
   @Column({ type: 'varchar', length: 20, nullable: true, unique: true })
   @Index()
@@ -79,6 +83,10 @@ export class User {
   @Index()
   referralCode: string;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  @Index()
+  stripeCardholderId: string | null;
+
   @Column({ type: 'uuid', nullable: true })
   @Index()
   referredBy: string | null;
@@ -86,10 +94,16 @@ export class User {
   @Column({ type: 'boolean', default: false })
   isVerified: boolean;
 
+  @Column({ type: 'boolean', default: false })
+  isEmailVerified?: boolean;
+
+  @Column({ type: 'boolean', default: true })
+  isActive?: boolean;
+
   @Column({
     type: 'enum',
     enum: UserKycTier,
-    default: UserKycTier.UNVERIFIED,
+    default: UserKycTier.NONE,
   })
   kycTier: UserKycTier;
 

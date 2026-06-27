@@ -11,6 +11,7 @@ import {
   NotificationType,
 } from './entities/notification.entity';
 import { CreateNotificationDto } from './dto/create-notification.dto';
+import { resolveDeepLink } from './deep-links.registry';
 import { UpdateNotificationDto } from './dto/update-notification.dto';
 import {
   NotificationResponseDto,
@@ -49,11 +50,20 @@ export class NotificationsService {
         return null;
       }
 
+      const deepLink =
+        createNotificationDto.actionUrl ??
+        resolveDeepLink(createNotificationDto.type, {
+          notificationId: '',
+          resourceId: createNotificationDto.relatedId,
+        });
+
+      const dtoWithDeepLink = { ...createNotificationDto, actionUrl: deepLink };
+
       const notification = this.notificationsRepository.create(
         preference.digestMode === NotificationDigestMode.IMMEDIATE
-          ? createNotificationDto
+          ? dtoWithDeepLink
           : {
-              ...createNotificationDto,
+              ...dtoWithDeepLink,
               metadata: {
                 ...(createNotificationDto.metadata ?? {}),
                 digestMode: preference.digestMode,

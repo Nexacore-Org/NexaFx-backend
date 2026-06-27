@@ -31,6 +31,7 @@ import { WalletsService } from '../../wallets/wallets.service';
 import { EncryptionService } from '../../common/services/encryption.service';
 import { LedgerService } from '../../ledger/services/ledger.service';
 import { TransactionLimitService } from './transaction-limit.service';
+import { RedisService } from '../../common/services/redis.service';
 
 describe('TransactionsService fee integration behavior', () => {
   let service: TransactionsService;
@@ -64,6 +65,10 @@ describe('TransactionsService fee integration behavior', () => {
     createTransaction: jest.fn(async () => ({})),
     signTransaction: jest.fn(async () => ({})),
     submitTransaction: jest.fn(async () => ({ hash: 'stellar-hash' })),
+    sendPayment: jest.fn(async () => ({ hash: 'stellar-hash' })),
+    getWalletBalances: jest.fn(async () => [{ asset: 'XLM', balance: '100' }]),
+    getAssetWithDefaultIssuer: jest.fn((code: string) => ({ code })),
+    getAsset: jest.fn((code: string) => ({ code })),
     findBestPath: jest.fn(async () => [
       {
         source_amount: '100',
@@ -154,6 +159,10 @@ describe('TransactionsService fee integration behavior', () => {
     createQueryRunner: jest.fn(() => queryRunner),
   };
 
+  const mockRedisService = {
+    del: jest.fn(),
+  }
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -182,6 +191,7 @@ describe('TransactionsService fee integration behavior', () => {
         { provide: EncryptionService, useValue: encryptionService },
         { provide: LedgerService, useValue: ledgerService },
         { provide: TransactionLimitService, useValue: transactionLimitService },
+        { provide: RedisService, useValue: mockRedisService },
       ],
     }).compile();
 

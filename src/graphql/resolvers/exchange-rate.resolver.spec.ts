@@ -59,12 +59,16 @@ describe('ExchangeRateResolver', () => {
 
   describe('exchangeRate', () => {
     it('returns rate with timestamp for a valid currency pair', async () => {
-      const fetchedAt = '2024-01-01T00:00:00.000Z';
+      const cachedAt = '2024-01-01T00:00:00.000Z';
+      const expiresAt = '2024-01-01T00:01:00.000Z';
       exchangeRatesService.getRate.mockResolvedValue({
         from: 'XLM',
         to: 'USD',
         rate: 0.1234,
-        fetchedAt,
+        inverseRate: 8.1,
+        provider: 'coingecko',
+        cachedAt,
+        expiresAt,
       });
 
       const result = await resolver.exchangeRate('XLM', 'USD');
@@ -74,15 +78,18 @@ describe('ExchangeRateResolver', () => {
         from: 'XLM',
         to: 'USD',
         rate: 0.1234,
-        timestamp: fetchedAt,
+        timestamp: cachedAt,
       });
     });
 
-    it('falls back to current time when fetchedAt is absent', async () => {
+    it('falls back to current time when cachedAt is absent', async () => {
       exchangeRatesService.getRate.mockResolvedValue({
         from: 'XLM',
         to: 'USD',
         rate: 0.09,
+        inverseRate: 11.1,
+        provider: 'coingecko',
+        expiresAt: new Date(Date.now() + 60000).toISOString(),
       });
 
       const result = await resolver.exchangeRate('XLM', 'USD');

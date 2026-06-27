@@ -5,15 +5,30 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan, MoreThan, Not } from 'typeorm';
+import { Repository, LessThan } from 'typeorm';
 import { Proposal, ProposalStatus } from '../entities/proposal.entity';
 import { Vote, VoteChoice } from '../entities/vote.entity';
 import { User, UserRole } from '../../users/user.entity';
 import { CreateProposalDto } from '../dto/create-proposal.dto';
 import { CastVoteDto } from '../dto/cast-vote.dto';
 import { DaoService } from '../dao.service';
+
+export interface VoteResults {
+  yesWeight: number;
+  noWeight: number;
+  abstainWeight: number;
+  totalWeight: number;
+  yesPercent: number;
+  noPercent: number;
+  abstainPercent: number;
+  quorumReached: boolean;
+  passing: boolean;
+  totalVotes: number;
+  totalEligibleVoters: number;
+}
 
 @Injectable()
 export class ProposalService {
@@ -39,11 +54,17 @@ export class ProposalService {
       throw new ForbiddenException('Only ADMIN can create proposals');
     }
 
+    const votingStartAt = new Date(createProposalDto.votingStartAt);
     const votingEndAt = new Date(createProposalDto.votingEndAt);
     const now = new Date();
 
-    if (votingEndAt <= now) {
-      throw new BadRequestException('votingEndAt must be in the future');
+    if (votingStartAt < now) {
+      throw new BadRequestException(
+        'votingStartAt must be now or in the future',
+      );
+    }
+    if (votingEndAt <= votingStartAt) {
+      throw new BadRequestException('votingEndAt must be after votingStartAt');
     }
 
     const proposal = this.proposalRepo.create({
@@ -51,10 +72,11 @@ export class ProposalService {
       description: createProposalDto.description,
       proposerId: userId,
       status: ProposalStatus.ACTIVE,
-      votingStartAt: now,
+      votingStartAt,
       votingEndAt,
       quorumPercent: createProposalDto.quorumPercent,
       passThresholdPercent: createProposalDto.passThresholdPercent,
+      stellarContractId: createProposalDto.stellarContractId ?? null,
     });
 
     return this.proposalRepo.save(proposal);
@@ -71,6 +93,13 @@ export class ProposalService {
     });
     if (!proposal) {
       throw new NotFoundException('Proposal not found');
+    }
+
+    // CANCELLED proposals cannot receive votes → 422
+    if (proposal.status === ProposalStatus.CANCELLED) {
+      throw new UnprocessableEntityException(
+        'Cannot vote on a cancelled proposal',
+      );
     }
 
     if (proposal.status !== ProposalStatus.ACTIVE) {
@@ -91,9 +120,7 @@ export class ProposalService {
       throw new ConflictException('Voter has already voted on this proposal');
     }
 
-    // Get voter's XLM balance at votingStartAt (snapshot)
-    // For now, use current balance from user.balances.XLM
-    // In a real system, we would query historical balance data from outside API or our ledger
+    // Get voter's XLM balance snapshot (from latest sync)
     const xlmBalance = voter.balances?.XLM || 0;
 
     if (!xlmBalance || xlmBalance === 0) {
@@ -110,6 +137,25 @@ export class ProposalService {
     return this.voteRepo.save(vote);
   }
 
+  async getProposalDetail(proposalId: string) {
+    const proposal = await this.proposalRepo.findOne({
+      where: { id: proposalId },
+      relations: ['votes'],
+    });
+
+    if (!proposal) {
+      throw new NotFoundException('Proposal not found');
+    }
+
+    const eligibleUsers = await this.countEligibleVoters();
+    const results = this.calculateResults(proposal, eligibleUsers);
+
+    return {
+      proposal: this.serializeProposal(proposal),
+      currentVotes: results,
+    };
+  }
+
   async getProposalResults(proposalId: string) {
     const proposal = await this.proposalRepo.findOne({
       where: { id: proposalId },
@@ -120,37 +166,56 @@ export class ProposalService {
       throw new NotFoundException('Proposal not found');
     }
 
-    // Calculate vote totals
-    const votes = proposal.votes || [];
+    // Use finalized totals if available, otherwise compute live
+    if (
+      proposal.status === ProposalStatus.PASSED ||
+      proposal.status === ProposalStatus.FAILED
+    ) {
+      const totalWeight = parseFloat(
+        (proposal.totalVotingWeight ?? 0).toString(),
+      );
+      const yesWeight = parseFloat((proposal.finalYesWeight ?? 0).toString());
+      const noWeight = parseFloat((proposal.finalNoWeight ?? 0).toString());
+      const abstainWeight = parseFloat(
+        (proposal.finalAbstainWeight ?? 0).toString(),
+      );
 
-    const yesWeight = votes
-      .filter((v) => v.choice === VoteChoice.YES)
-      .reduce((sum, v) => sum + parseFloat(v.weight.toString()), 0);
+      return {
+        proposal: {
+          id: proposal.id,
+          title: proposal.title,
+          status: proposal.status,
+          votingStartAt: proposal.votingStartAt,
+          votingEndAt: proposal.votingEndAt,
+          quorumPercent: proposal.quorumPercent,
+          passThresholdPercent: proposal.passThresholdPercent,
+        },
+        results: {
+          yesPercent: parseFloat(
+            (totalWeight > 0 ? (yesWeight / totalWeight) * 100 : 0).toFixed(2),
+          ),
+          noPercent: parseFloat(
+            (totalWeight > 0 ? (noWeight / totalWeight) * 100 : 0).toFixed(2),
+          ),
+          abstainPercent: parseFloat(
+            (totalWeight > 0 ? (abstainWeight / totalWeight) * 100 : 0).toFixed(
+              2,
+            ),
+          ),
+          totalWeight: parseFloat(totalWeight.toFixed(8)),
+          yesWeight: parseFloat(yesWeight.toFixed(8)),
+          noWeight: parseFloat(noWeight.toFixed(8)),
+          abstainWeight: parseFloat(abstainWeight.toFixed(8)),
+          quorumReached: proposal.status === ProposalStatus.PASSED,
+          passing: proposal.status === ProposalStatus.PASSED,
+          totalVotes: proposal.votes?.length ?? 0,
+        },
+      };
+    }
 
-    const noWeight = votes
-      .filter((v) => v.choice === VoteChoice.NO)
-      .reduce((sum, v) => sum + parseFloat(v.weight.toString()), 0);
-
-    const abstainWeight = votes
-      .filter((v) => v.choice === VoteChoice.ABSTAIN)
-      .reduce((sum, v) => sum + parseFloat(v.weight.toString()), 0);
-
-    const totalWeight = yesWeight + noWeight + abstainWeight;
-
-    // Calculate percentages
-    const yesPercent = totalWeight > 0 ? (yesWeight / totalWeight) * 100 : 0;
-    const noPercent = totalWeight > 0 ? (noWeight / totalWeight) * 100 : 0;
-    const abstainPercent =
-      totalWeight > 0 ? (abstainWeight / totalWeight) * 100 : 0;
-
-    // Check if quorum is reached
-    // Quorum is calculated as a percentage of total eligible voters, but since we don't track total eligibility,
-    // we calculate based on total participation relative to a baseline
-    // For simplicity, we'll check if enough votes were cast. In a prod system, we'd need total token holders count.
-    const quorumReached = totalWeight > 0; // Placeholder: quorum reached if there are votes
-
-    // Check if passing (majority)
-    const passing = yesPercent > proposal.passThresholdPercent;
+    // Live calculation for ACTIVE proposals
+    const eligibleUsers = await this.countEligibleVoters();
+    const results = this.calculateResults(proposal, eligibleUsers);
 
     return {
       proposal: {
@@ -163,16 +228,16 @@ export class ProposalService {
         passThresholdPercent: proposal.passThresholdPercent,
       },
       results: {
-        yesPercent: parseFloat(yesPercent.toFixed(2)),
-        noPercent: parseFloat(noPercent.toFixed(2)),
-        abstainPercent: parseFloat(abstainPercent.toFixed(2)),
-        totalWeight: parseFloat(totalWeight.toFixed(8)),
-        yesWeight: parseFloat(yesWeight.toFixed(8)),
-        noWeight: parseFloat(noWeight.toFixed(8)),
-        abstainWeight: parseFloat(abstainWeight.toFixed(8)),
-        quorumReached,
-        passing,
-        totalVotes: votes.length,
+        yesPercent: results.yesPercent,
+        noPercent: results.noPercent,
+        abstainPercent: results.abstainPercent,
+        totalWeight: results.totalWeight,
+        yesWeight: results.yesWeight,
+        noWeight: results.noWeight,
+        abstainWeight: results.abstainWeight,
+        quorumReached: results.quorumReached,
+        passing: results.passing,
+        totalVotes: results.totalVotes,
       },
     };
   }
@@ -191,7 +256,7 @@ export class ProposalService {
     });
 
     return {
-      data,
+      data: data.map((p) => this.serializeProposal(p)),
       pagination: {
         page,
         limit,
@@ -199,6 +264,23 @@ export class ProposalService {
         pages: Math.ceil(total / limit),
       },
     };
+  }
+
+  async cancelProposal(proposalId: string): Promise<Proposal> {
+    const proposal = await this.proposalRepo.findOne({
+      where: { id: proposalId },
+    });
+
+    if (!proposal) {
+      throw new NotFoundException('Proposal not found');
+    }
+
+    if (proposal.status !== ProposalStatus.ACTIVE) {
+      throw new BadRequestException('Only ACTIVE proposals can be cancelled');
+    }
+
+    proposal.status = ProposalStatus.CANCELLED;
+    return this.proposalRepo.save(proposal);
   }
 
   async finalizeExpiredProposals(): Promise<void> {
@@ -232,9 +314,66 @@ export class ProposalService {
   }
 
   private async finalizeProposal(proposal: Proposal): Promise<void> {
+    const eligibleUsers = await this.countEligibleVoters();
+    const results = this.calculateResults(proposal, eligibleUsers);
+
+    // Update proposal with finalized counts
+    proposal.status = results.passing
+      ? ProposalStatus.PASSED
+      : ProposalStatus.FAILED;
+    proposal.finalYesWeight = results.yesWeight;
+    proposal.finalNoWeight = results.noWeight;
+    proposal.finalAbstainWeight = results.abstainWeight;
+    proposal.totalVotingWeight = results.totalWeight;
+
+    // If PASSED and has stellarContractId, invoke on-chain contract
+    if (results.passing && proposal.stellarContractId) {
+      try {
+        const result = await this.daoService.invokeContract(
+          proposal.stellarContractId,
+          'finalize_proposal',
+          [
+            proposal.id,
+            results.yesWeight,
+            results.noWeight,
+            results.abstainWeight,
+          ],
+        );
+        proposal.onChainTxHash = result.txHash;
+        this.logger.log(
+          `Proposal ${proposal.id} submitted on-chain via ${proposal.stellarContractId}: ${result.txHash}`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Failed to submit proposal ${proposal.id} on-chain:`,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+
+    await this.proposalRepo.save(proposal);
+  }
+
+  /**
+   * Count eligible voters: users with XLM balance > 0
+   */
+  private async countEligibleVoters(): Promise<User[]> {
+    const users = await this.userRepo.find({
+      select: ['id', 'balances'],
+    });
+
+    return users.filter((u) => {
+      const xlmBalance = u.balances?.XLM;
+      return typeof xlmBalance === 'number' && xlmBalance > 0;
+    });
+  }
+
+  private calculateResults(
+    proposal: Proposal,
+    eligibleUsers: User[],
+  ): VoteResults {
     const votes = proposal.votes || [];
 
-    // Calculate vote totals
     const yesWeight = votes
       .filter((v) => v.choice === VoteChoice.YES)
       .reduce((sum, v) => sum + parseFloat(v.weight.toString()), 0);
@@ -249,45 +388,64 @@ export class ProposalService {
 
     const totalWeight = yesWeight + noWeight + abstainWeight;
 
-    // Calculate percentages and quorum
-    const yesPercent = totalWeight > 0 ? (yesWeight / totalWeight) * 100 : 0;
-    const quorumReached = totalWeight > 0; // Quorum check logic
+    const yesPercent =
+      totalWeight > 0
+        ? parseFloat(((yesWeight / totalWeight) * 100).toFixed(2))
+        : 0;
+    const noPercent =
+      totalWeight > 0
+        ? parseFloat(((noWeight / totalWeight) * 100).toFixed(2))
+        : 0;
+    const abstainPercent =
+      totalWeight > 0
+        ? parseFloat(((abstainWeight / totalWeight) * 100).toFixed(2))
+        : 0;
 
-    // Determine proposal outcome
-    let status = ProposalStatus.FAILED;
-    if (quorumReached && yesPercent > proposal.passThresholdPercent) {
-      status = ProposalStatus.PASSED;
-    }
+    // Quorum: (unique voters who cast a ballot / total eligible voters) >= quorumPercent
+    const uniqueVoters = new Set(votes.map((v) => v.voterId)).size;
+    const totalEligible = eligibleUsers.length;
+    const quorumReached =
+      totalEligible > 0
+        ? (uniqueVoters / totalEligible) * 100 >= proposal.quorumPercent
+        : totalWeight > 0;
 
-    // Update proposal with finalized counts
-    proposal.status = status;
-    proposal.finalYesWeight = yesWeight;
-    proposal.finalNoWeight = noWeight;
-    proposal.finalAbstainWeight = abstainWeight;
-    proposal.totalVotingWeight = totalWeight;
+    // Passing: quorum met AND yesPercent > passThresholdPercent
+    const passing = quorumReached && yesPercent > proposal.passThresholdPercent;
 
-    // If PASSED, submit to on-chain contract
-    if (status === ProposalStatus.PASSED) {
-      try {
-        const result = await this.daoService.invokeContract(
-          '', // Uses default contract from config
-          'finalize_proposal',
-          [proposal.id, yesWeight, noWeight, abstainWeight],
-        );
-        proposal.onChainTxHash = result.txHash;
-        this.logger.log(
-          `Proposal ${proposal.id} submitted on-chain: ${result.txHash}`,
-        );
-      } catch (error) {
-        this.logger.error(
-          `Failed to submit proposal ${proposal.id} on-chain:`,
-          error instanceof Error ? error.message : String(error),
-        );
-        // Still mark as PASSED even if on-chain submission fails
-        // The system can retry later
-      }
-    }
+    return {
+      yesWeight: parseFloat(yesWeight.toFixed(8)),
+      noWeight: parseFloat(noWeight.toFixed(8)),
+      abstainWeight: parseFloat(abstainWeight.toFixed(8)),
+      totalWeight: parseFloat(totalWeight.toFixed(8)),
+      yesPercent,
+      noPercent,
+      abstainPercent,
+      quorumReached,
+      passing,
+      totalVotes: votes.length,
+      totalEligibleVoters: totalEligible,
+    };
+  }
 
-    await this.proposalRepo.save(proposal);
+  private serializeProposal(proposal: Proposal) {
+    return {
+      id: proposal.id,
+      title: proposal.title,
+      description: proposal.description,
+      proposerId: proposal.proposerId,
+      status: proposal.status,
+      votingStartAt: proposal.votingStartAt,
+      votingEndAt: proposal.votingEndAt,
+      quorumPercent: proposal.quorumPercent,
+      passThresholdPercent: proposal.passThresholdPercent,
+      stellarContractId: proposal.stellarContractId,
+      onChainTxHash: proposal.onChainTxHash,
+      finalYesWeight: proposal.finalYesWeight,
+      finalNoWeight: proposal.finalNoWeight,
+      finalAbstainWeight: proposal.finalAbstainWeight,
+      totalVotingWeight: proposal.totalVotingWeight,
+      createdAt: proposal.createdAt,
+      updatedAt: proposal.updatedAt,
+    };
   }
 }

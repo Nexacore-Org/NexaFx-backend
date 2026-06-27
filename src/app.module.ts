@@ -11,6 +11,7 @@ import { CurrenciesModule } from './currencies/currencies.module';
 import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
 import { CommonModule } from './common/common.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { RolesGuard } from './common/guards/roles.guard';
 import { PlanThrottlerGuard } from './common/guards/plan-throttler.guard';
 import { ImpersonationRestrictionGuard } from './common/guards/impersonation-restriction.guard';
 import { HealthModule } from './health/health.module';
@@ -39,6 +40,7 @@ import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
 import { DisputesModule } from './disputes/disputes.module';
 import { VaultsModule } from './vaults/vaults.module';
+import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-anchor.module';
 
 @Module({
   imports: [
@@ -69,7 +71,8 @@ import { VaultsModule } from './vaults/vaults.module';
         {
           ttl: (configService.get<number>('THROTTLE_TTL') ?? 60) * 1000,
           limit: configService.get<number>('THROTTLE_LIMIT') ?? 100,
-        },
+        },    StellarSep24AnchorModule,
+
       ],
       inject: [ConfigService],
     }),
@@ -126,10 +129,14 @@ import { VaultsModule } from './vaults/vaults.module';
     },
     {
       provide: APP_GUARD,
-      useClass: ImpersonationRestrictionGuard,
+      useClass: RolesGuard,
     },
     {
       provide: APP_GUARD,
+      useClass: PlanThrottlerGuard,
+    },
+  ],
+  providers: [],
       useClass: PlanThrottlerGuard,
     },
   ],

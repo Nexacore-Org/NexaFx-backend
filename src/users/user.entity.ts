@@ -119,6 +119,9 @@ export class User {
   @Column({ type: 'boolean', default: false })
   isDeleted: boolean;
 
+  @Column({ type: 'boolean', default: true })
+  isActive: boolean;
+
   @Column({ type: 'timestamp with time zone', nullable: true })
   lockedUntil: Date | null;
 

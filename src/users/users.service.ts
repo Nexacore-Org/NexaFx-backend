@@ -15,6 +15,7 @@ import {
   WalletPortfolioResponseDto,
   PortfolioHoldingDto,
 } from './dto';
+import { UserQueryDto } from '../admin/dto/user-query.dto';
 import { StellarService } from '../blockchain/stellar/stellar.service';
 import { WalletBalanceResult } from '../blockchain/stellar/stellar.types';
 import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
@@ -399,6 +400,75 @@ export class UsersService {
     }
 
     await this.userRepository.update(userId, { isDeleted: true });
+  }
+
+  async softDelete(userId: string): Promise<void> {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    await this.userRepository.update(userId, { isActive: false });
+  }
+
+  async findAdminUsers(query: UserQueryDto) {
+    const page = query.page && query.page >= 1 ? query.page : 1;
+    let limit = query.limit && query.limit >= 1 ? query.limit : 10;
+    if (limit > 100) {
+      limit = 100;
+    }
+    const search = query.search;
+    const role = query.role;
+    const isActive = query.isActive;
+
+    const skip = (page - 1) * limit;
+    const queryBuilder = this.userRepository.createQueryBuilder('user');
+
+    if (search) {
+      queryBuilder.andWhere(
+        '(user.email ILIKE :search OR user.firstName ILIKE :search OR user.lastName ILIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    if (role) {
+      queryBuilder.andWhere('user.role = :role', { role });
+    }
+
+    if (isActive !== undefined) {
+      queryBuilder.andWhere('user.isActive = :isActive', { isActive });
+    }
+
+    queryBuilder.skip(skip).take(limit).orderBy('user.createdAt', 'DESC');
+
+    const [users, total] = await queryBuilder.getManyAndCount();
+
+    return {
+      data: users.map((user) => this.excludeSecrets(user)),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async updateUserStatus(userId: string, isActive: boolean): Promise<User> {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    await this.userRepository.update(userId, { isActive });
+    const updated = await this.findById(userId);
+    return updated!;
+  }
+
+  async updateUserRole(userId: string, role: UserRole): Promise<User> {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    await this.userRepository.update(userId, { role });
+    const updated = await this.findById(userId);
+    return updated!;
   }
 
   private async mapWalletBalance(balance: WalletBalanceResult): Promise<{

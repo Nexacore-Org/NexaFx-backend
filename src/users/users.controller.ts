@@ -298,6 +298,61 @@ export class UsersController {
   ): Promise<Record<string, unknown>> {
     return this.transactionLimitService.getUserLimitStatus(req.user.userId);
   }
+
+  @Get('me')
+  @ApiOperation({ summary: "Get authenticated user's profile" })
+  @ApiResponse({
+    status: 200,
+    description: 'User profile retrieved successfully',
+    type: ProfileResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Invalid or missing JWT token',
+  })
+  async getMe(
+    @Request() req: { user: { userId: string } },
+  ): Promise<ProfileResponseDto> {
+    return this.usersService.getProfile(req.user.userId);
+  }
+
+  @Patch('me')
+  @ApiOperation({ summary: 'Update authenticated user profile' })
+  @ApiBody({ type: UpdateProfileDto })
+  @ApiResponse({
+    status: 200,
+    description: 'User profile updated successfully',
+    type: ProfileResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Invalid request body' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Invalid or missing JWT token',
+  })
+  async updateMe(
+    @Request() req: { user: { userId: string } },
+    @Body() updateProfileDto: UpdateProfileDto,
+  ): Promise<ProfileResponseDto> {
+    return this.usersService.updateProfile(req.user.userId, updateProfileDto);
+  }
+
+  @Delete('me')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Soft delete current user account' })
+  @ApiResponse({
+    status: 200,
+    description: 'User account soft deleted successfully',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Invalid or missing JWT token',
+  })
+  async deleteMe(
+    @Request() req: { user: { userId: string } },
+  ): Promise<{ message: string }> {
+    await this.usersService.softDelete(req.user.userId);
+    return { message: 'User account has been deactivated' };
+  }
 }
 
 @ApiTags('Users V2')

@@ -67,13 +67,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Account has been deleted');
     }
 
-    // For impersonation tokens: verify the Redis session still exists
-    if (payload.isImpersonation && payload.jti) {
-      const redisKey = `nexafx:impersonation:${payload.sub}:${payload.jti}`;
-      const session = await this.redisService.get<{ adminId: string }>(redisKey);
-      if (!session) {
-        throw new UnauthorizedException('Impersonation session has expired or been revoked');
-      }
+    if (!user.isActive) {
+      throw new UnauthorizedException('User account is deactivated');
     }
 
     return {

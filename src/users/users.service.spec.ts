@@ -34,6 +34,7 @@ describe('UsersService', () => {
     role: UserRole.USER,
     plan: UserPlan.FREE,
     isDeleted: false,
+    isActive: true,
     fcmTokens: [],
     failedLoginAttempts: 0,
     lockedUntil: null,

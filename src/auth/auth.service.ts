@@ -71,7 +71,7 @@ export class AuthService {
     const genericMessage =
       'If an account exists with this email, an OTP has been sent.';
 
-    if (!user || !user.isVerified) {
+    if (!user || !user.isVerified || !user.isActive) {
       await this.simulateProcessingDelay();
 
       // Log failed login attempt
@@ -198,7 +198,7 @@ export class AuthService {
     userAgent?: string,
   ): Promise<any> {
     const user = await this.usersService.findByEmail(verifyDto.email);
-    if (!user || !user.isVerified) {
+    if (!user || !user.isVerified || !user.isActive) {
       // Log failed OTP verification
       await this.auditLogsService.logAuthEvent(
         undefined,
@@ -411,7 +411,7 @@ export class AuthService {
       await this.refreshTokensService.validateRefreshToken(refreshToken);
     const user = await this.usersService.findById(tokenEntity.userId);
 
-    if (!user || !user.isVerified) {
+    if (!user || !user.isVerified || !user.isActive) {
       throw new UnauthorizedException('Invalid refresh token');
     }
 

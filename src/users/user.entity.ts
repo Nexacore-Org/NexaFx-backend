@@ -83,6 +83,10 @@ export class User {
   @Index()
   referralCode: string;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  @Index()
+  stripeCardholderId: string | null;
+
   @Column({ type: 'uuid', nullable: true })
   @Index()
   referredBy: string | null;
@@ -115,6 +119,9 @@ export class User {
   @Column({ type: 'boolean', default: false })
   isDeleted: boolean;
 
+  @Column({ type: 'boolean', default: true })
+  isActive: boolean;
+
   @Column({ type: 'timestamp with time zone', nullable: true })
   lockedUntil: Date | null;
 
@@ -131,6 +138,9 @@ export class User {
     default: UserPlan.FREE,
   })
   plan: UserPlan;
+
+  @Column({ type: 'varchar', length: 10, default: 'en' })
+  preferredLanguage: string;
 
   @Column({ type: 'timestamp with time zone', nullable: true })
   balanceLastSyncedAt: Date | null;

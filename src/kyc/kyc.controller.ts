@@ -176,6 +176,53 @@ export class KycController {
     return this.kycService.approveKyc(id, user.userId);
   }
 
+  @Post('resubmit')
+  @ApiOperation({ summary: 'Resubmit KYC verification' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ type: ResubmitKycDto })
+  @UseInterceptors(
+    FileFieldsInterceptor([
+      { name: 'documentFront', maxCount: 1 },
+      { name: 'documentBack', maxCount: 1 },
+      { name: 'selfie', maxCount: 1 },
+    ]),
+  )
+  @Audit('kyc.resubmission')
+  async resubmitKyc(
+    @CurrentUser() user: CurrentUserPayload,
+    @UploadedFiles(new FileValidationPipe())
+    files: {
+      documentFront?: Express.Multer.File[];
+      documentBack?: Express.Multer.File[];
+      selfie?: Express.Multer.File[];
+    },
+    @Body() dto: ResubmitKycDto,
+    req?: any,
+  ) {
+    if (!files?.documentFront?.length) {
+      throw new BadRequestException('documentFront file is required');
+    }
+    if (!files?.selfie?.length) {
+      throw new BadRequestException('selfie file is required');
+    }
+
+    const version = req?.kycUploadVersion || Date.now().toString();
+    const basePath = `uploads/kyc/${user.userId}/${version}`;
+
+    const documentFrontUrl = `${basePath}/${files.documentFront![0].filename}`;
+    const documentBackUrl = files.documentBack?.length
+      ? `${basePath}/${files.documentBack![0].filename}`
+      : undefined;
+    const selfieUrl = `${basePath}/${files.selfie![0].filename}`;
+
+    return this.kycService.resubmitKyc(user.userId, {
+      ...dto,
+      documentFrontUrl,
+      documentBackUrl,
+      selfieUrl,
+    });
+  }
+
   @Patch(':id/reject')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
@@ -204,7 +251,7 @@ export class KycController {
       id,
       user.userId,
       dto.reason,
-      dto.requireResubmission,
+      dto.requireResubmission ?? false,
     );
   }
 }

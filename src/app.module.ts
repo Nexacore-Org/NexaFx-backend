@@ -1,14 +1,17 @@
 import { Module } from '@nestjs/common';
+import { I18nModule, AcceptLanguageResolver } from 'nestjs-i18n';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { join } from 'path';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { CurrenciesModule } from './currencies/currencies.module';
 import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
 import { CommonModule } from './common/common.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { RolesGuard } from './common/guards/roles.guard';
 import { PlanThrottlerGuard } from './common/guards/plan-throttler.guard';
 import { HealthModule } from './health/health.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
@@ -38,6 +41,9 @@ import { TaxModule } from './tax/tax.module';
 import { OrganisationsModule } from './organisations/organisations.module';
 import { SanctionsModule } from './sanctions/sanctions.module';
 import { LoansModule } from './loans/loans.module';
+import { DisputesModule } from './disputes/disputes.module';
+import { VaultsModule } from './vaults/vaults.module';
+import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-anchor.module';
 
 @Module({
   imports: [
@@ -68,9 +74,22 @@ import { LoansModule } from './loans/loans.module';
         {
           ttl: (configService.get<number>('THROTTLE_TTL') ?? 60) * 1000,
           limit: configService.get<number>('THROTTLE_LIMIT') ?? 100,
-        },
+        },    StellarSep24AnchorModule,
+
       ],
       inject: [ConfigService],
+    }),
+    I18nModule.forRootAsync({
+      useFactory: () => ({
+        fallbackLanguage: 'en',
+        loaderOptions: {
+          path: join(__dirname, '/i18n/'),
+          watch: true,
+        },
+      }),
+      resolvers: [
+        AcceptLanguageResolver,
+      ],
     }),
     CommonModule,
     AuthModule,
@@ -105,6 +124,9 @@ import { LoansModule } from './loans/loans.module';
     OrganisationsModule,
     SanctionsModule,
     LoansModule,
+    DisputesModule,
+    CardsModule,
+    VaultsModule,
   ],
   controllers: [AppController],
   providers: [
@@ -114,6 +136,14 @@ import { LoansModule } from './loans/loans.module';
     },
     {
       provide: APP_GUARD,
+      useClass: RolesGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: PlanThrottlerGuard,
+    },
+  ],
+  providers: [],
       useClass: PlanThrottlerGuard,
     },
   ],

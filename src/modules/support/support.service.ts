@@ -287,8 +287,10 @@ export class SupportService {
       ticket.status = dto.status;
       if (dto.status === SupportTicketStatus.RESOLVED) {
         ticket.resolvedAt = new Date();
+        ticket.closedAt = null;
       } else if (dto.status === SupportTicketStatus.CLOSED) {
         ticket.closedAt = new Date();
+        ticket.resolvedAt = null;
       } else {
         ticket.resolvedAt = null;
         ticket.closedAt = null;

@@ -31,7 +31,7 @@ describe('KycController', () => {
 
   beforeEach(() => {
     submitSpy = jest.fn().mockResolvedValue({ message: 'ok', status: 'pending', tier: 0 });
-    resubmitSpy = jest.fn().mockResolvedValue({ message: 'ok', status: 'pending' });
+    resubmitSpy = jest.fn().mockResolvedValue({ message: 'ok', status: 'pending', tier: 0 });
     serviceMock = {
       submitKyc: submitSpy,
       resubmitKyc: resubmitSpy,

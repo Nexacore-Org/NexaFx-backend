@@ -43,6 +43,7 @@ export class KycService {
     private readonly dataSource: DataSource,
     private readonly firebaseService: FirebaseService,
     private readonly webhookService: WebhookService,
+    private readonly kycEmailService: KycEmailService,
     @Inject(STORAGE_SERVICE_TOKEN)
     private readonly storageService: StorageService,
     private readonly kycEmailService: KycEmailService,
@@ -59,8 +60,9 @@ export class KycService {
       selfie?: Express.Multer.File;
     },
   ) {
+    return this.dataSource.transaction(async (manager) => {
     // Check for active submission
-    const existingActiveKyc = await this.kycRepository.findOne({
+    const existingActiveKyc = await manager.findOne(KycRecord, {
       where: [
         { userId, status: KycStatus.PENDING },
         { userId, status: KycStatus.RESUBMISSION_REQUIRED },
@@ -342,7 +344,7 @@ export class KycService {
             type: 'KYC_APPROVED',
             deepLink: 'nexafx://kyc/status',
             actionType: 'KYC_APPROVED',
-            resourceId: kycRecord.id,
+            resourceId: kyc.id,
             resourceType: 'kyc',
             timestamp: new Date().toISOString(),
           },
@@ -450,6 +452,15 @@ export class KycService {
             notificationPayload.title!,
             notificationPayload.message!,
             { entity: 'KYC', kycStatus: newStatus.toLowerCase() },
+            {
+              notificationId: notificationPayload.id ?? '',
+              type: 'KYC_REJECTED',
+              deepLink: 'nexafx://kyc/status',
+              actionType: 'KYC_REJECTED',
+              resourceId: kyc.id,
+              resourceType: 'kyc',
+              timestamp: new Date().toISOString(),
+            },
           )
           .catch((err: Error) =>
             this.logger.error(`Failed to send KYC FCM: ${err.message}`),
@@ -480,32 +491,7 @@ export class KycService {
           `Failed to send KYC rejection email: ${err.message}`,
         ),
       );
-
-    // Send push notification via Firebase
-    if (user.fcmTokens && user.fcmTokens.length > 0) {
-      this.firebaseService
-        .sendToTokens(
-          user.fcmTokens,
-          notificationPayload.title!,
-          notificationPayload.message!,
-          { entity: 'KYC', kycStatus: decision.toLowerCase() },
-          {
-            notificationId: notificationPayload.id ?? '',
-            type: 'KYC_REJECTED',
-            deepLink: 'nexafx://kyc/status',
-            actionType: 'KYC_REJECTED',
-            resourceId: kyc.id,
-            resourceType: 'kyc',
-            timestamp: new Date().toISOString(),
-          },
-        )
-        .catch((err: Error) =>
-          this.logger.error(
-            `Failed to send KYC push notification: ${err.message}`,
-          ),
-        );
-    }
-
+      
       return {
         message:
           newStatus === KycStatus.RESUBMISSION_REQUIRED

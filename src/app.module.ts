@@ -31,11 +31,12 @@ import { SuperAdminModule } from './super-admin/super-admin.module';
 import { GatewaysModule } from './gateways/gateways.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { WalletsModule } from './wallets/wallets.module';
+import { CardsModule } from './cards/cards.module';
 import { EscrowModule } from './escrow/escrow.module';
+import { VaultsModule } from './modules/vaults/vaults.module';
 import { RateAlertsModule } from './rate-alerts/rate-alerts.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
-import { VaultsModule } from './vaults/vaults.module';
 
 @Module({
   imports: [
@@ -97,10 +98,10 @@ import { VaultsModule } from './vaults/vaults.module';
     GraphQLApiModule,
     WebhooksModule,
     WalletsModule,
-    LedgerModule,
-    UsersModule,
     CardsModule,
     VaultsModule,
+    LedgerModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [

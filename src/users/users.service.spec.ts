@@ -42,6 +42,7 @@ describe('UsersService', () => {
     password: process.env.TEST_USER_PASSWORD ?? 'hashed-password',
     kycRecords: [],
     notifications: [],
+    preferredLanguage: 'en',
   };
 
   beforeEach(async () => {

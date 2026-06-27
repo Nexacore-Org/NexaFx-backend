@@ -38,6 +38,7 @@ import { ReferralsService } from '../referrals/referrals.service';
 import { TwoFactorService } from '../two-factor/two-factor.service';
 import { WalletsService } from '../wallets/wallets.service';
 import { OAuthAccount, OAuthProvider } from './entities/oauth-account.entity';
+import { I18nService } from 'nestjs-i18n';
 
 @Injectable()
 export class AuthService {
@@ -54,6 +55,7 @@ export class AuthService {
     private readonly referralsService: ReferralsService,
     private readonly twoFactorService: TwoFactorService,
     private readonly walletsService: WalletsService,
+    private readonly i18nService: I18nService,
     @InjectRepository(PasswordResetAttempt)
     private readonly passwordResetAttemptRepository: Repository<PasswordResetAttempt>,
     @InjectRepository(OAuthAccount)
@@ -144,6 +146,50 @@ export class AuthService {
     });
 
     return { message: genericMessage };
+  }
+
+  async loginV2(
+    loginDto: LoginDto,
+    lang: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<{ message: string }> {
+    const user = await this.usersService.findByEmail(loginDto.email);
+
+    if (!user || !user.isVerified) {
+      await this.simulateProcessingDelay();
+      throw new UnauthorizedException(
+        this.i18nService.translate('auth.INVALID_CREDENTIALS', { lang })
+      );
+    }
+
+    if (!user.password) {
+      await this.simulateProcessingDelay();
+      throw new UnauthorizedException(
+        this.i18nService.translate('auth.INVALID_CREDENTIALS', { lang })
+      );
+    }
+
+    const isPasswordValid = await bcrypt.compare(
+      loginDto.password,
+      user.password,
+    );
+
+    if (!isPasswordValid) {
+      await this.simulateProcessingDelay();
+      throw new UnauthorizedException(
+        this.i18nService.translate('auth.INVALID_CREDENTIALS', { lang }),
+      );
+    }
+
+    const otp = await this.otpsService.generateOtp(user, OtpType.LOGIN);
+    await this.otpDeliveryService.sendOtp({
+      email: user.email,
+      type: OtpType.LOGIN,
+      otp,
+    });
+
+    return { message: this.i18nService.translate('auth.LOGIN_OTP_SENT', { lang }) };
   }
 
   async verifyLoginOtp(

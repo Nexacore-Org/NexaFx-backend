@@ -10,6 +10,7 @@ import {
   Request,
   UseInterceptors,
   UploadedFile,
+  Version,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -207,6 +208,34 @@ export class UsersController {
     @Body() updateProfileDto: UpdateProfileDto,
   ): Promise<ProfileResponseDto> {
     return this.usersService.updateProfile(req.user.userId, updateProfileDto);
+  }
+
+  @Version('2')
+  @Get('me')
+  @ApiOperation({ summary: 'Get current user profile (v2)' })
+  async getProfileV2(
+    @Request() req: { user: { userId: string } },
+  ) {
+    const profile = await this.usersService.getProfile(req.user.userId);
+    return {
+      ...profile,
+      isRtl: profile.preferredLanguage === 'ar',
+    };
+  }
+
+  @Version('2')
+  @Patch('me')
+  @ApiOperation({ summary: 'Update current user profile (v2)' })
+  @ApiBody({ type: UpdateProfileDto })
+  async updateProfileV2(
+    @Request() req: { user: { userId: string } },
+    @Body() updateProfileDto: UpdateProfileDto,
+  ) {
+    const profile = await this.usersService.updateProfile(req.user.userId, updateProfileDto);
+    return {
+      ...profile,
+      isRtl: profile.preferredLanguage === 'ar',
+    };
   }
 
   @Post('device-token')

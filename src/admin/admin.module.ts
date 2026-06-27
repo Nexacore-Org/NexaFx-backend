@@ -13,10 +13,11 @@ import { RateAlert } from '../rate-alerts/entities/rate-alert.entity';
 import { AuditLog } from '../audit-logs/entities/audit-log.entity';
 import { KycModule } from '../kyc/kyc.module';
 import { BackupManifestService } from './services/backup-manifest.service';
+import { MigrationSnapshot } from '../database/entities/migration-snapshot.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Transaction, DataRequest, KycRecord, RateAlert, AuditLog]),
+    TypeOrmModule.forFeature([User, Transaction, DataRequest, KycRecord, RateAlert, AuditLog, MigrationSnapshot]),
     AuditLogsModule,
     ReportsModule,
     TransactionLimitsModule,

@@ -385,4 +385,53 @@ export class AdminController {
     }
     return this.adminService.streamAuditLogsCsv(res, query);
   }
+
+  // ---------------------------------------------------------------------------
+  // Migration history
+  // ---------------------------------------------------------------------------
+
+  @Get('migrations')
+  @ApiOperation({
+    summary: 'Get migration history with snapshot metadata (Admin only)',
+    description:
+      'Returns every TypeORM migration that has been applied to the database, ' +
+      'together with the pre-migration pg_dump snapshots recorded via the ' +
+      'pre-migration workflow. Includes a summary of snapshot statuses.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Migration history and snapshot metadata',
+    schema: {
+      example: {
+        appliedMigrations: [
+          { id: 1, timestamp: '1760000000000', name: 'CreateNotificationPreferences1760000000000' },
+        ],
+        snapshots: [
+          {
+            id: 'uuid',
+            environment: 'staging',
+            snapshotKey: 'nexafx/pre-migration/staging/2026-06-27T00:00:00Z-3.dump',
+            migrationCount: 3,
+            status: 'APPLIED',
+            appliedAt: '2026-06-27T00:05:00Z',
+            rolledBackAt: null,
+            takenAt: '2026-06-27T00:00:00Z',
+          },
+        ],
+        summary: {
+          totalApplied: 3,
+          totalSnapshots: 1,
+          pendingSnapshots: 0,
+          appliedSnapshots: 1,
+          rolledBackSnapshots: 0,
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
+  async getMigrationHistory() {
+    return this.adminService.getMigrationHistory();
+  }
 }
+

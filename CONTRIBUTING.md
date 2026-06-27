@@ -157,6 +157,64 @@ Only serious, clear, and actionable requests will be considered.
 
 ---
 
+## 🔄 Database Migrations (v2 — Required)
+
+All database migrations on the **v2** branch **must** follow the transactional
+pattern. PRs that do not comply will be rejected during review.
+
+### Mandatory pattern
+
+Every migration `up()` and `down()` must be wrapped in an explicit transaction:
+
+```typescript
+public async up(queryRunner: QueryRunner): Promise<void> {
+  await queryRunner.startTransaction();
+  try {
+    await queryRunner.query(`...`);
+    await queryRunner.commitTransaction();
+  } catch (err) {
+    await queryRunner.rollbackTransaction();
+    throw err;
+  }
+}
+```
+
+Apply the same pattern to `down()`.
+
+> **Exception**: DDL that cannot run inside a transaction (e.g.
+> `CREATE INDEX CONCURRENTLY`) must be placed outside the transaction block
+> with a clear comment explaining why.
+
+### Generating a new migration
+
+```bash
+npm run typeorm:migration:generate -- -n YourMigrationName
+```
+
+Then wrap the generated `up()` and `down()` in the transactional pattern above.
+
+### Dry-run validation (required before merge)
+
+Every PR targeting `v2` automatically runs migration rollback validation via
+the `ci-v2.yml` workflow. You can run it locally before pushing:
+
+```bash
+# Docker must be running
+npm run migration:validate
+```
+
+This starts a temporary PostgreSQL container, runs all migrations up, then
+reverts every one of them. If any `down()` fails, the PR **cannot** merge.
+
+### Pre-migration snapshots (required for staging/production)
+
+Before applying migrations to any live environment, trigger the
+**Pre-Migration Workflow** on GitHub Actions and select the target environment.
+This takes a `pg_dump` snapshot and uploads it to S3 before running
+migrations. See [docs/migrations.md](docs/migrations.md) for full details.
+
+---
+
 ## 🙏 Thank You
 
 Thanks for contributing to **NexaFX** — your input makes the project better!

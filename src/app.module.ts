@@ -36,6 +36,7 @@ import { RateAlertsModule } from './rate-alerts/rate-alerts.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
 import { VaultsModule } from './vaults/vaults.module';
+import { ProgrammablePaymentRulesModule } from './programmable-payment-rules/programmable-payment-rules.module';
 
 @Module({
   imports: [
@@ -66,7 +67,8 @@ import { VaultsModule } from './vaults/vaults.module';
         {
           ttl: (configService.get<number>('THROTTLE_TTL') ?? 60) * 1000,
           limit: configService.get<number>('THROTTLE_LIMIT') ?? 100,
-        },
+        },    ProgrammablePaymentRulesModule,
+
       ],
       inject: [ConfigService],
     }),

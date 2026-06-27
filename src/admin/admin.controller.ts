@@ -23,7 +23,7 @@ import {
 } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { KycService } from '../kyc/kyc.service';
-import { KycStatus } from '../kyc/entities/kyc.entity';
+import { KycStatus } from '../kyc/entities/kyc-application.entity';
 import { RejectKycDto } from '../kyc/dtos/kyc-reject';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -297,6 +297,37 @@ export class AdminController {
     @Body() dto: PatchTransactionLimitDto,
   ) {
     return this.adminService.patchTransactionLimit(tier, dto);
+  }
+
+  @Get('kyc/queue')
+  @ApiOperation({ summary: 'Get KYC applications queue (Admin only)' })
+  async getKycQueue(
+    @Query('status') status?: KycStatus,
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 20,
+  ) {
+    return this.kycService.getKycQueue(status, page, limit);
+  }
+
+  @Patch('kyc/:id/approve')
+  @Audit('admin.kyc_approve')
+  @ApiOperation({ summary: 'Approve a KYC application (Admin only)' })
+  async approveKyc(
+    @Param('id') id: string,
+    @CurrentUser() admin: { userId: string },
+  ) {
+    return this.kycService.approveKyc(id, admin.userId);
+  }
+
+  @Patch('kyc/:id/reject')
+  @Audit('admin.kyc_reject')
+  @ApiOperation({ summary: 'Reject a KYC application (Admin only)' })
+  async rejectKyc(
+    @Param('id') id: string,
+    @Body() dto: { reason: string; requireResubmission?: boolean },
+    @CurrentUser() admin: { userId: string },
+  ) {
+    return this.kycService.rejectKyc(id, admin.userId, dto.reason, dto.requireResubmission);
   }
 
   // ── KYC File Serving (must be before kyc/:id to avoid route conflict) ──

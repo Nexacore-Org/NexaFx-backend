@@ -27,7 +27,7 @@ export class CreditScoringService {
     // +20: KYC tier = ENHANCED (or FULL, which is higher)
     if (
       user.kycTier === UserKycTier.ENHANCED ||
-      user.kycTier === UserKycTier.FULL
+      user.kycTier === UserKycTier.ENHANCED
     ) {
       score += 20;
     }

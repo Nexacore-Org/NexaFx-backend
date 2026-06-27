@@ -37,7 +37,7 @@ import { MetricsQueryDto } from './dto/metrics-query.dto';
 import * as csv from 'fast-csv';
 import { OverrideTransactionDto } from './dto/override-transaction.dto';
 import { Response } from 'express';
-import { KycRecord, KycStatus } from '../kyc/entities/kyc.entity';
+import { KYCApplication, KycStatus } from '../kyc/entities/kyc-application.entity';
 import { RateAlert } from '../rate-alerts/entities/rate-alert.entity';
 import { AuditLog } from '../audit-logs/entities/audit-log.entity';
 import { AdminAuditLogsQueryDto } from './dto/admin-audit-logs-query.dto';
@@ -67,8 +67,8 @@ export class AdminService {
     private readonly transactionRepository: Repository<Transaction>,
     @InjectRepository(DataRequest)
     private readonly dataRequestRepository: Repository<DataRequest>,
-    @InjectRepository(KycRecord)
-    private readonly kycRepository: Repository<KycRecord>,
+    @InjectRepository(KYCApplication)
+    private readonly kycRepository: Repository<KYCApplication>,
     @InjectRepository(RateAlert)
     private readonly rateAlertRepository: Repository<RateAlert>,
     @InjectRepository(AuditLog)
@@ -153,7 +153,7 @@ export class AdminService {
     const volumes = await this.calculateTransactionVolumes();
 
     // KYC Metrics (Placeholder for future implementation)
-    // Assuming KycRecord entity exists and has status 'PENDING'
+    // Assuming KYCApplication entity exists and has status 'PENDING'
     // const pendingKyc = await this.kycRepository.count({ where: { status: 'PENDING' } });
     const pendingKyc = 0; // Placeholder
 
@@ -389,7 +389,7 @@ export class AdminService {
   async getUserById(id: string) {
     const user = await this.userRepository.findOne({
       where: { id },
-      relations: ['kycRecords', 'transactions'], // Load related data if needed
+      relations: ['KYCApplications', 'transactions'], // Load related data if needed
     });
 
     if (!user) {

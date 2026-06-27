@@ -5,7 +5,7 @@ import Stripe from 'stripe';
 import { ConfigService } from '@nestjs/config';
 import { VirtualCard, CardStatus } from './entities/virtual-card.entity';
 import { User } from '../users/user.entity';
-import { KycRecord, KycStatus } from '../kyc/entities/kyc.entity';
+import { KYCApplication, KycStatus } from '../kyc/entities/kyc-application.entity';
 import { Transaction, TransactionType, TransactionStatus } from '../transactions/entities/transaction.entity';
 import { UsersService } from '../users/users.service';
 import { UpdateCardControlsDto } from './dto/update-card-controls.dto';
@@ -20,8 +20,8 @@ export class CardsService {
     private virtualCardRepository: Repository<VirtualCard>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
-    @InjectRepository(KycRecord)
-    private kycRecordRepository: Repository<KycRecord>,
+    @InjectRepository(KYCApplication)
+    private KYCApplicationRepository: Repository<KYCApplication>,
     @InjectRepository(Transaction)
     private transactionRepository: Repository<Transaction>,
     private configService: ConfigService,
@@ -33,10 +33,10 @@ export class CardsService {
   }
 
   private async checkUserKycApproved(userId: string): Promise<void> {
-    const kycRecord = await this.kycRecordRepository.findOne({
+    const KYCApplication = await this.KYCApplicationRepository.findOne({
       where: { userId, status: KycStatus.APPROVED },
     });
-    if (!kycRecord) {
+    if (!KYCApplication) {
       throw new ForbiddenException('KYC must be approved to create a card');
     }
   }
@@ -46,25 +46,25 @@ export class CardsService {
       return user.stripeCardholderId;
     }
 
-    const kycRecord = await this.kycRecordRepository.findOne({
+    const KYCApplication = await this.KYCApplicationRepository.findOne({
       where: { userId: user.id, status: KycStatus.APPROVED },
     });
-    if (!kycRecord) {
+    if (!KYCApplication) {
       throw new ForbiddenException('KYC must be approved to create a card');
     }
 
     const cardholder = await this.stripe.issuing.cardholders.create({
       type: 'individual',
-      name: kycRecord.fullName,
+      name: KYCApplication.fullName,
       email: user.email,
       phone_number: user.phone || undefined,
       individual: {
         first_name: user.firstName || '',
         last_name: user.lastName || '',
         dob: {
-          day: kycRecord.dateOfBirth.getDate(),
-          month: kycRecord.dateOfBirth.getMonth() + 1,
-          year: kycRecord.dateOfBirth.getFullYear(),
+          day: KYCApplication.dateOfBirth.getDate(),
+          month: KYCApplication.dateOfBirth.getMonth() + 1,
+          year: KYCApplication.dateOfBirth.getFullYear(),
         },
       },
       status: 'active',

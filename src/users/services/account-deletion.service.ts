@@ -11,7 +11,7 @@ import {
 } from '../entities/data-request.entity';
 import { Transaction } from '../../transactions/entities/transaction.entity';
 import { Notification } from '../../notifications/entities/notification.entity';
-import { KycRecord } from '../../kyc/entities/kyc.entity';
+import { KYCApplication } from '../kyc/entities/kyc-application.entity';
 import { Beneficiary } from '../../beneficiaries/entities/beneficiary.entity';
 import { AuditLog } from '../../audit-logs/entities/audit-log.entity';
 import { NotificationType } from '../../notifications/entities/notification.entity';
@@ -31,8 +31,8 @@ export class AccountDeletionService {
     private readonly transactionRepository: Repository<Transaction>,
     @InjectRepository(Notification)
     private readonly notificationRepository: Repository<Notification>,
-    @InjectRepository(KycRecord)
-    private readonly kycRepository: Repository<KycRecord>,
+    @InjectRepository(KYCApplication)
+    private readonly kycRepository: Repository<KYCApplication>,
     @InjectRepository(Beneficiary)
     private readonly beneficiaryRepository: Repository<Beneficiary>,
     @InjectRepository(AuditLog)
@@ -202,7 +202,7 @@ export class AccountDeletionService {
 
       // Anonymize KYC records
       await queryRunner.manager.update(
-        KycRecord,
+        KYCApplication,
         { userId },
         {
           fullName: 'DELETED',
@@ -341,7 +341,7 @@ export class AccountDeletionService {
 
       // Anonymize KYC records
       await queryRunner.manager.update(
-        KycRecord,
+        KYCApplication,
         { userId },
         {
           fullName: 'DELETED',

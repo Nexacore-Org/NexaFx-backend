@@ -3,7 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { MulterModule } from '@nestjs/platform-express';
 import { KycService } from './kyc.service';
 import { KycController } from './kyc.controller';
-import { KycRecord } from './entities/kyc.entity';
+import { KYCApplication } from './entities/kyc-application.entity';
 import { KycEmailService } from './kyc-email.service';
 import { KycGuard } from '../common/guards/kyc.guard';
 import { User } from '../users/user.entity';
@@ -77,7 +77,7 @@ function fileFilter(
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([KycRecord, User]),
+    TypeOrmModule.forFeature([KYCApplication, User]),
     WebhooksModule,
     MulterModule.register({
       storage: undefined, // defaults to memoryStorage
@@ -92,7 +92,7 @@ function fileFilter(
     KycService,
     KycEmailService,
     KycGuard,
-    TypeOrmModule.forFeature([KycRecord]),
+    TypeOrmModule.forFeature([KYCApplication]),
   ],
 })
 export class KycModule {}

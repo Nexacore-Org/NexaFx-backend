@@ -8,7 +8,7 @@ import { Reflector } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import type { Request } from 'express';
-import { KycRecord, KycStatus } from '../../kyc/entities/kyc.entity';
+import { KYCApplication, KycStatus } from '../../kyc/entities/kyc-application.entity';
 import type { CurrentUserPayload } from '../../auth/decorators/current-user.decorator';
 
 /**
@@ -23,8 +23,8 @@ export const KYC_BYPASS_KEY = 'kycBypass';
 export class KycGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    @InjectRepository(KycRecord)
-    private readonly kycRepository: Repository<KycRecord>,
+    @InjectRepository(KYCApplication)
+    private readonly kycRepository: Repository<KYCApplication>,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {

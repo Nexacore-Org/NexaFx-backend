@@ -58,7 +58,7 @@ export class LoansService {
 
     if (
       user.kycTier !== UserKycTier.ENHANCED &&
-      user.kycTier !== UserKycTier.FULL
+      user.kycTier !== UserKycTier.ENHANCED
     ) {
       throw new ForbiddenException(
         'ENHANCED KYC verification is required to apply for a loan',

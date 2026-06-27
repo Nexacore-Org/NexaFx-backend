@@ -11,7 +11,7 @@ import {
   ScreeningStatus,
   ScreeningProvider,
 } from './entities/kyc-screening.entity';
-import { KycRecord } from '../kyc/entities/kyc.entity';
+import { KYCApplication } from '../kyc/entities/kyc-application.entity';
 import { OpenSanctionsProvider } from './providers/open-sanctions.provider';
 import { OfacProvider } from './providers/ofac.provider';
 import { WatchlistMatch } from './interfaces/watchlist-provider.interface';
@@ -26,8 +26,8 @@ export class SanctionsService {
   constructor(
     @InjectRepository(KycScreening)
     private readonly screeningRepo: Repository<KycScreening>,
-    @InjectRepository(KycRecord)
-    private readonly kycRepo: Repository<KycRecord>,
+    @InjectRepository(KYCApplication)
+    private readonly kycRepo: Repository<KYCApplication>,
     private readonly openSanctions: OpenSanctionsProvider,
     private readonly ofac: OfacProvider,
   ) {}

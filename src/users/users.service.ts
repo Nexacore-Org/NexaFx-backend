@@ -81,7 +81,7 @@ export class UsersService {
     userId: string,
     updateData: Partial<User>,
   ): Promise<void> {
-    await this.userRepository.update(userId, updateData);
+    await this.update(userId, updateData);
   }
 
   async createUser(params: {
@@ -172,6 +172,7 @@ export class UsersService {
     await this.userRepository.update(userId, {
       isVerified: true,
       isEmailVerified: true,
+      kycTier: UserKycTier.BASIC,
     });
   }
 
@@ -188,6 +189,10 @@ export class UsersService {
     const user = await this.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
+    }
+
+    if (data.isEmailVerified && user.kycTier === UserKycTier.NONE) {
+      data.kycTier = UserKycTier.BASIC;
     }
 
     await this.userRepository.update(userId, data);

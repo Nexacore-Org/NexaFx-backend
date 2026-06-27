@@ -36,7 +36,7 @@ export class TransactionLimitService {
       singleTxLimitUsd: string;
     }> = [
       {
-        tier: UserKycTier.UNVERIFIED,
+        tier: UserKycTier.NONE,
         dailyLimitUsd: '100',
         monthlyLimitUsd: '1000',
         singleTxLimitUsd: '100',
@@ -48,13 +48,13 @@ export class TransactionLimitService {
         singleTxLimitUsd: '1000',
       },
       {
-        tier: UserKycTier.ENHANCED,
+        tier: UserKycTier.STANDARD,
         dailyLimitUsd: '10000',
         monthlyLimitUsd: '150000',
         singleTxLimitUsd: '10000',
       },
       {
-        tier: UserKycTier.FULL,
+        tier: UserKycTier.ENHANCED,
         dailyLimitUsd: '50000',
         monthlyLimitUsd: '500000',
         singleTxLimitUsd: '50000',

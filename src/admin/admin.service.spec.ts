@@ -17,8 +17,6 @@ import { BadRequestException, ForbiddenException, NotFoundException } from '@nes
 import { UserQueryDto } from './dto/user-query.dto';
 import { OverrideTransactionDto } from './dto/override-transaction.dto';
 import { TransactionLimitService } from '../transactions/services/transaction-limit.service';
-import { MigrationSnapshot, SnapshotStatus } from '../database/entities/migration-snapshot.entity';
-import { DataSource } from 'typeorm';
 import { BackupManifestService } from './services/backup-manifest.service';
 
 describe('AdminService', () => {
@@ -171,22 +169,9 @@ describe('AdminService', () => {
           },
         },
         {
-          provide: getRepositoryToken(MigrationSnapshot),
-          useValue: {
-            find: jest.fn().mockResolvedValue([]),
-            save: jest.fn(),
-          },
-        },
-        {
-          provide: DataSource,
-          useValue: {
-            query: jest.fn().mockResolvedValue([]),
-          },
-        },
-        {
           provide: BackupManifestService,
           useValue: {
-            listRecentManifests: jest.fn().mockResolvedValue([]),
+            listRecentManifests: jest.fn(),
           },
         },
       ],

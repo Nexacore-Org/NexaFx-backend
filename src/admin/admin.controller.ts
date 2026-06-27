@@ -83,6 +83,46 @@ export class AdminController {
     res.send(csv);
   }
 
+  // The following user endpoints have been moved to UsersAdminController in the Users module:
+  //
+  // @Get('users')
+  // @ApiOperation({ summary: 'List users with filtering (Admin only)' })
+  // @ApiResponse({ status: 200, description: 'Returns list of users' })
+  // @ApiResponse({ status: 400, description: 'Bad Request' })
+  // @ApiResponse({ status: 401, description: 'Unauthorized' })
+  // @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
+  // async getUsers(@Query() query: UserQueryDto) {
+  //   return this.adminService.getUsers(query);
+  // }
+  //
+  // @Get('users/:id')
+  // @ApiOperation({ summary: 'Get detailed user profile (Admin only)' })
+  // @ApiParam({ name: 'id', type: String, description: 'User UUID' })
+  // @ApiResponse({ status: 200, description: 'Returns detailed user profile' })
+  // @ApiResponse({ status: 400, description: 'Bad Request' })
+  // @ApiResponse({ status: 401, description: 'Unauthorized' })
+  // @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
+  // @ApiResponse({ status: 404, description: 'User not found' })
+  // async getUserById(@Param('id', ParseUUIDPipe) id: string) {
+  //   return this.adminService.getUserById(id);
+  // }
+  //
+  // @Patch('users/:id/role')
+  // @ApiOperation({ summary: 'Update user role (Admin only)' })
+  // @ApiParam({ name: 'id', type: String, description: 'User UUID' })
+  // @ApiBody({ type: UpdateUserRoleDto })
+  // @ApiResponse({ status: 200, description: 'User role updated successfully' })
+  // @ApiResponse({ status: 400, description: 'Bad Request' })
+  // @ApiResponse({ status: 401, description: 'Unauthorized' })
+  // @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
+  // @ApiResponse({ status: 404, description: 'User not found' })
+  // async updateUserRole(
+  //   @Param('id', ParseUUIDPipe) id: string,
+  //   @Body() updateDto: UpdateUserRoleDto,
+  //   @CurrentUser() admin: { userId: string },
+  // ) {
+  //   return this.adminService.updateUserRole(id, updateDto, admin.userId);
+  // }
   @Get('users')
   @ApiOperation({ summary: 'List users with filtering (Admin only)' })
   @ApiResponse({ status: 200, description: 'Returns list of users' })

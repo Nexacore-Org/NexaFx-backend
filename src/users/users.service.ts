@@ -7,7 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { User, UserRole, UserPlan } from './user.entity';
+import { User, UserRole, UserPlan, UserKycTier } from './user.entity';
 import {
   UpdateProfileDto,
   ProfileResponseDto,
@@ -172,6 +172,7 @@ export class UsersService {
     await this.userRepository.update(userId, {
       isVerified: true,
       isEmailVerified: true,
+      kycTier: UserKycTier.BASIC,
     });
   }
 

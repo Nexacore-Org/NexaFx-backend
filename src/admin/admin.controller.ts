@@ -9,9 +9,7 @@ import {
   UseGuards,
   ParseUUIDPipe,
   Res,
-  BadRequestException,
 } from '@nestjs/common';
-import { Audit } from '../common/decorators/audit.decorator';
 import {
   ApiTags,
   ApiOperation,
@@ -19,12 +17,8 @@ import {
   ApiResponse,
   ApiParam,
   ApiBody,
-  ApiQuery,
 } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
-import { KycService } from '../kyc/kyc.service';
-import { KycStatus } from '../kyc/entities/kyc.entity';
-import { RejectKycDto } from '../kyc/dtos/kyc-reject';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -37,15 +31,16 @@ import { UpdateUserPlanDto } from './dto/update-user-plan.dto';
 import { AdminTransactionQueryDto } from './dto/admin-transaction-query.dto';
 import { MetricsQueryDto } from './dto/metrics-query.dto';
 import { OverrideTransactionDto } from './dto/override-transaction.dto';
+import { AdminAuditLogsQueryDto } from './dto/admin-audit-logs-query.dto';
+import { AdminAuditLogsExportQueryDto } from './dto/admin-audit-logs-export-query.dto';
 import {
   PatchTransactionLimitDto,
   UpsertTransactionLimitDto,
 } from './dto/transaction-limit.dto';
 import { Response } from 'express';
 import { join } from 'path';
-import { AdminAuditLogsQueryDto } from './dto/admin-audit-logs-query.dto';
-import { AdminAuditLogsExportQueryDto } from './dto/admin-audit-logs-export-query.dto';
 import { UserKycTier } from '../users/user.entity';
+import { RejectKycDto } from '../kyc/dtos/reject-kyc';
 import { RedisService } from '../common/services/redis.service';
 
 @ApiTags('Admin')
@@ -384,5 +379,45 @@ export class AdminController {
       throw new BadRequestException('Unsupported format. Only csv is supported.');
     }
     return this.adminService.streamAuditLogsCsv(res, query);
+  }
+
+  @Get('kyc')
+  @ApiOperation({ summary: 'Get KYC applications queue (Admin only)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns pending KYC applications by tier',
+  })
+  async getKycQueue(@Query('tier') tier?: UserKycTier) {
+    return this.adminService.getPendingKycApplications(tier);
+  }
+
+  @Post('kyc/:id/approve')
+  @ApiOperation({ summary: 'Approve KYC application (Admin only)' })
+  @ApiParam({ name: 'id', type: String, description: 'KYC application ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'KYC application approved successfully',
+  })
+  async approveKyc(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() admin: { userId: string },
+  ) {
+    return this.adminService.approveKycApplication(id, admin.userId);
+  }
+
+  @Post('kyc/:id/reject')
+  @ApiOperation({ summary: 'Reject KYC application (Admin only)' })
+  @ApiParam({ name: 'id', type: String, description: 'KYC application ID' })
+  @ApiBody({ type: RejectKycDto })
+  @ApiResponse({
+    status: 200,
+    description: 'KYC application rejected successfully',
+  })
+  async rejectKyc(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() admin: { userId: string },
+    @Body() dto: RejectKycDto,
+  ) {
+    return this.adminService.rejectKycApplication(id, admin.userId, dto);
   }
 }

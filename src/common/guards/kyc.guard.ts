@@ -8,11 +8,11 @@ import { Reflector } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import type { Request } from 'express';
-import { KycRecord, KycStatus } from '../../kyc/entities/kyc.entity';
+import { User, UserKycTier } from '../../users/user.entity';
 import type { CurrentUserPayload } from '../../auth/decorators/current-user.decorator';
 
 /**
- * Guard that blocks access if the authenticated user's KYC status is not APPROVED.
+ * Guard that blocks access if the authenticated user's KYC tier is NONE.
  * Apply using @UseGuards(KycGuard) on routes or controllers.
  *
  * A route can opt out of the check by using @SetMetadata(KYC_BYPASS_KEY, true).
@@ -23,12 +23,11 @@ export const KYC_BYPASS_KEY = 'kycBypass';
 export class KycGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    @InjectRepository(KycRecord)
-    private readonly kycRepository: Repository<KycRecord>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    // Check if the route is explicitly marked to bypass KYC check
     const bypass = this.reflector.getAllAndOverride<boolean>(KYC_BYPASS_KEY, [
       context.getHandler(),
       context.getClass(),
@@ -47,14 +46,13 @@ export class KycGuard implements CanActivate {
       throw new ForbiddenException('Authentication required');
     }
 
-    const latestKyc = await this.kycRepository.findOne({
-      where: { userId: user.userId },
-      order: { createdAt: 'DESC' },
+    const dbUser = await this.userRepository.findOne({
+      where: { id: user.userId },
     });
 
-    if (!latestKyc || latestKyc.status !== KycStatus.APPROVED) {
+    if (!dbUser || dbUser.kycTier === UserKycTier.NONE) {
       throw new ForbiddenException(
-        'KYC verification required. Please submit your documents and get verified before performing this action.',
+        'KYC verification required. Please verify your email to get started.',
       );
     }
 

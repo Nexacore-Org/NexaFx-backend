@@ -28,7 +28,7 @@ describe('UsersService', () => {
     referralCode: 'ABC12345',
     referredBy: null,
     isVerified: true,
-    kycTier: UserKycTier.ENHANCED,
+    kycTier: UserKycTier.NONE,
     isSuspended: false,
     isTwoFactorEnabled: false,
     role: UserRole.USER,

@@ -10,7 +10,7 @@ import { AccountDeletionService } from './services/account-deletion.service';
 import { DataRequest } from './entities/data-request.entity';
 import { Transaction } from '../transactions/entities/transaction.entity';
 import { Notification } from '../notifications/entities/notification.entity';
-import { KycRecord } from '../kyc/entities/kyc.entity';
+import { KYCApplication } from '../kyc/entities/kyc-application.entity';
 import { Beneficiary } from '../beneficiaries/entities/beneficiary.entity';
 import { AuditLog } from '../audit-logs/entities/audit-log.entity';
 import { Referral } from '../referrals/entities/referral.entity';
@@ -28,7 +28,7 @@ import { TransactionLimitsModule } from '../transactions/transaction-limits.modu
       DataRequest,
       Transaction,
       Notification,
-      KycRecord,
+      KYCApplication,
       Beneficiary,
       AuditLog,
       Referral,

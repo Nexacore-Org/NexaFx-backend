@@ -36,11 +36,6 @@ import {
 import { MetricsQueryDto } from './dto/metrics-query.dto';
 import * as csv from 'fast-csv';
 import { OverrideTransactionDto } from './dto/override-transaction.dto';
-import { Response } from 'express';
-import { KycRecord, KycStatus } from '../kyc/entities/kyc.entity';
-import { RateAlert } from '../rate-alerts/entities/rate-alert.entity';
-import { AuditLog } from '../audit-logs/entities/audit-log.entity';
-import { AdminAuditLogsQueryDto } from './dto/admin-audit-logs-query.dto';
 import { Logger } from '@nestjs/common';
 import {
   DataRequest,
@@ -50,11 +45,12 @@ import {
 import { UpdateUserPlanDto } from './dto/update-user-plan.dto';
 import { TransactionLimitService } from '../transactions/services/transaction-limit.service';
 import { UserKycTier } from '../users/user.entity';
-import { BackupManifestService } from './services/backup-manifest.service';
 import {
   PatchTransactionLimitDto,
   UpsertTransactionLimitDto,
 } from './dto/transaction-limit.dto';
+import { KYCApplication, ApplicationStatus, ApplicationTargetTier } from '../kyc/entities/kyc-application.entity';
+import { RejectKycDto } from '../kyc/dtos/reject-kyc';
 
 @Injectable()
 export class AdminService {
@@ -67,15 +63,10 @@ export class AdminService {
     private readonly transactionRepository: Repository<Transaction>,
     @InjectRepository(DataRequest)
     private readonly dataRequestRepository: Repository<DataRequest>,
-    @InjectRepository(KycRecord)
-    private readonly kycRepository: Repository<KycRecord>,
-    @InjectRepository(RateAlert)
-    private readonly rateAlertRepository: Repository<RateAlert>,
-    @InjectRepository(AuditLog)
-    private readonly auditLogRepository: Repository<AuditLog>,
+    @InjectRepository(KYCApplication)
+    private readonly kycApplicationRepository: Repository<KYCApplication>,
     private readonly auditLogsService: AuditLogsService,
     private readonly transactionLimitService: TransactionLimitService,
-    private readonly backupManifestService: BackupManifestService,
   ) {}
 
   async listTransactionLimits() {
@@ -828,5 +819,97 @@ export class AdminService {
 
   async getRecentBackups() {
     return this.backupManifestService.listRecentManifests(10);
+  }
+
+  async getPendingKycApplications(tier?: UserKycTier) {
+    const targetTier =
+      tier === UserKycTier.STANDARD
+        ? ApplicationTargetTier.STANDARD
+        : tier === UserKycTier.ENHANCED
+          ? ApplicationTargetTier.ENHANCED
+          : undefined;
+
+    return this.kycApplicationRepository
+      .createQueryBuilder('app')
+      .leftJoinAndSelect('app.user', 'user')
+      .where('app.status = :status', { status: ApplicationStatus.PENDING })
+      .andWhere(targetTier ? 'app.targetTier = :targetTier' : '1=1')
+      .orderBy('app.submittedAt', 'ASC')
+      .getMany();
+  }
+
+  async approveKycApplication(applicationId: string, adminId: string) {
+    const application = await this.kycApplicationRepository.findOne({
+      where: { id: applicationId },
+    });
+
+    if (!application) {
+      throw new NotFoundException('KYC application not found');
+    }
+
+    if (application.status !== ApplicationStatus.PENDING) {
+      throw new BadRequestException('Application has already been processed');
+    }
+
+    const user = await this.userRepository.findOne({
+      where: { id: application.userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    application.status = ApplicationStatus.APPROVED;
+    application.reviewedBy = adminId;
+    application.reviewedAt = new Date();
+
+    const newTier =
+      application.targetTier === ApplicationTargetTier.STANDARD
+        ? UserKycTier.STANDARD
+        : UserKycTier.ENHANCED;
+
+    user.kycTier = newTier;
+
+    await this.kycApplicationRepository.save(application);
+    await this.userRepository.save(user);
+
+    return {
+      message: 'KYC application approved successfully',
+      userId: user.id,
+      newTier,
+    };
+  }
+
+  async rejectKycApplication(
+    applicationId: string,
+    adminId: string,
+    dto: RejectKycDto,
+  ) {
+    const application = await this.kycApplicationRepository.findOne({
+      where: { id: applicationId },
+    });
+
+    if (!application) {
+      throw new NotFoundException('KYC application not found');
+    }
+
+    if (application.status !== ApplicationStatus.PENDING) {
+      throw new BadRequestException('Application has already been processed');
+    }
+
+    application.status = dto.requiresResubmission
+      ? ApplicationStatus.RESUBMISSION_REQUIRED
+      : ApplicationStatus.REJECTED;
+    application.rejectionReason = dto.reason || 'KYC application rejected';
+    application.reviewedBy = adminId;
+    application.reviewedAt = new Date();
+
+    await this.kycApplicationRepository.save(application);
+
+    return {
+      message: `KYC application ${application.status.toLowerCase()} successfully`,
+      applicationId: application.id,
+      status: application.status,
+    };
   }
 }

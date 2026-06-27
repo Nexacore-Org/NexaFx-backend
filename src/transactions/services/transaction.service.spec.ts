@@ -31,7 +31,8 @@ import { WalletsService } from '../../wallets/wallets.service';
 import { EncryptionService } from '../../common/services/encryption.service';
 import { LedgerService } from '../../ledger/services/ledger.service';
 import { TransactionLimitService } from './transaction-limit.service';
-import { RedisService } from '../../common/services/redis.service';
+import { RedisService } from '../../modules/redis/redis.service';
+import { TransactionCategory } from '../../analytics/entities/transaction-category.entity';
 
 describe('TransactionsService fee integration behavior', () => {
   let service: TransactionsService;
@@ -161,6 +162,7 @@ describe('TransactionsService fee integration behavior', () => {
 
   const mockRedisService = {
     del: jest.fn(),
+    delete: jest.fn(),
   }
 
   beforeEach(async () => {
@@ -172,6 +174,13 @@ describe('TransactionsService fee integration behavior', () => {
         {
           provide: getRepositoryToken(Transaction),
           useValue: transactionRepository,
+        },
+        {
+          provide: getRepositoryToken(TransactionCategory),
+          useValue: {
+            findOne: jest.fn(),
+            save: jest.fn(),
+          },
         },
         { provide: CurrenciesService, useValue: currenciesService },
         { provide: CurrencyPairService, useValue: currencyPairService },

@@ -8,6 +8,8 @@ import {
   TransactionType,
 } from '../transactions/entities/transaction.entity';
 import { LoansService } from '../loans/loans.service';
+import { AnalyticsService } from '../analytics/analytics.service';
+import { SanctionsService } from '../sanctions/sanctions.service';
 import { TransactionsService } from '../transactions/services/transaction.service';
 import { StellarService } from '../blockchain/stellar/stellar.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -58,6 +60,10 @@ export class ScheduledJobsService {
     private readonly auditLogsService: AuditLogsService,
     private readonly ledgerVerificationService: LedgerVerificationService,
     private readonly vaultsService: VaultsService,
+    private readonly loansService: LoansService,
+    private readonly redisService: RedisService,
+    private readonly analyticsService: AnalyticsService,
+    private readonly sanctionsService: SanctionsService,
   ) {
     // Truncate hostname to 255 characters to match DB column constraint
     this.instanceId = os.hostname().substring(0, 255);
@@ -843,6 +849,8 @@ export class ScheduledJobsService {
         );
     }
   }
+
+  /**
    * Daily loan repayment processing — auto-debits scheduled repayments and
    * applies overdue penalties. Runs at midnight every day.
    */

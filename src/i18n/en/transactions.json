@@ -1,0 +1,9 @@
+{
+  "CURRENCY_NOT_SUPPORTED": "Currency {currency} is not supported or inactive",
+  "UNABLE_TO_GET_EXCHANGE_RATE": "Unable to get exchange rate for {currency}",
+  "SWAP_SAME_CURRENCY": "Source and destination currencies must be different",
+  "SWAP_LIQUIDITY_PATH_NOT_FOUND": "No liquidity path found for {from} to {to}",
+  "SWAP_FAILED": "Swap failed: {message}",
+  "SOURCE_ADDRESS_MISMATCH": "sourceAddress must match the public key of the wallet used for this swap",
+  "PREVIEW_LIQUIDITY_PATH_NOT_FOUND": "No liquidity path found for {from} to {to}"
+}

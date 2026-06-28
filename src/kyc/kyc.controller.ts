@@ -1,7 +1,6 @@
 import {
   Controller,
   Post,
-  Body,
   Get,
   UseGuards,
   UseInterceptors,
@@ -9,6 +8,7 @@ import {
   UsePipes,
   Param,
   ParseUUIDPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import { Audit } from '../common/decorators/audit.decorator';
 import {
@@ -30,7 +30,6 @@ import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { FileValidationPipe } from '../common/pipes/file-validation.pipe';
 import { UserKycTier } from '../users/user.entity';
 
-// DTO for KYC application
 export class ApplyKycDto {
   targetTier: UserKycTier.STANDARD | UserKycTier.ENHANCED;
 }

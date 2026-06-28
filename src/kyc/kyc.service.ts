@@ -24,6 +24,7 @@ import {
 import { scanBuffer } from '../common/helpers/virus-scanner.helper';
 import { validateSelfieVideo } from '../common/helpers/video-duration-scanner.helper';
 import { SanctionsService } from '../sanctions/sanctions.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 type DocumentFiles = {
   governmentIdFront?: Express.Multer.File;
@@ -44,6 +45,7 @@ export class KycService {
     private userRepository: Repository<User>,
     private readonly dataSource: DataSource,
     private readonly firebaseService: FirebaseService,
+    private readonly notificationsService: NotificationsService,
     private readonly webhookService: WebhookService,
     @Inject(STORAGE_SERVICE_TOKEN)
     private readonly storageService: StorageService,
@@ -160,7 +162,10 @@ export class KycService {
       };
 
       documents['videoSelfie'] = {
-        s3Key: await this.storageService.upload(files.videoSelfie, storagePath),
+        s3Key: await this.storageService.upload(
+          files.videoSelfie,
+          storagePath,
+        ),
         mimeType: files.videoSelfie.mimetype,
       };
     }

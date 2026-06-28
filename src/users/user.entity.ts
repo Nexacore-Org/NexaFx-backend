@@ -79,6 +79,28 @@ export class User {
   @Column({ type: 'jsonb', nullable: true, default: [] })
   fcmTokens: string[];
 
+  @Column({
+    type: 'jsonb',
+    nullable: true,
+    default: {
+      email: true,
+      push: true,
+      types: { TRANSACTION: true, KYC: true, RATE_ALERT: true },
+    },
+  })
+  notificationPreferences: {
+    email: boolean;
+    push: boolean;
+    types: {
+      TRANSACTION: boolean;
+      KYC: boolean;
+      RATE_ALERT: boolean;
+    };
+  };
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  fcmToken: string | null;
+
   @Column({ type: 'varchar', length: 8, unique: true })
   @Index()
   referralCode: string;
@@ -95,10 +117,7 @@ export class User {
   isVerified: boolean;
 
   @Column({ type: 'boolean', default: false })
-  isEmailVerified?: boolean;
-
-  @Column({ type: 'boolean', default: true })
-  isActive?: boolean;
+  isEmailVerified: boolean;
 
   @Column({
     type: 'enum',
@@ -119,6 +138,9 @@ export class User {
   @Column({ type: 'boolean', default: false })
   isDeleted: boolean;
 
+  @Column({ type: 'boolean', default: true })
+  isActive: boolean;
+
   @Column({ type: 'timestamp with time zone', nullable: true })
   lockedUntil: Date | null;
 
@@ -135,6 +157,9 @@ export class User {
     default: UserPlan.FREE,
   })
   plan: UserPlan;
+
+  @Column({ type: 'varchar', length: 10, default: 'en' })
+  preferredLanguage: string;
 
   @Column({ type: 'timestamp with time zone', nullable: true })
   balanceLastSyncedAt: Date | null;

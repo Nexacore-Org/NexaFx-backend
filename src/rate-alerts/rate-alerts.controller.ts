@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Delete,
+  Patch,
   Body,
   Param,
   Request,
@@ -52,6 +53,21 @@ export class RateAlertsController {
     @Request() req: { user: { userId: string } },
   ): Promise<RateAlertResponseDto[]> {
     return this.rateAlertsService.getUserAlerts(req.user.userId);
+  }
+
+  @Patch(':id/reset')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reset (re-activate) one of my triggered rate alerts' })
+  @ApiResponse({
+    status: 200,
+    description: 'Rate alert reset successfully',
+    type: RateAlertResponseDto,
+  })
+  async resetAlert(
+    @Request() req: { user: { userId: string } },
+    @Param('id') id: string,
+  ): Promise<RateAlertResponseDto> {
+    return this.rateAlertsService.resetAlert(req.user.userId, id);
   }
 
   @Delete(':id')

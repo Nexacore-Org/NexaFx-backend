@@ -11,10 +11,12 @@ import { WebhooksModule } from '../webhooks/webhooks.module';
 import { StorageModule } from '../modules/storage/storage.module';
 import { forwardRef } from '@nestjs/common';
 import { SanctionsModule } from '../sanctions/sanctions.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([KYCApplication, User]),
+    NotificationsModule,
     WebhooksModule,
     MulterModule.register({
       limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB for video selfies

@@ -13,14 +13,11 @@ import { DataRequest } from '../users/entities/data-request.entity';
 import { KycRecord } from '../kyc/entities/kyc.entity';
 import { RateAlert } from '../rate-alerts/entities/rate-alert.entity';
 import { AuditLog } from '../audit-logs/entities/audit-log.entity';
-import {
-  BadRequestException,
-  ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { UserQueryDto } from './dto/user-query.dto';
 import { OverrideTransactionDto } from './dto/override-transaction.dto';
 import { TransactionLimitService } from '../transactions/services/transaction-limit.service';
+import { BackupManifestService } from './services/backup-manifest.service';
 
 describe('AdminService', () => {
   let service: AdminService;
@@ -169,6 +166,12 @@ describe('AdminService', () => {
               andWhere: jest.fn().mockReturnThis(),
               stream: jest.fn().mockResolvedValue([]),
             })),
+          },
+        },
+        {
+          provide: BackupManifestService,
+          useValue: {
+            listRecentManifests: jest.fn(),
           },
         },
       ],
@@ -623,6 +626,97 @@ describe('AdminService', () => {
 
       expect(mockResponse.setHeader).toHaveBeenCalledWith('Content-Type', 'text/csv');
       expect(service['auditLogRepository'].createQueryBuilder).toHaveBeenCalled();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // getMigrationHistory
+  // ---------------------------------------------------------------------------
+  describe('getMigrationHistory', () => {
+    it('should return empty applied migrations and empty snapshots when neither exist', async () => {
+      jest.spyOn(service['dataSource'], 'query').mockResolvedValue([]);
+      jest.spyOn(service['migrationSnapshotRepository'], 'find').mockResolvedValue([]);
+
+      const result = await service.getMigrationHistory();
+
+      expect(result.appliedMigrations).toEqual([]);
+      expect(result.snapshots).toEqual([]);
+      expect(result.summary.totalApplied).toBe(0);
+      expect(result.summary.totalSnapshots).toBe(0);
+    });
+
+    it('should return applied migrations from the TypeORM migrations table', async () => {
+      const mockMigrations = [
+        { id: 1, timestamp: '1760000000000', name: 'CreateNotificationPreferences1760000000000' },
+        { id: 2, timestamp: '1761000000000', name: 'AddKycTierAndTransactionLimits1761000000000' },
+      ];
+      jest.spyOn(service['dataSource'], 'query').mockResolvedValue(mockMigrations);
+      jest.spyOn(service['migrationSnapshotRepository'], 'find').mockResolvedValue([]);
+
+      const result = await service.getMigrationHistory();
+
+      expect(result.appliedMigrations).toHaveLength(2);
+      expect(result.appliedMigrations[0].name).toBe('CreateNotificationPreferences1760000000000');
+      expect(result.summary.totalApplied).toBe(2);
+    });
+
+    it('should return snapshot records with correct status counts', async () => {
+      jest.spyOn(service['dataSource'], 'query').mockResolvedValue([]);
+
+      const mockSnapshots: MigrationSnapshot[] = [
+        { id: 'snap-1', environment: 'staging', snapshotKey: 'key-1', migrationCount: 2, status: SnapshotStatus.APPLIED, appliedAt: new Date(), rolledBackAt: null, takenAt: new Date() },
+        { id: 'snap-2', environment: 'production', snapshotKey: 'key-2', migrationCount: 1, status: SnapshotStatus.ROLLED_BACK, appliedAt: new Date(), rolledBackAt: new Date(), takenAt: new Date() },
+        { id: 'snap-3', environment: 'staging', snapshotKey: 'key-3', migrationCount: 3, status: SnapshotStatus.PENDING, appliedAt: null, rolledBackAt: null, takenAt: new Date() },
+      ];
+      jest.spyOn(service['migrationSnapshotRepository'], 'find').mockResolvedValue(mockSnapshots);
+
+      const result = await service.getMigrationHistory();
+
+      expect(result.snapshots).toHaveLength(3);
+      expect(result.summary.totalSnapshots).toBe(3);
+      expect(result.summary.appliedSnapshots).toBe(1);
+      expect(result.summary.rolledBackSnapshots).toBe(1);
+      expect(result.summary.pendingSnapshots).toBe(1);
+    });
+
+    it('should return empty applied migrations and log a warning when migrations table query fails', async () => {
+      jest.spyOn(service['dataSource'], 'query').mockRejectedValue(new Error('relation "migrations" does not exist'));
+      jest.spyOn(service['migrationSnapshotRepository'], 'find').mockResolvedValue([]);
+      const warnSpy = jest.spyOn(service['logger'], 'warn').mockImplementation(() => {});
+
+      const result = await service.getMigrationHistory();
+
+      expect(result.appliedMigrations).toEqual([]);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Could not query migrations table'),
+      );
+    });
+
+    it('should combine applied migrations and snapshots in the response', async () => {
+      const mockMigrations = [
+        { id: 1, timestamp: '1762000000000', name: 'CreateMigrationSnapshots1762000000000' },
+      ];
+      const mockSnapshot: MigrationSnapshot = {
+        id: 'snap-1',
+        environment: 'staging',
+        snapshotKey: 'nexafx/pre-migration/staging/2026-06-27T00-00-00Z-1.dump',
+        migrationCount: 1,
+        status: SnapshotStatus.APPLIED,
+        appliedAt: new Date(),
+        rolledBackAt: null,
+        takenAt: new Date(),
+      };
+
+      jest.spyOn(service['dataSource'], 'query').mockResolvedValue(mockMigrations);
+      jest.spyOn(service['migrationSnapshotRepository'], 'find').mockResolvedValue([mockSnapshot]);
+
+      const result = await service.getMigrationHistory();
+
+      expect(result.appliedMigrations).toHaveLength(1);
+      expect(result.snapshots).toHaveLength(1);
+      expect(result.summary.totalApplied).toBe(1);
+      expect(result.summary.totalSnapshots).toBe(1);
+      expect(result.summary.appliedSnapshots).toBe(1);
     });
   });
 });

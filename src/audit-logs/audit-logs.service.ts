@@ -47,7 +47,7 @@ export class AuditLogsService {
         resourceId,
         status: createAuditLogDto.status || 'SUCCESS',
       } as any);
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(
         `Failed to create audit log: ${error.message}`,
         error.stack,
@@ -69,6 +69,11 @@ export class AuditLogsService {
       const ipAddress = request ? this.getClientIp(request) : null;
       const userAgent = request ? request.headers?.['user-agent'] : null;
 
+      let impersonatedByAdminId = null;
+      if (request?.user?.isImpersonation && request?.user?.impersonatedBy) {
+        impersonatedByAdminId = request.user.impersonatedBy;
+      }
+
       await this.auditLogsRepository.createAuditLog({
         actorId,
         action,
@@ -78,8 +83,9 @@ export class AuditLogsService {
         metadata,
         ipAddress,
         userAgent,
+        impersonatedByAdminId,
       } as any);
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(
         `[CRITICAL] Failed to write audit log: ${error.message}`,
         error.stack,

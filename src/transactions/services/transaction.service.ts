@@ -27,7 +27,7 @@ import { NotificationType } from '../../notifications/entities/notification.enti
 import { CurrenciesService } from '../../currencies/currencies.service';
 import { CurrencyPairService } from '../../currencies/services/currency-pair.service';
 import { ExchangeRatesService } from '../../exchange-rates/exchange-rates.service';
-import { StellarService } from '../../blockchain/stellar/stellar.service';
+import { StellarService } from '../../modules/stellar/stellar.service';
 import { UsersService } from '../../users/users.service';
 import { AuditLogsService } from '../../audit-logs/audit-logs.service';
 import { AuditAction } from '../../audit-logs/enums/audit-action.enum';
@@ -46,6 +46,9 @@ import { EncryptionService } from '../../common/services/encryption.service';
 import { LedgerService } from '../../ledger/services/ledger.service';
 import { TransactionLimitService } from './transaction-limit.service';
 import { RedisService } from '../../modules/redis/redis.service';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { TAX_QUEUE } from '../../modules/queues/queue.constants';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -160,6 +163,8 @@ export class TransactionsService {
     private readonly ledgerService: LedgerService,
     private readonly transactionLimitService: TransactionLimitService,
     private readonly redisService: RedisService,
+    @InjectQueue(TAX_QUEUE)
+    private readonly taxQueue: Queue,
   ) {}
 
   /**
@@ -689,6 +694,9 @@ export class TransactionsService {
         transaction.status = TransactionStatus.SUCCESS;
         await this.transactionRepository.save(transaction);
         await this.redisService.delete('admin_stats');
+        this.taxQueue.add('process-transaction', { transactionId: transaction.id }).catch((e) =>
+          this.logger.error(`Failed to enqueue tax processing for swap transaction ${transaction.id}: ${e.message}`)
+        );
 
         await this.updateUserBalance(
           userId,
@@ -928,6 +936,12 @@ export class TransactionsService {
 
       await this.transactionRepository.save(transaction);
 
+      if (transaction.status === TransactionStatus.SUCCESS) {
+        this.taxQueue.add('process-transaction', { transactionId: transaction.id }).catch((e) =>
+          this.logger.error(`Failed to enqueue tax processing for verified transaction ${transaction.id}: ${e.message}`)
+        );
+      }
+
       await this.auditLogsService.logTransactionEvent(
         transaction.userId,
         AuditAction.TRANSACTION_STATUS_UPDATED,
@@ -1006,6 +1020,12 @@ export class TransactionsService {
     }
 
     await this.transactionRepository.save(transaction);
+
+    if (transaction.status === TransactionStatus.SUCCESS) {
+      this.taxQueue.add('process-transaction', { transactionId: transaction.id }).catch((e) =>
+        this.logger.error(`Failed to enqueue tax processing for manual status update ${transaction.id}: ${e.message}`)
+      );
+    }
 
     await this.auditLogsService.logTransactionEvent(
       transaction.userId,

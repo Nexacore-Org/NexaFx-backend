@@ -16,7 +16,7 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TransformResponseInterceptor } from './common/interceptors/transform-response.interceptor';
 import helmet from 'helmet';
 import { JwtService } from '@nestjs/jwt';
-import {createAdminQueueAuthMiddleware} from './modules/queues/admin-queue-auth.middleware';
+import { createAdminQueueAuthMiddleware } from './modules/queues/admin-queue-auth.middleware';
 import { QueuesDashboardService } from './modules/queues/queues-dashboard.service';
 import { join } from 'path';
 import * as compression from 'compression';
@@ -66,7 +66,6 @@ async function bootstrap() {
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
-
 
   const jwtService = app.get(JwtService);
   const queuesDashboard = app.get(QueuesDashboardService);

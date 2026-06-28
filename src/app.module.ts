@@ -38,6 +38,10 @@ import { EscrowModule } from './escrow/escrow.module';
 import { RateAlertsModule } from './rate-alerts/rate-alerts.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
+import { TaxModule } from './tax/tax.module';
+import { OrganisationsModule } from './organisations/organisations.module';
+import { SanctionsModule } from './sanctions/sanctions.module';
+import { LoansModule } from './loans/loans.module';
 import { DisputesModule } from './disputes/disputes.module';
 import { VaultsModule } from './vaults/vaults.module';
 import { OwaspZapDastModule } from './owasp-zap-dast/owasp-zap-dast.module';
@@ -120,6 +124,10 @@ import { FiatModule } from './modules/fiat/fiat.module';
     WalletsModule,
     LedgerModule,
     UsersModule,
+    TaxModule,
+    OrganisationsModule,
+    SanctionsModule,
+    LoansModule,
     DisputesModule,
     CardsModule,
     VaultsModule,

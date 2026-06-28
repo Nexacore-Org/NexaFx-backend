@@ -10,8 +10,8 @@ import { UsersService } from '../users/users.service';
 import { User } from '../users/user.entity';
 import { Wallet, StellarNetwork } from './entities/wallet.entity';
 import { GenerateWalletDto, ImportWalletDto } from './dto/wallet.dto';
-import { StellarService } from '../blockchain/stellar/stellar.service';
-import { WalletBalanceResult } from '../blockchain/stellar/stellar.types';
+import { StellarService } from '../modules/stellar/stellar.service';
+import { WalletBalanceResult } from '../modules/stellar/stellar.types';
 import { EncryptionService } from '../common/services/encryption.service';
 import Decimal from 'decimal.js';
 

@@ -122,7 +122,7 @@ export class UsersService {
     const user = this.userRepository.create({
       email: normalizedEmail,
       password: hashedPassword,
-      passwordHash: hashedPassword || undefined,
+      passwordHash: hashedPassword ?? undefined,
       firstName: params.firstName || null,
       lastName: params.lastName || null,
       phone: params.phone || null,

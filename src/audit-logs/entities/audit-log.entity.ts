@@ -18,6 +18,10 @@ export class AuditLog {
 
   @Column({ type: 'uuid', nullable: true })
   @Index()
+  impersonatedByAdminId: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  @Index()
   targetId: string | null;
 
   @Column()

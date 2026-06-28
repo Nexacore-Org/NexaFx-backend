@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThanOrEqual, Repository } from 'typeorm';
+import Decimal from 'decimal.js';
 import { RateAlert, RateAlertCondition } from './entities/rate-alert.entity';
 import { CreateRateAlertDto } from './dto/create-rate-alert.dto';
 import { RateAlertResponseDto } from './dto/rate-alert-response.dto';
@@ -92,6 +93,31 @@ export class RateAlertsService {
     await this.rateAlertsRepository.delete(alert.id);
   }
 
+  /**
+   * Re-activate a previously triggered alert owned by the user.
+   * Clears the triggeredAt timestamp and sets isActive back to true.
+   * @throws NotFoundException when the alert does not exist or is not owned by the user
+   */
+  async resetAlert(
+    userId: string,
+    alertId: string,
+  ): Promise<RateAlertResponseDto> {
+    const alert = await this.rateAlertsRepository.findOne({
+      where: { id: alertId, userId },
+    });
+
+    if (!alert) {
+      throw new NotFoundException('Rate alert not found');
+    }
+
+    alert.isActive = true;
+    alert.triggeredAt = null;
+
+    const saved = await this.rateAlertsRepository.save(alert);
+
+    return this.toResponseDto(saved);
+  }
+
   async checkAndTriggerAlerts(): Promise<RateAlertCheckResult> {
     const reactivated = await this.reactivateRecurringAlerts();
 
@@ -168,11 +194,14 @@ export class RateAlertsService {
     currentRate: number,
     targetRate: number,
   ): boolean {
+    const current = new Decimal(currentRate);
+    const target = new Decimal(targetRate);
+
     if (condition === RateAlertCondition.ABOVE) {
-      return currentRate >= targetRate;
+      return current.greaterThanOrEqualTo(target);
     }
 
-    return currentRate <= targetRate;
+    return current.lessThanOrEqualTo(target);
   }
 
   private async triggerAlert(
@@ -198,9 +227,14 @@ export class RateAlertsService {
       },
     });
 
-    alert.isActive = false;
-    alert.triggeredAt = now;
-    await this.rateAlertsRepository.save(alert);
+    // Atomically deactivate only if still active, preventing a double-trigger
+    // when multiple scheduler instances evaluate the same alert concurrently.
+    await this.rateAlertsRepository
+      .createQueryBuilder()
+      .update(RateAlert)
+      .set({ isActive: false, triggeredAt: now })
+      .where('id = :id AND "isActive" = true', { id: alert.id })
+      .execute();
 
     await this.auditLogsService.logSystemEvent(
       AuditAction.RATE_ALERT_TRIGGERED,

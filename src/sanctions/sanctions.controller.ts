@@ -21,8 +21,8 @@ import { SanctionsService } from './sanctions.service';
 import { OverrideScreeningDto } from './dto/override-screening.dto';
 import { ScreeningStatus } from './entities/kyc-screening.entity';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles } from '../common/decorators/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/user.entity';
 import {
   CurrentUser,

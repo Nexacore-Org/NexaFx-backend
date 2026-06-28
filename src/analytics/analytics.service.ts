@@ -611,10 +611,9 @@ export class AnalyticsService {
         rates.set(curr, 1);
       } else {
         try {
-          const rate = await this.exchangeRatesService.convert(
+          const rate = await this.exchangeRatesService.getRate(
             curr,
             targetCurrency,
-            1,
           );
           rates.set(curr, rate.rate);
         } catch {

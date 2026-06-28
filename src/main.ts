@@ -1,7 +1,5 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import {
   ClassSerializerInterceptor,
   Logger,
@@ -13,16 +11,13 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Reflector } from '@nestjs/core';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
-import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { MulterExceptionFilter } from './common/filters/multer-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TransformResponseInterceptor } from './common/interceptors/transform-response.interceptor';
 import helmet from 'helmet';
 import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
 import {createAdminQueueAuthMiddleware} from './modules/queues/admin-queue-auth.middleware';
 import { QueuesDashboardService } from './modules/queues/queues-dashboard.service';
-import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { join } from 'path';
 import * as compression from 'compression';
 
@@ -44,7 +39,7 @@ async function bootstrap() {
     }),
   );
 
-  app.useGlobalFilters(new HttpExceptionFilter());
+  app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalInterceptors(
     new ClassSerializerInterceptor(app.get(Reflector)),
     new LoggingInterceptor(),
@@ -74,7 +69,6 @@ async function bootstrap() {
 
 
   const jwtService = app.get(JwtService);
-  const configService = app.get(ConfigService);
   const queuesDashboard = app.get(QueuesDashboardService);
 
   app.use(

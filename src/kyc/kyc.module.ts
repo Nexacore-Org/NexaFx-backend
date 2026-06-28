@@ -10,7 +10,21 @@ import { User } from '../users/user.entity';
 import { WebhooksModule } from '../webhooks/webhooks.module';
 import { StorageModule } from '../modules/storage/storage.module';
 import { forwardRef } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { SanctionsModule } from '../sanctions/sanctions.module';
+import { join } from 'path';
+import * as fs from 'fs';
+import { randomUUID } from 'crypto';
+
+const ALLOWED_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'application/pdf',
+];
+
+function isMulterFile(file: unknown): file is Express.Multer.File {
+  return typeof file === 'object' && file !== null && 'originalname' in file;
+}
 
 // Shared destination builder
 function buildDiskDestination(

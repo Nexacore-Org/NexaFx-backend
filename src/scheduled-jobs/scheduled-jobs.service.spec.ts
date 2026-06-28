@@ -25,6 +25,9 @@ import { CurrencyPairService } from '../currencies/services/currency-pair.servic
 import { ProposalService } from '../dao/services/proposal.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { RedisService } from '../common/services/redis.service';
+import { AnalyticsService } from '../analytics/analytics.service';
+import { SanctionsService } from '../sanctions/sanctions.service';
+import { LoansService } from '../loans/loans.service';
 
 describe('ScheduledJobsService', () => {
   let service: ScheduledJobsService;
@@ -153,7 +156,25 @@ describe('ScheduledJobsService', () => {
             logTransactionEvent: jest.fn(),
           },
         },
-        { provide: RedisService, useValue: mockRedisService }
+        { provide: RedisService, useValue: mockRedisService },
+        {
+          provide: AnalyticsService,
+          useValue: {
+            recordBalanceSnapshotsForAllUsers: jest.fn(),
+          },
+        },
+        {
+          provide: SanctionsService,
+          useValue: {
+            screenUser: jest.fn(),
+          },
+        },
+        {
+          provide: LoansService,
+          useValue: {
+            processInterestAccruals: jest.fn(),
+          },
+        },
       ],
     }).compile();
 

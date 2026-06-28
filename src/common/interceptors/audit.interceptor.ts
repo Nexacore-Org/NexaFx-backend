@@ -78,12 +78,16 @@ export class AuditInterceptor implements NestInterceptor {
           // Resolve resourceId
           let resourceId = response?.id || response?.user?.id || request.params?.id || null;
 
-          const metadata = {
+          const metadata: Record<string, any> = {
             method: request.method,
             url: encodeURI(String(request.url ?? '')),
             statusCode: context.switchToHttp().getResponse().statusCode,
             body: sanitizeBody(request.body),
           };
+
+          if (request.user?.isImpersonation && request.user?.impersonatedBy) {
+            metadata.impersonatedByAdminId = request.user.impersonatedBy;
+          }
 
           // Asynchronously write audit log (without blocking request execution)
           this.auditLogsService.log(
@@ -97,13 +101,17 @@ export class AuditInterceptor implements NestInterceptor {
           ).catch(() => {});
         },
         error: async (err) => {
-          const metadata = {
+          const metadata: Record<string, any> = {
             method: request.method,
             url: encodeURI(String(request.url ?? '')),
             statusCode: err.status || 500,
             body: sanitizeBody(request.body),
             error: err.message,
           };
+
+          if (request.user?.isImpersonation && request.user?.impersonatedBy) {
+            metadata.impersonatedByAdminId = request.user.impersonatedBy;
+          }
 
           const resourceId = request.params?.id || null;
 

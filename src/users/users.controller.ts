@@ -354,3 +354,29 @@ export class UsersController {
     return { message: 'User account has been deactivated' };
   }
 }
+
+@ApiTags('Users V2')
+@Controller('v2/users')
+@ApiBearerAuth('access-token')
+export class UsersV2Controller {
+  constructor(private readonly usersService: UsersService) {}
+
+  @Get('me')
+  @ApiOperation({ summary: 'Get current user profile (V2)' })
+  @ApiResponse({
+    status: 200,
+    description: 'User profile retrieved successfully',
+  })
+  async getMe(@Request() req: any) {
+    const userId = req.user.userId;
+    const profile = await this.usersService.getProfile(userId);
+    if (req.user?.isImpersonation) {
+      return {
+        ...profile,
+        isBeingImpersonated: true,
+      };
+    }
+    return profile;
+  }
+}
+

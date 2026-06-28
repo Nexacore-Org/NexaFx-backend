@@ -42,6 +42,7 @@ export class KycService {
     private configService: ConfigService,
     private readonly dataSource: DataSource,
     private readonly firebaseService: FirebaseService,
+    private readonly notificationsService: NotificationsService,
     private readonly webhookService: WebhookService,
     private readonly kycEmailService: KycEmailService,
     @Inject(STORAGE_SERVICE_TOKEN)

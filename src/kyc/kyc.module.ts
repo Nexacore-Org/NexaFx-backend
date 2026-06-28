@@ -31,6 +31,7 @@ function isMulterFile(file: unknown): file is Express.Multer.File {
 @Module({
   imports: [
     TypeOrmModule.forFeature([KycRecord, User]),
+    NotificationsModule,
     WebhooksModule,
     MulterModule.register({
       storage: undefined, // defaults to memoryStorage

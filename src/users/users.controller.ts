@@ -28,6 +28,7 @@ import {
   WalletPortfolioResponseDto,
   DeviceTokenDto,
   RateLimitStatusDto,
+  UpdateNotificationPreferencesDto,
 } from './dto';
 import { DataExportService } from './services/data-export.service';
 import { AccountDeletionService } from './services/account-deletion.service';
@@ -268,6 +269,38 @@ export class UsersController {
   ): Promise<{ message: string }> {
     await this.usersService.removeDeviceToken(req.user.userId, body.token);
     return { message: 'Device token removed successfully' };
+  }
+
+  @Patch('me/notification-preferences')
+  @ApiOperation({ summary: 'Update notification preferences' })
+  @ApiBody({ type: UpdateNotificationPreferencesDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Notification preferences updated successfully',
+  })
+  async updateNotificationPreferences(
+    @Request() req: { user: { userId: string } },
+    @Body() dto: UpdateNotificationPreferencesDto,
+  ) {
+    return this.usersService.updateNotificationPreferences(req.user.userId, dto);
+  }
+
+  @Patch('me/fcm-token')
+  @ApiOperation({ summary: 'Update FCM token' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { fcmToken: { type: 'string' } },
+      required: ['fcmToken'],
+    },
+  })
+  @ApiResponse({ status: 200, description: 'FCM token updated successfully' })
+  async updateFcmToken(
+    @Request() req: { user: { userId: string } },
+    @Body() body: { fcmToken: string },
+  ) {
+    await this.usersService.updateFcmToken(req.user.userId, body.fcmToken);
+    return { message: 'FCM token updated successfully' };
   }
 
   @Get('me/rate-limit')

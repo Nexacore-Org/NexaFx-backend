@@ -16,7 +16,6 @@ import { CurrencyPairService } from '../currencies/services/currency-pair.servic
 import { LedgerVerificationService } from '../ledger/services/ledger-verification.service';
 import {
   NotificationType,
-  NotificationStatus,
   Notification,
 } from '../notifications/entities/notification.entity';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -306,8 +305,8 @@ export class ScheduledJobsService {
         .createQueryBuilder()
         .delete()
         .from(Notification)
-        .where('status = :status AND "createdAt" < :cutoff', {
-          status: NotificationStatus.READ,
+        .where('isRead = :isRead AND "createdAt" < :cutoff', {
+          isRead: true,
           cutoff: thirtyDaysAgo,
         })
         .execute();
@@ -322,8 +321,8 @@ export class ScheduledJobsService {
         .createQueryBuilder()
         .delete()
         .from(Notification)
-        .where('status = :status AND "createdAt" < :cutoff', {
-          status: NotificationStatus.UNREAD,
+        .where('isRead = :isRead AND "createdAt" < :cutoff', {
+          isRead: false,
           cutoff: ninetyDaysAgo,
         })
         .execute();
@@ -511,25 +510,20 @@ export class ScheduledJobsService {
           ? `Your deposit of ${transaction.amount} ${transaction.currency} has been confirmed`
           : `Your withdrawal of ${transaction.amount} ${transaction.currency} has been confirmed`;
 
-      const notificationType =
-        transaction.type === TransactionType.DEPOSIT
-          ? NotificationType.DEPOSIT_CONFIRMED
-          : NotificationType.WITHDRAWAL_PROCESSED;
 
-      await this.notificationsService.create({
-        userId: transaction.userId,
-        type: notificationType,
-        title: `${transaction.type} Confirmed`,
-        message: notificationMessage,
-        relatedId: transaction.id,
-        metadata: {
+      await this.notificationsService.dispatch(
+        transaction.userId,
+        NotificationType.TRANSACTION,
+        `${transaction.type} Confirmed`,
+        notificationMessage,
+        {
           transactionId: transaction.id,
           type: transaction.type,
-          amount: transaction.amount,
+          amount: transaction.amount.toString(),
           currency: transaction.currency,
           txHash: transaction.txHash,
         },
-      });
+      );
 
       this.logger.log(
         `[Reconciliation] Notification created for transaction ${transaction.id}`,
@@ -590,20 +584,19 @@ export class ScheduledJobsService {
           ? `Your deposit of ${transaction.amount} ${transaction.currency} failed`
           : `Your withdrawal of ${transaction.amount} ${transaction.currency} failed`;
 
-      await this.notificationsService.create({
-        userId: transaction.userId,
-        type: NotificationType.TRANSACTION_FAILED,
-        title: `${transaction.type} Failed`,
-        message: notificationMessage,
-        relatedId: transaction.id,
-        metadata: {
+      await this.notificationsService.dispatch(
+        transaction.userId,
+        NotificationType.TRANSACTION,
+        `${transaction.type} Failed`,
+        notificationMessage,
+        {
           transactionId: transaction.id,
           type: transaction.type,
-          amount: transaction.amount,
+          amount: transaction.amount.toString(),
           currency: transaction.currency,
-          failureReason: transaction.failureReason,
+          failureReason: transaction.failureReason || 'unknown',
         },
-      });
+      );
 
       this.logger.log(
         `[Reconciliation] Failure notification created for transaction ${transaction.id}`,

@@ -18,17 +18,25 @@ import {
   PaginatedNotificationResponse,
 } from './dto/notification-response.dto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { NotificationPreferenceService } from './services/notification-preference.service';
-import { NotificationDigestMode } from './entities/notification-preference.entity';
+import { Repository } from 'typeorm';
+import { Notification, NotificationType } from './entities/notification.entity';
+import { User } from '../users/user.entity';
+import { FCMService } from '../firebase/fcm.service';
+import { ConfigService } from '@nestjs/config';
+import Mailgun from 'mailgun.js';
+import FormData from 'form-data';
 
 @Injectable()
 export class NotificationsService {
-  private readonly logger = new Logger('NotificationsService');
+  private readonly logger = new Logger(NotificationsService.name);
 
   constructor(
     @InjectRepository(Notification)
-    private notificationsRepository: Repository<Notification>,
-    private readonly preferenceService: NotificationPreferenceService,
+    private readonly notificationRepository: Repository<Notification>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    private readonly fcmService: FCMService,
+    private readonly configService: ConfigService,
   ) {}
 
   async create(
@@ -94,222 +102,163 @@ export class NotificationsService {
     return { updated: result.affected || 0 };
   }
 
-  async findAll(
+  async dispatch(
+    userId: string,
+    type: NotificationType,
+    title: string,
+    body: string,
+    data?: Record<string, any>,
+  ): Promise<Notification> {
+    // 1. Create the in-app notification record in the DB
+    const notification = await this.create(userId, type, title, body, data);
+
+    try {
+      // 2. Fetch the user and their notification preferences
+      const user = await this.userRepository.findOne({ where: { id: userId } });
+      if (!user) {
+        this.logger.warn(`User ${userId} not found during notification dispatch.`);
+        return notification;
+      }
+
+      const prefs = user.notificationPreferences || {
+        email: true,
+        push: true,
+        types: { TRANSACTION: true, KYC: true, RATE_ALERT: true },
+      };
+
+      // Check if this type is enabled for the user
+      const isTypeEnabled =
+        type === NotificationType.SYSTEM ||
+        prefs.types?.[type] !== false;
+
+      if (!isTypeEnabled) {
+        this.logger.log(
+          `Notification type ${type} is disabled for user ${userId}. Skipping delivery.`,
+        );
+        return notification;
+      }
+
+      // 3. Send FCM push if push preference is enabled (opt-in based on user preferences)
+      if (prefs.push === true) {
+        await this.fcmService.sendPush(userId, title, body, data);
+      }
+
+      // 4. Send email if email preference is enabled (opt-in based on user preferences)
+      if (prefs.email === true && user.email) {
+        await this.sendEmail(user.email, title, body);
+      }
+    } catch (error) {
+      // Catch and log dispatch errors to ensure main flows are not blocked
+      this.logger.error(
+        `Failed to deliver dispatch notifications for user ${userId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
+    return notification;
+  }
+
+  async getNotifications(
     userId: string,
     page: number = 1,
     limit: number = 10,
-    type?: NotificationType,
-    status?: NotificationStatus,
-  ): Promise<PaginatedNotificationResponse> {
-    try {
-      const query =
-        this.notificationsRepository.createQueryBuilder('notification');
-
-      query.where('notification.userId = :userId', { userId });
-
-      if (type) {
-        query.andWhere('notification.type = :type', { type });
-      }
-
-      if (status) {
-        query.andWhere('notification.status = :status', { status });
-      }
-
-      query.orderBy('notification.createdAt', 'DESC');
-
-      const total = await query.getCount();
-      const skip = (page - 1) * limit;
-
-      const notifications = await query.skip(skip).take(limit).getMany();
-
-      return {
-        data: notifications.map((n) => this.mapToResponseDto(n)),
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      };
-    } catch (error) {
-      this.logger.error('Failed to fetch notifications', error);
-      throw new BadRequestException('Failed to fetch notifications');
-    }
-  }
-
-  async findById(id: string): Promise<NotificationResponseDto> {
-    const notification = await this.notificationsRepository.findOne({
-      where: { id },
-    });
-
-    if (!notification) {
-      throw new NotFoundException(`Notification with ID ${id} not found`);
+    isRead?: boolean,
+  ) {
+    const where: any = { userId };
+    if (isRead !== undefined) {
+      where.isRead = isRead;
     }
 
-    return this.mapToResponseDto(notification);
-  }
-
-  async findByUserId(userId: string): Promise<NotificationResponseDto[]> {
-    const notifications = await this.notificationsRepository.find({
-      where: { userId },
+    const [data, total] = await this.notificationRepository.findAndCount({
+      where,
       order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
     });
 
-    return notifications.map((n) => this.mapToResponseDto(n));
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
-  async markAsRead(id: string): Promise<NotificationResponseDto> {
-    const notification = await this.notificationsRepository.findOne({
-      where: { id },
+  async markAsRead(userId: string, id: string): Promise<Notification> {
+    const notification = await this.notificationRepository.findOne({
+      where: { id, userId },
     });
 
     if (!notification) {
-      throw new NotFoundException(`Notification with ID ${id} not found`);
+      throw new NotFoundException(`Notification with ID ${id} not found.`);
     }
 
-    notification.status = NotificationStatus.READ;
+    notification.isRead = true;
     notification.readAt = new Date();
-
-    const updated = await this.notificationsRepository.save(notification);
-    return this.mapToResponseDto(updated);
-  }
-
-  async markMultipleAsRead(
-    notificationIds: string[],
-  ): Promise<NotificationResponseDto[]> {
-    if (!notificationIds || notificationIds.length === 0) {
-      throw new BadRequestException('Notification IDs are required');
-    }
-
-    await this.notificationsRepository.update(
-      { id: In(notificationIds) },
-      {
-        status: NotificationStatus.READ,
-        readAt: new Date(),
-      },
-    );
-
-    const updated = await this.notificationsRepository.find({
-      where: { id: In(notificationIds) },
-    });
-
-    return updated.map((n) => this.mapToResponseDto(n));
+    return this.notificationRepository.save(notification);
   }
 
   async markAllAsRead(userId: string): Promise<{ updated: number }> {
-    const result = await this.notificationsRepository.update(
-      { userId, status: NotificationStatus.UNREAD },
-      {
-        status: NotificationStatus.READ,
-        readAt: new Date(),
-      },
+    const result = await this.notificationRepository.update(
+      { userId, isRead: false },
+      { isRead: true, readAt: new Date() },
     );
-
     return { updated: result.affected || 0 };
   }
 
   async getUnreadCount(userId: string): Promise<{ count: number }> {
-    const count = await this.notificationsRepository.countBy({
-      userId,
-      status: NotificationStatus.UNREAD,
+    const count = await this.notificationRepository.count({
+      where: { userId, isRead: false },
     });
-
     return { count };
   }
 
-  async delete(id: string): Promise<{ success: boolean }> {
-    const result = await this.notificationsRepository.delete(id);
+  private async sendEmail(to: string, subject: string, body: string): Promise<void> {
+    const skipEmail = this.configService.get<string>('SKIP_EMAIL_SENDING');
 
-    if (result.affected === 0) {
-      throw new NotFoundException(`Notification with ID ${id} not found`);
+    if (skipEmail === 'true') {
+      this.logger.log(
+        `[EMAIL DEV] Email skipped — to: ${to}, subject: ${subject}, body: ${body}`,
+      );
+      return;
     }
 
-    return { success: true };
-  }
+    const apiKey = this.configService.get<string>('MAILGUN_API_KEY');
+    const domain = this.configService.get<string>('MAILGUN_DOMAIN');
+    const fromEmail = this.configService.get<string>('MAILGUN_FROM_EMAIL');
+    const fromName =
+      this.configService.get<string>('MAILGUN_FROM_NAME') ?? 'NexaFX';
 
-  async deleteMultiple(
-    notificationIds: string[],
-  ): Promise<{ deleted: number }> {
-    if (!notificationIds || notificationIds.length === 0) {
-      throw new BadRequestException('Notification IDs are required');
+    if (!apiKey || !domain || !fromEmail) {
+      this.logger.error(
+        'Missing Mailgun configuration: MAILGUN_API_KEY, MAILGUN_DOMAIN, and MAILGUN_FROM_EMAIL are required',
+      );
+      return;
     }
 
-    const result = await this.notificationsRepository.delete(notificationIds);
-    return { deleted: result.affected || 0 };
-  }
+    try {
+      const mailgun = new Mailgun(FormData);
+      const client = mailgun.client({ username: 'api', key: apiKey });
 
-  async deleteAllByUser(userId: string): Promise<{ deleted: number }> {
-    const result = await this.notificationsRepository.delete({ userId });
-    return { deleted: result.affected || 0 };
-  }
-
-  async canSendChannel(
-    userId: string,
-    type: NotificationType,
-    channel: 'email' | 'push' | 'inApp',
-  ): Promise<boolean> {
-    return this.preferenceService.isChannelEnabled(userId, type, channel);
-  }
-
-  generateUnsubscribeToken(userId: string, type: NotificationType): string {
-    return this.preferenceService.generateUnsubscribeToken(userId, type);
-  }
-
-  async findByType(
-    userId: string,
-    type: NotificationType,
-  ): Promise<NotificationResponseDto[]> {
-    const notifications = await this.notificationsRepository.find({
-      where: { userId, type },
-      order: { createdAt: 'DESC' },
-    });
-
-    return notifications.map((n) => this.mapToResponseDto(n));
-  }
-
-  async findByStatus(
-    userId: string,
-    status: NotificationStatus,
-  ): Promise<NotificationResponseDto[]> {
-    const notifications = await this.notificationsRepository.find({
-      where: { userId, status },
-      order: { createdAt: 'DESC' },
-    });
-
-    return notifications.map((n) => this.mapToResponseDto(n));
-  }
-
-  async update(
-    id: string,
-    updateNotificationDto: UpdateNotificationDto,
-  ): Promise<NotificationResponseDto> {
-    const notification = await this.notificationsRepository.findOne({
-      where: { id },
-    });
-
-    if (!notification) {
-      throw new NotFoundException(`Notification with ID ${id} not found`);
+      await client.messages.create(domain, {
+        from: `${fromName} <${fromEmail}>`,
+        to: [to],
+        subject: subject,
+        html: `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 5px;">
+            <h2 style="color: #333;">${subject}</h2>
+            <p style="font-size: 16px; color: #555; line-height: 1.5;">${body}</p>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+            <p style="font-size: 12px; color: #999; text-align: center;">This is an automated notification from NexaFX.</p>
+          </div>
+        `,
+        text: body,
+      });
+      this.logger.log(`Email sent successfully to ${to}`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to send email to ${to}: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
-
-    Object.assign(notification, updateNotificationDto);
-    const updated = await this.notificationsRepository.save(notification);
-    return this.mapToResponseDto(updated);
-  }
-
-  private mapToResponseDto(
-    notification: Notification,
-  ): NotificationResponseDto {
-    return {
-      id: notification.id,
-      userId: notification.userId,
-      type: notification.type,
-      title: notification.title,
-      message: notification.message,
-      status: notification.status,
-      metadata: notification.metadata,
-      relatedId: notification.relatedId,
-      actionUrl: notification.actionUrl,
-      createdAt: notification.createdAt,
-      updatedAt: notification.updatedAt,
-      readAt: notification.readAt,
-    };
   }
 }

@@ -705,13 +705,15 @@ export class TransactionsService {
         );
         await this.updateUserBalance(userId, toCurrency, effectiveAmount);
 
-        await this.notificationsService.create({
+        await this.notificationsService.dispatch(
           userId,
-          type: NotificationType.SWAP_COMPLETED,
-          title: 'Swap Completed',
-          message: `Successfully swapped ${amount} ${fromCurrency} to ${effectiveAmount.toFixed(2)} ${toCurrency}`,
-          relatedId: transaction.id,
-        });
+          NotificationType.TRANSACTION,
+          'Swap Completed',
+          `Successfully swapped ${amount} ${fromCurrency} to ${effectiveAmount.toFixed(2)} ${toCurrency}`,
+          {
+            transactionId: transaction.id,
+          },
+        );
 
         this.logger.log(
           `Swap transaction completed successfully: ${transaction.id} (Attempt ${i})`,
@@ -1380,9 +1382,6 @@ export class TransactionsService {
     failureReason?: string,
   ): Promise<void> {
     try {
-      const user = await this.usersService.findById(userId);
-      if (!user || !user.fcmTokens || user.fcmTokens.length === 0) return;
-
       const actionText =
         transaction.type === TransactionType.DEPOSIT ? 'Deposit' : 'Withdrawal';
       let title = '';

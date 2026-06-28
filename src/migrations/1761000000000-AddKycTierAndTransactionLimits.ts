@@ -1,5 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
+export class AddKycTierAndTransactionLimits1761000000000 implements MigrationInterface {
 /**
  * Adds the kycTier column to users and creates the transaction_limits table.
  *

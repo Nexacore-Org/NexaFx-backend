@@ -13,6 +13,7 @@ import { CommonModule } from './common/common.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PlanThrottlerGuard } from './common/guards/plan-throttler.guard';
+import { ImpersonationRestrictionGuard } from './common/guards/impersonation-restriction.guard';
 import { HealthModule } from './health/health.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -37,9 +38,18 @@ import { EscrowModule } from './escrow/escrow.module';
 import { RateAlertsModule } from './rate-alerts/rate-alerts.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
+import { TransactionsV2Module } from './transactions/transaction-v2.module';
+import { FiatV2Module } from './fiat/fiat-v2.module';
+import { BatchesV2Module } from './batches/batches-v2.module';
+import { TaxModule } from './tax/tax.module';
+import { OrganisationsModule } from './organisations/organisations.module';
+import { SanctionsModule } from './sanctions/sanctions.module';
+import { LoansModule } from './loans/loans.module';
 import { DisputesModule } from './disputes/disputes.module';
 import { VaultsModule } from './vaults/vaults.module';
+import { OwaspZapDastModule } from './owasp-zap-dast/owasp-zap-dast.module';
 import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-anchor.module';
+import { FiatModule } from './modules/fiat/fiat.module';
 
 @Module({
   imports: [
@@ -70,6 +80,7 @@ import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-a
         {
           ttl: (configService.get<number>('THROTTLE_TTL') ?? 60) * 1000,
           limit: configService.get<number>('THROTTLE_LIMIT') ?? 100,
+        },    OwaspZapDastModule,
         },    StellarSep24AnchorModule,
 
       ],
@@ -97,6 +108,9 @@ import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-a
     NotificationsModule,
     FirebaseModule,
     TransactionsModule,
+    TransactionsV2Module,
+    FiatV2Module,
+    BatchesV2Module,
     ReferralsModule,
     BeneficiariesModule,
     KycModule,
@@ -116,9 +130,14 @@ import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-a
     WalletsModule,
     LedgerModule,
     UsersModule,
+    TaxModule,
+    OrganisationsModule,
+    SanctionsModule,
+    LoansModule,
     DisputesModule,
     CardsModule,
     VaultsModule,
+    FiatModule,
   ],
   controllers: [AppController],
   providers: [
@@ -132,10 +151,6 @@ import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-a
     },
     {
       provide: APP_GUARD,
-      useClass: PlanThrottlerGuard,
-    },
-  ],
-  providers: [],
       useClass: PlanThrottlerGuard,
     },
   ],

@@ -89,7 +89,7 @@ describe('TransactionsService.createSwap', () => {
     };
 
     notificationsService = {
-      create: jest.fn(async () => ({})),
+      dispatch: jest.fn(async () => ({})),
     };
     const ledgerService = {
       record: jest.fn(async () => undefined),
@@ -234,9 +234,13 @@ describe('TransactionsService.createSwap', () => {
     expect(result.toAmount).toBe('99.50000000');
 
     expect(stellarService.submitTransaction).toHaveBeenCalled();
-    expect(notificationsService.create).toHaveBeenCalledWith(
+    expect(notificationsService.dispatch).toHaveBeenCalledWith(
+      'user-1',
+      NotificationType.TRANSACTION,
+      'Swap Completed',
+      expect.any(String),
       expect.objectContaining({
-        type: NotificationType.SWAP_COMPLETED,
+        transactionId: 'tx-123',
       }),
     );
   });

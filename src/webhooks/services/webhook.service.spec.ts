@@ -49,6 +49,12 @@ describe('WebhookService', () => {
           provide: getRepositoryToken(WebhookDelivery),
           useValue: deliveryRepo,
         },
+        {
+          provide: 'BullQueue_webhook-queue',
+          useValue: {
+            add: jest.fn(),
+          },
+        },
       ],
     }).compile();
 

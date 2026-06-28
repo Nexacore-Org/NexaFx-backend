@@ -1,5 +1,4 @@
 import { Module, Global } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { PaginationService } from './services/pagination.service';
 import { DateService } from './services/date.service';
 import { EncryptionService } from './services/encryption.service';
@@ -14,6 +13,7 @@ import { RedisService } from './services/redis.service';
     PaginationService,
     DateService,
     EncryptionService,
+    IdempotencyRedisCache,
     IdempotencyService,
     RedisService,
   ],
@@ -21,6 +21,7 @@ import { RedisService } from './services/redis.service';
     PaginationService,
     DateService,
     EncryptionService,
+    IdempotencyRedisCache,
     IdempotencyService,
     RedisService,
   ],

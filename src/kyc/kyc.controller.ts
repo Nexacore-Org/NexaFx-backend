@@ -8,8 +8,9 @@ import {
   UploadedFiles,
   BadRequestException,
   UsePipes,
-  Patch,
   Param,
+  Patch,
+  Req,
 } from '@nestjs/common';
 import { Audit } from '../common/decorators/audit.decorator';
 import {
@@ -36,6 +37,7 @@ import {
 } from '../auth/decorators/current-user.decorator';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { FileValidationPipe } from '../common/pipes/file-validation.pipe';
+import { Request } from 'express';
 
 @ApiTags('KYC')
 @Controller('kyc')
@@ -92,6 +94,48 @@ export class KycController {
   @ApiResponse({ status: 200, description: 'KYC status retrieved' })
   async getKycStatus(@CurrentUser() user: CurrentUserPayload) {
     return this.kycService.getKycStatus(user.userId);
+  }
+
+  @Post('resubmit')
+  @ApiOperation({ summary: 'Resubmit KYC details' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ type: ResubmitKycDto })
+  @UseInterceptors(
+    FileFieldsInterceptor([
+      { name: 'documentFront', maxCount: 1 },
+      { name: 'documentBack', maxCount: 1 },
+      { name: 'selfie', maxCount: 1 },
+    ]),
+  )
+  @ApiResponse({ status: 200, description: 'KYC resubmission successful' })
+  async resubmitKyc(
+    @CurrentUser() user: CurrentUserPayload,
+    @UploadedFiles()
+    files: {
+      documentFront?: Express.Multer.File[];
+      documentBack?: Express.Multer.File[];
+      selfie?: Express.Multer.File[];
+    },
+    @Body() dto: ResubmitKycDto,
+    @Req() req: Request & { kycUploadVersion?: string },
+  ) {
+    const version = req.kycUploadVersion || 'v1';
+    const documentFrontUrl = files?.documentFront?.[0]
+      ? `uploads/kyc/${user.userId}/${version}/${files.documentFront[0].filename || files.documentFront[0].originalname}`
+      : undefined;
+    const documentBackUrl = files?.documentBack?.[0]
+      ? `uploads/kyc/${user.userId}/${version}/${files.documentBack[0].filename || files.documentBack[0].originalname}`
+      : undefined;
+    const selfieUrl = files?.selfie?.[0]
+      ? `uploads/kyc/${user.userId}/${version}/${files.selfie[0].filename || files.selfie[0].originalname}`
+      : undefined;
+
+    return this.kycService.resubmitKyc(user.userId, {
+      ...dto,
+      documentFrontUrl,
+      documentBackUrl,
+      selfieUrl,
+    });
   }
 
   @Get('pending')

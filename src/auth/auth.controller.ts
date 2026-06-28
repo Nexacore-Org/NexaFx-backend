@@ -9,7 +9,9 @@ import {
   Req,
   Res,
   UseGuards,
+  Version,
 } from '@nestjs/common';
+import { I18n, I18nContext } from 'nestjs-i18n';
 import { AuthGuard } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
@@ -66,6 +68,16 @@ export class AuthController {
   @ApiResponse({ status: 400, description: 'Invalid request body' })
   async login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
+  }
+
+  @Public()
+  @Version('2')
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Initiate login with email and password (v2)' })
+  @ApiBody({ type: LoginDto })
+  async loginV2(@Body() loginDto: LoginDto, @I18n() i18n: I18nContext) {
+    return this.authService.loginV2(loginDto, i18n.lang);
   }
 
   @Public()

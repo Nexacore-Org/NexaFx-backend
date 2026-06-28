@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { EMAIL_QUEUE, WEBHOOK_QUEUE } from './queue.constants';
+import { EMAIL_QUEUE, WEBHOOK_QUEUE, TAX_QUEUE } from './queue.constants';
 import { redisConnectionFromUrl } from './queue-connection';
 import { QueuesDashboardService } from './queues-dashboard.service';
 
@@ -29,6 +29,15 @@ import { QueuesDashboardService } from './queues-dashboard.service';
         defaultJobOptions: {
           attempts: 3,
           backoff: { type: 'fixed', delay: 60_000 },
+          removeOnComplete: 100,
+          removeOnFail: 500,
+        },
+      },
+      {
+        name: TAX_QUEUE,
+        defaultJobOptions: {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 10_000 },
           removeOnComplete: 100,
           removeOnFail: 500,
         },

@@ -224,12 +224,41 @@ export class StellarService {
   /* -------------------- PAYMENTS -------------------- */
 
   async sendPayment(
-    fromSecret: string,
-    toPublicKey: string,
-    amount: string,
+    fromSecretOrParams:
+      | string
+      | {
+          sourcePublicKey?: string;
+          destination: string;
+          asset?: string | Asset;
+          amount: string;
+          secretKey: string;
+          memo?: string;
+          memoType?: string;
+          userId?: string;
+        },
+    toPublicKey?: string,
+    amount?: string,
     memo?: string,
     userId?: string,
   ): Promise<SendPaymentResult> {
+    let fromSecret: string;
+    let destPublicKey: string;
+    let paymentAmount: string;
+    let paymentMemo: string | undefined = memo;
+    let paymentUserId: string | undefined = userId;
+
+    if (typeof fromSecretOrParams === 'object') {
+      fromSecret = fromSecretOrParams.secretKey;
+      destPublicKey = fromSecretOrParams.destination;
+      paymentAmount = fromSecretOrParams.amount;
+      paymentMemo = fromSecretOrParams.memo;
+      paymentUserId = fromSecretOrParams.userId;
+    } else {
+      fromSecret = fromSecretOrParams;
+      destPublicKey = toPublicKey!;
+      paymentAmount = amount!;
+    }
+
     try {
       const keypair = Keypair.fromSecret(fromSecret);
       const account = await this.server.loadAccount(keypair.publicKey());
@@ -239,14 +268,14 @@ export class StellarService {
         networkPassphrase: this.networkPassphrase,
       }).addOperation(
         Operation.payment({
-          destination: toPublicKey,
+          destination: destPublicKey,
           asset: Asset.native(),
-          amount,
+          amount: paymentAmount,
         }),
       );
 
-      if (memo) {
-        builder.addMemo(Memo.text(memo));
+      if (paymentMemo) {
+        builder.addMemo(Memo.text(paymentMemo));
       }
 
       const transaction = builder.setTimeout(180).build();
@@ -254,10 +283,10 @@ export class StellarService {
 
       const result = await this.server.submitTransaction(transaction);
 
-      if (userId) {
+      if (paymentUserId) {
         await this.auditLogsService.logSystemEvent(
           AuditAction.TRANSACTION_SUBMITTED,
-          userId,
+          paymentUserId,
           {
             transactionHash: result.hash,
             ledger: result.ledger,
@@ -274,13 +303,13 @@ export class StellarService {
       const error = toStellarError(err);
       this.logger.error(`Failed to send Stellar payment: ${error.message}`);
 
-      if (userId) {
+      if (paymentUserId) {
         await this.auditLogsService.logSystemEvent(
           AuditAction.TRANSACTION_SUBMITTED + '_FAILED',
-          userId,
+          paymentUserId,
           {
-            destination: toPublicKey,
-            amount,
+            destination: destPublicKey,
+            amount: paymentAmount,
             error: error.message,
             resultCodes: error.response?.data?.extras?.result_codes,
           },

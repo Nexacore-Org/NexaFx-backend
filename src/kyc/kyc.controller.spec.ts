@@ -10,6 +10,7 @@ describe('KycController', () => {
   let controller: KycController;
   let serviceMock: Partial<KycService>;
   let submitSpy: jest.Mock;
+  let resubmitSpy: jest.Mock;
 
   const buildMulterFile = (
     fieldname: string,
@@ -30,7 +31,12 @@ describe('KycController', () => {
 
   beforeEach(() => {
     submitSpy = jest.fn().mockResolvedValue({ message: 'ok', status: 'pending', tier: 0 });
-    serviceMock = { submitKyc: submitSpy };
+    resubmitSpy = jest.fn().mockResolvedValue({ message: 'ok', status: 'pending', tier: 0 });
+    serviceMock = {
+      submitKyc: submitSpy,
+      resubmitKyc: resubmitSpy,
+      getKycStatus: jest.fn().mockResolvedValue({ status: 'not_submitted' }),
+    };
     controller = new KycController(serviceMock as KycService);
   });
 

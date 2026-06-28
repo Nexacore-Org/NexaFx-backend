@@ -68,3 +68,4 @@ export class CreateEscrowsTable1762000000000 implements MigrationInterface {
     await queryRunner.query('DROP TABLE IF EXISTS "escrows"');
     await queryRunner.query('DROP TYPE IF EXISTS "public"."escrows_status_enum"');
   }
+}

@@ -42,10 +42,12 @@ export class KycService {
     private configService: ConfigService,
     private readonly dataSource: DataSource,
     private readonly firebaseService: FirebaseService,
+    private readonly notificationsService: NotificationsService,
     private readonly webhookService: WebhookService,
     private readonly kycEmailService: KycEmailService,
     @Inject(STORAGE_SERVICE_TOKEN)
     private readonly storageService: StorageService,
+    private readonly kycEmailService: KycEmailService,
     @Optional()
     private readonly sanctionsService?: SanctionsService,
   ) { }
@@ -64,6 +66,7 @@ export class KycService {
     const existingActiveKyc = await manager.findOne(KycRecord, {
       where: [
         { userId, status: KycStatus.PENDING },
+        { userId, status: KycStatus.RESUBMISSION_REQUIRED },
       ],
     });
 
@@ -121,15 +124,14 @@ export class KycService {
       submittedAt: new Date(),
     });
 
-    await manager.save(newKyc);
+    await this.kycRepository.save(newKyc);
 
     return {
       message: 'KYC submitted successfully',
       status: newKyc.status,
       tier: newKyc.tier,
     };
-  });
-}
+  }
 
   async resubmitKyc(
   userId: string,
@@ -395,7 +397,8 @@ export class KycService {
 
       if (
         kyc.status === KycStatus.APPROVED ||
-        kyc.status === KycStatus.REJECTED
+        kyc.status === KycStatus.REJECTED ||
+        kyc.status === KycStatus.RESUBMISSION_REQUIRED
       ) {
         throw new BadRequestException('KYC already reviewed');
       }
@@ -408,9 +411,62 @@ export class KycService {
         : KycStatus.REJECTED;
 
       kyc.status = newStatus;
-      kyc.rejectionReason = reason || 'KYC rejected';
+      kyc.rejectionReason = reason || (requireResubmission ? 'Resubmission required' : 'KYC rejected');
       kyc.reviewedBy = reviewerId;
       kyc.reviewedAt = new Date();
+
+/      let notificationPayload: Partial<Notification>;
+
+      if (decision === KycStatus.APPROVED) {
+        kyc.status = KycStatus.APPROVED;
+        const tier = this.resolveUserKycTier(kyc);
+        kyc.tier =
+          tier === UserKycTier.BASIC
+            ? KycTier.TIER_1
+            : tier === UserKycTier.UNVERIFIED
+              ? KycTier.TIER_0
+              : KycTier.TIER_2;
+        kyc.reviewedAt = new Date();
+
+        user.isVerified = true;
+        user.kycTier = tier;
+
+        notificationPayload = {
+          userId: user.id,
+          type: NotificationType.SYSTEM,
+          title: 'KYC Approved',
+          message:
+            'Your identity verification has been approved. You now have full access to higher transaction limits.',
+          status: NotificationStatus.UNREAD,
+          relatedId: kyc.id,
+          metadata: {
+            entity: 'KYC',
+            kycStatus: 'approved',
+            tier,
+          },
+        };
+      } else {
+        kyc.status = KycStatus.REJECTED;
+        kyc.rejectionReason = reason || 'KYC rejected';
+        kyc.reviewedAt = new Date();
+
+        user.isVerified = false;
+        user.kycTier = UserKycTier.UNVERIFIED;
+
+        notificationPayload = {
+          userId: user.id,
+          type: NotificationType.SYSTEM,
+          title: 'KYC Rejected',
+          message: `Your KYC submission was rejected. Reason: ${kyc.rejectionReason}`,
+          status: NotificationStatus.UNREAD,
+          relatedId: kyc.id,
+          metadata: {
+            entity: 'KYC',
+            kycStatus: 'rejected',
+            reason: kyc.rejectionReason,
+          },
+        };
+      }
       user.isVerified = false;
       user.kycTier = UserKycTier.UNVERIFIED;
 
@@ -475,20 +531,20 @@ export class KycService {
           this.logger.error(`Webhook dispatch failed: ${err.message}`),
         );
 
-      // Send rejection email
-      this.kycEmailService
-        .sendRejectionEmail(
-          user.email,
-          user.firstName ?? 'User',
-          reason,
-          requireResubmission,
-        )
-        .catch((err: Error) =>
-          this.logger.error(
-            `Failed to send KYC rejection email: ${err.message}`,
-          ),
-        );
-
+ // Send rejection email
+    this.kycEmailService
+      .sendRejectionEmail(
+        user.email,
+        user.firstName ?? 'User',
+        reason,
+        newStatus === KycStatus.RESUBMISSION_REQUIRED,
+      )
+      .catch((err: Error) =>
+        this.logger.error(
+          `Failed to send KYC rejection email: ${err.message}`,
+        ),
+      );
+      
       return {
         message:
           newStatus === KycStatus.RESUBMISSION_REQUIRED

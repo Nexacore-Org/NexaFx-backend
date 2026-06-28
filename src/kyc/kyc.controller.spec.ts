@@ -171,7 +171,7 @@ describe('KycController', () => {
 
     const reqForController = {
       kycUploadVersion: 'v2',
-    } as unknown as Request;
+    } as any;
     await controller.resubmitKyc(
       user,
       filesForController,

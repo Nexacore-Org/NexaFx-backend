@@ -819,7 +819,7 @@ export class AdminService {
           status: row.audit_log_status || '',
         });
       }
-    } catch (err) {
+    } catch (err: any) {
       this.logger.error(`Error streaming audit logs CSV: ${err.message}`, err.stack);
     } finally {
       csvStream.end();

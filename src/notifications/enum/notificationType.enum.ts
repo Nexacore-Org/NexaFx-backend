@@ -1,6 +1,4 @@
 export enum NotificationType {
-  SYSTEM = 'SYSTEM',
-  PROJECT = 'PROJECT',
   TRANSACTION = 'TRANSACTION',
   OTP = 'OTP',
   MESSAGING = 'MESSAGING',

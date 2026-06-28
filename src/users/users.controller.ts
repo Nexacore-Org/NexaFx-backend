@@ -28,6 +28,7 @@ import {
   WalletPortfolioResponseDto,
   DeviceTokenDto,
   RateLimitStatusDto,
+  UpdateNotificationPreferencesDto,
 } from './dto';
 import { DataExportService } from './services/data-export.service';
 import { AccountDeletionService } from './services/account-deletion.service';
@@ -270,6 +271,38 @@ export class UsersController {
     return { message: 'Device token removed successfully' };
   }
 
+  @Patch('me/notification-preferences')
+  @ApiOperation({ summary: 'Update notification preferences' })
+  @ApiBody({ type: UpdateNotificationPreferencesDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Notification preferences updated successfully',
+  })
+  async updateNotificationPreferences(
+    @Request() req: { user: { userId: string } },
+    @Body() dto: UpdateNotificationPreferencesDto,
+  ) {
+    return this.usersService.updateNotificationPreferences(req.user.userId, dto);
+  }
+
+  @Patch('me/fcm-token')
+  @ApiOperation({ summary: 'Update FCM token' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { fcmToken: { type: 'string' } },
+      required: ['fcmToken'],
+    },
+  })
+  @ApiResponse({ status: 200, description: 'FCM token updated successfully' })
+  async updateFcmToken(
+    @Request() req: { user: { userId: string } },
+    @Body() body: { fcmToken: string },
+  ) {
+    await this.usersService.updateFcmToken(req.user.userId, body.fcmToken);
+    return { message: 'FCM token updated successfully' };
+  }
+
   @Get('me/rate-limit')
   @ApiOperation({ summary: 'Get current user rate limit status' })
   @ApiResponse({
@@ -354,3 +387,29 @@ export class UsersController {
     return { message: 'User account has been deactivated' };
   }
 }
+
+@ApiTags('Users V2')
+@Controller('v2/users')
+@ApiBearerAuth('access-token')
+export class UsersV2Controller {
+  constructor(private readonly usersService: UsersService) {}
+
+  @Get('me')
+  @ApiOperation({ summary: 'Get current user profile (V2)' })
+  @ApiResponse({
+    status: 200,
+    description: 'User profile retrieved successfully',
+  })
+  async getMe(@Request() req: any) {
+    const userId = req.user.userId;
+    const profile = await this.usersService.getProfile(userId);
+    if (req.user?.isImpersonation) {
+      return {
+        ...profile,
+        isBeingImpersonated: true,
+      };
+    }
+    return profile;
+  }
+}
+

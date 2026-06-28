@@ -1,0 +1,8 @@
+{
+  "USER_NOT_FOUND": "Utilisateur non trouvé",
+  "ACCOUNT_SUSPENDED": "Compte suspendu",
+  "ACCOUNT_DELETED": "Le compte a été supprimé",
+  "INSUFFICIENT_BALANCE": "Solde insuffisant",
+  "TRANSACTION_NOT_FOUND": "Transaction non trouvée",
+  "KYC_NOT_FOUND": "Dossier KYC non trouvé"
+}

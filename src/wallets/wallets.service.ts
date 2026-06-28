@@ -7,13 +7,14 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
-import { StellarService } from '../blockchain/stellar/stellar.service';
-import { WalletBalanceResult } from '../blockchain/stellar/stellar.types';
-import { EncryptionService } from '../common/services/encryption.service';
 import { UsersService } from '../users/users.service';
 import { User } from '../users/user.entity';
 import { Wallet, StellarNetwork } from './entities/wallet.entity';
 import { GenerateWalletDto, ImportWalletDto } from './dto/wallet.dto';
+import { StellarService } from '../modules/stellar/stellar.service';
+import { WalletBalanceResult } from '../modules/stellar/stellar.types';
+import { EncryptionService } from '../common/services/encryption.service';
+import Decimal from 'decimal.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -36,12 +37,17 @@ export interface TransactionWalletContext {
 
 export interface WalletListItem {
   id: string;
-  publicKey: string;
+  userId: string;
+  currency: string;
+  balance: string;
+  publicKey: string | null;
+  encryptedSecretKey: string | null;
   label: string;
   isDefault: boolean;
   isWatchOnly: boolean;
   network: StellarNetwork;
   createdAt: Date;
+  updatedAt: Date;
   balances: WalletBalanceResult[];
   /** Non-null when a balance fetch fails for this wallet. */
   balanceError: string | null;
@@ -91,6 +97,33 @@ export class WalletsService {
   /**
    * Called after signup / managed-user creation when the User row already
    * holds keys. Idempotent — skips silently if the user already has wallets.
+   * Return only authenticated user's wallets
+   */
+  async findAllByUser(userId: string): Promise<Wallet[]> {
+    return this.walletRepository.find({
+      where: { userId },
+      order: { createdAt: 'ASC' },
+    });
+  }
+
+  /**
+   * Return specific wallet of the authenticated user
+   */
+  async findByUserAndCurrency(userId: string, currency: string): Promise<Wallet> {
+    const targetCurrency = currency.trim().toUpperCase();
+    const wallet = await this.walletRepository.findOne({
+      where: { userId, currency: targetCurrency },
+    });
+    if (!wallet) {
+      throw new NotFoundException(
+        `Wallet with currency '${targetCurrency}' not found for this user`,
+      );
+    }
+    return wallet;
+  }
+
+  /**
+   * Integrates into the signup/creation flow to seed the default XLM wallet
    */
   async seedPrimaryWalletFromUserCredentials(
     userId: string,
@@ -124,6 +157,30 @@ export class WalletsService {
    *
    * @throws NotFoundException when an explicit walletId is not found.
    * @throws BadRequestException when the resolved wallet is watch-only.
+    const existing = await this.walletRepository.findOne({
+      where: { userId, currency: 'XLM' },
+    });
+    if (existing) {
+      return;
+    }
+
+    const defaultWallet = this.walletRepository.create({
+      userId,
+      currency: 'XLM',
+      balance: '0.00000000',
+      isDefault: true,
+      publicKey,
+      encryptedSecretKey,
+      label: 'Primary',
+      network: this.getNetwork(),
+    });
+
+    await this.walletRepository.save(defaultWallet);
+  }
+
+  /**
+   * Resolves the wallet context for Stellar blockchain transactions, ensuring
+   * compatibility with transactions and super-admin modules.
    */
   async resolveWalletForTransaction(
     userId: string,
@@ -190,8 +247,31 @@ export class WalletsService {
       take: safePageSize,
     });
 
-    const items = await Promise.all(
-      wallets.map(wallet => this.toListItem(wallet)),
+    const withBalances = await Promise.all(
+      wallets.map(async (w) => {
+        let balances: WalletBalanceResult[] = [];
+        if (w.publicKey) {
+          try {
+            balances = await this.stellarService.getWalletBalances(w.publicKey);
+          } catch {
+            // Friendbot/balance check might fail or time out in testnets
+          }
+        }
+        return {
+          id: w.id,
+          userId: w.userId,
+          currency: w.currency,
+          balance: w.balance,
+          publicKey: w.publicKey,
+          encryptedSecretKey: w.encryptedSecretKey,
+          label: w.label,
+          isDefault: w.isDefault,
+          network: w.network,
+          createdAt: w.createdAt,
+          updatedAt: w.updatedAt,
+          balances,
+        };
+      }),
     );
 
     return { items, total, page: safePage, pageSize: safePageSize };
@@ -242,6 +322,39 @@ export class WalletsService {
     );
 
     return this.toSummary(saved);
+    const wallet = this.walletRepository.create({
+      userId,
+      publicKey: generated.publicKey,
+      encryptedSecretKey: encrypted,
+      label,
+      isDefault: false,
+      network: this.getNetwork(),
+      currency: 'XLM',
+      balance: '0.00000000',
+    });
+    const saved = await this.walletRepository.save(wallet);
+
+    if (saved.publicKey) {
+      try {
+        await this.stellarService.fundTestnetWallet(saved.publicKey);
+      } catch {
+        // Friendbot funding is best-effort for newly generated wallets.
+      }
+    }
+
+    return {
+      id: saved.id,
+      userId: saved.userId,
+      currency: saved.currency,
+      balance: saved.balance,
+      publicKey: saved.publicKey,
+      encryptedSecretKey: saved.encryptedSecretKey,
+      label: saved.label,
+      isDefault: saved.isDefault,
+      network: saved.network,
+      createdAt: saved.createdAt,
+      updatedAt: saved.updatedAt,
+    };
   }
 
   /**
@@ -284,6 +397,31 @@ export class WalletsService {
     );
 
     return this.toSummary(saved);
+    const wallet = this.walletRepository.create({
+      userId,
+      publicKey: normalized,
+      encryptedSecretKey: null,
+      label,
+      isDefault: false,
+      network: this.getNetwork(),
+      currency: 'XLM',
+      balance: '0.00000000',
+    });
+    const saved = await this.walletRepository.save(wallet);
+
+    return {
+      id: saved.id,
+      userId: saved.userId,
+      currency: saved.currency,
+      balance: saved.balance,
+      publicKey: saved.publicKey,
+      encryptedSecretKey: saved.encryptedSecretKey,
+      label: saved.label,
+      isDefault: saved.isDefault,
+      network: saved.network,
+      createdAt: saved.createdAt,
+      updatedAt: saved.updatedAt,
+    };
   }
 
   /**
@@ -304,6 +442,19 @@ export class WalletsService {
     wallet.label = sanitized;
     const saved = await this.walletRepository.save(wallet);
     return this.toSummary(saved);
+    return {
+      id: saved.id,
+      userId: saved.userId,
+      currency: saved.currency,
+      balance: saved.balance,
+      publicKey: saved.publicKey,
+      encryptedSecretKey: saved.encryptedSecretKey,
+      label: saved.label,
+      isDefault: saved.isDefault,
+      network: saved.network,
+      createdAt: saved.createdAt,
+      updatedAt: saved.updatedAt,
+    };
   }
 
   /**
@@ -329,7 +480,9 @@ export class WalletsService {
       if (target.encryptedSecretKey != null) {
         userUpdate.walletSecretKeyEncrypted = target.encryptedSecretKey;
       }
-      await manager.getRepository(User).update(userId, userUpdate);
+      if (Object.keys(userUpdate).length > 0) {
+        await manager.getRepository(User).update(userId, userUpdate);
+      }
     });
 
     this.logger.log(`Set wallet ${walletId} as default for user ${userId}`);

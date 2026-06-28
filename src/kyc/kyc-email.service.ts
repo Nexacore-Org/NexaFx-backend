@@ -1,5 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { User } from '../users/user.entity';
+import { I18nService } from 'nestjs-i18n';
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 
@@ -7,7 +11,12 @@ import FormData from 'form-data';
 export class KycEmailService {
   private readonly logger = new Logger(KycEmailService.name);
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly i18nService: I18nService,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+  ) {}
 
   async sendApprovalEmail(to: string, userName: string): Promise<void> {
     const skipEmail = this.configService.get<string>('SKIP_EMAIL_SENDING');
@@ -17,9 +26,17 @@ export class KycEmailService {
     }
 
     try {
-      const subject = 'Your KYC Verification Has Been Approved';
-      const html = this.buildApprovalHtml(userName);
-      const text = `Hi ${userName},\n\nYour KYC verification has been approved! You now have full access to higher transaction limits on NexaFX.\n\n- NexaFX Team`;
+      const user = await this.userRepository.findOne({ where: { email: to } });
+      const lang = user?.preferredLanguage || 'en';
+
+      const subject = this.i18nService.translate('emails.APPROVAL_SUBJECT', { lang });
+      const text = this.i18nService.translate('emails.APPROVAL_TEXT', { lang, args: { userName } });
+      const htmlTitle = this.i18nService.translate('emails.APPROVAL_HTML_TITLE', { lang });
+      const htmlBody = this.i18nService.translate('emails.APPROVAL_HTML_BODY', { lang, args: { userName } });
+      const htmlBadge = this.i18nService.translate('emails.APPROVAL_HTML_BADGE', { lang });
+      const htmlFooter = this.i18nService.translate('emails.FOOTER', { lang, args: { year: new Date().getFullYear() } });
+
+      const html = this.buildTranslatedApprovalHtml(htmlTitle, htmlBody, htmlBadge, htmlFooter);
 
       await this.sendEmail(to, subject, html, text);
       this.logger.log(`KYC approval email sent to ${to}`);
@@ -44,13 +61,38 @@ export class KycEmailService {
     }
 
     try {
+      const user = await this.userRepository.findOne({ where: { email: to } });
+      const lang = user?.preferredLanguage || 'en';
+
       const subject = canResubmit
-        ? 'KYC Resubmission Required'
-        : 'KYC Verification Rejected';
-      const html = this.buildRejectionHtml(userName, reason, canResubmit);
+        ? this.i18nService.translate('emails.RESUBMIT_SUBJECT', { lang })
+        : this.i18nService.translate('emails.REJECT_SUBJECT', { lang });
+
       const text = canResubmit
-        ? `Hi ${userName},\n\nYour KYC submission requires changes before it can be approved.\n\nReason: ${reason}\n\nPlease log in and resubmit your documents.\n\n- NexaFX Team`
-        : `Hi ${userName},\n\nYour KYC verification was rejected.\n\nReason: ${reason}\n\n- NexaFX Team`;
+        ? this.i18nService.translate('emails.RESUBMIT_TEXT', { lang, args: { userName, reason } })
+        : this.i18nService.translate('emails.REJECT_TEXT', { lang, args: { userName, reason } });
+
+      const statusBadge = canResubmit
+        ? this.i18nService.translate('emails.RESUBMIT_BADGE', { lang })
+        : this.i18nService.translate('emails.REJECT_BADGE', { lang });
+
+      const actionText = canResubmit
+        ? this.i18nService.translate('emails.RESUBMIT_ACTION', { lang })
+        : this.i18nService.translate('emails.REJECT_ACTION', { lang });
+
+      const introText = this.i18nService.translate('emails.REJECT_INTRO', { lang });
+      const reasonLabel = this.i18nService.translate('emails.REJECT_REASON', { lang });
+      const htmlFooter = this.i18nService.translate('emails.FOOTER', { lang, args: { year: new Date().getFullYear() } });
+
+      const html = this.buildTranslatedRejectionHtml(
+        statusBadge,
+        actionText,
+        introText,
+        reasonLabel,
+        reason,
+        htmlFooter,
+        canResubmit,
+      );
 
       await this.sendEmail(to, subject, html, text);
       this.logger.log(`KYC rejection email sent to ${to}`);
@@ -62,45 +104,45 @@ export class KycEmailService {
     }
   }
 
-  private buildApprovalHtml(userName: string): string {
+  private buildTranslatedApprovalHtml(
+    title: string,
+    body: string,
+    badge: string,
+    footer: string,
+  ): string {
     return `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; background: #ffffff;">
         <div style="background: #27AE60; padding: 24px; border-radius: 12px 12px 0 0; text-align: center;">
           <h1 style="margin: 0; color: #fff; font-size: 24px; font-weight: 700;">NexaFX</h1>
         </div>
         <div style="padding: 32px;">
-          <h2 style="margin: 0 0 8px; font-size: 20px; color: #1A1A1A;">KYC Approved ✅</h2>
+          <h2 style="margin: 0 0 8px; font-size: 20px; color: #1A1A1A;">${title}</h2>
           <p style="color: #555; line-height: 1.6;">
-            Hi ${userName},
-          </p>
-          <p style="color: #555; line-height: 1.6;">
-            Your identity verification has been approved. You now have full access to higher transaction limits on NexaFX.
+            ${body}
           </p>
           <div style="background: #E8F8F0; border: 2px solid #27AE60; border-radius: 12px; padding: 16px; margin: 24px 0;">
             <p style="margin: 0; color: #1A7A3A; font-size: 15px;">
-              🎉 Your account is now fully verified. Enjoy higher limits!
+              ${badge}
             </p>
           </div>
           <p style="font-size: 12px; color: #999; text-align: center; margin-top: 32px;">
-            © ${new Date().getFullYear()} NexaFX. All rights reserved.
+            ${footer}
           </p>
         </div>
       </div>
     `;
   }
 
-  private buildRejectionHtml(
-    userName: string,
+  private buildTranslatedRejectionHtml(
+    statusBadge: string,
+    actionText: string,
+    introText: string,
+    reasonLabel: string,
     reason: string,
+    footer: string,
     canResubmit: boolean,
   ): string {
     const headerColor = canResubmit ? '#F5A623' : '#E74C3C';
-    const statusBadge = canResubmit
-      ? 'Resubmission Required 🔄'
-      : 'Rejected ❌';
-    const actionText = canResubmit
-      ? 'Please log in to your NexaFX account and resubmit your documents with the requested changes.'
-      : 'If you believe this is an error, please contact our support team.';
 
     return `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; background: #ffffff;">
@@ -110,20 +152,17 @@ export class KycEmailService {
         <div style="padding: 32px;">
           <h2 style="margin: 0 0 8px; font-size: 20px; color: #1A1A1A;">${statusBadge}</h2>
           <p style="color: #555; line-height: 1.6;">
-            Hi ${userName},
-          </p>
-          <p style="color: #555; line-height: 1.6;">
-            Your KYC verification could not be approved at this time.
+            ${introText}
           </p>
           <div style="background: #FFF0F0; border-left: 3px solid #E74C3C; border-radius: 8px; padding: 16px; margin: 24px 0;">
-            <p style="margin: 0 0 8px; color: #1A1A1A; font-weight: 600;">Reason:</p>
+            <p style="margin: 0 0 8px; color: #1A1A1A; font-weight: 600;">${reasonLabel}</p>
             <p style="margin: 0; color: #555;">${reason}</p>
           </div>
           <p style="color: #555; line-height: 1.6;">
             ${actionText}
           </p>
           <p style="font-size: 12px; color: #999; text-align: center; margin-top: 32px;">
-            © ${new Date().getFullYear()} NexaFX. All rights reserved.
+            ${footer}
           </p>
         </div>
       </div>

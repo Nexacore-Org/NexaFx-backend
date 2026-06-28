@@ -52,25 +52,7 @@ export class ExchangeRatesService {
     private readonly snapshotRepository: Repository<ExchangeRateSnapshot>,
   ) {}
 
-  async getRate(from: string, to: string): Promise<ExchangeRateResult> {
-    const fromCode = this.normalizeCurrencyCode(from, 'from');
-    const toCode = this.normalizeCurrencyCode(to, 'to');
 
-    await this.validateCurrencyPair(fromCode, toCode);
-
-    const cacheKey = this.getCacheKey(fromCode, toCode);
-    const cached = await this.cache.get(cacheKey);
-    if (cached) {
-      return this.toRateResult(fromCode, toCode, cached);
-    }
-
-    if (fromCode === toCode) {
-      const entry = await this.cache.set(cacheKey, {
-        rate: 1,
-        fetchedAt: new Date().toISOString(),
-      });
-      this.notifyRateUpdate(fromCode, toCode, entry);
-      return this.toRateResult(fromCode, toCode, entry);
   /**
    * Validate a currency pair (both currencies must be valid)
    */
@@ -117,24 +99,6 @@ export class ExchangeRatesService {
 
     // Cache expired or not found - attempt external provider fetch
     try {
-      const providerRate = await this.providerClient.fetchRate(
-        fromCode,
-        toCode,
-      );
-      const entry = await this.cache.set(cacheKey, {
-        rate: providerRate.rate,
-        fetchedAt: providerRate.fetchedAt,
-      });
-      this.notifyRateUpdate(fromCode, toCode, entry);
-      return this.toRateResult(fromCode, toCode, entry);
-    } catch (error) {
-      this.logger.error(
-        `Failed to fetch rate ${fromCode}->${toCode}`,
-        error instanceof Error ? error.stack : String(error),
-      );
-
-      if (error instanceof ExchangeRatesProviderError) {
-        throw new ServiceUnavailableException(error.message);
       const fetched = await this.providerClient.fetchRate(fromCode, toCode);
 
       const cachedAt = new Date().toISOString();

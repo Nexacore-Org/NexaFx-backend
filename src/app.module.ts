@@ -1,16 +1,19 @@
 import { Module } from '@nestjs/common';
+import { I18nModule, AcceptLanguageResolver } from 'nestjs-i18n';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { join } from 'path';
 import { AppController } from './app.controller';
-import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CurrenciesModule } from './currencies/currencies.module';
 import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
 import { CommonModule } from './common/common.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { RolesGuard } from './common/guards/roles.guard';
 import { PlanThrottlerGuard } from './common/guards/plan-throttler.guard';
+import { ImpersonationRestrictionGuard } from './common/guards/impersonation-restriction.guard';
 import { HealthModule } from './health/health.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -31,9 +34,22 @@ import { SuperAdminModule } from './super-admin/super-admin.module';
 import { GatewaysModule } from './gateways/gateways.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { WalletsModule } from './wallets/wallets.module';
+import { EscrowModule } from './escrow/escrow.module';
 import { RateAlertsModule } from './rate-alerts/rate-alerts.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
+import { TransactionsV2Module } from './transactions/transaction-v2.module';
+import { FiatV2Module } from './fiat/fiat-v2.module';
+import { BatchesV2Module } from './batches/batches-v2.module';
+import { TaxModule } from './tax/tax.module';
+import { OrganisationsModule } from './organisations/organisations.module';
+import { SanctionsModule } from './sanctions/sanctions.module';
+import { LoansModule } from './loans/loans.module';
+import { DisputesModule } from './disputes/disputes.module';
+import { VaultsModule } from './vaults/vaults.module';
+import { OwaspZapDastModule } from './owasp-zap-dast/owasp-zap-dast.module';
+import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-anchor.module';
+import { FiatModule } from './modules/fiat/fiat.module';
 
 @Module({
   imports: [
@@ -64,9 +80,23 @@ import { UsersModule } from './users/users.module';
         {
           ttl: (configService.get<number>('THROTTLE_TTL') ?? 60) * 1000,
           limit: configService.get<number>('THROTTLE_LIMIT') ?? 100,
-        },
+        },    OwaspZapDastModule,
+        },    StellarSep24AnchorModule,
+
       ],
       inject: [ConfigService],
+    }),
+    I18nModule.forRootAsync({
+      useFactory: () => ({
+        fallbackLanguage: 'en',
+        loaderOptions: {
+          path: join(__dirname, '/i18n/'),
+          watch: true,
+        },
+      }),
+      resolvers: [
+        AcceptLanguageResolver,
+      ],
     }),
     CommonModule,
     AuthModule,
@@ -78,6 +108,9 @@ import { UsersModule } from './users/users.module';
     NotificationsModule,
     FirebaseModule,
     TransactionsModule,
+    TransactionsV2Module,
+    FiatV2Module,
+    BatchesV2Module,
     ReferralsModule,
     BeneficiariesModule,
     KycModule,
@@ -89,6 +122,7 @@ import { UsersModule } from './users/users.module';
     RateAlertsModule,
     AdminModule,
     SuperAdminModule,
+    EscrowModule,
     // DAO module provides Stellar Soroban contract interaction for reward distribution
     DaoModule,
     GraphQLApiModule,
@@ -96,13 +130,24 @@ import { UsersModule } from './users/users.module';
     WalletsModule,
     LedgerModule,
     UsersModule,
+    TaxModule,
+    OrganisationsModule,
+    SanctionsModule,
+    LoansModule,
+    DisputesModule,
+    CardsModule,
+    VaultsModule,
+    FiatModule,
   ],
   controllers: [AppController],
   providers: [
-    AppService,
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
     },
     {
       provide: APP_GUARD,

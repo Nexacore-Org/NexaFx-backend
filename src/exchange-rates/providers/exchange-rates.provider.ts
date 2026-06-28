@@ -40,18 +40,14 @@ export class ExchangeRatesProviderClient {
   );
 
   private readonly baseUrl: string;
-  private readonly apiKey?: string;
   private readonly timeoutMs: number;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly httpService: HttpService,
   ) {
-    this.baseUrl = this.loadBaseUrl();
-    this.apiKey = this.configService.get<string>(
-      'EXCHANGE_RATES_PROVIDER_API_KEY',
-    );
-    this.timeoutMs = this.loadTimeout();
+    this.baseUrl = this.configService.get<string>('EXCHANGE_RATES_PROVIDER_BASE_URL') || 'https://api.coingecko.com/v3';
+    this.timeoutMs = this.getTimeoutMs();
   }
 
   async fetchRate(
@@ -88,10 +84,11 @@ export class ExchangeRatesProviderClient {
         );
       }
 
+    if (fromUpper === toUpper) {
       return {
-        rate,
+        rate: 1,
         fetchedAt: new Date().toISOString(),
-        source: this.baseUrl,
+        source: 'identity',
       };
     } catch (error) {
       throw this.handleError(error);
@@ -113,9 +110,56 @@ export class ExchangeRatesProviderClient {
     if (data.info?.rate !== undefined) {
       return Number(data.info.rate);
     }
+    }
 
-    return Number.NaN;
-  }
+    const cryptoIds: Record<string, string> = {
+      XLM: 'stellar',
+      USDC: 'usd-coin',
+      USDT: 'tether',
+      BTC: 'bitcoin',
+      ETH: 'ethereum',
+      XRP: 'ripple',
+    };
+
+    try {
+      // Scenario 1: Base currency is a supported cryptocurrency
+      if (cryptoIds[fromUpper]) {
+        const coinId = cryptoIds[fromUpper];
+        const vsCurrency = toUpper.toLowerCase();
+        const url = `${this.baseUrl}/simple/price?ids=${coinId}&vs_currencies=${vsCurrency}`;
+        const response = await firstValueFrom(
+          this.httpService.get(url, { timeout: this.timeoutMs }),
+        );
+        const data = response.data;
+        if (data && data[coinId] && typeof data[coinId][vsCurrency] === 'number') {
+          return {
+            rate: data[coinId][vsCurrency],
+            fetchedAt: new Date().toISOString(),
+            source: 'coingecko',
+          };
+        }
+      }
+
+      // Scenario 2: Target currency is a supported cryptocurrency (inverse query)
+      if (cryptoIds[toUpper]) {
+        const coinId = cryptoIds[toUpper];
+        const vsCurrency = fromUpper.toLowerCase();
+        const url = `${this.baseUrl}/simple/price?ids=${coinId}&vs_currencies=${vsCurrency}`;
+        const response = await firstValueFrom(
+          this.httpService.get(url, { timeout: this.timeoutMs }),
+        );
+        const data = response.data;
+        if (data && data[coinId] && typeof data[coinId][vsCurrency] === 'number') {
+          const inverseRate = data[coinId][vsCurrency];
+          if (inverseRate > 0) {
+            return {
+              rate: 1 / inverseRate,
+              fetchedAt: new Date().toISOString(),
+              source: 'coingecko-inverse',
+            };
+          }
+        }
+      }
 
   private buildLatestUrl(from: string, to: string): string {
     const url = new URL(this.baseUrl);
@@ -124,9 +168,32 @@ export class ExchangeRatesProviderClient {
 
     url.searchParams.set('base', from);
     url.searchParams.set('symbols', to);
+      // Scenario 3: Both are fiat currencies (e.g. USD to NGN) using XLM (stellar) as a bridge
+      const url = `${this.baseUrl}/simple/price?ids=stellar&vs_currencies=${fromUpper.toLowerCase()},${toUpper.toLowerCase()}`;
+      const response = await firstValueFrom(
+        this.httpService.get(url, { timeout: this.timeoutMs }),
+      );
+      const data = response.data;
+      if (data && data.stellar) {
+        const fromVal = data.stellar[fromUpper.toLowerCase()];
+        const toVal = data.stellar[toUpper.toLowerCase()];
+        if (typeof fromVal === 'number' && typeof toVal === 'number' && fromVal > 0) {
+          return {
+            rate: toVal / fromVal,
+            fetchedAt: new Date().toISOString(),
+            source: 'coingecko-bridge',
+          };
+        }
+      }
 
-    if (this.apiKey) {
-      url.searchParams.set('access_key', this.apiKey);
+      throw new ExchangeRatesProviderError(`Unsupported or unmappable currency pair: ${fromUpper}->${toUpper}`);
+    } catch (error: any) {
+      if (error instanceof ExchangeRatesProviderError) {
+        throw error;
+      }
+      throw new ExchangeRatesProviderError(
+        error.message || `Failed to fetch rate for ${fromUpper}->${toUpper} from CoinGecko`,
+      );
     }
 
     return url.toString();

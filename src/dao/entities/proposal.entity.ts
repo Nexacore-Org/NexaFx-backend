@@ -68,6 +68,9 @@ export class Proposal {
   totalVotingWeight: number | null;
 
   @Column({ type: 'varchar', length: 128, nullable: true })
+  stellarContractId: string | null;
+
+  @Column({ type: 'varchar', length: 128, nullable: true })
   @Index()
   onChainTxHash: string | null;
 

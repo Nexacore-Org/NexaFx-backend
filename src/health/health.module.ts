@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
+import { TerminusModule } from '@nestjs/terminus';
 import { HealthController } from './health.controller';
 import { HealthService } from './health.service';
-import { StellarModule } from '../blockchain/stellar/stellar.module';
 
 @Module({
-  imports: [StellarModule],
+  imports: [TerminusModule],
   controllers: [HealthController],
   providers: [HealthService],
 })

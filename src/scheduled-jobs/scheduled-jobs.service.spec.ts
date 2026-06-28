@@ -24,6 +24,10 @@ import { WebhookService } from '../webhooks/services/webhook.service';
 import { CurrencyPairService } from '../currencies/services/currency-pair.service';
 import { ProposalService } from '../dao/services/proposal.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { RedisService } from '../common/services/redis.service';
+import { AnalyticsService } from '../analytics/analytics.service';
+import { SanctionsService } from '../sanctions/sanctions.service';
+import { LoansService } from '../loans/loans.service';
 
 describe('ScheduledJobsService', () => {
   let service: ScheduledJobsService;
@@ -51,6 +55,10 @@ describe('ScheduledJobsService', () => {
   const mockLedgerVerificationService = {
     verify: jest.fn(),
   };
+
+  const mockRedisService = {
+    del: jest.fn(),
+  }
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -146,6 +154,25 @@ describe('ScheduledJobsService', () => {
             logEvent: jest.fn(),
             createLog: jest.fn(),
             logTransactionEvent: jest.fn(),
+          },
+        },
+        { provide: RedisService, useValue: mockRedisService },
+        {
+          provide: AnalyticsService,
+          useValue: {
+            recordBalanceSnapshotsForAllUsers: jest.fn(),
+          },
+        },
+        {
+          provide: SanctionsService,
+          useValue: {
+            screenUser: jest.fn(),
+          },
+        },
+        {
+          provide: LoansService,
+          useValue: {
+            processInterestAccruals: jest.fn(),
           },
         },
       ],

@@ -1,8 +1,12 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan, IsNull } from 'typeorm';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { WebhookEndpoint } from '../entities/webhook-endpoint.entity';
 import { WebhookDelivery } from '../entities/webhook-delivery.entity';
+import { WEBHOOK_QUEUE } from '../../modules/queues/queue.constants';
+import type { WebhookDeliveryJob } from '../../modules/webhooks/webhook.processor';
 import * as crypto from 'crypto';
 import axios from 'axios';
 import { URL } from 'url';
@@ -22,6 +26,8 @@ export class WebhookService {
     private readonly endpointRepo: Repository<WebhookEndpoint>,
     @InjectRepository(WebhookDelivery)
     private readonly deliveryRepo: Repository<WebhookDelivery>,
+    @InjectQueue(WEBHOOK_QUEUE)
+    private readonly webhookQueue: Queue<WebhookDeliveryJob>,
   ) {}
 
   private validateWebhookUrl(raw: string): void {
@@ -57,11 +63,7 @@ export class WebhookService {
     return this.endpointRepo.save(endpoint);
   }
 
-  async dispatch(
-    eventType: string,
-    payload: any,
-    userId: string,
-  ): Promise<void> {
+  async dispatch(eventType: string, data: any, userId: string): Promise<void> {
     const endpoints = await this.endpointRepo.find({
       where: { userId, isActive: true },
     });
@@ -69,6 +71,13 @@ export class WebhookService {
     const relevantEndpoints = endpoints.filter(
       (e) => e.events.includes(eventType) || e.events.includes('*'),
     );
+
+    const payload = {
+      id: crypto.randomUUID(),
+      event: eventType,
+      data,
+      timestamp: new Date().toISOString(),
+    };
 
     for (const endpoint of relevantEndpoints) {
       const delivery = this.deliveryRepo.create({
@@ -79,12 +88,28 @@ export class WebhookService {
       });
       await this.deliveryRepo.save(delivery);
 
-      // Asynchronous delivery - do not await
-      this.executeDelivery(delivery, endpoint).catch((err) => {
-        this.logger.error(
-          `Initial delivery failed for ${endpoint.url}: ${err.message}`,
-        );
-      });
+      await this.enqueueDelivery(delivery.id, 0);
+    }
+  }
+
+  async processDeliveryJob(deliveryId: string): Promise<void> {
+    const delivery = await this.deliveryRepo.findOne({
+      where: { id: deliveryId },
+    });
+    if (!delivery) return;
+
+    const endpoint = await this.endpointRepo.findOne({
+      where: { id: delivery.endpointId },
+    });
+    if (!endpoint || !endpoint.isActive) return;
+
+    await this.executeDelivery(delivery, endpoint);
+
+    if (!delivery.deliveredAt && delivery.nextRetryAt) {
+      await this.enqueueDelivery(
+        delivery.id,
+        Math.max(0, delivery.nextRetryAt.getTime() - Date.now()),
+      );
     }
   }
 
@@ -121,13 +146,17 @@ export class WebhookService {
           : JSON.stringify(response.data);
       delivery.deliveredAt = new Date();
       delivery.nextRetryAt = null;
-    } catch (error) {
-      delivery.responseStatus = error.response?.status || 0;
-      delivery.responseBody = error.response?.data
-        ? typeof error.response.data === 'string'
-          ? error.response.data
-          : JSON.stringify(error.response.data)
-        : error.message;
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      const response = (error as any)?.response;
+      const responseData = response?.data;
+
+      delivery.responseStatus = response?.status || 0;
+      delivery.responseBody = responseData
+        ? typeof responseData === 'string'
+          ? responseData
+          : JSON.stringify(responseData)
+        : err.message;
 
       if (delivery.attemptCount < this.MAX_ATTEMPTS) {
         const delayMinutes = this.RETRY_INTERVALS[delivery.attemptCount - 1];
@@ -150,12 +179,29 @@ export class WebhookService {
     });
 
     for (const delivery of pendingDeliveries) {
-      const endpoint = await this.endpointRepo.findOne({
-        where: { id: delivery.endpointId },
-      });
-      if (endpoint && endpoint.isActive) {
-        await this.executeDelivery(delivery, endpoint);
-      }
+      await this.enqueueDelivery(delivery.id, 0);
+    }
+  }
+
+  private async enqueueDelivery(
+    deliveryId: string,
+    delayMs: number,
+  ): Promise<void> {
+    try {
+      await this.webhookQueue.add(
+        'deliver-webhook',
+        { deliveryId },
+        {
+          jobId: `webhook:${deliveryId}:${delayMs}`,
+          delay: delayMs,
+        },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Webhook queue unavailable; delivery ${deliveryId} will be picked up by retry cron: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
     }
   }
 
@@ -181,6 +227,58 @@ export class WebhookService {
       where: { endpointId },
       order: { createdAt: 'DESC' },
       take: 100,
+    });
+  }
+
+  async testEndpoint(endpointId: string, userId: string): Promise<void> {
+    const endpoint = await this.endpointRepo.findOne({
+      where: { id: endpointId, userId },
+    });
+    if (!endpoint) {
+      throw new BadRequestException('Endpoint not found');
+    }
+
+    const payload = {
+      id: crypto.randomUUID(),
+      event: 'ping',
+      data: { message: 'Test ping from NexaFX' },
+      timestamp: new Date().toISOString(),
+    };
+
+    const delivery = this.deliveryRepo.create({
+      endpointId: endpoint.id,
+      eventType: 'ping',
+      payload,
+      attemptCount: 0,
+    });
+    await this.deliveryRepo.save(delivery);
+
+    this.executeDelivery(delivery, endpoint).catch((err) => {
+      this.logger.error(`Test delivery failed: ${err.message}`);
+    });
+  }
+
+  async redeliver(
+    endpointId: string,
+    deliveryId: string,
+    userId: string,
+  ): Promise<void> {
+    const endpoint = await this.endpointRepo.findOne({
+      where: { id: endpointId, userId },
+    });
+    if (!endpoint) {
+      throw new BadRequestException('Endpoint not found');
+    }
+
+    const delivery = await this.deliveryRepo.findOne({
+      where: { id: deliveryId, endpointId },
+    });
+    if (!delivery) {
+      throw new BadRequestException('Delivery not found');
+    }
+
+    this.executeDelivery(delivery, endpoint).catch((err) => {
+      this.logger.error(`Redelivery failed: ${err.message}`);
     });
   }
 }

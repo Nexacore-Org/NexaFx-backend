@@ -21,6 +21,7 @@ import {
 import { UserQueryDto } from './dto/user-query.dto';
 import { OverrideTransactionDto } from './dto/override-transaction.dto';
 import { TransactionLimitService } from '../transactions/services/transaction-limit.service';
+import { BackupManifestService } from './services/backup-manifest.service';
 
 describe('AdminService', () => {
   let service: AdminService;
@@ -169,6 +170,12 @@ describe('AdminService', () => {
               andWhere: jest.fn().mockReturnThis(),
               stream: jest.fn().mockResolvedValue([]),
             })),
+          },
+        },
+        {
+          provide: BackupManifestService,
+          useValue: {
+            listRecentManifests: jest.fn(),
           },
         },
       ],

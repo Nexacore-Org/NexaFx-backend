@@ -28,6 +28,8 @@ import { WebhookService } from '../../webhooks/services/webhook.service';
 import { BeneficiariesService } from '../../beneficiaries/beneficiaries.service';
 import { LedgerService } from '../../ledger/services/ledger.service';
 import { TransactionLimitService } from './transaction-limit.service';
+import { RedisService } from '../../modules/redis/redis.service';
+import { TransactionCategory } from '../../analytics/entities/transaction-category.entity';
 
 // Mock Stellar SDK components
 jest.mock('stellar-sdk', () => {
@@ -57,6 +59,11 @@ describe('TransactionsService.createSwap', () => {
   let stellarService: any;
   let notificationsService: any;
 
+  const mockRedisService = {
+    del: jest.fn(),
+    delete: jest.fn(),
+  }
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -78,10 +85,11 @@ describe('TransactionsService.createSwap', () => {
       ]),
       buildPathPaymentOp: jest.fn(() => ({})),
       getAsset: jest.fn(() => ({ isNative: () => true })),
+      getAssetWithDefaultIssuer: jest.fn(() => ({ isNative: () => true })),
     };
 
     notificationsService = {
-      create: jest.fn(async () => ({})),
+      dispatch: jest.fn(async () => ({})),
     };
     const ledgerService = {
       record: jest.fn(async () => undefined),
@@ -107,6 +115,13 @@ describe('TransactionsService.createSwap', () => {
           provide: getRepositoryToken(Transaction),
           useValue: transactionRepository,
         },
+        {
+          provide: getRepositoryToken(TransactionCategory),
+          useValue: {
+            findOne: jest.fn(),
+            save: jest.fn(),
+          },
+        },
         { provide: DataSource, useValue: dataSource },
         {
           provide: CurrenciesService,
@@ -114,6 +129,7 @@ describe('TransactionsService.createSwap', () => {
             findOne: jest.fn(async () => ({ isActive: true })),
           },
         },
+        { provide: RedisService, useValue: mockRedisService },
         {
           provide: ExchangeRatesService,
           useValue: {
@@ -197,7 +213,7 @@ describe('TransactionsService.createSwap', () => {
     (service as any).getUserBalance = jest.fn(async () => '100');
     (service as any).getUserStellarAddress = jest.fn(async () => 'G123');
     (service as any).getUserStellarSecretKey = jest.fn(async () => 'S123');
-    (service as any).updateUserBalance = jest.fn(async () => {});
+    (service as any).updateUserBalance = jest.fn(async () => { });
   });
 
   it('should successfully create a swap transaction', async () => {
@@ -218,9 +234,13 @@ describe('TransactionsService.createSwap', () => {
     expect(result.toAmount).toBe('99.50000000');
 
     expect(stellarService.submitTransaction).toHaveBeenCalled();
-    expect(notificationsService.create).toHaveBeenCalledWith(
+    expect(notificationsService.dispatch).toHaveBeenCalledWith(
+      'user-1',
+      NotificationType.TRANSACTION,
+      'Swap Completed',
+      expect.any(String),
       expect.objectContaining({
-        type: NotificationType.SWAP_COMPLETED,
+        transactionId: 'tx-123',
       }),
     );
   });

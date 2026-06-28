@@ -7,6 +7,7 @@ import { ExchangeRatesModule } from '../exchange-rates/exchange-rates.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { CurrenciesModule } from '../currencies/currencies.module';
+import { WebhooksModule } from '../webhooks/webhooks.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { CurrenciesModule } from '../currencies/currencies.module';
     NotificationsModule,
     AuditLogsModule,
     CurrenciesModule,
+    WebhooksModule,
   ],
   controllers: [RateAlertsController],
   providers: [RateAlertsService],

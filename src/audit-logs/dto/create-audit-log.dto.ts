@@ -21,6 +21,10 @@ export class CreateAuditLogDto {
 
   @IsOptional()
   @IsUUID()
+  impersonatedByAdminId?: string;
+
+  @IsOptional()
+  @IsUUID()
   targetId?: string;
 
   @IsString()

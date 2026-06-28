@@ -47,6 +47,7 @@ import { SanctionsModule } from './sanctions/sanctions.module';
 import { LoansModule } from './loans/loans.module';
 import { DisputesModule } from './disputes/disputes.module';
 import { VaultsModule } from './vaults/vaults.module';
+import { FraudRiskScoringModule } from './fraud-risk-scoring/fraud-risk-scoring.module';
 import { DataResidencyModule } from './data-residency/data-residency.module';
 import { MerchantIntegrationModule } from './merchant-integration/merchant-integration.module';
 import { ProgrammablePaymentRulesModule } from './programmable-payment-rules/programmable-payment-rules.module';
@@ -87,6 +88,7 @@ import { FiatModule } from './modules/fiat/fiat.module';
         {
           ttl: (configService.get<number>('THROTTLE_TTL') ?? 60) * 1000,
           limit: configService.get<number>('THROTTLE_LIMIT') ?? 100,
+        },    FraudRiskScoringModule,
         },    DataResidencyModule,
         },    MerchantIntegrationModule,
         },    ProgrammablePaymentRulesModule,

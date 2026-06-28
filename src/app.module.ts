@@ -47,6 +47,7 @@ import { SanctionsModule } from './sanctions/sanctions.module';
 import { LoansModule } from './loans/loans.module';
 import { DisputesModule } from './disputes/disputes.module';
 import { VaultsModule } from './vaults/vaults.module';
+import { AiKycDocVerificationModule } from './ai-kyc-doc-verification/ai-kyc-doc-verification.module';
 import { MobileSdkGuideModule } from './mobile-sdk-guide/mobile-sdk-guide.module';
 import { OwaspZapDastModule } from './owasp-zap-dast/owasp-zap-dast.module';
 import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-anchor.module';
@@ -81,6 +82,7 @@ import { FiatModule } from './modules/fiat/fiat.module';
         {
           ttl: (configService.get<number>('THROTTLE_TTL') ?? 60) * 1000,
           limit: configService.get<number>('THROTTLE_LIMIT') ?? 100,
+        },    AiKycDocVerificationModule,
         },    MobileSdkGuideModule,
         },    OwaspZapDastModule,
         },    StellarSep24AnchorModule,

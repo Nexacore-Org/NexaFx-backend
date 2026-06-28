@@ -47,7 +47,7 @@ export class AuditLogsService {
         resourceId,
         status: createAuditLogDto.status || 'SUCCESS',
       } as any);
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(
         `Failed to create audit log: ${error.message}`,
         error.stack,
@@ -79,7 +79,7 @@ export class AuditLogsService {
         ipAddress,
         userAgent,
       } as any);
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(
         `[CRITICAL] Failed to write audit log: ${error.message}`,
         error.stack,

@@ -4,6 +4,7 @@ import { ScheduledJobsService } from './scheduled-jobs.service';
 import { Transaction } from '../transactions/entities/transaction.entity';
 import { Notification } from '../notifications/entities/notification.entity';
 import { IdempotencyRecord } from '../common/entities/idempotency-record.entity';
+import { DataRequest } from '../users/entities/data-request.entity';
 import { TransactionsModule } from '../transactions/transaction.module';
 import { BlockchainModule } from '../blockchain/blockchain.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -14,11 +15,16 @@ import { DaoModule } from '../dao/dao.module';
 import { LedgerModule } from '../ledger/ledger.module';
 import { WebhooksModule } from '../webhooks/webhooks.module';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
-import { AnalyticsModule } from '../analytics/analytics.module';
+import { VaultsModule } from '../vaults/vaults.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Transaction, Notification, IdempotencyRecord]),
+    TypeOrmModule.forFeature([
+      Transaction,
+      Notification,
+      IdempotencyRecord,
+      DataRequest,
+    ]),
     TransactionsModule,
     BlockchainModule,
     NotificationsModule,
@@ -29,7 +35,7 @@ import { AnalyticsModule } from '../analytics/analytics.module';
     LedgerModule,
     WebhooksModule,
     AuditLogsModule,
-    AnalyticsModule,
+    VaultsModule,
   ],
   providers: [ScheduledJobsService],
   exports: [ScheduledJobsService],

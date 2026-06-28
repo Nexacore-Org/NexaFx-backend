@@ -55,6 +55,11 @@ import {
   PatchTransactionLimitDto,
   UpsertTransactionLimitDto,
 } from './dto/transaction-limit.dto';
+import {
+  MigrationSnapshot,
+  SnapshotStatus,
+} from '../database/entities/migration-snapshot.entity';
+import { DataSource } from 'typeorm';
 
 @Injectable()
 export class AdminService {
@@ -76,6 +81,9 @@ export class AdminService {
     private readonly auditLogsService: AuditLogsService,
     private readonly transactionLimitService: TransactionLimitService,
     private readonly backupManifestService: BackupManifestService,
+    @InjectRepository(MigrationSnapshot)
+    private readonly migrationSnapshotRepository: Repository<MigrationSnapshot>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async listTransactionLimits() {
@@ -819,7 +827,7 @@ export class AdminService {
           status: row.audit_log_status || '',
         });
       }
-    } catch (err) {
+    } catch (err: any) {
       this.logger.error(`Error streaming audit logs CSV: ${err.message}`, err.stack);
     } finally {
       csvStream.end();
@@ -828,5 +836,59 @@ export class AdminService {
 
   async getRecentBackups() {
     return this.backupManifestService.listRecentManifests(10);
+  }
+
+  /**
+   * Returns the full migration history: every migration that TypeORM has
+   * recorded as executed, combined with any snapshot metadata that was
+   * captured before the migration was applied.
+   *
+   * Used by GET /admin/migrations.
+   */
+  async getMigrationHistory(): Promise<{
+    appliedMigrations: { id: number; timestamp: string; name: string }[];
+    snapshots: MigrationSnapshot[];
+    summary: {
+      totalApplied: number;
+      totalSnapshots: number;
+      pendingSnapshots: number;
+      appliedSnapshots: number;
+      rolledBackSnapshots: number;
+    };
+  }> {
+    // Read from TypeORM's internal __migrations table (table name is
+    // configurable but defaults to "migrations").
+    let appliedMigrations: { id: number; timestamp: string; name: string }[] =
+      [];
+    try {
+      appliedMigrations = await this.dataSource.query(
+        `SELECT id, timestamp::text, name FROM migrations ORDER BY timestamp ASC`,
+      );
+    } catch {
+      // Table may not exist if migrations have never been run — return empty.
+      this.logger.warn(
+        'Could not query migrations table — it may not exist yet.',
+      );
+    }
+
+    const snapshots = await this.migrationSnapshotRepository.find({
+      order: { takenAt: 'DESC' },
+    });
+
+    const summary = {
+      totalApplied: appliedMigrations.length,
+      totalSnapshots: snapshots.length,
+      pendingSnapshots: snapshots.filter(
+        (s) => s.status === SnapshotStatus.PENDING,
+      ).length,
+      appliedSnapshots: snapshots.filter(
+        (s) => s.status === SnapshotStatus.APPLIED,
+      ).length,
+      rolledBackSnapshots: snapshots.filter(
+        (s) => s.status === SnapshotStatus.ROLLED_BACK,
+      ).length,
+    };
+
+    return { appliedMigrations, snapshots, summary };
   }
 }

@@ -1,0 +1,8 @@
+{
+  "USER_NOT_FOUND": "المستخدم غير موجود",
+  "ACCOUNT_SUSPENDED": "الحساب معلق",
+  "ACCOUNT_DELETED": "تم حذف الحساب",
+  "INSUFFICIENT_BALANCE": "الرصيد غير كافٍ",
+  "TRANSACTION_NOT_FOUND": "المعاملة غير موجودة",
+  "KYC_NOT_FOUND": "سجل معرفة عميلك غير موجود"
+}

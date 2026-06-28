@@ -34,7 +34,14 @@ describe('UsersService', () => {
     role: UserRole.USER,
     plan: UserPlan.FREE,
     isDeleted: false,
+    isActive: true,
     fcmTokens: [],
+    notificationPreferences: {
+      email: true,
+      push: true,
+      types: { TRANSACTION: true, KYC: true, RATE_ALERT: true },
+    },
+    fcmToken: null,
     failedLoginAttempts: 0,
     lockedUntil: null,
     createdAt: new Date('2025-01-01T00:00:00Z'),
@@ -42,6 +49,7 @@ describe('UsersService', () => {
     password: process.env.TEST_USER_PASSWORD ?? 'hashed-password',
     kycRecords: [],
     notifications: [],
+    preferredLanguage: 'en',
   };
 
   beforeEach(async () => {

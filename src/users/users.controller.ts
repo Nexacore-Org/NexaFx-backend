@@ -10,6 +10,7 @@ import {
   Request,
   UseInterceptors,
   UploadedFile,
+  Version,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -210,6 +211,34 @@ export class UsersController {
     return this.usersService.updateProfile(req.user.userId, updateProfileDto);
   }
 
+  @Version('2')
+  @Get('me')
+  @ApiOperation({ summary: 'Get current user profile (v2)' })
+  async getProfileV2(
+    @Request() req: { user: { userId: string } },
+  ) {
+    const profile = await this.usersService.getProfile(req.user.userId);
+    return {
+      ...profile,
+      isRtl: profile.preferredLanguage === 'ar',
+    };
+  }
+
+  @Version('2')
+  @Patch('me')
+  @ApiOperation({ summary: 'Update current user profile (v2)' })
+  @ApiBody({ type: UpdateProfileDto })
+  async updateProfileV2(
+    @Request() req: { user: { userId: string } },
+    @Body() updateProfileDto: UpdateProfileDto,
+  ) {
+    const profile = await this.usersService.updateProfile(req.user.userId, updateProfileDto);
+    return {
+      ...profile,
+      isRtl: profile.preferredLanguage === 'ar',
+    };
+  }
+
   @Post('device-token')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Register a device token for push notifications' })
@@ -301,5 +330,60 @@ export class UsersController {
     @Request() req: { user: { userId: string } },
   ): Promise<Record<string, unknown>> {
     return this.transactionLimitService.getUserLimitStatus(req.user.userId);
+  }
+
+  @Get('me')
+  @ApiOperation({ summary: "Get authenticated user's profile" })
+  @ApiResponse({
+    status: 200,
+    description: 'User profile retrieved successfully',
+    type: ProfileResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Invalid or missing JWT token',
+  })
+  async getMe(
+    @Request() req: { user: { userId: string } },
+  ): Promise<ProfileResponseDto> {
+    return this.usersService.getProfile(req.user.userId);
+  }
+
+  @Patch('me')
+  @ApiOperation({ summary: 'Update authenticated user profile' })
+  @ApiBody({ type: UpdateProfileDto })
+  @ApiResponse({
+    status: 200,
+    description: 'User profile updated successfully',
+    type: ProfileResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Invalid request body' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Invalid or missing JWT token',
+  })
+  async updateMe(
+    @Request() req: { user: { userId: string } },
+    @Body() updateProfileDto: UpdateProfileDto,
+  ): Promise<ProfileResponseDto> {
+    return this.usersService.updateProfile(req.user.userId, updateProfileDto);
+  }
+
+  @Delete('me')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Soft delete current user account' })
+  @ApiResponse({
+    status: 200,
+    description: 'User account soft deleted successfully',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Invalid or missing JWT token',
+  })
+  async deleteMe(
+    @Request() req: { user: { userId: string } },
+  ): Promise<{ message: string }> {
+    await this.usersService.softDelete(req.user.userId);
+    return { message: 'User account has been deactivated' };
   }
 }

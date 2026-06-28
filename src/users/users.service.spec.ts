@@ -34,6 +34,7 @@ describe('UsersService', () => {
     role: UserRole.USER,
     plan: UserPlan.FREE,
     isDeleted: false,
+    isActive: true,
     fcmTokens: [],
     notificationPreferences: {
       email: true,
@@ -48,6 +49,7 @@ describe('UsersService', () => {
     password: process.env.TEST_USER_PASSWORD ?? 'hashed-password',
     kycRecords: [],
     notifications: [],
+    preferredLanguage: 'en',
   };
 
   beforeEach(async () => {

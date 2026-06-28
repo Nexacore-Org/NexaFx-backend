@@ -28,7 +28,8 @@ import { WebhookService } from '../../webhooks/services/webhook.service';
 import { BeneficiariesService } from '../../beneficiaries/beneficiaries.service';
 import { LedgerService } from '../../ledger/services/ledger.service';
 import { TransactionLimitService } from './transaction-limit.service';
-import { RedisService } from '../../common/services/redis.service';
+import { RedisService } from '../../modules/redis/redis.service';
+import { TransactionCategory } from '../../analytics/entities/transaction-category.entity';
 
 // Mock Stellar SDK components
 jest.mock('stellar-sdk', () => {
@@ -60,6 +61,7 @@ describe('TransactionsService.createSwap', () => {
 
   const mockRedisService = {
     del: jest.fn(),
+    delete: jest.fn(),
   }
 
   beforeEach(async () => {
@@ -112,6 +114,13 @@ describe('TransactionsService.createSwap', () => {
         {
           provide: getRepositoryToken(Transaction),
           useValue: transactionRepository,
+        },
+        {
+          provide: getRepositoryToken(TransactionCategory),
+          useValue: {
+            findOne: jest.fn(),
+            save: jest.fn(),
+          },
         },
         { provide: DataSource, useValue: dataSource },
         {

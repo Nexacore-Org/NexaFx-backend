@@ -13,16 +13,24 @@ import { RateAlert } from '../rate-alerts/entities/rate-alert.entity';
 import { AuditLog } from '../audit-logs/entities/audit-log.entity';
 import { KycModule } from '../kyc/kyc.module';
 import { BackupManifestService } from './services/backup-manifest.service';
+import { MigrationSnapshot } from '../database/entities/migration-snapshot.entity';
+import { ImpersonationController } from './impersonation/impersonation.controller';
+import { ImpersonationService } from './impersonation/impersonation.service';
+import { JwtModule } from '@nestjs/jwt';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Transaction, DataRequest, KycRecord, RateAlert, AuditLog]),
+    TypeOrmModule.forFeature([User, Transaction, DataRequest, KycRecord, RateAlert, AuditLog, MigrationSnapshot]),
     AuditLogsModule,
     ReportsModule,
     TransactionLimitsModule,
     KycModule,
+    JwtModule,
+    UsersModule,
   ],
-  controllers: [AdminController],
-  providers: [AdminService, BackupManifestService],
+  controllers: [AdminController, ImpersonationController],
+  providers: [AdminService, BackupManifestService, ImpersonationService],
+  exports: [ImpersonationService],
 })
 export class AdminModule { }

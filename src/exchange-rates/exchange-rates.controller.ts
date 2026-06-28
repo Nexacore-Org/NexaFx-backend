@@ -48,6 +48,14 @@ export class ExchangeRatesController {
   }
 
   @Public()
+  @Get('pairs')
+  @ApiOperation({ summary: 'Get supported currency pairs configured by provider' })
+  @ApiResponse({ status: 200, description: 'Supported currency pairs returned successfully' })
+  async getSupportedPairs(): Promise<string[]> {
+    return this.exchangeRatesService.getSupportedPairs();
+  }
+
+  @Public()
   @Get('history')
   @ApiOperation({ summary: 'Get daily historical OHLC data' })
   @ApiQuery({ name: 'from', required: true, example: 'XLM' })

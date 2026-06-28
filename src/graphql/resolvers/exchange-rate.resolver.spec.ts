@@ -91,7 +91,7 @@ describe('ExchangeRateResolver', () => {
         provider: 'coingecko',
         cachedAt: undefined as any,
         expiresAt: new Date(Date.now() + 60000).toISOString(),
-      });
+      } as any);
 
       const result = await resolver.exchangeRate('XLM', 'USD');
 

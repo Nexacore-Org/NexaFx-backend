@@ -38,6 +38,7 @@ import { RateAlertsModule } from './rate-alerts/rate-alerts.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
 import { DisputesModule } from './disputes/disputes.module';
+import { CardsModule } from './cards/cards.module';
 import { VaultsModule } from './vaults/vaults.module';
 import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-anchor.module';
 import { FraudModule } from './modules/fraud/fraud.module';
@@ -71,8 +72,7 @@ import { FraudModule } from './modules/fraud/fraud.module';
         {
           ttl: (configService.get<number>('THROTTLE_TTL') ?? 60) * 1000,
           limit: configService.get<number>('THROTTLE_LIMIT') ?? 100,
-        },    StellarSep24AnchorModule,
-
+        },
       ],
       inject: [ConfigService],
     }),
@@ -84,9 +84,7 @@ import { FraudModule } from './modules/fraud/fraud.module';
           watch: true,
         },
       }),
-      resolvers: [
-        AcceptLanguageResolver,
-      ],
+      resolvers: [AcceptLanguageResolver],
     }),
     CommonModule,
     AuthModule,
@@ -120,6 +118,7 @@ import { FraudModule } from './modules/fraud/fraud.module';
     DisputesModule,
     CardsModule,
     VaultsModule,
+    StellarSep24AnchorModule,
     FraudModule,
   ],
   controllers: [AppController],
@@ -134,10 +133,6 @@ import { FraudModule } from './modules/fraud/fraud.module';
     },
     {
       provide: APP_GUARD,
-      useClass: PlanThrottlerGuard,
-    },
-  ],
-  providers: [],
       useClass: PlanThrottlerGuard,
     },
   ],

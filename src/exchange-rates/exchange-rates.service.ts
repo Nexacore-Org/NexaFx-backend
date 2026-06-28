@@ -52,7 +52,6 @@ export class ExchangeRatesService {
     private readonly snapshotRepository: Repository<ExchangeRateSnapshot>,
   ) {}
 
-
   /**
    * Validate a currency pair (both currencies must be valid)
    */

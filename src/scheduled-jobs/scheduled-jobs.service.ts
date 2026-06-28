@@ -16,7 +16,6 @@ import { CurrencyPairService } from '../currencies/services/currency-pair.servic
 import { LedgerVerificationService } from '../ledger/services/ledger-verification.service';
 import {
   NotificationType,
-  NotificationStatus,
   Notification,
 } from '../notifications/entities/notification.entity';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -28,6 +27,11 @@ import { IdempotencyRecord } from '../common/entities/idempotency-record.entity'
 import { DataRequest } from '../users/entities/data-request.entity';
 import { RedisService } from '../common/services/redis.service';
 import { DataSource } from 'typeorm';
+import { AnalyticsService } from '../analytics/analytics.service';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { TAX_QUEUE } from '../modules/queues/queue.constants';
+import { SanctionsService } from '../sanctions/sanctions.service';
 import { VaultsService } from '../vaults/vaults.service';
 
 @Injectable()
@@ -57,6 +61,12 @@ export class ScheduledJobsService {
     private readonly proposalService: ProposalService,
     private readonly auditLogsService: AuditLogsService,
     private readonly ledgerVerificationService: LedgerVerificationService,
+    private readonly analyticsService: AnalyticsService,
+    private readonly redisService: RedisService,
+    @InjectQueue(TAX_QUEUE)
+    private readonly taxQueue: Queue,
+    private readonly sanctionsService: SanctionsService,
+    private readonly loansService: LoansService,
     private readonly vaultsService: VaultsService,
   ) {
     // Truncate hostname to 255 characters to match DB column constraint
@@ -295,8 +305,8 @@ export class ScheduledJobsService {
         .createQueryBuilder()
         .delete()
         .from(Notification)
-        .where('status = :status AND "createdAt" < :cutoff', {
-          status: NotificationStatus.READ,
+        .where('isRead = :isRead AND "createdAt" < :cutoff', {
+          isRead: true,
           cutoff: thirtyDaysAgo,
         })
         .execute();
@@ -311,8 +321,8 @@ export class ScheduledJobsService {
         .createQueryBuilder()
         .delete()
         .from(Notification)
-        .where('status = :status AND "createdAt" < :cutoff', {
-          status: NotificationStatus.UNREAD,
+        .where('isRead = :isRead AND "createdAt" < :cutoff', {
+          isRead: false,
           cutoff: ninetyDaysAgo,
         })
         .execute();
@@ -469,6 +479,10 @@ export class ScheduledJobsService {
     await this.transactionRepository.save(transaction);
     await this.redisService.del('admin_stats');
 
+    this.taxQueue.add('process-transaction', { transactionId: transaction.id }).catch((e) =>
+      this.logger.error(`Failed to enqueue tax processing for reconciled transaction ${transaction.id}: ${e.message}`)
+    );
+
     // Update user balance for deposits
     if (transaction.type === TransactionType.DEPOSIT) {
       try {
@@ -496,25 +510,20 @@ export class ScheduledJobsService {
           ? `Your deposit of ${transaction.amount} ${transaction.currency} has been confirmed`
           : `Your withdrawal of ${transaction.amount} ${transaction.currency} has been confirmed`;
 
-      const notificationType =
-        transaction.type === TransactionType.DEPOSIT
-          ? NotificationType.DEPOSIT_CONFIRMED
-          : NotificationType.WITHDRAWAL_PROCESSED;
 
-      await this.notificationsService.create({
-        userId: transaction.userId,
-        type: notificationType,
-        title: `${transaction.type} Confirmed`,
-        message: notificationMessage,
-        relatedId: transaction.id,
-        metadata: {
+      await this.notificationsService.dispatch(
+        transaction.userId,
+        NotificationType.TRANSACTION,
+        `${transaction.type} Confirmed`,
+        notificationMessage,
+        {
           transactionId: transaction.id,
           type: transaction.type,
-          amount: transaction.amount,
+          amount: transaction.amount.toString(),
           currency: transaction.currency,
           txHash: transaction.txHash,
         },
-      });
+      );
 
       this.logger.log(
         `[Reconciliation] Notification created for transaction ${transaction.id}`,
@@ -575,20 +584,19 @@ export class ScheduledJobsService {
           ? `Your deposit of ${transaction.amount} ${transaction.currency} failed`
           : `Your withdrawal of ${transaction.amount} ${transaction.currency} failed`;
 
-      await this.notificationsService.create({
-        userId: transaction.userId,
-        type: NotificationType.TRANSACTION_FAILED,
-        title: `${transaction.type} Failed`,
-        message: notificationMessage,
-        relatedId: transaction.id,
-        metadata: {
+      await this.notificationsService.dispatch(
+        transaction.userId,
+        NotificationType.TRANSACTION,
+        `${transaction.type} Failed`,
+        notificationMessage,
+        {
           transactionId: transaction.id,
           type: transaction.type,
-          amount: transaction.amount,
+          amount: transaction.amount.toString(),
           currency: transaction.currency,
-          failureReason: transaction.failureReason,
+          failureReason: transaction.failureReason || 'unknown',
         },
-      });
+      );
 
       this.logger.log(
         `[Reconciliation] Failure notification created for transaction ${transaction.id}`,

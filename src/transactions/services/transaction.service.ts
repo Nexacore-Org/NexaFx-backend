@@ -10,7 +10,6 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import { RedisService } from '../../common/services/redis.service';
 import {
   Transaction,
   TransactionStatus,
@@ -689,7 +688,7 @@ export class TransactionsService {
         transaction.stellarTxHash = rawResult.hash;
         transaction.status = TransactionStatus.SUCCESS;
         await this.transactionRepository.save(transaction);
-        await this.redisService.del('admin_stats');
+        await this.redisService.delete('admin_stats');
 
         await this.updateUserBalance(
           userId,
@@ -897,7 +896,7 @@ export class TransactionsService {
 
       if (verificationResult.status === 'SUCCESS') {
         transaction.status = TransactionStatus.SUCCESS;
-        await this.redisService.del('admin_stats');
+        await this.redisService.delete('admin_stats');
 
         if (transaction.type === TransactionType.DEPOSIT) {
           await this.updateUserBalance(

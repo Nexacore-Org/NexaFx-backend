@@ -195,8 +195,8 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
-    const presentedHash = this.hashToken(token);
-    if (!this.timingSafeEquals(storedHash, presentedHash)) {
+    const presentedHash = this.hashRefreshToken(token);
+    if (!this.timingSafeHashEquals(storedHash, presentedHash)) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
   }

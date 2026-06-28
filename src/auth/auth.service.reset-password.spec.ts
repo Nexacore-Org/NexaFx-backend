@@ -14,6 +14,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { I18nService } from 'nestjs-i18n';
 
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
@@ -29,6 +30,7 @@ import { ReferralsService } from '../referrals/referrals.service';
 import { TwoFactorService } from '../two-factor/two-factor.service';
 import { WalletsService } from '../wallets/wallets.service';
 import { PasswordResetAttempt } from './entities/password-reset-attempt.entity';
+import { OAuthAccount } from './entities/oauth-account.entity';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 
 // ---------------------------------------------------------------------------
@@ -123,8 +125,21 @@ describe('AuthService.resetPassword()', () => {
         { provide: TwoFactorService, useValue: mockTwoFactorService },
         { provide: WalletsService, useValue: mockWalletsService },
         {
+          provide: I18nService,
+          useValue: {
+            translate: jest.fn((key) => key),
+          },
+        },
+        {
           provide: getRepositoryToken(PasswordResetAttempt),
           useValue: mockPasswordResetAttemptRepository,
+        },
+        {
+          provide: getRepositoryToken(OAuthAccount),
+          useValue: {
+            findOne: jest.fn(),
+            save: jest.fn(),
+          },
         },
       ],
     }).compile();

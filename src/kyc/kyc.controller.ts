@@ -8,6 +8,8 @@ import {
   UploadedFiles,
   BadRequestException,
   UsePipes,
+  Patch,
+  Param,
 } from '@nestjs/common';
 import { Audit } from '../common/decorators/audit.decorator';
 import {
@@ -17,12 +19,17 @@ import {
   ApiResponse,
   ApiBody,
   ApiConsumes,
+  ApiParam,
 } from '@nestjs/swagger';
 import { KycService } from './kyc.service';
 import { SubmitKycDto } from './dtos/kyc-submit';
 import { ResubmitKycDto } from './dtos/kyc-resubmit';
+import { RejectKycDto } from './dtos/kyc-reject';
 import { KycRecord } from './entities/kyc.entity';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '../users/user.entity';
 import {
   CurrentUser,
   CurrentUserPayload,
@@ -103,16 +110,11 @@ export class KycController {
   @Patch(':id/approve')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Approve or reject a KYC submission (Admin)' })
+  @ApiOperation({ summary: 'Approve a KYC submission (Admin)' })
   @ApiParam({ name: 'id', type: String, description: 'KYC record ID' })
-  @ApiBody({ type: ApproveKycDto })
   @ApiResponse({
-    status: 201,
-    description: 'KYC resubmission successful',
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Not in RESUBMISSION_REQUIRED status, wrong file type/size',
+    status: 200,
+    description: 'KYC approved successfully',
   })
   @ApiResponse({
     status: 401,
@@ -125,21 +127,67 @@ export class KycController {
   @Audit('kyc.review')
   async approveKyc(
     @Param('id') id: string,
-    @Body() approveKycDto: ApproveKycDto,
-  ): Promise<KycRecord> {
-    return this.kycService.approveKyc(id, approveKycDto);
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.kycService.approveKyc(id, user.userId);
   }
 
-  @Patch(':id/review')
+  @Post('resubmit')
+  @ApiOperation({ summary: 'Resubmit KYC verification' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ type: ResubmitKycDto })
+  @UseInterceptors(
+    FileFieldsInterceptor([
+      { name: 'documentFront', maxCount: 1 },
+      { name: 'documentBack', maxCount: 1 },
+      { name: 'selfie', maxCount: 1 },
+    ]),
+  )
+  @Audit('kyc.resubmission')
+  async resubmitKyc(
+    @CurrentUser() user: CurrentUserPayload,
+    @UploadedFiles(new FileValidationPipe())
+    files: {
+      documentFront?: Express.Multer.File[];
+      documentBack?: Express.Multer.File[];
+      selfie?: Express.Multer.File[];
+    },
+    @Body() dto: ResubmitKycDto,
+    req?: any,
+  ) {
+    if (!files?.documentFront?.length) {
+      throw new BadRequestException('documentFront file is required');
+    }
+    if (!files?.selfie?.length) {
+      throw new BadRequestException('selfie file is required');
+    }
+
+    const version = req?.kycUploadVersion || Date.now().toString();
+    const basePath = `uploads/kyc/${user.userId}/${version}`;
+
+    const documentFrontUrl = `${basePath}/${files.documentFront![0].filename}`;
+    const documentBackUrl = files.documentBack?.length
+      ? `${basePath}/${files.documentBack![0].filename}`
+      : undefined;
+    const selfieUrl = `${basePath}/${files.selfie![0].filename}`;
+
+    return this.kycService.resubmitKyc(user.userId, {
+      ...dto,
+      documentFrontUrl,
+      documentBackUrl,
+      selfieUrl,
+    });
+  }
+
+  @Patch(':id/reject')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Review and decide on a KYC submission (Admin)' })
+  @ApiOperation({ summary: 'Reject a KYC submission (Admin)' })
   @ApiParam({ name: 'id', type: String, description: 'KYC record ID' })
-  @ApiBody({ type: ReviewKycDto })
+  @ApiBody({ type: RejectKycDto })
   @ApiResponse({
     status: 200,
-    description: 'KYC status retrieved successfully',
-    type: 'object',
+    description: 'KYC rejected successfully',
   })
   @ApiResponse({
     status: 401,
@@ -150,7 +198,16 @@ export class KycController {
     description: 'Forbidden - Admin role required',
   })
   @Audit('kyc.review')
-  async reviewKyc(@Param('id') id: string, @Body() dto: ReviewKycDto) {
-    return this.kycService.reviewKyc(id, dto.decision, dto.reason);
+  async rejectKyc(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: RejectKycDto,
+  ) {
+    return this.kycService.rejectKyc(
+      id,
+      user.userId,
+      dto.reason,
+      dto.requireResubmission ?? false,
+    );
   }
 }

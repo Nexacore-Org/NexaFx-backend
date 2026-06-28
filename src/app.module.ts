@@ -38,6 +38,9 @@ import { EscrowModule } from './escrow/escrow.module';
 import { RateAlertsModule } from './rate-alerts/rate-alerts.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
+import { TransactionsV2Module } from './transactions/transaction-v2.module';
+import { FiatV2Module } from './fiat/fiat-v2.module';
+import { BatchesV2Module } from './batches/batches-v2.module';
 import { TaxModule } from './tax/tax.module';
 import { OrganisationsModule } from './organisations/organisations.module';
 import { SanctionsModule } from './sanctions/sanctions.module';
@@ -105,6 +108,9 @@ import { FiatModule } from './modules/fiat/fiat.module';
     NotificationsModule,
     FirebaseModule,
     TransactionsModule,
+    TransactionsV2Module,
+    FiatV2Module,
+    BatchesV2Module,
     ReferralsModule,
     BeneficiariesModule,
     KycModule,

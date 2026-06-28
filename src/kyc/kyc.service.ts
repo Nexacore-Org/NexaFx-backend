@@ -415,6 +415,58 @@ export class KycService {
       kyc.reviewedBy = reviewerId;
       kyc.reviewedAt = new Date();
 
+/      let notificationPayload: Partial<Notification>;
+
+      if (decision === KycStatus.APPROVED) {
+        kyc.status = KycStatus.APPROVED;
+        const tier = this.resolveUserKycTier(kyc);
+        kyc.tier =
+          tier === UserKycTier.BASIC
+            ? KycTier.TIER_1
+            : tier === UserKycTier.UNVERIFIED
+              ? KycTier.TIER_0
+              : KycTier.TIER_2;
+        kyc.reviewedAt = new Date();
+
+        user.isVerified = true;
+        user.kycTier = tier;
+
+        notificationPayload = {
+          userId: user.id,
+          type: NotificationType.SYSTEM,
+          title: 'KYC Approved',
+          message:
+            'Your identity verification has been approved. You now have full access to higher transaction limits.',
+          status: NotificationStatus.UNREAD,
+          relatedId: kyc.id,
+          metadata: {
+            entity: 'KYC',
+            kycStatus: 'approved',
+            tier,
+          },
+        };
+      } else {
+        kyc.status = KycStatus.REJECTED;
+        kyc.rejectionReason = reason || 'KYC rejected';
+        kyc.reviewedAt = new Date();
+
+        user.isVerified = false;
+        user.kycTier = UserKycTier.UNVERIFIED;
+
+        notificationPayload = {
+          userId: user.id,
+          type: NotificationType.SYSTEM,
+          title: 'KYC Rejected',
+          message: `Your KYC submission was rejected. Reason: ${kyc.rejectionReason}`,
+          status: NotificationStatus.UNREAD,
+          relatedId: kyc.id,
+          metadata: {
+            entity: 'KYC',
+            kycStatus: 'rejected',
+            reason: kyc.rejectionReason,
+          },
+        };
+      }
       user.isVerified = false;
       user.kycTier = UserKycTier.UNVERIFIED;
 

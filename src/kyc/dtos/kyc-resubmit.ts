@@ -1,36 +1,14 @@
-import {
-  IsDateString,
-  IsEnum,
-  IsNotEmpty,
-  IsString,
-  Matches,
-  MinLength,
-} from 'class-validator';
-import { DocumentType } from '../entities/kyc.entity';
+import { IsEnum, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { UserKycTier } from '../../users/user.entity';
 
 export class ResubmitKycDto {
-  @ApiProperty({ description: 'Full legal name of the user' })
-  @IsString()
-  @IsNotEmpty()
-  @MinLength(3)
-  fullName: string;
-
-  @ApiProperty({ enum: DocumentType, description: 'Type of ID document' })
-  @IsEnum(DocumentType)
-  documentType: DocumentType;
-
-  @ApiProperty({ description: 'ID document number' })
-  @IsString()
-  @IsNotEmpty()
-  @Matches(/^[A-Za-z0-9]+$/, {
-    message: 'ID number must contain only alphanumeric characters',
+  @ApiProperty({
+    description: 'Target KYC tier to resubmit for',
+    enum: [UserKycTier.STANDARD, UserKycTier.ENHANCED],
+    required: false,
   })
-  documentNumber: string;
-
-  @IsDateString()
-  dateOfBirth: string;
-
-  @IsString()
-  nationality: string;
+  @IsOptional()
+  @IsEnum(UserKycTier)
+  targetTier?: UserKycTier.STANDARD | UserKycTier.ENHANCED;
 }

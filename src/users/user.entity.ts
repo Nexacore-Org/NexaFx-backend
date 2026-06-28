@@ -79,6 +79,28 @@ export class User {
   @Column({ type: 'jsonb', nullable: true, default: [] })
   fcmTokens: string[];
 
+  @Column({
+    type: 'jsonb',
+    nullable: true,
+    default: {
+      email: true,
+      push: true,
+      types: { TRANSACTION: true, KYC: true, RATE_ALERT: true },
+    },
+  })
+  notificationPreferences: {
+    email: boolean;
+    push: boolean;
+    types: {
+      TRANSACTION: boolean;
+      KYC: boolean;
+      RATE_ALERT: boolean;
+    };
+  };
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  fcmToken: string | null;
+
   @Column({ type: 'varchar', length: 8, unique: true })
   @Index()
   referralCode: string;

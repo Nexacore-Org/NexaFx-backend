@@ -48,6 +48,8 @@ import { LoansModule } from './loans/loans.module';
 import { DisputesModule } from './disputes/disputes.module';
 import { VaultsModule } from './vaults/vaults.module';
 import { PlatformHealthRunbookModule } from './platform-health-runbook/platform-health-runbook.module';
+import { RegulatoryReportingModule } from './regulatory-reporting/regulatory-reporting.module';
+import { MultiSignatureWalletsModule } from './multi-signature-wallets/multi-signature-wallets.module';
 import { DashboardPreferencesModule } from './dashboard-preferences/dashboard-preferences.module';
 import { FraudRiskScoringModule } from './fraud-risk-scoring/fraud-risk-scoring.module';
 import { DataResidencyModule } from './data-residency/data-residency.module';
@@ -91,6 +93,8 @@ import { FiatModule } from './modules/fiat/fiat.module';
           ttl: (configService.get<number>('THROTTLE_TTL') ?? 60) * 1000,
           limit: configService.get<number>('THROTTLE_LIMIT') ?? 100,
         },    PlatformHealthRunbookModule,
+        },    RegulatoryReportingModule,
+        },    MultiSignatureWalletsModule,
         },    DashboardPreferencesModule,
         },    FraudRiskScoringModule,
         },    DataResidencyModule,

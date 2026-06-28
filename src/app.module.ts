@@ -40,6 +40,7 @@ import { UsersModule } from './users/users.module';
 import { DisputesModule } from './disputes/disputes.module';
 import { VaultsModule } from './vaults/vaults.module';
 import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-anchor.module';
+import { FiatModule } from './modules/fiat/fiat.module';
 
 @Module({
   imports: [
@@ -119,6 +120,7 @@ import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-a
     DisputesModule,
     CardsModule,
     VaultsModule,
+    FiatModule,
   ],
   controllers: [AppController],
   providers: [
@@ -132,10 +134,6 @@ import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-a
     },
     {
       provide: APP_GUARD,
-      useClass: PlanThrottlerGuard,
-    },
-  ],
-  providers: [],
       useClass: PlanThrottlerGuard,
     },
   ],

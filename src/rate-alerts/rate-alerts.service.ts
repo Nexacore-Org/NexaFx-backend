@@ -210,13 +210,12 @@ export class RateAlertsService {
   ): Promise<void> {
     const now = new Date();
 
-    await this.notificationsService.create({
-      userId: alert.userId,
-      type: NotificationType.SYSTEM,
-      title: 'Rate Alert Triggered',
-      message: `${alert.fromCurrency}/${alert.toCurrency} is now ${currentRate}. Your ${alert.condition} ${alert.targetRate} alert was triggered.`,
-      relatedId: alert.id,
-      metadata: {
+    await this.notificationsService.dispatch(
+      alert.userId,
+      NotificationType.RATE_ALERT,
+      'Rate Alert Triggered',
+      `${alert.fromCurrency}/${alert.toCurrency} is now ${currentRate}. Your ${alert.condition} ${alert.targetRate} alert was triggered.`,
+      {
         alertId: alert.id,
         fromCurrency: alert.fromCurrency,
         toCurrency: alert.toCurrency,
@@ -225,7 +224,7 @@ export class RateAlertsService {
         currentRate,
         recurring: alert.recurring,
       },
-    });
+    );
 
     // Atomically deactivate only if still active, preventing a double-trigger
     // when multiple scheduler instances evaluate the same alert concurrently.

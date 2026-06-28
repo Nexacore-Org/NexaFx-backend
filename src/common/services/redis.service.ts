@@ -72,4 +72,18 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       this.logger.error(`Error deleting pattern ${pattern} from Redis`, error);
     }
   }
+
+  /**
+   * Returns all keys matching a glob-style pattern.
+   * Use with care — avoid on very large keyspaces.
+   * Safe for admin-scoped patterns like `nexafx:impersonation:admin:<id>:*`.
+   */
+  async keys(pattern: string): Promise<string[]> {
+    try {
+      return await this.client.keys(pattern);
+    } catch (error) {
+      this.logger.error(`Error listing keys for pattern ${pattern}`, error);
+      return [];
+    }
+  }
 }

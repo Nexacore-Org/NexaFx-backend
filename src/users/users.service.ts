@@ -7,13 +7,14 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { User, UserRole, UserPlan } from './user.entity';
+import { User, UserRole, UserPlan, UserKycTier } from './user.entity';
 import {
   UpdateProfileDto,
   ProfileResponseDto,
   WalletBalancesResponseDto,
   WalletPortfolioResponseDto,
   PortfolioHoldingDto,
+  UpdateNotificationPreferencesDto,
 } from './dto';
 import { UserQueryDto } from '../admin/dto/user-query.dto';
 import { StellarService } from '../blockchain/stellar/stellar.service';
@@ -96,6 +97,9 @@ export class UsersService {
     referralCode: string;
     referredBy?: string | null;
     role?: UserRole;
+    consentGdpr?: boolean;
+    consentGdprAt?: Date;
+    consentGdprVersion?: string;
   }): Promise<
     Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'>
   > {
@@ -122,7 +126,7 @@ export class UsersService {
     const user = this.userRepository.create({
       email: normalizedEmail,
       password: hashedPassword,
-      passwordHash: hashedPassword || undefined,
+      passwordHash: hashedPassword ?? undefined,
       firstName: params.firstName || null,
       lastName: params.lastName || null,
       phone: params.phone || null,
@@ -173,6 +177,7 @@ export class UsersService {
     await this.userRepository.update(userId, {
       isVerified: true,
       isEmailVerified: true,
+      kycTier: UserKycTier.BASIC,
     });
   }
 
@@ -189,6 +194,10 @@ export class UsersService {
     const user = await this.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
+    }
+
+    if (data.isEmailVerified && user.kycTier === UserKycTier.NONE) {
+      data.kycTier = UserKycTier.BASIC;
     }
 
     await this.userRepository.update(userId, data);
@@ -587,5 +596,55 @@ export class UsersService {
       resetAt,
       isUnlimited,
     };
+  }
+
+  async updateNotificationPreferences(
+    userId: string,
+    dto: UpdateNotificationPreferencesDto,
+  ): Promise<User> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const currentPreferences = user.notificationPreferences || {
+      email: true,
+      push: true,
+      types: { TRANSACTION: true, KYC: true, RATE_ALERT: true },
+    };
+
+    user.notificationPreferences = {
+      email: dto.email !== undefined ? dto.email : currentPreferences.email,
+      push: dto.push !== undefined ? dto.push : currentPreferences.push,
+      types: {
+        TRANSACTION:
+          dto.types?.TRANSACTION !== undefined
+            ? dto.types.TRANSACTION
+            : currentPreferences.types.TRANSACTION,
+        KYC:
+          dto.types?.KYC !== undefined
+            ? dto.types.KYC
+            : currentPreferences.types.KYC,
+        RATE_ALERT:
+          dto.types?.RATE_ALERT !== undefined
+            ? dto.types.RATE_ALERT
+            : currentPreferences.types.RATE_ALERT,
+      },
+    };
+
+    return this.userRepository.save(user);
+  }
+
+  async updateFcmToken(userId: string, fcmToken: string): Promise<void> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    user.fcmToken = fcmToken;
+    const currentTokens = user.fcmTokens || [];
+    if (!currentTokens.includes(fcmToken)) {
+      user.fcmTokens = [...currentTokens, fcmToken];
+    }
+    await this.userRepository.save(user);
   }
 }

@@ -1,11 +1,13 @@
 import {
   IsBoolean,
+  IsEnum,
   IsNotEmpty,
   IsOptional,
   IsString,
   MinLength,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { UserKycTier } from '../../users/user.entity';
 
 export class RejectKycDto {
   @ApiProperty({
@@ -27,4 +29,15 @@ export class RejectKycDto {
   @IsOptional()
   @IsBoolean()
   requireResubmission?: boolean;
+}
+
+export class ResubmitKycDto {
+  @ApiProperty({
+    description: 'Target KYC tier to resubmit for',
+    enum: [UserKycTier.STANDARD, UserKycTier.ENHANCED],
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(UserKycTier)
+  targetTier?: UserKycTier.STANDARD | UserKycTier.ENHANCED;
 }

@@ -20,6 +20,7 @@ import { FirebaseModule } from '../firebase/firebase.module';
 import { WebhooksModule } from '../webhooks/webhooks.module';
 import { CommonModule } from '../common/common.module';
 import { TransactionLimitsModule } from './transaction-limits.module';
+import { ComplianceModule } from '../modules/compliance/compliance.module';
 import { KycModule } from '../kyc/kyc.module';
 
 @Module({
@@ -40,6 +41,7 @@ import { KycModule } from '../kyc/kyc.module';
     WebhooksModule,
     CommonModule,
     TransactionLimitsModule,
+    ComplianceModule,
     KycModule,
   ],
   controllers: [TransactionsController],

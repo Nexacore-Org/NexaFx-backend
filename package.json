@@ -1,6 +1,6 @@
 {
   "name": "nexafx-backend",
-  "version": "0.0.1",
+  "version": "2.0.0",
   "description": "",
   "author": "",
   "private": true,
@@ -19,9 +19,15 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "typeorm": "typeorm-ts-node-commonjs",
-    "typeorm:migration:run": "npm run typeorm migration:run -- -d src/database/data-source.ts",
+    "typeorm:migration:run": "npm run typeorm migration:run -- -d src/database/datasource.ts",
+    "typeorm:migration:revert": "npm run typeorm migration:revert -- -d src/database/datasource.ts",
+    "typeorm:migration:generate": "npm run typeorm migration:generate -- -d src/database/datasource.ts",
+    "migration:validate": "ts-node scripts/validate-migrations.ts",
     "seed": "ts-node src/database/seed.ts",
-    "seed:fresh": "ts-node src/database/seed-fresh.ts"
+    "seed:fresh": "ts-node src/database/seed-fresh.ts",
+    "commitlint": "commitlint --config commitlint.config.js",
+    "release": "semantic-release",
+    "release:prerelease": "semantic-release --branch v2"
   },
   "dependencies": {
     "@apollo/server": "^5.5.0",
@@ -95,6 +101,15 @@
     "uuid": "^9.0.1"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.1.0",
+    "@commitlint/config-conventional": "^21.1.0",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/exec": "^7.1.0",
+    "@semantic-release/github": "^12.0.8",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/release-notes-generator": "^14.1.1",
+    "semantic-release": "^25.0.5",
     "@eslint/eslintrc": "^3.2.0",
     "@eslint/js": "^9.18.0",
     "@nestjs/cli": "^11.0.21",
@@ -165,6 +180,20 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "coverageThreshold": {
+      "global": {
+        "lines": 80,
+        "functions": 75,
+        "branches": 70,
+        "statements": 80
+      }
+    },
+    "coveragePathIgnorePatterns": [
+      "\\.module\\.ts$",
+      "\\.entity\\.ts$",
+      "main\\.ts",
+      "/migrations/"
+    ]
   }
 }

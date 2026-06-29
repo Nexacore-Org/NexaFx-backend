@@ -6,6 +6,7 @@ import {
   InternalServerErrorException,
   Logger,
   ForbiddenException,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -21,13 +22,14 @@ import {
   CreateWithdrawalDto,
   CreateSwapDto,
   TransactionQueryDto,
+  TagUsageDto,
 } from '../dtos/transaction.dto';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { NotificationType } from '../../notifications/entities/notification.entity';
 import { CurrenciesService } from '../../currencies/currencies.service';
 import { CurrencyPairService } from '../../currencies/services/currency-pair.service';
 import { ExchangeRatesService } from '../../exchange-rates/exchange-rates.service';
-import { StellarService } from '../../blockchain/stellar/stellar.service';
+import { StellarService } from '../../modules/stellar/stellar.service';
 import { UsersService } from '../../users/users.service';
 import { AuditLogsService } from '../../audit-logs/audit-logs.service';
 import { AuditAction } from '../../audit-logs/enums/audit-action.enum';
@@ -45,9 +47,24 @@ import { WalletsService } from '../../wallets/wallets.service';
 import { EncryptionService } from '../../common/services/encryption.service';
 import { LedgerService } from '../../ledger/services/ledger.service';
 import { TransactionLimitService } from './transaction-limit.service';
+import { AmlService } from '../../modules/compliance/aml.service';
 import { RedisService } from '../../modules/redis/redis.service';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { TAX_QUEUE } from '../../modules/queues/queue.constants';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Truncates a memo string to at most 28 UTF-8 bytes, the Stellar memo_text limit.
+ * Splits on a character boundary so the result is always valid UTF-8.
+ */
+export function truncateMemoTo28Bytes(memo: string): string {
+  const encoded = Buffer.from(memo, 'utf8');
+  if (encoded.length <= 28) return memo;
+  // Slice to 28 bytes, then decode — incomplete multi-byte sequences are dropped
+  return encoded.slice(0, 28).toString('utf8').replace(/\uFFFD/g, '');
+}
 
 /** Narrows an unknown catch value to a plain Error with a message string. */
 function toError(err: unknown): Error {
@@ -159,7 +176,10 @@ export class TransactionsService {
     private readonly encryptionService: EncryptionService,
     private readonly ledgerService: LedgerService,
     private readonly transactionLimitService: TransactionLimitService,
+    private readonly amlService: AmlService,
     private readonly redisService: RedisService,
+    @InjectQueue(TAX_QUEUE)
+    private readonly taxQueue: Queue,
   ) {}
 
   /**
@@ -177,7 +197,11 @@ export class TransactionsService {
       `Creating deposit for user ${userId}: ${amount} ${currency}`,
     );
 
-    await this.transactionLimitService.check(userId, amount, currency);
+    if (this.limitsService) {
+      await this.limitsService.checkLimit(userId, TransactionType.DEPOSIT, amount, currency);
+    } else {
+      await this.transactionLimitService.check(userId, amount, currency);
+    }
 
     const currencyData = await this.currenciesService.findOne(currency);
     if (!currencyData || !currencyData.isActive) {
@@ -201,11 +225,13 @@ export class TransactionsService {
       );
     }
 
-    const fee = (await (this as any).feesService?.calculateFee(
-      TransactionType.DEPOSIT,
-      currency,
-      amount,
-    )) || { feeAmount: 0, feeCurrency: currency, feeType: FeeType.FLAT };
+    const fee = this.limitsService
+      ? await this.limitsService.calculateFee(TransactionType.DEPOSIT, amount, currency)
+      : (await (this as any).feesService?.calculateFee(
+          TransactionType.DEPOSIT,
+          currency,
+          amount,
+        )) || { feeAmount: 0, feeCurrency: currency, feeType: FeeType.FLAT };
 
     const transaction = this.transactionRepository.create({
       userId,
@@ -216,6 +242,7 @@ export class TransactionsService {
       feeAmount: fee.feeAmount.toFixed(8),
       feeCurrency: fee.feeCurrency,
       status: TransactionStatus.PENDING,
+      counterpartyMemo: createDepositDto.memo ?? null,
     });
 
     try {
@@ -239,6 +266,24 @@ export class TransactionsService {
         userId,
         createDepositDto.walletId,
       );
+
+      const paymentOperation = Operation.payment({
+        destination: destinationAddress,
+        asset: Asset.native(),
+        amount: amount.toString(),
+      });
+
+      // Use counterpartyMemo on Stellar if provided (truncated to 28 bytes)
+      const stellarMemo = createDepositDto.memo
+        ? truncateMemoTo28Bytes(createDepositDto.memo)
+        : `DEPOSIT-${transaction.id}`;
+
+      const stellarTx = await this.stellarService.createTransaction({
+        sourcePublicKey: sourceAddress,
+        operations: [paymentOperation],
+        memo: stellarMemo,
+      });
+
 
       const secretKey = await this.getStellarSecretKey();
       const paymentResult = await this.stellarService.sendPayment(
@@ -360,7 +405,11 @@ export class TransactionsService {
       throw new NotFoundException('User not found');
     }
 
-    await this.transactionLimitService.check(userId, amount, currency);
+    if (this.limitsService) {
+      await this.limitsService.checkLimit(userId, TransactionType.WITHDRAW, amount, currency);
+    } else {
+      await this.transactionLimitService.check(userId, amount, currency);
+    }
 
     const userBalance = await this.getUserBalance(userId, currency);
     if (parseFloat(userBalance) < amount) {
@@ -395,11 +444,13 @@ export class TransactionsService {
       );
     }
 
-    const fee = (await (this as any).feesService?.calculateFee(
-      TransactionType.WITHDRAW,
-      currency,
-      amount,
-    )) || { feeAmount: 0, feeCurrency: currency, feeType: FeeType.FLAT };
+    const fee = this.limitsService
+      ? await this.limitsService.calculateFee(TransactionType.WITHDRAW, amount, currency)
+      : (await (this as any).feesService?.calculateFee(
+          TransactionType.WITHDRAW,
+          currency,
+          amount,
+        )) || { feeAmount: 0, feeCurrency: currency, feeType: FeeType.FLAT };
 
     const totalDeduction = amount + fee.feeAmount;
     if (parseFloat(userBalance) < totalDeduction) {
@@ -424,6 +475,7 @@ export class TransactionsService {
       feeAmount: fee.feeAmount.toFixed(8),
       feeCurrency: fee.feeCurrency,
       status: TransactionStatus.PENDING,
+      counterpartyMemo: createWithdrawalDto.memo ?? null,
     });
 
     try {
@@ -443,6 +495,29 @@ export class TransactionsService {
           device: userAgent,
         },
       );
+
+      const sourceAddress = await this.getUserStellarAddress(
+        userId,
+        createWithdrawalDto.walletId,
+      );
+
+      const paymentOperation = Operation.payment({
+        destination: destinationAddress,
+        asset: Asset.native(),
+        amount: amount.toString(),
+      });
+
+      // Use counterpartyMemo on Stellar if provided (truncated to 28 bytes)
+      const stellarMemo = createWithdrawalDto.memo
+        ? truncateMemoTo28Bytes(createWithdrawalDto.memo)
+        : `WITHDRAW-${transaction.id}`;
+
+      const stellarTx = await this.stellarService.createTransaction({
+        sourcePublicKey: sourceAddress,
+        operations: [paymentOperation],
+        memo: stellarMemo,
+      });
+
 
       const secretKey = await this.getUserStellarSecretKey(
         userId,
@@ -535,7 +610,11 @@ export class TransactionsService {
       `Creating swap for user ${userId}: ${amount} ${fromCurrency} to ${toCurrency}`,
     );
 
-    await this.transactionLimitService.check(userId, amount, fromCurrency);
+    if (this.limitsService) {
+      await this.limitsService.checkLimit(userId, TransactionType.SWAP, amount, fromCurrency);
+    } else {
+      await this.transactionLimitService.check(userId, amount, fromCurrency);
+    }
 
     if (fromCurrency === toCurrency) {
       throw new BadRequestException(
@@ -556,11 +635,13 @@ export class TransactionsService {
     }
 
     // 3. Calculate Fee
-    const fee = (await this.feesService.calculateFee(
-      FeeTransactionType.SWAP,
-      fromCurrency,
-      amount,
-    )) || { feeAmount: 0, feeCurrency: fromCurrency, feeType: FeeType.FLAT };
+    const fee = this.limitsService
+      ? await this.limitsService.calculateFee(TransactionType.SWAP, amount, fromCurrency)
+      : (await this.feesService.calculateFee(
+          FeeTransactionType.SWAP,
+          fromCurrency,
+          amount,
+        )) || { feeAmount: 0, feeCurrency: fromCurrency, feeType: FeeType.FLAT };
 
     if (parseFloat(userBalance) < amount + fee.feeAmount) {
       throw new BadRequestException(
@@ -622,6 +703,7 @@ export class TransactionsService {
         feeAmount: fee.feeAmount.toFixed(8),
         feeCurrency: fee.feeCurrency,
         status: TransactionStatus.PENDING,
+        counterpartyMemo: createSwapDto.memo ?? null,
         metadata: {
           path: bestPath.path,
           originalDestinationAmount: destinationAmount,
@@ -667,10 +749,14 @@ export class TransactionsService {
           slippageTolerance,
         });
 
+        const swapMemo = createSwapDto.memo
+          ? truncateMemoTo28Bytes(createSwapDto.memo)
+          : `SWAP-${transaction.id}`;
+
         const stellarTx = await this.stellarService.createTransaction({
           sourcePublicKey: txWallet.publicKey,
           operations: [swapOperation],
-          memo: `SWAP-${transaction.id}`,
+          memo: swapMemo,
         });
 
         const secretKey = await this.getUserStellarSecretKey(userId, walletId);
@@ -689,6 +775,9 @@ export class TransactionsService {
         transaction.status = TransactionStatus.SUCCESS;
         await this.transactionRepository.save(transaction);
         await this.redisService.delete('admin_stats');
+        this.taxQueue.add('process-transaction', { transactionId: transaction.id }).catch((e) =>
+          this.logger.error(`Failed to enqueue tax processing for swap transaction ${transaction.id}: ${e.message}`)
+        );
 
         await this.updateUserBalance(
           userId,
@@ -697,13 +786,15 @@ export class TransactionsService {
         );
         await this.updateUserBalance(userId, toCurrency, effectiveAmount);
 
-        await this.notificationsService.create({
+        await this.notificationsService.dispatch(
           userId,
-          type: NotificationType.SWAP_COMPLETED,
-          title: 'Swap Completed',
-          message: `Successfully swapped ${amount} ${fromCurrency} to ${effectiveAmount.toFixed(2)} ${toCurrency}`,
-          relatedId: transaction.id,
-        });
+          NotificationType.TRANSACTION,
+          'Swap Completed',
+          `Successfully swapped ${amount} ${fromCurrency} to ${effectiveAmount.toFixed(2)} ${toCurrency}`,
+          {
+            transactionId: transaction.id,
+          },
+        );
 
         this.logger.log(
           `Swap transaction completed successfully: ${transaction.id} (Attempt ${i})`,
@@ -720,6 +811,10 @@ export class TransactionsService {
           .catch((e) =>
             this.logger.error(`Webhook dispatch failed: ${e.message}`),
           );
+
+        this.amlService
+          .enqueue(transaction.id)
+          .catch((e) => this.logger.error(`AML enqueue failed: ${e.message}`));
 
         return transaction;
       } catch (err) {
@@ -928,6 +1023,12 @@ export class TransactionsService {
 
       await this.transactionRepository.save(transaction);
 
+      if (transaction.status === TransactionStatus.SUCCESS) {
+        this.taxQueue.add('process-transaction', { transactionId: transaction.id }).catch((e) =>
+          this.logger.error(`Failed to enqueue tax processing for verified transaction ${transaction.id}: ${e.message}`)
+        );
+      }
+
       await this.auditLogsService.logTransactionEvent(
         transaction.userId,
         AuditAction.TRANSACTION_STATUS_UPDATED,
@@ -961,6 +1062,10 @@ export class TransactionsService {
           .catch((e) =>
             this.logger.error(`Webhook dispatch failed: ${e.message}`),
           );
+
+        this.amlService
+          .enqueue(transaction.id)
+          .catch((e) => this.logger.error(`AML enqueue failed: ${e.message}`));
       } else if (transaction.status === TransactionStatus.FAILED) {
         this.webhookService
           .dispatch('transaction.failed', transaction, transaction.userId)
@@ -1007,6 +1112,12 @@ export class TransactionsService {
 
     await this.transactionRepository.save(transaction);
 
+    if (transaction.status === TransactionStatus.SUCCESS) {
+      this.taxQueue.add('process-transaction', { transactionId: transaction.id }).catch((e) =>
+        this.logger.error(`Failed to enqueue tax processing for manual status update ${transaction.id}: ${e.message}`)
+      );
+    }
+
     await this.auditLogsService.logTransactionEvent(
       transaction.userId,
       AuditAction.TRANSACTION_STATUS_UPDATED,
@@ -1037,6 +1148,12 @@ export class TransactionsService {
       ).catch((e) =>
         this.logger.error(`Failed to send push notification: ${e.message}`),
       );
+    }
+
+    if (status === TransactionStatus.SUCCESS) {
+      this.amlService
+        .enqueue(transaction.id)
+        .catch((e) => this.logger.error(`AML enqueue failed: ${e.message}`));
     }
 
     return transaction;
@@ -1108,6 +1225,9 @@ export class TransactionsService {
     userId: string,
     query?: TransactionQueryDto,
   ): Promise<{ transactions: any[]; total: number }> {
+    const page = Math.max(1, query?.page ?? 1);
+    const limit = Math.max(1, query?.limit ?? 20);
+
     const queryBuilder = this.transactionRepository
       .createQueryBuilder('transaction')
       .where('transaction.userId = :userId', { userId });
@@ -1116,13 +1236,38 @@ export class TransactionsService {
       queryBuilder.andWhere('transaction.type = :type', { type: query.type });
     }
 
+    if (query?.status) {
+      queryBuilder.andWhere('transaction.status = :status', {
+        status: query.status,
+      });
+    }
+
     if (query?.currency) {
       queryBuilder.andWhere('transaction.currency = :currency', {
         currency: query.currency,
       });
     }
 
-    queryBuilder.orderBy('transaction.createdAt', 'DESC');
+    // Filter by tag — array contains (GIN-indexed)
+    if (query?.tag) {
+      queryBuilder.andWhere(':tag = ANY(transaction.tags)', {
+        tag: query.tag.toLowerCase(),
+      });
+    }
+
+    // Full-text search across userNote, counterpartyMemo, txHash
+    if (query?.search) {
+      const term = `%${query.search}%`;
+      queryBuilder.andWhere(
+        '(transaction.userNote ILIKE :term OR transaction.counterpartyMemo ILIKE :term OR transaction.txHash ILIKE :term)',
+        { term },
+      );
+    }
+
+    queryBuilder
+      .orderBy('transaction.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
 
     const [transactions, total] = await queryBuilder.getManyAndCount();
 
@@ -1209,6 +1354,64 @@ export class TransactionsService {
       where: { status: TransactionStatus.PENDING },
       order: { createdAt: 'ASC' },
     });
+  }
+
+  /**
+   * Update the private note on a transaction (owner only).
+   */
+  async updateNote(
+    transactionId: string,
+    userId: string,
+    note: string | null,
+  ): Promise<Transaction> {
+    const transaction = await this.transactionRepository.findOne({
+      where: { id: transactionId },
+    });
+    if (!transaction) throw new NotFoundException('Transaction not found');
+    if (transaction.userId !== userId)
+      throw new ForbiddenException(
+        'You do not have permission to annotate this transaction',
+      );
+    transaction.userNote = note;
+    return this.transactionRepository.save(transaction);
+  }
+
+  /**
+   * Replace the tag list on a transaction (owner only).
+   */
+  async updateTags(
+    transactionId: string,
+    userId: string,
+    tags: string[],
+  ): Promise<Transaction> {
+    const transaction = await this.transactionRepository.findOne({
+      where: { id: transactionId },
+    });
+    if (!transaction) throw new NotFoundException('Transaction not found');
+    if (transaction.userId !== userId)
+      throw new ForbiddenException(
+        'You do not have permission to annotate this transaction',
+      );
+    transaction.tags = tags;
+    return this.transactionRepository.save(transaction);
+  }
+
+  /**
+   * Return all unique tags used by the authenticated user with usage counts.
+   */
+  async getUserTags(userId: string): Promise<TagUsageDto[]> {
+    // Unnest the text[] array and count occurrences per tag
+    const rows = await this.transactionRepository
+      .createQueryBuilder('transaction')
+      .select('UNNEST(transaction.tags)', 'tag')
+      .addSelect('COUNT(*)', 'count')
+      .where('transaction.userId = :userId', { userId })
+      .andWhere('transaction.tags IS NOT NULL')
+      .groupBy('tag')
+      .orderBy('count', 'DESC')
+      .getRawMany<{ tag: string; count: string }>();
+
+    return rows.map((r) => ({ tag: r.tag, count: parseInt(r.count, 10) }));
   }
 
   // ── Category auto-assignment ───────────────────────────────────────────────
@@ -1360,9 +1563,6 @@ export class TransactionsService {
     failureReason?: string,
   ): Promise<void> {
     try {
-      const user = await this.usersService.findById(userId);
-      if (!user || !user.fcmTokens || user.fcmTokens.length === 0) return;
-
       const actionText =
         transaction.type === TransactionType.DEPOSIT ? 'Deposit' : 'Withdrawal';
       let title = '';

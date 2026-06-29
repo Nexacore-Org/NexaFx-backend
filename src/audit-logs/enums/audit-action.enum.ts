@@ -58,4 +58,8 @@ export enum AuditAction {
 
   // Fraud actions
   FRAUD_LOGIN_BLOCKED = 'FRAUD_LOGIN_BLOCKED',
+
+  // Impersonation actions
+  IMPERSONATION_STARTED = 'admin.impersonation.started',
+  IMPERSONATION_ENDED = 'admin.impersonation.ended',
 }

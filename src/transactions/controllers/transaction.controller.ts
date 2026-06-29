@@ -12,6 +12,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { Audit } from '../../common/decorators/audit.decorator';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -38,15 +39,21 @@ import {
 } from '../dtos/transaction-response.dto';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { RolesGuard } from '../../auth/guards/roles.guard';
+import { KycGuard } from '../../common/guards/kyc.guard';
 import { UserRole } from '../../users/user.entity';
+import { TransactionLimitService } from '../services/transaction-limit.service';
 
 @ApiTags('Transactions')
 @ApiBearerAuth('access-token')
 @Controller('transactions')
 export class TransactionsController {
-  constructor(private readonly transactionsService: TransactionsService) {}
+  constructor(
+    private readonly transactionsService: TransactionsService,
+    private readonly transactionLimitService: TransactionLimitService,
+  ) {}
 
   @Post('deposit')
+  @UseGuards(KycGuard)
   @ApiOperation({ summary: 'Initiate a deposit transaction' })
   @ApiBody({ type: CreateDepositDto })
   @ApiResponse({
@@ -63,6 +70,7 @@ export class TransactionsController {
     description: 'Unauthorized - Invalid or missing JWT token',
   })
   @ApiResponse({ status: 500, description: 'Blockchain transaction failed' })
+  @Audit('transaction.created')
   async createDeposit(
     @Request() req,
     @Body() createDepositDto: CreateDepositDto,
@@ -74,6 +82,7 @@ export class TransactionsController {
   }
 
   @Post('withdraw')
+  @UseGuards(KycGuard)
   @ApiOperation({ summary: 'Initiate a withdrawal transaction' })
   @ApiBody({ type: CreateWithdrawalDto })
   @ApiResponse({
@@ -91,6 +100,7 @@ export class TransactionsController {
     description: 'Unauthorized - Invalid or missing JWT token',
   })
   @ApiResponse({ status: 500, description: 'Blockchain transaction failed' })
+  @Audit('transaction.created')
   async createWithdrawal(
     @Request() req,
     @Body() createWithdrawalDto: CreateWithdrawalDto,
@@ -102,6 +112,7 @@ export class TransactionsController {
   }
 
   @Post('swap')
+  @UseGuards(KycGuard)
   @ApiOperation({ summary: 'Initiate a currency swap transaction' })
   @ApiBody({ type: CreateSwapDto })
   @ApiResponse({
@@ -119,6 +130,7 @@ export class TransactionsController {
     description: 'Unauthorized - Invalid or missing JWT token',
   })
   @ApiResponse({ status: 500, description: 'Blockchain transaction failed' })
+  @Audit('transaction.created')
   async createSwap(
     @Request() req,
     @Body() createSwapDto: CreateSwapDto,
@@ -334,10 +346,49 @@ export class TransactionsController {
     description: 'Forbidden - Transaction does not belong to the user',
   })
   @ApiResponse({ status: 404, description: 'Transaction not found' })
+  @Audit('transaction.cancelled')
   async cancelTransaction(
     @Param('id') id: string,
     @Request() req,
   ): Promise<TransactionResponseDto> {
     return this.transactionsService.cancelTransaction(id, req.user.userId);
+  }
+
+  @Get('limits/me')
+  @ApiOperation({ summary: 'Get current user KYC tier and transaction limits' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns user KYC tier and remaining limits',
+    schema: {
+      type: 'object',
+      properties: {
+        tier: { type: 'string' },
+        limits: {
+          type: 'object',
+          properties: {
+            dailyLimitUsd: { type: 'number' },
+            monthlyLimitUsd: { type: 'number' },
+            singleTxLimitUsd: { type: 'number' },
+          },
+        },
+        usage: {
+          type: 'object',
+          properties: {
+            todayUsd: { type: 'number' },
+            monthUsd: { type: 'number' },
+          },
+        },
+        remaining: {
+          type: 'object',
+          properties: {
+            dailyUsd: { type: 'number' },
+            monthlyUsd: { type: 'number' },
+          },
+        },
+      },
+    },
+  })
+  async getMyLimits(@Request() req) {
+    return this.transactionLimitService.getUserLimitStatus(req.user.userId);
   }
 }

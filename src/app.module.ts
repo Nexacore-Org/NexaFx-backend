@@ -1,19 +1,24 @@
 import { Module } from '@nestjs/common';
+import { I18nModule, AcceptLanguageResolver } from 'nestjs-i18n';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { BullModule } from '@nestjs/bullmq';
+import { join } from 'path';
 import { AppController } from './app.controller';
-import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CurrenciesModule } from './currencies/currencies.module';
 import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
 import { CommonModule } from './common/common.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { RolesGuard } from './common/guards/roles.guard';
 import { PlanThrottlerGuard } from './common/guards/plan-throttler.guard';
+import { ImpersonationRestrictionGuard } from './common/guards/impersonation-restriction.guard';
 import { HealthModule } from './health/health.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { GdprModule } from './modules/gdpr/gdpr.module';
 import { TransactionsModule } from './transactions/transaction.module';
 import { BeneficiariesModule } from './beneficiaries/beneficiaries.module';
 import { KycModule } from './kyc/kyc.module';
@@ -25,15 +30,46 @@ import { FirebaseModule } from './firebase/firebase.module';
 import { AdminModule } from './admin/admin.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { DaoModule } from './dao/dao.module';
-import { ScheduleModule } from '@nestjs/schedule';
 import { GraphQLApiModule } from './graphql/graphql.module';
 import { SuperAdminModule } from './super-admin/super-admin.module';
 import { GatewaysModule } from './gateways/gateways.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { WalletsModule } from './wallets/wallets.module';
+import { EscrowModule } from './escrow/escrow.module';
 import { RateAlertsModule } from './rate-alerts/rate-alerts.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
+import { ExperimentsModule } from './experiments/experiments.module';
+import { ComplianceModule } from './modules/compliance/compliance.module';
+import { SearchModule } from './search/search.module';
+import { MessagingModule } from './messaging/messaging.module';
+import { TransactionsV2Module } from './transactions/transaction-v2.module';
+import { FiatV2Module } from './fiat/fiat-v2.module';
+import { BatchesV2Module } from './batches/batches-v2.module';
+import { TaxModule } from './tax/tax.module';
+import { OrganisationsModule } from './organisations/organisations.module';
+import { SanctionsModule } from './sanctions/sanctions.module';
+import { LoansModule } from './loans/loans.module';
+import { DisputesModule } from './disputes/disputes.module';
+import { VaultsModule } from './vaults/vaults.module';
+import { ZeroDowntimeDeploymentModule } from './zero-downtime-deployment/zero-downtime-deployment.module';
+import { RateAlertsEnhancementModule } from './rate-alerts-enhancement/rate-alerts-enhancement.module';
+import { WebhookVerificationSdkModule } from './webhook-verification-sdk/webhook-verification-sdk.module';
+import { PlatformHealthRunbookModule } from './platform-health-runbook/platform-health-runbook.module';
+import { RegulatoryReportingModule } from './regulatory-reporting/regulatory-reporting.module';
+import { MultiSignatureWalletsModule } from './multi-signature-wallets/multi-signature-wallets.module';
+import { DashboardPreferencesModule } from './dashboard-preferences/dashboard-preferences.module';
+import { FraudRiskScoringModule } from './fraud-risk-scoring/fraud-risk-scoring.module';
+import { DataResidencyModule } from './data-residency/data-residency.module';
+import { MerchantIntegrationModule } from './merchant-integration/merchant-integration.module';
+import { ProgrammablePaymentRulesModule } from './programmable-payment-rules/programmable-payment-rules.module';
+import { GraphqlSubscriptionsModule } from './graphql-subscriptions/graphql-subscriptions.module';
+import { LoadTestingModule } from './load-testing/load-testing.module';
+import { AiKycDocVerificationModule } from './ai-kyc-doc-verification/ai-kyc-doc-verification.module';
+import { MobileSdkGuideModule } from './mobile-sdk-guide/mobile-sdk-guide.module';
+import { OwaspZapDastModule } from './owasp-zap-dast/owasp-zap-dast.module';
+import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-anchor.module';
+import { FiatModule } from './modules/fiat/fiat.module';
 
 @Module({
   imports: [
@@ -56,17 +92,56 @@ import { UsersModule } from './users/users.module';
             : false,
         autoLoadEntities: true,
       }),
-      inject: [ConfigService],
     }),
+        BullModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => ({
+        connection: {
+          url: configService.get<string>('REDIS_URL') || 'redis://localhost:6379',
+        },
+      }),
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => [
         {
           ttl: (configService.get<number>('THROTTLE_TTL') ?? 60) * 1000,
           limit: configService.get<number>('THROTTLE_LIMIT') ?? 100,
-        },
+        },    ZeroDowntimeDeploymentModule,
+        },    RateAlertsEnhancementModule,
+        },    WebhookVerificationSdkModule,
+        },    PlatformHealthRunbookModule,
+        },    RegulatoryReportingModule,
+        },    MultiSignatureWalletsModule,
+        },    DashboardPreferencesModule,
+        },    FraudRiskScoringModule,
+        },    DataResidencyModule,
+        },    MerchantIntegrationModule,
+        },    ProgrammablePaymentRulesModule,
+        },    GraphqlSubscriptionsModule,
+        },    LoadTestingModule,
+        },    AiKycDocVerificationModule,
+        },    MobileSdkGuideModule,
+        },    OwaspZapDastModule,
+        },    StellarSep24AnchorModule,
+
       ],
       inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ([{
+        ttl: configService.get<number>('THROTTLE_TTL') ?? 60000,
+        limit: configService.get<number>('THROTTLE_LIMIT') ?? 100,
+      }]),
+    }),
+    I18nModule.forRootAsync({
+      useFactory: () => ({
+        fallbackLanguage: 'en',
+        loaderOptions: {
+          path: join(__dirname, '/i18n/'),
+          watch: true,
+        },
+      }),
+      resolvers: [
+        AcceptLanguageResolver,
+      ],
     }),
     CommonModule,
     AuthModule,
@@ -78,6 +153,9 @@ import { UsersModule } from './users/users.module';
     NotificationsModule,
     FirebaseModule,
     TransactionsModule,
+    TransactionsV2Module,
+    FiatV2Module,
+    BatchesV2Module,
     ReferralsModule,
     BeneficiariesModule,
     KycModule,
@@ -89,6 +167,7 @@ import { UsersModule } from './users/users.module';
     RateAlertsModule,
     AdminModule,
     SuperAdminModule,
+    EscrowModule,
     // DAO module provides Stellar Soroban contract interaction for reward distribution
     DaoModule,
     GraphQLApiModule,
@@ -96,13 +175,28 @@ import { UsersModule } from './users/users.module';
     WalletsModule,
     LedgerModule,
     UsersModule,
+    ExperimentsModule,
+    ComplianceModule,
+    SearchModule,
+    MessagingModule,
+    TaxModule,
+    OrganisationsModule,
+    SanctionsModule,
+    LoansModule,
+    DisputesModule,
+    CardsModule,
+    VaultsModule,
+    FiatModule,
   ],
   controllers: [AppController],
   providers: [
-    AppService,
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
     },
     {
       provide: APP_GUARD,
@@ -111,3 +205,4 @@ import { UsersModule } from './users/users.module';
   ],
 })
 export class AppModule {}
+

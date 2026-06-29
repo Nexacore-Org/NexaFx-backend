@@ -15,12 +15,8 @@ import {
 import { NotificationPreferenceUpdateDto } from '../dto/notification-preference.dto';
 
 const NON_DISABLEABLE_TYPES = new Set<NotificationType>([
-  NotificationType.OTP,
   NotificationType.TRANSACTION,
-  NotificationType.TRANSACTION_FAILED,
-  NotificationType.DEPOSIT_CONFIRMED,
-  NotificationType.WITHDRAWAL_PROCESSED,
-  NotificationType.SWAP_COMPLETED,
+  NotificationType.SYSTEM,
 ]);
 
 @Injectable()

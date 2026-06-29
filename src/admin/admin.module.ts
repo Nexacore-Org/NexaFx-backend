@@ -33,4 +33,4 @@ import { UsersModule } from '../users/users.module';
   providers: [AdminService, BackupManifestService, ImpersonationService],
   exports: [ImpersonationService],
 })
-export class AdminModule { }
+export class AdminModule {}

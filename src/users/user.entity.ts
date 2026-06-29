@@ -9,7 +9,7 @@ import {
 } from 'typeorm';
 import { Exclude } from 'class-transformer';
 import { Notification } from '../notifications/entities/notification.entity';
-import { KycRecord } from '../kyc/entities/kyc.entity';
+import { KYCApplication } from '../kyc/entities/kyc-application.entity';
 
 export enum UserRole {
   USER = 'USER',
@@ -25,10 +25,10 @@ export enum UserPlan {
 }
 
 export enum UserKycTier {
-  UNVERIFIED = 'UNVERIFIED',
+  NONE = 'NONE',
   BASIC = 'BASIC',
+  STANDARD = 'STANDARD',
   ENHANCED = 'ENHANCED',
-  FULL = 'FULL',
 }
 
 @Entity('users')
@@ -54,8 +54,8 @@ export class User {
   @Exclude({ toPlainOnly: true })
   passwordHash?: string;
 
-  @OneToMany(() => KycRecord, (kyc) => kyc.user)
-  kycRecords: KycRecord[];
+  @OneToMany(() => KYCApplication, (app) => app.user)
+  kycApplications: KYCApplication[];
 
   @Column({ type: 'varchar', length: 20, nullable: true, unique: true })
   @Index()
@@ -117,15 +117,12 @@ export class User {
   isVerified: boolean;
 
   @Column({ type: 'boolean', default: false })
-  isEmailVerified?: boolean;
-
-  @Column({ type: 'boolean', default: true })
-  isActive?: boolean;
+  isEmailVerified: boolean;
 
   @Column({
     type: 'enum',
     enum: UserKycTier,
-    default: UserKycTier.UNVERIFIED,
+    default: UserKycTier.NONE,
   })
   kycTier: UserKycTier;
 

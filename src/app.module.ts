@@ -40,12 +40,30 @@ import { RateAlertsModule } from './rate-alerts/rate-alerts.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
 import { MessagingModule } from './messaging/messaging.module';
+import { TransactionsV2Module } from './transactions/transaction-v2.module';
+import { FiatV2Module } from './fiat/fiat-v2.module';
+import { BatchesV2Module } from './batches/batches-v2.module';
 import { TaxModule } from './tax/tax.module';
 import { OrganisationsModule } from './organisations/organisations.module';
 import { SanctionsModule } from './sanctions/sanctions.module';
 import { LoansModule } from './loans/loans.module';
 import { DisputesModule } from './disputes/disputes.module';
 import { VaultsModule } from './vaults/vaults.module';
+import { ZeroDowntimeDeploymentModule } from './zero-downtime-deployment/zero-downtime-deployment.module';
+import { RateAlertsEnhancementModule } from './rate-alerts-enhancement/rate-alerts-enhancement.module';
+import { WebhookVerificationSdkModule } from './webhook-verification-sdk/webhook-verification-sdk.module';
+import { PlatformHealthRunbookModule } from './platform-health-runbook/platform-health-runbook.module';
+import { RegulatoryReportingModule } from './regulatory-reporting/regulatory-reporting.module';
+import { MultiSignatureWalletsModule } from './multi-signature-wallets/multi-signature-wallets.module';
+import { DashboardPreferencesModule } from './dashboard-preferences/dashboard-preferences.module';
+import { FraudRiskScoringModule } from './fraud-risk-scoring/fraud-risk-scoring.module';
+import { DataResidencyModule } from './data-residency/data-residency.module';
+import { MerchantIntegrationModule } from './merchant-integration/merchant-integration.module';
+import { ProgrammablePaymentRulesModule } from './programmable-payment-rules/programmable-payment-rules.module';
+import { GraphqlSubscriptionsModule } from './graphql-subscriptions/graphql-subscriptions.module';
+import { LoadTestingModule } from './load-testing/load-testing.module';
+import { AiKycDocVerificationModule } from './ai-kyc-doc-verification/ai-kyc-doc-verification.module';
+import { MobileSdkGuideModule } from './mobile-sdk-guide/mobile-sdk-guide.module';
 import { OwaspZapDastModule } from './owasp-zap-dast/owasp-zap-dast.module';
 import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-anchor.module';
 import { FiatModule } from './modules/fiat/fiat.module';
@@ -88,6 +106,21 @@ import { FiatModule } from './modules/fiat/fiat.module';
         {
           ttl: (configService.get<number>('THROTTLE_TTL') ?? 60) * 1000,
           limit: configService.get<number>('THROTTLE_LIMIT') ?? 100,
+        },    ZeroDowntimeDeploymentModule,
+        },    RateAlertsEnhancementModule,
+        },    WebhookVerificationSdkModule,
+        },    PlatformHealthRunbookModule,
+        },    RegulatoryReportingModule,
+        },    MultiSignatureWalletsModule,
+        },    DashboardPreferencesModule,
+        },    FraudRiskScoringModule,
+        },    DataResidencyModule,
+        },    MerchantIntegrationModule,
+        },    ProgrammablePaymentRulesModule,
+        },    GraphqlSubscriptionsModule,
+        },    LoadTestingModule,
+        },    AiKycDocVerificationModule,
+        },    MobileSdkGuideModule,
         },    OwaspZapDastModule,
         },    StellarSep24AnchorModule,
 
@@ -116,6 +149,9 @@ import { FiatModule } from './modules/fiat/fiat.module';
     NotificationsModule,
     FirebaseModule,
     TransactionsModule,
+    TransactionsV2Module,
+    FiatV2Module,
+    BatchesV2Module,
     ReferralsModule,
     BeneficiariesModule,
     KycModule,

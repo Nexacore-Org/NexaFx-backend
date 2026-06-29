@@ -14,6 +14,8 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { MulterExceptionFilter } from './common/filters/multer-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TransformResponseInterceptor } from './common/interceptors/transform-response.interceptor';
+import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
+import { IdempotencyService } from './common/services/idempotency.service';
 import helmet from 'helmet';
 import { JwtService } from '@nestjs/jwt';
 import { createAdminQueueAuthMiddleware } from './modules/queues/admin-queue-auth.middleware';
@@ -39,11 +41,19 @@ async function bootstrap() {
     }),
   );
 
+  // Get service instance for global interceptor
+  const idempotencyService = app.get(IdempotencyService);
+
+  // Global Filters (order matters: specific before general)
+  app.useGlobalFilters(new HttpExceptionFilter(), new AllExceptionsFilter());
+
+  // Global Interceptors
   app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalInterceptors(
     new ClassSerializerInterceptor(app.get(Reflector)),
     new LoggingInterceptor(),
     new TransformResponseInterceptor(),
+    new IdempotencyInterceptor(idempotencyService),
   );
 
   // Global Filters (order matters: specific before general)

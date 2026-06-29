@@ -1,8 +1,12 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan, IsNull } from 'typeorm';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { WebhookEndpoint } from '../entities/webhook-endpoint.entity';
 import { WebhookDelivery } from '../entities/webhook-delivery.entity';
+import { WEBHOOK_QUEUE } from '../../modules/queues/queue.constants';
+import type { WebhookDeliveryJob } from '../../modules/webhooks/webhook.processor';
 import * as crypto from 'crypto';
 import axios from 'axios';
 import { URL } from 'url';
@@ -22,6 +26,8 @@ export class WebhookService {
     private readonly endpointRepo: Repository<WebhookEndpoint>,
     @InjectRepository(WebhookDelivery)
     private readonly deliveryRepo: Repository<WebhookDelivery>,
+    @InjectQueue(WEBHOOK_QUEUE)
+    private readonly webhookQueue: Queue<WebhookDeliveryJob>,
   ) {}
 
   private validateWebhookUrl(raw: string): void {
@@ -82,12 +88,28 @@ export class WebhookService {
       });
       await this.deliveryRepo.save(delivery);
 
-      // Asynchronous delivery - do not await
-      this.executeDelivery(delivery, endpoint).catch((err) => {
-        this.logger.error(
-          `Initial delivery failed for ${endpoint.url}: ${err.message}`,
-        );
-      });
+      await this.enqueueDelivery(delivery.id, 0);
+    }
+  }
+
+  async processDeliveryJob(deliveryId: string): Promise<void> {
+    const delivery = await this.deliveryRepo.findOne({
+      where: { id: deliveryId },
+    });
+    if (!delivery) return;
+
+    const endpoint = await this.endpointRepo.findOne({
+      where: { id: delivery.endpointId },
+    });
+    if (!endpoint || !endpoint.isActive) return;
+
+    await this.executeDelivery(delivery, endpoint);
+
+    if (!delivery.deliveredAt && delivery.nextRetryAt) {
+      await this.enqueueDelivery(
+        delivery.id,
+        Math.max(0, delivery.nextRetryAt.getTime() - Date.now()),
+      );
     }
   }
 
@@ -157,12 +179,29 @@ export class WebhookService {
     });
 
     for (const delivery of pendingDeliveries) {
-      const endpoint = await this.endpointRepo.findOne({
-        where: { id: delivery.endpointId },
-      });
-      if (endpoint && endpoint.isActive) {
-        await this.executeDelivery(delivery, endpoint);
-      }
+      await this.enqueueDelivery(delivery.id, 0);
+    }
+  }
+
+  private async enqueueDelivery(
+    deliveryId: string,
+    delayMs: number,
+  ): Promise<void> {
+    try {
+      await this.webhookQueue.add(
+        'deliver-webhook',
+        { deliveryId },
+        {
+          jobId: `webhook:${deliveryId}:${delayMs}`,
+          delay: delayMs,
+        },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Webhook queue unavailable; delivery ${deliveryId} will be picked up by retry cron: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
     }
   }
 

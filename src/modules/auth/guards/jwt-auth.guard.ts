@@ -2,8 +2,10 @@ import { ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import { GqlExecutionContext } from '@nestjs/graphql';
+import { Observable } from 'rxjs';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import type { Request } from 'express';
+import { isObservable, lastValueFrom } from 'rxjs';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
@@ -21,8 +23,12 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       return true;
     }
 
-    const result = await super.canActivate(context);
-    return Boolean(result);
+    const result = super.canActivate(context);
+    if (isObservable(result)) {
+      return lastValueFrom(result);
+    }
+
+    return result;
   }
 
   getRequest(context: ExecutionContext) {

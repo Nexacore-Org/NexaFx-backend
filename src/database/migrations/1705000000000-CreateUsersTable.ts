@@ -179,7 +179,10 @@ export class CreateUsersTable1705000000000 implements MigrationInterface {
     );
     await queryRunner.createIndex(
       'users',
-      new TableIndex({ name: 'IDX_users_referredBy', columnNames: ['referredBy'] }),
+      new TableIndex({
+        name: 'IDX_users_referredBy',
+        columnNames: ['referredBy'],
+      }),
     );
     await queryRunner.createIndex(
       'users',

@@ -247,8 +247,10 @@ export class AuthController {
   })
   @ApiResponse({ status: 409, description: 'Phone already registered' })
   @ApiResponse({ status: 400, description: 'Invalid request body' })
-  async signup(@Body() signupDto: SignupDto) {
-    return this.authService.signup(signupDto);
+  async signup(@Body() signupDto: SignupDto, @Req() req: any) {
+    const ipAddress = req.ip || req.connection?.remoteAddress || null;
+    const userAgent = req.get('User-Agent') || null;
+    return this.authService.signup(signupDto, ipAddress, userAgent);
   }
 
   @Public()

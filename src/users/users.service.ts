@@ -97,6 +97,9 @@ export class UsersService {
     referralCode: string;
     referredBy?: string | null;
     role?: UserRole;
+    consentGdpr?: boolean;
+    consentGdprAt?: Date;
+    consentGdprVersion?: string;
   }): Promise<
     Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'>
   > {

@@ -164,6 +164,21 @@ export class User {
   @Column({ type: 'timestamp with time zone', nullable: true })
   balanceLastSyncedAt: Date | null;
 
+  @Column({ type: 'boolean', default: false })
+  consentGdpr: boolean;
+
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  consentGdprAt: Date | null;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  consentGdprVersion: string | null;
+
+  @Column({ type: 'boolean', default: true })
+  isActive: boolean;
+
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  deletedAt: Date | null;
+
   @CreateDateColumn({ type: 'timestamp with time zone' })
   createdAt: Date;
 

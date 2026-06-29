@@ -18,6 +18,7 @@ import { ImpersonationRestrictionGuard } from './common/guards/impersonation-res
 import { HealthModule } from './health/health.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { GdprModule } from './modules/gdpr/gdpr.module';
 import { TransactionsModule } from './transactions/transaction.module';
 import { BeneficiariesModule } from './beneficiaries/beneficiaries.module';
 import { KycModule } from './kyc/kyc.module';

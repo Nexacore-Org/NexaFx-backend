@@ -2,16 +2,14 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TerminusModule } from '@nestjs/terminus';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { envValidationSchema } from './config/env.validation';
 import { AppController } from './app.controller';
 import { HealthModule } from './health/health.module';
-import { AppService } from './app.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { CurrenciesModule } from './currencies/currencies.module';
 import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
 import { CommonModule } from './common/common.module';
-import { PlanThrottlerGuard } from './common/guards/plan-throttler.guard';
-import { HealthModule } from './health/health.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { TransactionsModule } from './transactions/transaction.module';
@@ -25,7 +23,6 @@ import { FirebaseModule } from './firebase/firebase.module';
 import { AdminModule } from './admin/admin.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { DaoModule } from './dao/dao.module';
-import { ScheduleModule } from '@nestjs/schedule';
 import { GraphQLApiModule } from './graphql/graphql.module';
 import { SuperAdminModule } from './super-admin/super-admin.module';
 import { GatewaysModule } from './gateways/gateways.module';
@@ -35,7 +32,7 @@ import { RateAlertsModule } from './rate-alerts/rate-alerts.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
 import { StellarModule } from './modules/stellar/stellar.module';
-import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
+import { ConversionsModule } from './modules/conversions/conversions.module';
 
 @Module({
   imports: [
@@ -64,15 +61,18 @@ import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
             : false,
         autoLoadEntities: true,
       }),
-      inject: [ConfigService],
     }),
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        ttl: configService.get<number>('THROTTLE_TTL') ?? 60,
-        limit: configService.get<number>('THROTTLE_LIMIT') ?? 100,
-      }),
       inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        throttlers: [
+          {
+            ttl: (configService.get<number>('THROTTLE_TTL') ?? 60) * 1000,
+            limit: configService.get<number>('THROTTLE_LIMIT') ?? 100,
+          },
+        ],
+      }),
     }),
     CommonModule,
     StellarModule,
@@ -81,6 +81,7 @@ import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
     ExchangeRatesModule,
     GatewaysModule,
     HealthModule,
+    ConversionsModule,
   ],
   controllers: [AppController],
   providers: [],

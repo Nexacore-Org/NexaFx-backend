@@ -18,6 +18,7 @@ import { ImpersonationRestrictionGuard } from './common/guards/impersonation-res
 import { HealthModule } from './health/health.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { GdprModule } from './modules/gdpr/gdpr.module';
 import { TransactionsModule } from './transactions/transaction.module';
 import { BeneficiariesModule } from './beneficiaries/beneficiaries.module';
 import { KycModule } from './kyc/kyc.module';
@@ -40,6 +41,8 @@ import { RateAlertsModule } from './rate-alerts/rate-alerts.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
 import { ExperimentsModule } from './experiments/experiments.module';
+import { ComplianceModule } from './modules/compliance/compliance.module';
+import { SearchModule } from './search/search.module';
 import { MessagingModule } from './messaging/messaging.module';
 import { TransactionsV2Module } from './transactions/transaction-v2.module';
 import { FiatV2Module } from './fiat/fiat-v2.module';
@@ -173,6 +176,8 @@ import { FiatModule } from './modules/fiat/fiat.module';
     LedgerModule,
     UsersModule,
     ExperimentsModule,
+    ComplianceModule,
+    SearchModule,
     MessagingModule,
     TaxModule,
     OrganisationsModule,

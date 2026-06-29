@@ -58,9 +58,7 @@ export class RatesGateway implements OnGatewayInit {
       this.logger.log(`Client ${client.id} subscribed to ${roomName}`);
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
-      this.logger.warn(
-        `Subscription failed for ${from}/${to}: ${err.message}`,
-      );
+      this.logger.warn(`Subscription failed for ${from}/${to}: ${err.message}`);
       client.emit('error', { message: `Invalid currency pair: ${from}/${to}` });
     }
   }

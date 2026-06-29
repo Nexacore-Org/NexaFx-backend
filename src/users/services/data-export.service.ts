@@ -183,7 +183,7 @@ export class DataExportService {
       this.notificationRepository.find({ where: { userId } }),
       this.kycRepository.find({ where: { userId } }),
       this.beneficiaryRepository.find({ where: { userId } }),
-      this.auditLogRepository.find({ where: { userId } }),
+      this.auditLogRepository.find({ where: { actorId: userId } }),
       this.referralRepository.find({
         where: [{ referrerId: userId }, { refereeId: userId }],
       }),

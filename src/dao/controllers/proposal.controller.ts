@@ -25,12 +25,16 @@ import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { UserRole } from '../../users/user.entity';
 import { ProposalStatus } from '../entities/proposal.entity';
+import { RedisService } from '../../common/services/redis.service';
 
 @ApiTags('DAO - Governance')
 @Controller('dao/proposals')
 @ApiBearerAuth('access-token')
 export class ProposalController {
-  constructor(private readonly proposalService: ProposalService) {}
+  constructor(
+    private readonly proposalService: ProposalService,
+    private readonly redisService: RedisService,
+  ) {}
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -115,12 +119,14 @@ export class ProposalController {
     @Request() req: { user: { userId: string; user: any } },
     @Body() castVoteDto: CastVoteDto,
   ) {
-    return this.proposalService.castVote(
+    const result = await this.proposalService.castVote(
       proposalId,
       req.user.userId,
       req.user.user,
       castVoteDto,
     );
+    await this.redisService.del(`proposal_results_${proposalId}`);
+    return result;
   }
 
   @Get(':id')
@@ -202,7 +208,14 @@ export class ProposalController {
   })
   @ApiResponse({ status: 404, description: 'Proposal not found' })
   async getResults(@Param('id') proposalId: string) {
-    return this.proposalService.getProposalResults(proposalId);
+    const cacheKey = `proposal_results_${proposalId}`;
+    const cached = await this.redisService.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+    const results = await this.proposalService.getProposalResults(proposalId);
+    await this.redisService.set(cacheKey, results, 30);
+    return results;
   }
 
   @Get()

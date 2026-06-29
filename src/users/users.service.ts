@@ -7,7 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { User, UserRole, UserPlan } from './user.entity';
+import { User, UserRole, UserPlan, UserKycTier } from './user.entity';
 import {
   UpdateProfileDto,
   ProfileResponseDto,
@@ -97,6 +97,9 @@ export class UsersService {
     referralCode: string;
     referredBy?: string | null;
     role?: UserRole;
+    consentGdpr?: boolean;
+    consentGdprAt?: Date;
+    consentGdprVersion?: string;
   }): Promise<
     Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'>
   > {
@@ -174,6 +177,7 @@ export class UsersService {
     await this.userRepository.update(userId, {
       isVerified: true,
       isEmailVerified: true,
+      kycTier: UserKycTier.BASIC,
     });
   }
 
@@ -190,6 +194,10 @@ export class UsersService {
     const user = await this.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
+    }
+
+    if (data.isEmailVerified && user.kycTier === UserKycTier.NONE) {
+      data.kycTier = UserKycTier.BASIC;
     }
 
     await this.userRepository.update(userId, data);

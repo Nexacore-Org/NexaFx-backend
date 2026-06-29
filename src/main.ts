@@ -1,4 +1,6 @@
 import { NestFactory, Reflector } from '@nestjs/core';
+import './tracing'; // <-- CRITICAL: MUST REMAIN ON LINE 1 BEFORE ANY NODE LOADERS
+import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import {
   ClassSerializerInterceptor,
@@ -23,11 +25,21 @@ import { createAdminQueueAuthMiddleware } from './modules/queues/admin-queue-aut
 import { QueuesDashboardService } from './modules/queues/queues-dashboard.service';
 import { join } from 'path';
 import * as compression from 'compression';
+import { v4 as uuidv4 } from 'uuid';
+import { Request, Response, NextFunction } from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const logger = new Logger('Bootstrap');
   const configService = app.get(ConfigService);
+
+  // Trace Correlation & Request ID Context Propagation Middleware
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const requestId = (req.headers['x-request-id'] as string) || uuidv4();
+    req.headers['x-request-id'] = requestId;
+    res.setHeader('X-Request-ID', requestId);
+    next();
+  });
 
   app.use(helmet());
 
@@ -46,19 +58,15 @@ async function bootstrap() {
   const idempotencyService = app.get(IdempotencyService);
 
   // Global Filters (order matters: specific before general)
-  app.useGlobalFilters(new HttpExceptionFilter(), new AllExceptionsFilter());
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   // Global Interceptors
-  app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalInterceptors(
     new ClassSerializerInterceptor(app.get(Reflector)),
     new LoggingInterceptor(),
     new TransformResponseInterceptor(),
     new IdempotencyInterceptor(idempotencyService),
   );
-
-  // Global Filters (order matters: specific before general)
-  //   app.useGlobalFilters(new HttpExceptionFilter(), new AllExceptionsFilter());
 
   app.enableVersioning({
     type: VersioningType.URI,
@@ -91,7 +99,7 @@ async function bootstrap() {
   app.enableCors({
     origin: origins.length ? origins : false,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
   });
 
   const port = configService.get<number>('PORT') ?? 3000;

@@ -52,4 +52,13 @@ export class Notification {
 
   @CreateDateColumn({ type: 'timestamp with time zone' })
   createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+
+  @Column({ type: 'timestamp', nullable: true })
+  readAt?: Date;
+
+  @Column({ type: 'tsvector', nullable: true })
+  searchVector: string | null;
 }

@@ -23,7 +23,7 @@ import {
 } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { KycService } from '../kyc/kyc.service';
-import { KycStatus } from '../kyc/entities/kyc.entity';
+import { KycStatus } from '../kyc/entities/kyc-application.entity';
 import { RejectKycDto } from '../kyc/dtos/kyc-reject';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -58,7 +58,7 @@ export class AdminController {
     private readonly adminService: AdminService,
     private readonly kycService: KycService,
     private readonly redisService: RedisService,
-  ) { }
+  ) {}
 
   @Get('metrics')
   @ApiOperation({ summary: 'Get platform metrics (Admin only)' })
@@ -339,6 +339,43 @@ export class AdminController {
     return this.adminService.patchTransactionLimit(tier, dto);
   }
 
+  @Get('kyc')
+  @ApiOperation({ summary: 'Get KYC applications queue (Admin only)' })
+  async getKycQueue(
+    @Query('tier') tier?: UserKycTier.STANDARD | UserKycTier.ENHANCED,
+    @Query('status') status?: KycStatus,
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 20,
+  ) {
+    return this.kycService.getKycQueue(tier, status, page, limit);
+  }
+
+  @Post('kyc/:id/approve')
+  @Audit('admin.kyc_approve')
+  @ApiOperation({ summary: 'Approve a KYC application (Admin only)' })
+  async approveKyc(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() admin: { userId: string },
+  ) {
+    return this.kycService.approveKyc(id, admin.userId);
+  }
+
+  @Post('kyc/:id/reject')
+  @Audit('admin.kyc_reject')
+  @ApiOperation({ summary: 'Reject a KYC application (Admin only)' })
+  async rejectKyc(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: { reason: string; requireResubmission?: boolean },
+    @CurrentUser() admin: { userId: string },
+  ) {
+    return this.kycService.rejectKyc(
+      id,
+      admin.userId,
+      dto.reason,
+      dto.requireResubmission,
+    );
+  }
+
   // ── KYC File Serving (must be before kyc/:id to avoid route conflict) ──
 
   @Get('kyc-file/:userId/:version/:filename')
@@ -401,7 +438,10 @@ export class AdminController {
 
   @Get('audit-logs')
   @ApiOperation({ summary: 'Get audit logs (Admin only)' })
-  @ApiResponse({ status: 200, description: 'Audit logs retrieved successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Audit logs retrieved successfully',
+  })
   async getAuditLogs(@Query() query: AdminAuditLogsQueryDto) {
     return this.adminService.getAdminAuditLogs(query);
   }
@@ -421,7 +461,9 @@ export class AdminController {
     @Res() res: Response,
   ) {
     if (query.format !== 'csv') {
-      throw new BadRequestException('Unsupported format. Only csv is supported.');
+      throw new BadRequestException(
+        'Unsupported format. Only csv is supported.',
+      );
     }
     return this.adminService.streamAuditLogsCsv(res, query);
   }

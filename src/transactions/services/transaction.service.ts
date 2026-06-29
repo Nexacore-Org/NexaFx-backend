@@ -46,6 +46,7 @@ import { WalletsService } from '../../wallets/wallets.service';
 import { EncryptionService } from '../../common/services/encryption.service';
 import { LedgerService } from '../../ledger/services/ledger.service';
 import { TransactionLimitService } from './transaction-limit.service';
+import { AmlService } from '../../modules/compliance/aml.service';
 import { RedisService } from '../../modules/redis/redis.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -163,6 +164,7 @@ export class TransactionsService {
     private readonly encryptionService: EncryptionService,
     private readonly ledgerService: LedgerService,
     private readonly transactionLimitService: TransactionLimitService,
+    private readonly amlService: AmlService,
     private readonly redisService: RedisService,
     @InjectQueue(TAX_QUEUE)
     private readonly taxQueue: Queue,
@@ -750,6 +752,10 @@ export class TransactionsService {
             this.logger.error(`Webhook dispatch failed: ${e.message}`),
           );
 
+        this.amlService
+          .enqueue(transaction.id)
+          .catch((e) => this.logger.error(`AML enqueue failed: ${e.message}`));
+
         return transaction;
       } catch (err) {
         const error = toError(err);
@@ -996,6 +1002,10 @@ export class TransactionsService {
           .catch((e) =>
             this.logger.error(`Webhook dispatch failed: ${e.message}`),
           );
+
+        this.amlService
+          .enqueue(transaction.id)
+          .catch((e) => this.logger.error(`AML enqueue failed: ${e.message}`));
       } else if (transaction.status === TransactionStatus.FAILED) {
         this.webhookService
           .dispatch('transaction.failed', transaction, transaction.userId)
@@ -1078,6 +1088,12 @@ export class TransactionsService {
       ).catch((e) =>
         this.logger.error(`Failed to send push notification: ${e.message}`),
       );
+    }
+
+    if (status === TransactionStatus.SUCCESS) {
+      this.amlService
+        .enqueue(transaction.id)
+        .catch((e) => this.logger.error(`AML enqueue failed: ${e.message}`));
     }
 
     return transaction;

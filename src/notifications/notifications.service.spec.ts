@@ -26,6 +26,9 @@ describe('NotificationsService', () => {
     data: {},
     readAt: null,
     createdAt: new Date(),
+    updatedAt: new Date(),
+    readAt: undefined,
+    searchVector: null,
     user: {} as any,
   };
 

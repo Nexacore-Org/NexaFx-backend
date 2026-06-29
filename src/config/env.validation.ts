@@ -6,6 +6,10 @@ export const envValidationSchema = Joi.object({
     .required(),
   PORT: Joi.number().default(3000),
   DATABASE_URL: Joi.string().required(),
+  
+  // Appended optional DB_SSL property schema rule defaulting to false
+  DB_SSL: Joi.boolean().default(false),
+
   JWT_SECRET: Joi.string().min(32).required(),
   JWT_EXPIRES_IN: Joi.string().required(),
   ALLOWED_ORIGINS: Joi.string().allow('', null),

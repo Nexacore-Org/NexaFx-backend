@@ -7,19 +7,15 @@ import {
   Logger,
   ForbiddenException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import {
-  Operation,
-  Asset,
-  Transaction as StellarTransaction,
-} from 'stellar-sdk';
 import {
   Transaction,
   TransactionStatus,
   TransactionType,
 } from '../entities/transaction.entity';
+import { TransactionCategory } from '../../analytics/entities/transaction-category.entity';
 import {
   CreateDepositDto,
   CreateWithdrawalDto,
@@ -31,7 +27,7 @@ import { NotificationType } from '../../notifications/entities/notification.enti
 import { CurrenciesService } from '../../currencies/currencies.service';
 import { CurrencyPairService } from '../../currencies/services/currency-pair.service';
 import { ExchangeRatesService } from '../../exchange-rates/exchange-rates.service';
-import { StellarService } from '../../blockchain/stellar/stellar.service';
+import { StellarService } from '../../modules/stellar/stellar.service';
 import { UsersService } from '../../users/users.service';
 import { AuditLogsService } from '../../audit-logs/audit-logs.service';
 import { AuditAction } from '../../audit-logs/enums/audit-action.enum';
@@ -50,6 +46,10 @@ import { EncryptionService } from '../../common/services/encryption.service';
 import { LedgerService } from '../../ledger/services/ledger.service';
 import { TransactionLimitService } from './transaction-limit.service';
 import { AmlService } from '../../modules/compliance/aml.service';
+import { RedisService } from '../../modules/redis/redis.service';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { TAX_QUEUE } from '../../modules/queues/queue.constants';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -143,6 +143,8 @@ export class TransactionsService {
   constructor(
     @InjectRepository(Transaction)
     private readonly transactionRepository: Repository<Transaction>,
+    @InjectRepository(TransactionCategory)
+    private readonly categoryRepository: Repository<TransactionCategory>,
     private readonly dataSource: DataSource,
     private readonly currenciesService: CurrenciesService,
     private readonly exchangeRatesService: ExchangeRatesService,
@@ -162,6 +164,9 @@ export class TransactionsService {
     private readonly ledgerService: LedgerService,
     private readonly transactionLimitService: TransactionLimitService,
     private readonly amlService: AmlService,
+    private readonly redisService: RedisService,
+    @InjectQueue(TAX_QUEUE)
+    private readonly taxQueue: Queue,
   ) {}
 
   /**
@@ -242,31 +247,17 @@ export class TransactionsService {
         createDepositDto.walletId,
       );
 
-      const paymentOperation = Operation.payment({
-        destination: destinationAddress,
-        asset: Asset.native(),
-        amount: amount.toString(),
-      });
-
-      const stellarTx = await this.stellarService.createTransaction({
-        sourcePublicKey: sourceAddress,
-        operations: [paymentOperation],
-        memo: `DEPOSIT-${transaction.id}`,
-      });
-
       const secretKey = await this.getStellarSecretKey();
+      const paymentResult = await this.stellarService.sendPayment(
+        secretKey,
+        destinationAddress,
+        amount.toString(),
+        `DEPOSIT-${transaction.id}`,
+        userId,
+      );
 
-      const signedTx: StellarTransaction =
-        await this.stellarService.signTransaction(stellarTx, secretKey);
-
-      const rawResult: unknown =
-        await this.stellarService.submitTransaction(signedTx);
-
-      if (!isStellarSubmitResult(rawResult)) {
-        throw new Error('Unexpected response shape from Stellar submit');
-      }
-
-      transaction.txHash = rawResult.hash;
+      transaction.txHash = paymentResult.hash;
+      transaction.stellarTxHash = paymentResult.hash;
       await this.transactionRepository.save(transaction);
 
       try {
@@ -280,6 +271,12 @@ export class TransactionsService {
 
       this.logger.log(
         `Deposit transaction created successfully: ${transaction.id}`,
+      );
+
+      this.autoAssignCategory(transaction).catch((e) =>
+        this.logger.warn(
+          `Non-blocking category assignment failed: ${e.message}`,
+        ),
       );
 
       return transaction;
@@ -454,39 +451,21 @@ export class TransactionsService {
         },
       );
 
-      const sourceAddress = await this.getUserStellarAddress(
-        userId,
-        createWithdrawalDto.walletId,
-      );
-
-      const paymentOperation = Operation.payment({
-        destination: destinationAddress,
-        asset: Asset.native(),
-        amount: amount.toString(),
-      });
-
-      const stellarTx = await this.stellarService.createTransaction({
-        sourcePublicKey: sourceAddress,
-        operations: [paymentOperation],
-        memo: `WITHDRAW-${transaction.id}`,
-      });
-
       const secretKey = await this.getUserStellarSecretKey(
         userId,
         createWithdrawalDto.walletId,
       );
 
-      const signedTx: StellarTransaction =
-        await this.stellarService.signTransaction(stellarTx, secretKey);
+      const paymentResult = await this.stellarService.sendPayment(
+        secretKey,
+        destinationAddress,
+        amount.toString(),
+        `WITHDRAW-${transaction.id}`,
+        userId,
+      );
 
-      const rawResult: unknown =
-        await this.stellarService.submitTransaction(signedTx);
-
-      if (!isStellarSubmitResult(rawResult)) {
-        throw new Error('Unexpected response shape from Stellar submit');
-      }
-
-      transaction.txHash = rawResult.hash;
+      transaction.txHash = paymentResult.hash;
+      transaction.stellarTxHash = paymentResult.hash;
       await this.updateUserBalance(userId, currency, -amount);
 
       if (beneficiaryId) {
@@ -502,6 +481,12 @@ export class TransactionsService {
 
       this.logger.log(
         `Withdrawal transaction created successfully: ${transaction.id}`,
+      );
+
+      this.autoAssignCategory(transaction).catch((e) =>
+        this.logger.warn(
+          `Non-blocking category assignment failed: ${e.message}`,
+        ),
       );
 
       return transaction;
@@ -601,12 +586,9 @@ export class TransactionsService {
     }
 
     // 4. Find Best Path
-    const fromAsset = this.stellarService['getAsset']
-      ? (this.stellarService as any).getAsset(fromCurrency)
-      : this.getAssetHelper(fromCurrency);
-    const toAsset = this.stellarService['getAsset']
-      ? (this.stellarService as any).getAsset(toCurrency)
-      : this.getAssetHelper(toCurrency);
+    const fromAsset =
+      this.stellarService.getAssetWithDefaultIssuer(fromCurrency);
+    const toAsset = this.stellarService.getAssetWithDefaultIssuer(toCurrency);
 
     const paths = await this.stellarService.findBestPath(
       fromAsset,
@@ -685,8 +667,8 @@ export class TransactionsService {
           destAsset: toAsset,
           destAmount: destinationAmount.toString(),
           destination: destinationAddress,
-          path: bestPath.path.map(
-            (p) => new Asset(p.asset_code, p.asset_issuer),
+          path: bestPath.path.map((p) =>
+            this.stellarService.getAsset(p.asset_code, p.asset_issuer),
           ),
           mode: 'strict-send',
           slippageTolerance,
@@ -710,8 +692,13 @@ export class TransactionsService {
         }
 
         transaction.txHash = rawResult.hash;
+        transaction.stellarTxHash = rawResult.hash;
         transaction.status = TransactionStatus.SUCCESS;
         await this.transactionRepository.save(transaction);
+        await this.redisService.delete('admin_stats');
+        this.taxQueue.add('process-transaction', { transactionId: transaction.id }).catch((e) =>
+          this.logger.error(`Failed to enqueue tax processing for swap transaction ${transaction.id}: ${e.message}`)
+        );
 
         await this.updateUserBalance(
           userId,
@@ -720,16 +707,24 @@ export class TransactionsService {
         );
         await this.updateUserBalance(userId, toCurrency, effectiveAmount);
 
-        await this.notificationsService.create({
+        await this.notificationsService.dispatch(
           userId,
-          type: NotificationType.SWAP_COMPLETED,
-          title: 'Swap Completed',
-          message: `Successfully swapped ${amount} ${fromCurrency} to ${effectiveAmount.toFixed(2)} ${toCurrency}`,
-          relatedId: transaction.id,
-        });
+          NotificationType.TRANSACTION,
+          'Swap Completed',
+          `Successfully swapped ${amount} ${fromCurrency} to ${effectiveAmount.toFixed(2)} ${toCurrency}`,
+          {
+            transactionId: transaction.id,
+          },
+        );
 
         this.logger.log(
           `Swap transaction completed successfully: ${transaction.id} (Attempt ${i})`,
+        );
+
+        this.autoAssignCategory(transaction).catch((e) =>
+          this.logger.warn(
+            `Non-blocking category assignment failed: ${e.message}`,
+          ),
         );
 
         this.webhookService
@@ -776,14 +771,8 @@ export class TransactionsService {
     );
   }
 
-  private getAssetHelper(code: string): Asset {
-    if (code === 'XLM') return Asset.native();
-    // In a real app, you'd fetch the issuer from the database or config
-    // Using a default issuer for demonstration as seen in the original code
-    return new Asset(
-      code,
-      'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335XPB7X3NCQXMK3SBEG3CIFE7G',
-    );
+  private getAssetHelper(code: string) {
+    return this.stellarService.getAssetWithDefaultIssuer(code);
   }
 
   private swapPreviewCache = new Map<string, { data: any; expiry: number }>();
@@ -795,6 +784,13 @@ export class TransactionsService {
     mode: 'strict-send' | 'strict-receive' = 'strict-send',
   ): Promise<any> {
     const cacheKey = `${fromCurrency}-${toCurrency}-${amount}-${mode}`;
+    const redisKey = this.redisService.key('quotes', cacheKey);
+    const redisCached = await this.redisService.getJson<any>(redisKey);
+    if (redisCached) {
+      this.logger.debug(`Returning Redis cached swap preview for ${cacheKey}`);
+      return redisCached;
+    }
+
     const cached = this.swapPreviewCache.get(cacheKey);
 
     if (cached && cached.expiry > Date.now()) {
@@ -850,10 +846,12 @@ export class TransactionsService {
       };
     });
 
-    // Cache results for 10 seconds
+    await this.redisService.setJson(redisKey, results, 30);
+
+    // Local fallback cache mirrors Redis TTL for single-instance degradation.
     this.swapPreviewCache.set(cacheKey, {
       data: results,
-      expiry: Date.now() + 10000,
+      expiry: Date.now() + 30000,
     });
 
     return results;
@@ -914,6 +912,7 @@ export class TransactionsService {
 
       if (verificationResult.status === 'SUCCESS') {
         transaction.status = TransactionStatus.SUCCESS;
+        await this.redisService.delete('admin_stats');
 
         if (transaction.type === TransactionType.DEPOSIT) {
           await this.updateUserBalance(
@@ -944,6 +943,12 @@ export class TransactionsService {
       }
 
       await this.transactionRepository.save(transaction);
+
+      if (transaction.status === TransactionStatus.SUCCESS) {
+        this.taxQueue.add('process-transaction', { transactionId: transaction.id }).catch((e) =>
+          this.logger.error(`Failed to enqueue tax processing for verified transaction ${transaction.id}: ${e.message}`)
+        );
+      }
 
       await this.auditLogsService.logTransactionEvent(
         transaction.userId,
@@ -1027,6 +1032,12 @@ export class TransactionsService {
     }
 
     await this.transactionRepository.save(transaction);
+
+    if (transaction.status === TransactionStatus.SUCCESS) {
+      this.taxQueue.add('process-transaction', { transactionId: transaction.id }).catch((e) =>
+        this.logger.error(`Failed to enqueue tax processing for manual status update ${transaction.id}: ${e.message}`)
+      );
+    }
 
     await this.auditLogsService.logTransactionEvent(
       transaction.userId,
@@ -1169,21 +1180,27 @@ export class TransactionsService {
     const currencyLookup: Record<string, any> = {};
 
     try {
+      const allCurrencies = await this.currenciesService.findAll(false);
+      const currencyMap = new Map(allCurrencies.map((c) => [c.code.toUpperCase(), c]));
       for (const currencyCode of uniqueCurrencies) {
-        // @ts-ignore - Pre-existing type issue
-        const currency = await this.currenciesService.getCurrency(currencyCode);
-        // @ts-ignore - Pre-existing type issue
-        currencyLookup[currencyCode] = {
-          symbol: currency.symbol || currencyCode,
-          displayName: currency.name || currencyCode,
-        };
+        const currency = currencyMap.get(currencyCode.toUpperCase());
+        if (currency) {
+          currencyLookup[currencyCode] = {
+            symbol: currency.symbol || currencyCode,
+            displayName: currency.name || currencyCode,
+          };
+        } else {
+          currencyLookup[currencyCode] = {
+            symbol: currencyCode,
+            displayName: currencyCode,
+          };
+        }
       }
     } catch (error) {
       this.logger.warn(
         `Failed to fetch currency metadata: ${error instanceof Error ? error.message : String(error)}`,
       );
       for (const currencyCode of uniqueCurrencies) {
-        // @ts-ignore - Pre-existing type issue
         currencyLookup[currencyCode] = {
           symbol: currencyCode,
           displayName: currencyCode,
@@ -1230,6 +1247,51 @@ export class TransactionsService {
       where: { status: TransactionStatus.PENDING },
       order: { createdAt: 'ASC' },
     });
+  }
+
+  // ── Category auto-assignment ───────────────────────────────────────────────
+
+  private async autoAssignCategory(transaction: Transaction): Promise<void> {
+    try {
+      let categoryName: string;
+
+      switch (transaction.type) {
+        case TransactionType.SWAP:
+          categoryName = 'Exchange';
+          break;
+        case TransactionType.WITHDRAW:
+          categoryName = 'Transfers';
+          break;
+        case TransactionType.DEPOSIT: {
+          const meta = transaction.metadata;
+          if (meta?.source === 'referral') {
+            categoryName = 'Referral Rewards';
+          } else if (meta?.source === 'savings') {
+            categoryName = 'Savings';
+          } else if (meta?.source === 'batch' || meta?.batchPayment) {
+            categoryName = 'Payroll';
+          } else {
+            categoryName = 'Transfers';
+          }
+          break;
+        }
+        default:
+          categoryName = 'Other';
+      }
+
+      const category = await this.categoryRepository.findOne({
+        where: { name: categoryName, isSystem: true },
+      });
+
+      if (category) {
+        transaction.categoryId = category.id;
+        await this.transactionRepository.save(transaction);
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Category auto-assignment failed for transaction ${transaction.id}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────
@@ -1336,9 +1398,6 @@ export class TransactionsService {
     failureReason?: string,
   ): Promise<void> {
     try {
-      const user = await this.usersService.findById(userId);
-      if (!user || !user.fcmTokens || user.fcmTokens.length === 0) return;
-
       const actionText =
         transaction.type === TransactionType.DEPOSIT ? 'Deposit' : 'Withdrawal';
       let title = '';
@@ -1357,10 +1416,21 @@ export class TransactionsService {
         return;
       }
 
-      await this.firebaseService.sendToTokens(user.fcmTokens, title, body, {
-        transactionId: transaction.id,
-        type: transaction.type,
-      });
+      await this.firebaseService.sendToTokens(
+        user.fcmTokens,
+        title,
+        body,
+        { transactionId: transaction.id, type: transaction.type },
+        {
+          notificationId: transaction.id,
+          type: transaction.type,
+          deepLink: `nexafx://transactions/${transaction.id}`,
+          actionType: transaction.type,
+          resourceId: transaction.id,
+          resourceType: 'transaction',
+          timestamp: new Date().toISOString(),
+        },
+      );
     } catch (e) {
       // Intentionally swallow errors so it doesn't break flows
     }

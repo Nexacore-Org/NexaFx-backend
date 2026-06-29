@@ -8,6 +8,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { GqlExecutionContext } from '@nestjs/graphql';
 import { User, UserRole } from '../../users/user.entity';
 import { RateLimitConfig } from '../../users/rate-limit-config.entity';
 
@@ -35,6 +36,18 @@ export class PlanThrottlerGuard extends ThrottlerGuard {
   }
 
   /**
+   * Override getRequestResponse to support GraphQL contexts.
+   */
+  getRequestResponse(context: ExecutionContext) {
+    if (context.getType<string>() === 'graphql') {
+      const gqlCtx = GqlExecutionContext.create(context);
+      const ctx = gqlCtx.getContext();
+      return { req: ctx.req, res: ctx.req?.res };
+    }
+    return super.getRequestResponse(context);
+  }
+
+  /**
    * Override generateKey to use a consistent key based only on user tracker for authenticated users.
    * For unauthenticated requests, fallback to default behavior (includes route prefix).
    */
@@ -43,8 +56,9 @@ export class PlanThrottlerGuard extends ThrottlerGuard {
     suffix: string,
     name: string,
   ): string {
-    const req = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    if (req.user?.userId) {
+    const { req } = this.getRequestResponse(context);
+    const authReq = req as AuthenticatedRequest;
+    if (authReq?.user?.userId) {
       return suffix;
     }
     return super.generateKey(context, suffix, name);

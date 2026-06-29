@@ -14,6 +14,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { I18nService } from 'nestjs-i18n';
 
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
@@ -29,6 +30,7 @@ import { ReferralsService } from '../referrals/referrals.service';
 import { TwoFactorService } from '../two-factor/two-factor.service';
 import { WalletsService } from '../wallets/wallets.service';
 import { PasswordResetAttempt } from './entities/password-reset-attempt.entity';
+import { OAuthAccount } from './entities/oauth-account.entity';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 
 // ---------------------------------------------------------------------------
@@ -47,7 +49,9 @@ const makeUser = (overrides: Partial<any> = {}) => ({
   ...overrides,
 });
 
-const makeResetDto = (overrides: Partial<ResetPasswordDto> = {}): ResetPasswordDto =>
+const makeResetDto = (
+  overrides: Partial<ResetPasswordDto> = {},
+): ResetPasswordDto =>
   Object.assign(new ResetPasswordDto(), {
     email: 'trader@nexafx.com',
     otp: '123456',
@@ -80,7 +84,10 @@ const mockAuditLogsService = {
 
 // Minimal stubs for services not under test
 const mockOtpDeliveryService = { sendOtp: jest.fn() };
-const mockJwtService = { sign: jest.fn().mockReturnValue('token'), verify: jest.fn() };
+const mockJwtService = {
+  sign: jest.fn().mockReturnValue('token'),
+  verify: jest.fn(),
+};
 const mockConfigService = { get: jest.fn().mockReturnValue('15m') };
 const mockStellarService = { generateWallet: jest.fn() };
 const mockEncryptionService = { encrypt: jest.fn() };
@@ -118,8 +125,21 @@ describe('AuthService.resetPassword()', () => {
         { provide: TwoFactorService, useValue: mockTwoFactorService },
         { provide: WalletsService, useValue: mockWalletsService },
         {
+          provide: I18nService,
+          useValue: {
+            translate: jest.fn((key) => key),
+          },
+        },
+        {
           provide: getRepositoryToken(PasswordResetAttempt),
           useValue: mockPasswordResetAttemptRepository,
+        },
+        {
+          provide: getRepositoryToken(OAuthAccount),
+          useValue: {
+            findOne: jest.fn(),
+            save: jest.fn(),
+          },
         },
       ],
     }).compile();
@@ -179,7 +199,9 @@ describe('AuthService.resetPassword()', () => {
       mockOtpsService.invalidateAllUserOtps.mockResolvedValue(undefined);
       mockAuditLogsService.logAuthEvent.mockResolvedValue(undefined);
 
-      await service.resetPassword(makeResetDto({ newPassword: 'AnotherPass!99' }));
+      await service.resetPassword(
+        makeResetDto({ newPassword: 'AnotherPass!99' }),
+      );
 
       expect(mockUsersService.updatePassword).toHaveBeenCalledWith(
         user.id,
@@ -216,7 +238,9 @@ describe('AuthService.resetPassword()', () => {
 
       await service.resetPassword(makeResetDto());
 
-      expect(mockOtpsService.invalidateAllUserOtps).toHaveBeenCalledWith(user.id);
+      expect(mockOtpsService.invalidateAllUserOtps).toHaveBeenCalledWith(
+        user.id,
+      );
     });
 
     it('emits a PASSWORD_RESET_COMPLETE audit event on success', async () => {
@@ -327,7 +351,9 @@ describe('AuthService.resetPassword()', () => {
         UnauthorizedException,
       );
 
-      expect(mockRefreshTokensService.revokeAllUserTokens).not.toHaveBeenCalled();
+      expect(
+        mockRefreshTokensService.revokeAllUserTokens,
+      ).not.toHaveBeenCalled();
     });
   });
 });

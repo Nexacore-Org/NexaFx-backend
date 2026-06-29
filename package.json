@@ -19,9 +19,9 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "typeorm": "typeorm-ts-node-commonjs",
-    "typeorm:migration:run": "npm run typeorm migration:run -- -d src/database/data-source.ts",
-    "typeorm:migration:revert": "npm run typeorm migration:revert -- -d src/database/data-source.ts",
-    "typeorm:migration:generate": "npm run typeorm migration:generate -- -d src/database/data-source.ts",
+    "typeorm:migration:run": "npm run typeorm migration:run -- -d src/database/datasource.ts",
+    "typeorm:migration:revert": "npm run typeorm migration:revert -- -d src/database/datasource.ts",
+    "typeorm:migration:generate": "npm run typeorm migration:generate -- -d src/database/datasource.ts",
     "migration:validate": "ts-node scripts/validate-migrations.ts",
     "seed": "ts-node src/database/seed.ts",
     "seed:fresh": "ts-node src/database/seed-fresh.ts"
@@ -166,6 +166,20 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "coverageThreshold": {
+      "global": {
+        "lines": 80,
+        "functions": 75,
+        "branches": 70,
+        "statements": 80
+      }
+    },
+    "coveragePathIgnorePatterns": [
+      "\\.module\\.ts$",
+      "\\.entity\\.ts$",
+      "main\\.ts",
+      "/migrations/"
+    ]
   }
 }

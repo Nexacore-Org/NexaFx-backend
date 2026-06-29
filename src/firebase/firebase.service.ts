@@ -15,29 +15,63 @@ export class FirebaseService implements OnModuleInit {
 
   private initializeFirebase() {
     try {
-      const projectId = this.configService.get<string>('FIREBASE_PROJECT_ID');
-      const clientEmail = this.configService.get<string>(
-        'FIREBASE_CLIENT_EMAIL',
-      );
-      const privateKeyStr = this.configService.get<string>(
-        'FIREBASE_PRIVATE_KEY',
+      if (admin.apps && admin.apps.length > 0) {
+        this.initialized = true;
+        this.logger.log('Firebase Admin SDK already initialized');
+        return;
+      }
+
+      const serviceAccountJson = this.configService.get<string>(
+        'FIREBASE_SERVICE_ACCOUNT_JSON',
       );
 
-      if (!projectId || !clientEmail || !privateKeyStr) {
+      let credentialConfig: any = null;
+
+      if (serviceAccountJson) {
+        try {
+          const serviceAccount = JSON.parse(serviceAccountJson);
+          credentialConfig = {
+            projectId: serviceAccount.project_id || serviceAccount.projectId,
+            clientEmail: serviceAccount.client_email || serviceAccount.clientEmail,
+            privateKey: (serviceAccount.private_key || serviceAccount.privateKey)?.replace(/\\n/g, '\n'),
+          };
+        } catch (jsonError) {
+          this.logger.error(
+            `Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON: ${jsonError.message}`,
+          );
+        }
+      }
+
+      if (!credentialConfig) {
+        const projectId = this.configService.get<string>('FIREBASE_PROJECT_ID');
+        const clientEmail = this.configService.get<string>(
+          'FIREBASE_CLIENT_EMAIL',
+        );
+        const privateKeyStr = this.configService.get<string>(
+          'FIREBASE_PRIVATE_KEY',
+        );
+
+        if (projectId && clientEmail && privateKeyStr) {
+          credentialConfig = {
+            projectId,
+            clientEmail,
+            privateKey: privateKeyStr.replace(/\\n/g, '\n'),
+          };
+        }
+      }
+
+      if (!credentialConfig || !credentialConfig.projectId || !credentialConfig.clientEmail || !credentialConfig.privateKey) {
         this.logger.warn(
           'Firebase credentials not fully configured. Push notifications will be disabled.',
         );
         return;
       }
 
-      // Handle raw newlines in private key string if passed from .env
-      const privateKey = privateKeyStr.replace(/\\n/g, '\n');
-
       admin.initializeApp({
         credential: admin.credential.cert({
-          projectId,
-          clientEmail,
-          privateKey,
+          projectId: credentialConfig.projectId,
+          clientEmail: credentialConfig.clientEmail,
+          privateKey: credentialConfig.privateKey,
         }),
       });
 
@@ -57,6 +91,7 @@ export class FirebaseService implements OnModuleInit {
     title: string,
     body: string,
     data?: Record<string, string>,
+    structuredData?: Record<string, string>,
   ): Promise<void> {
     if (!this.initialized) {
       this.logger.warn(
@@ -70,6 +105,11 @@ export class FirebaseService implements OnModuleInit {
     }
 
     try {
+      const mergedData: Record<string, string> = {
+        ...(data ?? {}),
+        ...(structuredData ?? {}),
+      };
+
       const message: admin.messaging.MulticastMessage = {
         notification: {
           title,
@@ -78,8 +118,8 @@ export class FirebaseService implements OnModuleInit {
         tokens,
       };
 
-      if (data) {
-        message.data = data;
+      if (Object.keys(mergedData).length > 0) {
+        message.data = mergedData;
       }
 
       const response = await admin.messaging().sendEachForMulticast(message);

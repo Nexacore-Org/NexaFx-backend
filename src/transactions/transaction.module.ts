@@ -4,6 +4,7 @@ import { TransactionsService } from './services/transaction.service';
 import { TransactionVerificationService } from './services/transaction-verification.service';
 import { TransactionsController } from './controllers/transaction.controller';
 import { Transaction } from './entities/transaction.entity';
+import { TransactionCategory } from '../analytics/entities/transaction-category.entity';
 import { CurrenciesModule } from '../currencies/currencies.module';
 import { ExchangeRatesModule } from '../exchange-rates/exchange-rates.module';
 import { BlockchainModule } from '../blockchain/blockchain.module';
@@ -19,10 +20,11 @@ import { FirebaseModule } from '../firebase/firebase.module';
 import { WebhooksModule } from '../webhooks/webhooks.module';
 import { CommonModule } from '../common/common.module';
 import { TransactionLimitsModule } from './transaction-limits.module';
+import { KycModule } from '../kyc/kyc.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Transaction]),
+    TypeOrmModule.forFeature([Transaction, TransactionCategory]),
     CurrenciesModule,
     ExchangeRatesModule,
     BlockchainModule,
@@ -38,6 +40,7 @@ import { TransactionLimitsModule } from './transaction-limits.module';
     WebhooksModule,
     CommonModule,
     TransactionLimitsModule,
+    KycModule,
   ],
   controllers: [TransactionsController],
   providers: [TransactionsService, TransactionVerificationService],

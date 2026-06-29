@@ -22,7 +22,7 @@ export class LoggingInterceptor implements NestInterceptor {
       `Incoming Request: ${method} ${url} - User Agent: ${userAgent}`,
     );
 
-    if (Object.keys(body).length > 0) {
+    if (body && Object.keys(body).length > 0) {
       this.logger.debug(`Request Body: ${JSON.stringify(body)}`);
     }
 

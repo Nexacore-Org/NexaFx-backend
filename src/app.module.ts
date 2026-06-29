@@ -40,6 +40,7 @@ import { EscrowModule } from './escrow/escrow.module';
 import { RateAlertsModule } from './rate-alerts/rate-alerts.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
+import { ExperimentsModule } from './experiments/experiments.module';
 import { ComplianceModule } from './modules/compliance/compliance.module';
 import { SearchModule } from './search/search.module';
 import { MessagingModule } from './messaging/messaging.module';
@@ -174,6 +175,7 @@ import { FiatModule } from './modules/fiat/fiat.module';
     WalletsModule,
     LedgerModule,
     UsersModule,
+    ExperimentsModule,
     ComplianceModule,
     SearchModule,
     MessagingModule,

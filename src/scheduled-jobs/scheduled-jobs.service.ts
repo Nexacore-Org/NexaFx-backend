@@ -25,6 +25,7 @@ import { ProposalService } from '../dao/services/proposal.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { IdempotencyRecord } from '../common/entities/idempotency-record.entity';
 import { DataRequest } from '../users/entities/data-request.entity';
+import { AmlService } from '../modules/compliance/aml.service';
 import { RedisService } from '../common/services/redis.service';
 import { DataSource } from 'typeorm';
 import { AnalyticsService } from '../analytics/analytics.service';
@@ -61,6 +62,7 @@ export class ScheduledJobsService {
     private readonly proposalService: ProposalService,
     private readonly auditLogsService: AuditLogsService,
     private readonly ledgerVerificationService: LedgerVerificationService,
+    private readonly amlService: AmlService,
     private readonly analyticsService: AnalyticsService,
     private readonly redisService: RedisService,
     @InjectQueue(TAX_QUEUE)
@@ -539,6 +541,11 @@ export class ScheduledJobsService {
     this.webhookService
       .dispatch('transaction.completed', transaction, transaction.userId)
       .catch((e) => this.logger.error(`Webhook dispatch failed: ${e.message}`));
+
+    // Enqueue AML compliance check
+    this.amlService
+      .enqueue(transaction.id)
+      .catch((e) => this.logger.error(`AML enqueue failed: ${e.message}`));
   }
 
   /**

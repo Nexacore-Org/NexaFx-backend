@@ -30,7 +30,6 @@ import { FirebaseModule } from './firebase/firebase.module';
 import { AdminModule } from './admin/admin.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { DaoModule } from './dao/dao.module';
-import { ScheduleModule } from '@nestjs/schedule';
 import { GraphQLApiModule } from './graphql/graphql.module';
 import { SuperAdminModule } from './super-admin/super-admin.module';
 import { GatewaysModule } from './gateways/gateways.module';
@@ -94,15 +93,13 @@ import { FiatModule } from './modules/fiat/fiat.module';
         autoLoadEntities: true,
       }),
     }),
-    BullModule.forRootAsync({
+        BullModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         connection: {
           url: configService.get<string>('REDIS_URL') || 'redis://localhost:6379',
         },
       }),
-      inject: [ConfigService],
-    }),
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => [

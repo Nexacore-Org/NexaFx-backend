@@ -32,16 +32,63 @@ export class AuditLogsService {
     private readonly exportJobRepository: AuditLogExportJobRepository,
     private readonly scheduleRepository: AuditLogScheduleRepository,
     private readonly configService: ConfigService,
-  ) {}
+  ) { }
 
   async createLog(createAuditLogDto: CreateAuditLogDto): Promise<void> {
     try {
-      await this.auditLogsRepository.createAuditLog(createAuditLogDto);
-    } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
+      const actorId = createAuditLogDto.actorId || createAuditLogDto.userId;
+      const resourceType = createAuditLogDto.resourceType || createAuditLogDto.entity;
+      const resourceId = createAuditLogDto.resourceId || createAuditLogDto.entityId;
+
+      await this.auditLogsRepository.createAuditLog({
+        ...createAuditLogDto,
+        actorId,
+        resourceType,
+        resourceId,
+        status: createAuditLogDto.status || 'SUCCESS',
+      } as any);
+    } catch (error: any) {
       this.logger.error(
-        `Failed to create audit log: ${err.message}`,
-        err.stack,
+        `Failed to create audit log: ${error.message}`,
+        error.stack,
+      );
+      // Don't throw error to prevent breaking main functionality
+    }
+  }
+
+  async log(
+    actorId: string | null,
+    action: string,
+    resourceType: string,
+    resourceId: string | null,
+    status: 'SUCCESS' | 'FAILURE',
+    metadata?: Record<string, any>,
+    request?: any,
+  ): Promise<void> {
+    try {
+      const ipAddress = request ? this.getClientIp(request) : null;
+      const userAgent = request ? request.headers?.['user-agent'] : null;
+
+      let impersonatedByAdminId = null;
+      if (request?.user?.isImpersonation && request?.user?.impersonatedBy) {
+        impersonatedByAdminId = request.user.impersonatedBy;
+      }
+
+      await this.auditLogsRepository.createAuditLog({
+        actorId,
+        action,
+        resourceType,
+        resourceId,
+        status: status as any,
+        metadata,
+        ipAddress,
+        userAgent,
+        impersonatedByAdminId,
+      } as any);
+    } catch (error: any) {
+      this.logger.error(
+        `[CRITICAL] Failed to write audit log: ${error.message}`,
+        error.stack,
       );
       // Don't throw error to prevent breaking main functionality
     }

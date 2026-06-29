@@ -7,17 +7,20 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { User } from '../../modules/users/entities/user.entity';
+import { RedisModule } from '../redis/redis.module';
 
 @Module({
   imports: [
     ConfigModule,
+    RedisModule,
     PassportModule,
     TypeOrmModule.forFeature([User]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
         const secret = configService.get<string>('JWT_SECRET');
-        const isProduction = configService.get<string>('NODE_ENV') === 'production';
+        const isProduction =
+          configService.get<string>('NODE_ENV') === 'production';
 
         if (!secret && isProduction) {
           throw new Error('JWT_SECRET is not configured');

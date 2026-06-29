@@ -1,29 +1,37 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import {
   ClassSerializerInterceptor,
+  Logger,
   ValidationPipe,
   VersioningType,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Reflector } from '@nestjs/core';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
-import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { MulterExceptionFilter } from './common/filters/multer-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TransformResponseInterceptor } from './common/interceptors/transform-response.interceptor';
+import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
+import { IdempotencyService } from './common/services/idempotency.service';
 import helmet from 'helmet';
-import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { JwtService } from '@nestjs/jwt';
+import { createAdminQueueAuthMiddleware } from './modules/queues/admin-queue-auth.middleware';
+import { QueuesDashboardService } from './modules/queues/queues-dashboard.service';
+import { join } from 'path';
+import * as compression from 'compression';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const logger = new Logger('Bootstrap');
   const configService = app.get(ConfigService);
 
   app.use(helmet());
+
+  // Response compression
+  app.use(compression({ threshold: 1024 }));
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -33,15 +41,23 @@ async function bootstrap() {
     }),
   );
 
-  app.useGlobalFilters(new HttpExceptionFilter());
+  // Get service instance for global interceptor
+  const idempotencyService = app.get(IdempotencyService);
+
+  // Global Filters (order matters: specific before general)
+  app.useGlobalFilters(new HttpExceptionFilter(), new AllExceptionsFilter());
+
+  // Global Interceptors
+  app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalInterceptors(
     new ClassSerializerInterceptor(app.get(Reflector)),
     new LoggingInterceptor(),
     new TransformResponseInterceptor(),
+    new IdempotencyInterceptor(idempotencyService),
   );
 
   // Global Filters (order matters: specific before general)
-//   app.useGlobalFilters(new HttpExceptionFilter(), new AllExceptionsFilter());
+  //   app.useGlobalFilters(new HttpExceptionFilter(), new AllExceptionsFilter());
 
   app.enableVersioning({
     type: VersioningType.URI,
@@ -61,6 +77,16 @@ async function bootstrap() {
     .map((origin) => origin.trim())
     .filter(Boolean);
 
+  const jwtService = app.get(JwtService);
+  const queuesDashboard = app.get(QueuesDashboardService);
+
+  app.use(
+    '/admin/queues',
+    createAdminQueueAuthMiddleware(jwtService, configService),
+    queuesDashboard.getRouter(),
+  );
+
+  // CORS
   app.enableCors({
     origin: origins.length ? origins : false,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
@@ -70,11 +96,18 @@ async function bootstrap() {
   const port = configService.get<number>('PORT') ?? 3000;
   const environment = configService.get<string>('NODE_ENV');
 
+  // Configure NestJS static file middleware to serve uploads
+  app.useStaticAssets(join(process.cwd(), 'uploads'), {
+    prefix: '/uploads',
+  });
+
   await app.listen(port);
 
   logger.log(`NexaFX API v2 started on port ${port}`);
   logger.log(`Environment: ${environment}`);
-  logger.log(`CORS origins: ${origins.length ? origins.join(', ') : 'none configured'}`);
+  logger.log(
+    `CORS origins: ${origins.length ? origins.join(', ') : 'none configured'}`,
+  );
 }
 
 void bootstrap();

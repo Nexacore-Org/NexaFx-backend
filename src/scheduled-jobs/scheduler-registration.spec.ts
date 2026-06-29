@@ -24,6 +24,10 @@ import { WebhookService } from '../webhooks/services/webhook.service';
 import { CurrencyPairService } from '../currencies/services/currency-pair.service';
 import { ProposalService } from '../dao/services/proposal.service';
 import { LedgerVerificationService } from '../ledger/services/ledger-verification.service';
+import { RedisService } from '../common/services/redis.service';
+import { AnalyticsService } from '../analytics/analytics.service';
+import { SanctionsService } from '../sanctions/sanctions.service';
+import { LoansService } from '../loans/loans.service';
 
 type ProviderWrapper = {
   name: string;
@@ -54,6 +58,10 @@ describe('Scheduler registration', () => {
 
   const serviceMock = {};
 
+  const mockRedisService = {
+    del: jest.fn(),
+  }
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -63,6 +71,7 @@ describe('Scheduler registration', () => {
         ScheduledJobsService,
         TransactionVerificationService,
         { provide: TransactionsService, useValue: serviceMock },
+        { provide: RedisService, useValue: mockRedisService },
         {
           provide: UsersService,
           useValue: {
@@ -140,6 +149,24 @@ describe('Scheduler registration', () => {
             })),
           },
         },
+        {
+          provide: AnalyticsService,
+          useValue: {
+            recordBalanceSnapshotsForAllUsers: jest.fn(),
+          },
+        },
+        {
+          provide: SanctionsService,
+          useValue: {
+            screenUser: jest.fn(),
+          },
+        },
+        {
+          provide: LoansService,
+          useValue: {
+            processInterestAccruals: jest.fn(),
+          },
+        },
       ],
     }).compile();
   });
@@ -174,7 +201,7 @@ describe('Scheduler registration', () => {
     await moduleRef.init();
 
     const registry = moduleRef.get(SchedulerRegistry);
-    expect(registry.getCronJobs().size).toBe(14);
+    expect(registry.getCronJobs().size).toBe(18);
     expect(warnSpy).not.toHaveBeenCalledWith(
       expect.stringContaining('Cannot register cron job'),
     );

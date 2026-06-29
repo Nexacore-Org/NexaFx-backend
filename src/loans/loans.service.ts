@@ -7,8 +7,14 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
-import { LoanApplication, LoanStatus } from './entities/loan-application.entity';
-import { LoanRepayment, RepaymentStatus } from './entities/loan-repayment.entity';
+import {
+  LoanApplication,
+  LoanStatus,
+} from './entities/loan-application.entity';
+import {
+  LoanRepayment,
+  RepaymentStatus,
+} from './entities/loan-repayment.entity';
 import { ComplianceFlag } from './entities/compliance-flag.entity';
 import { CreditScoringService } from './credit-scoring.service';
 import { UsersService } from '../users/users.service';
@@ -52,14 +58,14 @@ export class LoansService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async applyForLoan(userId: string, dto: ApplyLoanDto): Promise<LoanApplication> {
+  async applyForLoan(
+    userId: string,
+    dto: ApplyLoanDto,
+  ): Promise<LoanApplication> {
     const user = await this.usersService.findById(userId);
     if (!user) throw new NotFoundException('User not found');
 
-    if (
-      user.kycTier !== UserKycTier.ENHANCED &&
-      user.kycTier !== UserKycTier.FULL
-    ) {
+    if (user.kycTier !== UserKycTier.ENHANCED) {
       throw new ForbiddenException(
         'ENHANCED KYC verification is required to apply for a loan',
       );
@@ -137,10 +143,11 @@ export class LoansService {
 
     // Find the earliest unpaid repayment
     const pendingRepayments = loan.repayments
-      .filter((r) =>
-        r.status === RepaymentStatus.SCHEDULED ||
-        r.status === RepaymentStatus.PARTIAL ||
-        r.status === RepaymentStatus.OVERDUE,
+      .filter(
+        (r) =>
+          r.status === RepaymentStatus.SCHEDULED ||
+          r.status === RepaymentStatus.PARTIAL ||
+          r.status === RepaymentStatus.OVERDUE,
       )
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
@@ -212,7 +219,9 @@ export class LoansService {
         where: { loanId },
       });
       const allPaid = allRepayments.every(
-        (r) => r.status === RepaymentStatus.PAID || r.status === RepaymentStatus.WAIVED,
+        (r) =>
+          r.status === RepaymentStatus.PAID ||
+          r.status === RepaymentStatus.WAIVED,
       );
 
       if (allPaid) {
@@ -397,10 +406,8 @@ export class LoansService {
         const outstanding =
           parseFloat(repayment.totalDue) - parseFloat(repayment.paidAmount);
         const dailyPenalty = outstanding * DAILY_PENALTY_RATE;
-        const newPenalty =
-          parseFloat(repayment.penaltyAmount) + dailyPenalty;
-        const newTotalDue =
-          parseFloat(repayment.totalDue) + dailyPenalty;
+        const newPenalty = parseFloat(repayment.penaltyAmount) + dailyPenalty;
+        const newTotalDue = parseFloat(repayment.totalDue) + dailyPenalty;
 
         repayment.penaltyAmount = newPenalty.toFixed(8);
         repayment.totalDue = newTotalDue.toFixed(8);
@@ -428,7 +435,7 @@ export class LoansService {
     const principal = dto.approvedAmount / instalments;
     const annualRate = dto.interestRatePercent / 100;
     const monthlyRate = annualRate / 12;
-    const interestPerInstalment = (dto.approvedAmount * monthlyRate);
+    const interestPerInstalment = dto.approvedAmount * monthlyRate;
 
     const repayments: Partial<LoanRepayment>[] = [];
     const startDate = new Date();

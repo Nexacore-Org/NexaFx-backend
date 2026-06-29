@@ -35,12 +35,16 @@ import { Roles } from '../../auth/decorators/roles.decorator';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { KycGuard } from '../../common/guards/kyc.guard';
 import { UserRole } from '../../users/user.entity';
+import { TransactionLimitService } from '../services/transaction-limit.service';
 
 @ApiTags('Transactions')
 @ApiBearerAuth('access-token')
 @Controller('transactions')
 export class TransactionsController {
-  constructor(private readonly transactionsService: TransactionsService) {}
+  constructor(
+    private readonly transactionsService: TransactionsService,
+    private readonly transactionLimitService: TransactionLimitService,
+  ) {}
 
   @Post('deposit')
   @UseGuards(KycGuard)
@@ -274,5 +278,43 @@ export class TransactionsController {
     @Request() req,
   ): Promise<TransactionResponseDto> {
     return this.transactionsService.cancelTransaction(id, req.user.userId);
+  }
+
+  @Get('limits/me')
+  @ApiOperation({ summary: 'Get current user KYC tier and transaction limits' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns user KYC tier and remaining limits',
+    schema: {
+      type: 'object',
+      properties: {
+        tier: { type: 'string' },
+        limits: {
+          type: 'object',
+          properties: {
+            dailyLimitUsd: { type: 'number' },
+            monthlyLimitUsd: { type: 'number' },
+            singleTxLimitUsd: { type: 'number' },
+          },
+        },
+        usage: {
+          type: 'object',
+          properties: {
+            todayUsd: { type: 'number' },
+            monthUsd: { type: 'number' },
+          },
+        },
+        remaining: {
+          type: 'object',
+          properties: {
+            dailyUsd: { type: 'number' },
+            monthlyUsd: { type: 'number' },
+          },
+        },
+      },
+    },
+  })
+  async getMyLimits(@Request() req) {
+    return this.transactionLimitService.getUserLimitStatus(req.user.userId);
   }
 }

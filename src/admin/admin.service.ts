@@ -36,6 +36,11 @@ import {
 import { MetricsQueryDto } from './dto/metrics-query.dto';
 import * as csv from 'fast-csv';
 import { OverrideTransactionDto } from './dto/override-transaction.dto';
+import { Response } from 'express';
+import { KycRecord, KycStatus } from '../kyc/entities/kyc.entity';
+import { RateAlert } from '../rate-alerts/entities/rate-alert.entity';
+import { AuditLog } from '../audit-logs/entities/audit-log.entity';
+import { AdminAuditLogsQueryDto } from './dto/admin-audit-logs-query.dto';
 import { Logger } from '@nestjs/common';
 import {
   DataRequest,
@@ -45,10 +50,16 @@ import {
 import { UpdateUserPlanDto } from './dto/update-user-plan.dto';
 import { TransactionLimitService } from '../transactions/services/transaction-limit.service';
 import { UserKycTier } from '../users/user.entity';
+import { BackupManifestService } from './services/backup-manifest.service';
 import {
   PatchTransactionLimitDto,
   UpsertTransactionLimitDto,
 } from './dto/transaction-limit.dto';
+import {
+  MigrationSnapshot,
+  SnapshotStatus,
+} from '../database/entities/migration-snapshot.entity';
+import { DataSource } from 'typeorm';
 
 @Injectable()
 export class AdminService {
@@ -61,8 +72,18 @@ export class AdminService {
     private readonly transactionRepository: Repository<Transaction>,
     @InjectRepository(DataRequest)
     private readonly dataRequestRepository: Repository<DataRequest>,
+    @InjectRepository(KycRecord)
+    private readonly kycRepository: Repository<KycRecord>,
+    @InjectRepository(RateAlert)
+    private readonly rateAlertRepository: Repository<RateAlert>,
+    @InjectRepository(AuditLog)
+    private readonly auditLogRepository: Repository<AuditLog>,
     private readonly auditLogsService: AuditLogsService,
     private readonly transactionLimitService: TransactionLimitService,
+    private readonly backupManifestService: BackupManifestService,
+    @InjectRepository(MigrationSnapshot)
+    private readonly migrationSnapshotRepository: Repository<MigrationSnapshot>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async listTransactionLimits() {
@@ -77,7 +98,10 @@ export class AdminService {
     });
   }
 
-  async patchTransactionLimit(tier: UserKycTier, dto: PatchTransactionLimitDto) {
+  async patchTransactionLimit(
+    tier: UserKycTier,
+    dto: PatchTransactionLimitDto,
+  ) {
     return this.transactionLimitService.upsertLimit(tier, {
       dailyLimitUsd: dto.dailyLimitUsd,
       monthlyLimitUsd: dto.monthlyLimitUsd,
@@ -711,5 +735,160 @@ export class AdminService {
 
     const requests = await query.getMany();
     return { requests };
+  }
+
+  async getStats() {
+    const date30DaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    const totalUsers = await this.userRepository.count();
+    const newUsers30Days = await this.userRepository.count({
+      where: { createdAt: MoreThanOrEqual(date30DaysAgo) },
+    });
+
+    const totalTransactions = await this.transactionRepository.count();
+    const volumes = await this.transactionRepository
+      .createQueryBuilder('transaction')
+      .select('transaction.currency', 'currency')
+      .addSelect('SUM(CAST(transaction.amount AS DECIMAL))', 'volume')
+      .where('transaction.createdAt >= :date30DaysAgo', { date30DaysAgo })
+      .andWhere('transaction.status = :status', { status: TransactionStatus.SUCCESS })
+      .groupBy('transaction.currency')
+      .getRawMany();
+
+    const transactionVolume30Days: Record<string, number> = {};
+    for (const v of volumes) {
+      transactionVolume30Days[v.currency] = parseFloat(v.volume) || 0;
+    }
+
+    const kycPendingCount = await this.kycRepository.count({
+      where: { status: KycStatus.PENDING },
+    });
+
+    const activeRateAlertsCount = await this.rateAlertRepository.count({
+      where: { isActive: true },
+    });
+
+    const systemUptime = process.uptime();
+
+    return {
+      totalUsers,
+      newUsers30Days,
+      totalTransactions,
+      transactionVolume30Days,
+      kycPendingCount,
+      activeRateAlertsCount,
+      systemUptime,
+    };
+  }
+
+  async getAdminAuditLogs(query: AdminAuditLogsQueryDto) {
+    const { actorId, action, from, to, status, page = 1, limit = 20 } = query;
+    return this.auditLogsService.getPrivilegedLogs({
+      actorId,
+      action,
+      from,
+      to,
+      status,
+      page,
+      limit,
+    } as any);
+  }
+
+  async streamAuditLogsCsv(response: Response, query: { from?: string; to?: string }) {
+    const { from, to } = query;
+
+    response.setHeader('Content-Type', 'text/csv');
+    response.setHeader('Content-Disposition', 'attachment; filename="audit-logs.csv"');
+
+    const csvStream = csv.format({ headers: true });
+    csvStream.pipe(response);
+
+    const queryBuilder = this.auditLogRepository
+      .createQueryBuilder('audit_log')
+      .orderBy('audit_log.createdAt', 'ASC');
+
+    if (from) {
+      queryBuilder.andWhere('audit_log.createdAt >= :from', { from: new Date(from) });
+    }
+    if (to) {
+      queryBuilder.andWhere('audit_log.createdAt <= :to', { to: new Date(to) });
+    }
+
+    try {
+      const queryStream = await queryBuilder.stream();
+      for await (const row of queryStream) {
+        csvStream.write({
+          createdAt: row.audit_log_createdAt ? new Date(row.audit_log_createdAt).toISOString() : '',
+          actorId: row.audit_log_actorId || '',
+          action: row.audit_log_action || '',
+          resourceType: row.audit_log_resourceType || '',
+          resourceId: row.audit_log_resourceId || '',
+          ipAddress: row.audit_log_ipAddress || '',
+          status: row.audit_log_status || '',
+        });
+      }
+    } catch (err: any) {
+      this.logger.error(`Error streaming audit logs CSV: ${err.message}`, err.stack);
+    } finally {
+      csvStream.end();
+    }
+  }
+
+  async getRecentBackups() {
+    return this.backupManifestService.listRecentManifests(10);
+  }
+
+  /**
+   * Returns the full migration history: every migration that TypeORM has
+   * recorded as executed, combined with any snapshot metadata that was
+   * captured before the migration was applied.
+   *
+   * Used by GET /admin/migrations.
+   */
+  async getMigrationHistory(): Promise<{
+    appliedMigrations: { id: number; timestamp: string; name: string }[];
+    snapshots: MigrationSnapshot[];
+    summary: {
+      totalApplied: number;
+      totalSnapshots: number;
+      pendingSnapshots: number;
+      appliedSnapshots: number;
+      rolledBackSnapshots: number;
+    };
+  }> {
+    // Read from TypeORM's internal __migrations table (table name is
+    // configurable but defaults to "migrations").
+    let appliedMigrations: { id: number; timestamp: string; name: string }[] =
+      [];
+    try {
+      appliedMigrations = await this.dataSource.query(
+        `SELECT id, timestamp::text, name FROM migrations ORDER BY timestamp ASC`,
+      );
+    } catch {
+      // Table may not exist if migrations have never been run — return empty.
+      this.logger.warn(
+        'Could not query migrations table — it may not exist yet.',
+      );
+    }
+
+    const snapshots = await this.migrationSnapshotRepository.find({
+      order: { takenAt: 'DESC' },
+    });
+
+    const summary = {
+      totalApplied: appliedMigrations.length,
+      totalSnapshots: snapshots.length,
+      pendingSnapshots: snapshots.filter(
+        (s) => s.status === SnapshotStatus.PENDING,
+      ).length,
+      appliedSnapshots: snapshots.filter(
+        (s) => s.status === SnapshotStatus.APPLIED,
+      ).length,
+      rolledBackSnapshots: snapshots.filter(
+        (s) => s.status === SnapshotStatus.ROLLED_BACK,
+      ).length,
+    };
+
+    return { appliedMigrations, snapshots, summary };
   }
 }

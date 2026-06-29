@@ -183,7 +183,7 @@ export class DataExportService {
       this.notificationRepository.find({ where: { userId } }),
       this.kycRepository.find({ where: { userId } }),
       this.beneficiaryRepository.find({ where: { userId } }),
-      this.auditLogRepository.find({ where: { userId } }),
+      this.auditLogRepository.find({ where: { actorId: userId } }),
       this.referralRepository.find({
         where: [{ referrerId: userId }, { refereeId: userId }],
       }),
@@ -217,7 +217,10 @@ export class DataExportService {
     const zipFileName = `nexafx-export_${safeUserId}_${timestamp}.zip`;
     const zipFilePath = path.join(this.EXPORT_DIR, zipFileName);
     // Guard: ensure the resolved path stays inside EXPORT_DIR
-    if (!zipFilePath.startsWith(this.EXPORT_DIR + path.sep) && zipFilePath !== this.EXPORT_DIR) {
+    if (
+      !zipFilePath.startsWith(this.EXPORT_DIR + path.sep) &&
+      zipFilePath !== this.EXPORT_DIR
+    ) {
       throw new Error('Invalid export path detected');
     }
 

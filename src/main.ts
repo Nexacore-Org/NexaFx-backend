@@ -1,3 +1,4 @@
+import { NestFactory, Reflector } from '@nestjs/core';
 import './tracing'; // <-- CRITICAL: MUST REMAIN ON LINE 1 BEFORE ANY NODE LOADERS
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
@@ -5,12 +6,13 @@ import {
   ClassSerializerInterceptor,
   Logger,
   ValidationPipe,
+  Logger,
+  ClassSerializerInterceptor,
   VersioningType,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { Reflector } from '@nestjs/core';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { MulterExceptionFilter } from './common/filters/multer-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';

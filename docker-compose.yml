@@ -18,5 +18,16 @@ services:
       timeout: 5s
       retries: 5
 
+  # Jaeger distributed tracing system instance container
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: nexafx-jaeger-v2
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686"  # Access the Jaeger UI Dashboard at http://localhost:16686
+      - "4318:4318"    # OTLP HTTP receiver endpoint targeted by OpenTelemetry
+    restart: unless-stopped
+
 volumes:
   postgres_data_v2:

@@ -12,23 +12,31 @@ const ALLOWED_MIME_TYPES = new Set([
   'application/pdf',
 ]);
 
+const ALLOWED_VIDEO_MIME_TYPES = new Set([
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
+]);
+
 const ALLOWED_EXTENSIONS: Record<string, string> = {
   'image/jpeg': '.jpg',
   'image/png': '.png',
   'application/pdf': '.pdf',
+  'video/mp4': '.mp4',
+  'video/webm': '.webm',
+  'video/quicktime': '.mov',
 };
 
-const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB for images/docs
+const MAX_VIDEO_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB for video selfies
 
 @Injectable()
 export class FileValidationPipe implements PipeTransform {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async transform(value: unknown, _metadata: ArgumentMetadata) {
     if (!value) {
       return value;
     }
 
-    // Handle both single file and record of file arrays
     if (typeof value === 'object' && value !== null) {
       const filesMap = value as Record<string, Express.Multer.File[]>;
       for (const fieldName of Object.keys(filesMap)) {
@@ -52,28 +60,37 @@ export class FileValidationPipe implements PipeTransform {
       return;
     }
 
-    // Enforce max size (in case multer limits are bypassed)
-    if (file.size > MAX_FILE_SIZE_BYTES) {
+    const isVideoField =
+      fieldName === 'videoSelfie' ||
+      (file.mimetype && ALLOWED_VIDEO_MIME_TYPES.has(file.mimetype));
+
+    const maxSize = isVideoField
+      ? MAX_VIDEO_FILE_SIZE_BYTES
+      : MAX_FILE_SIZE_BYTES;
+    const allowedTypes = isVideoField
+      ? ALLOWED_VIDEO_MIME_TYPES
+      : ALLOWED_MIME_TYPES;
+
+    if (file.size > maxSize) {
       throw new BadRequestException(
-        `File "${fieldName}" exceeds the 5 MB size limit`,
+        `File "${fieldName}" exceeds the ${isVideoField ? '50 MB' : '5 MB'} size limit`,
       );
     }
 
-    // Detect actual MIME type from magic bytes - do NOT trust Content-Type header
     const detected = await fromBuffer(file.buffer);
 
-    if (!detected || !ALLOWED_MIME_TYPES.has(detected.mime)) {
+    if (!detected || !allowedTypes.has(detected.mime)) {
+      const allowedList = Array.from(allowedTypes).join(', ');
       throw new BadRequestException(
-        `File "${fieldName}" has an invalid or unsupported format. ` +
-          `Allowed types: image/jpeg, image/png, application/pdf`,
+        `File "${fieldName}" has an invalid or unsupported format. Allowed types: ${allowedList}`,
       );
     }
 
-    // Patch the mimetype on the file object with the actual detected MIME
     file.mimetype = detected.mime;
 
-    // Also set the correct extension on the originalname so downstream code picks it up
     const correctExt = ALLOWED_EXTENSIONS[detected.mime];
-    file.originalname = `${fieldName}${correctExt}`;
+    if (correctExt) {
+      file.originalname = `${fieldName}${correctExt}`;
+    }
   }
 }

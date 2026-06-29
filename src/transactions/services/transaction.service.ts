@@ -6,6 +6,7 @@ import {
   InternalServerErrorException,
   Logger,
   ForbiddenException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -44,6 +45,7 @@ import { WalletsService } from '../../wallets/wallets.service';
 import { EncryptionService } from '../../common/services/encryption.service';
 import { LedgerService } from '../../ledger/services/ledger.service';
 import { TransactionLimitService } from './transaction-limit.service';
+import { LimitsService } from '../../modules/limits/limits.service';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -155,6 +157,7 @@ export class TransactionsService {
     private readonly encryptionService: EncryptionService,
     private readonly ledgerService: LedgerService,
     private readonly transactionLimitService: TransactionLimitService,
+    @Optional() private readonly limitsService?: LimitsService,
   ) {}
 
   /**
@@ -172,7 +175,11 @@ export class TransactionsService {
       `Creating deposit for user ${userId}: ${amount} ${currency}`,
     );
 
-    await this.transactionLimitService.check(userId, amount, currency);
+    if (this.limitsService) {
+      await this.limitsService.checkLimit(userId, TransactionType.DEPOSIT, amount, currency);
+    } else {
+      await this.transactionLimitService.check(userId, amount, currency);
+    }
 
     const currencyData = await this.currenciesService.findOne(currency);
     if (!currencyData || !currencyData.isActive) {
@@ -196,11 +203,13 @@ export class TransactionsService {
       );
     }
 
-    const fee = (await (this as any).feesService?.calculateFee(
-      TransactionType.DEPOSIT,
-      currency,
-      amount,
-    )) || { feeAmount: 0, feeCurrency: currency, feeType: FeeType.FLAT };
+    const fee = this.limitsService
+      ? await this.limitsService.calculateFee(TransactionType.DEPOSIT, amount, currency)
+      : (await (this as any).feesService?.calculateFee(
+          TransactionType.DEPOSIT,
+          currency,
+          amount,
+        )) || { feeAmount: 0, feeCurrency: currency, feeType: FeeType.FLAT };
 
     const transaction = this.transactionRepository.create({
       userId,
@@ -349,7 +358,11 @@ export class TransactionsService {
       throw new NotFoundException('User not found');
     }
 
-    await this.transactionLimitService.check(userId, amount, currency);
+    if (this.limitsService) {
+      await this.limitsService.checkLimit(userId, TransactionType.WITHDRAW, amount, currency);
+    } else {
+      await this.transactionLimitService.check(userId, amount, currency);
+    }
 
     const userBalance = await this.getUserBalance(userId, currency);
     if (parseFloat(userBalance) < amount) {
@@ -384,11 +397,13 @@ export class TransactionsService {
       );
     }
 
-    const fee = (await (this as any).feesService?.calculateFee(
-      TransactionType.WITHDRAW,
-      currency,
-      amount,
-    )) || { feeAmount: 0, feeCurrency: currency, feeType: FeeType.FLAT };
+    const fee = this.limitsService
+      ? await this.limitsService.calculateFee(TransactionType.WITHDRAW, amount, currency)
+      : (await (this as any).feesService?.calculateFee(
+          TransactionType.WITHDRAW,
+          currency,
+          amount,
+        )) || { feeAmount: 0, feeCurrency: currency, feeType: FeeType.FLAT };
 
     const totalDeduction = amount + fee.feeAmount;
     if (parseFloat(userBalance) < totalDeduction) {
@@ -518,7 +533,11 @@ export class TransactionsService {
       `Creating swap for user ${userId}: ${amount} ${fromCurrency} to ${toCurrency}`,
     );
 
-    await this.transactionLimitService.check(userId, amount, fromCurrency);
+    if (this.limitsService) {
+      await this.limitsService.checkLimit(userId, TransactionType.SWAP, amount, fromCurrency);
+    } else {
+      await this.transactionLimitService.check(userId, amount, fromCurrency);
+    }
 
     if (fromCurrency === toCurrency) {
       throw new BadRequestException(
@@ -539,11 +558,13 @@ export class TransactionsService {
     }
 
     // 3. Calculate Fee
-    const fee = (await this.feesService.calculateFee(
-      FeeTransactionType.SWAP,
-      fromCurrency,
-      amount,
-    )) || { feeAmount: 0, feeCurrency: fromCurrency, feeType: FeeType.FLAT };
+    const fee = this.limitsService
+      ? await this.limitsService.calculateFee(TransactionType.SWAP, amount, fromCurrency)
+      : (await this.feesService.calculateFee(
+          FeeTransactionType.SWAP,
+          fromCurrency,
+          amount,
+        )) || { feeAmount: 0, feeCurrency: fromCurrency, feeType: FeeType.FLAT };
 
     if (parseFloat(userBalance) < amount + fee.feeAmount) {
       throw new BadRequestException(

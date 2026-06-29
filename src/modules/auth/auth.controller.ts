@@ -28,7 +28,7 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle(5, 15 * 60)
+  @Throttle({ default: { limit: 5, ttl: 900000 } })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Authenticate a user and return JWT tokens' })

@@ -1,3 +1,4 @@
+// OAuth feature implementation
 import {
   Injectable,
   UnauthorizedException,
@@ -430,7 +431,11 @@ export class AuthService {
     };
   }
 
-  async signup(signupDto: SignupDto): Promise<{ message: string }> {
+  async signup(
+    signupDto: SignupDto,
+    ipAddress: string | null = null,
+    userAgent: string | null = null,
+  ): Promise<{ message: string }> {
     const normalizedEmail = signupDto.email.toLowerCase().trim();
     const normalizedReferralCode = signupDto.referralCode?.toUpperCase().trim();
     const genericMessage =
@@ -490,7 +495,19 @@ export class AuthService {
       walletSecretKeyEncrypted: encryptedSecretKey,
       referralCode: generatedReferralCode,
       referredBy,
+      consentGdpr: signupDto.consentGdpr,
+      consentGdprAt: new Date(),
+      consentGdprVersion: this.configService.get<string>('PRIVACY_POLICY_VERSION') || '1.0',
     });
+
+    if (signupDto.consentGdpr) {
+      await this.gdprService.recordConsent(
+        user.id,
+        this.configService.get<string>('PRIVACY_POLICY_VERSION') || '1.0',
+        ipAddress,
+        userAgent,
+      );
+    }
 
     await this.walletsService.seedPrimaryWalletFromUserCredentials(
       user.id,

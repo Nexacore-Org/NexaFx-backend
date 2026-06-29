@@ -4,6 +4,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { BullModule } from '@nestjs/bullmq';
 import { join } from 'path';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
@@ -17,6 +18,7 @@ import { ImpersonationRestrictionGuard } from './common/guards/impersonation-res
 import { HealthModule } from './health/health.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { GdprModule } from './modules/gdpr/gdpr.module';
 import { TransactionsModule } from './transactions/transaction.module';
 import { BeneficiariesModule } from './beneficiaries/beneficiaries.module';
 import { KycModule } from './kyc/kyc.module';
@@ -37,6 +39,10 @@ import { EscrowModule } from './escrow/escrow.module';
 import { RateAlertsModule } from './rate-alerts/rate-alerts.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
+import { ExperimentsModule } from './experiments/experiments.module';
+import { ComplianceModule } from './modules/compliance/compliance.module';
+import { SearchModule } from './search/search.module';
+import { MessagingModule } from './messaging/messaging.module';
 import { TransactionsV2Module } from './transactions/transaction-v2.module';
 import { FiatV2Module } from './fiat/fiat-v2.module';
 import { BatchesV2Module } from './batches/batches-v2.module';
@@ -87,6 +93,13 @@ import { FiatModule } from './modules/fiat/fiat.module';
         autoLoadEntities: true,
       }),
     }),
+        BullModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => ({
+        connection: {
+          url: configService.get<string>('REDIS_URL') || 'redis://localhost:6379',
+        },
+      }),
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => [
@@ -113,6 +126,10 @@ import { FiatModule } from './modules/fiat/fiat.module';
 
       ],
       inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ([{
+        ttl: configService.get<number>('THROTTLE_TTL') ?? 60000,
+        limit: configService.get<number>('THROTTLE_LIMIT') ?? 100,
+      }]),
     }),
     I18nModule.forRootAsync({
       useFactory: () => ({
@@ -158,6 +175,10 @@ import { FiatModule } from './modules/fiat/fiat.module';
     WalletsModule,
     LedgerModule,
     UsersModule,
+    ExperimentsModule,
+    ComplianceModule,
+    SearchModule,
+    MessagingModule,
     TaxModule,
     OrganisationsModule,
     SanctionsModule,
@@ -184,3 +205,4 @@ import { FiatModule } from './modules/fiat/fiat.module';
   ],
 })
 export class AppModule {}
+

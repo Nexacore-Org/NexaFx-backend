@@ -6,6 +6,7 @@ import {
   InternalServerErrorException,
   Logger,
   ForbiddenException,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -45,6 +46,7 @@ import { WalletsService } from '../../wallets/wallets.service';
 import { EncryptionService } from '../../common/services/encryption.service';
 import { LedgerService } from '../../ledger/services/ledger.service';
 import { TransactionLimitService } from './transaction-limit.service';
+import { AmlService } from '../../modules/compliance/aml.service';
 import { RedisService } from '../../modules/redis/redis.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -162,6 +164,7 @@ export class TransactionsService {
     private readonly encryptionService: EncryptionService,
     private readonly ledgerService: LedgerService,
     private readonly transactionLimitService: TransactionLimitService,
+    private readonly amlService: AmlService,
     private readonly redisService: RedisService,
     @InjectQueue(TAX_QUEUE)
     private readonly taxQueue: Queue,
@@ -182,7 +185,11 @@ export class TransactionsService {
       `Creating deposit for user ${userId}: ${amount} ${currency}`,
     );
 
-    await this.transactionLimitService.check(userId, amount, currency);
+    if (this.limitsService) {
+      await this.limitsService.checkLimit(userId, TransactionType.DEPOSIT, amount, currency);
+    } else {
+      await this.transactionLimitService.check(userId, amount, currency);
+    }
 
     const currencyData = await this.currenciesService.findOne(currency);
     if (!currencyData || !currencyData.isActive) {
@@ -206,11 +213,13 @@ export class TransactionsService {
       );
     }
 
-    const fee = (await (this as any).feesService?.calculateFee(
-      TransactionType.DEPOSIT,
-      currency,
-      amount,
-    )) || { feeAmount: 0, feeCurrency: currency, feeType: FeeType.FLAT };
+    const fee = this.limitsService
+      ? await this.limitsService.calculateFee(TransactionType.DEPOSIT, amount, currency)
+      : (await (this as any).feesService?.calculateFee(
+          TransactionType.DEPOSIT,
+          currency,
+          amount,
+        )) || { feeAmount: 0, feeCurrency: currency, feeType: FeeType.FLAT };
 
     const transaction = this.transactionRepository.create({
       userId,
@@ -365,7 +374,11 @@ export class TransactionsService {
       throw new NotFoundException('User not found');
     }
 
-    await this.transactionLimitService.check(userId, amount, currency);
+    if (this.limitsService) {
+      await this.limitsService.checkLimit(userId, TransactionType.WITHDRAW, amount, currency);
+    } else {
+      await this.transactionLimitService.check(userId, amount, currency);
+    }
 
     const userBalance = await this.getUserBalance(userId, currency);
     if (parseFloat(userBalance) < amount) {
@@ -400,11 +413,13 @@ export class TransactionsService {
       );
     }
 
-    const fee = (await (this as any).feesService?.calculateFee(
-      TransactionType.WITHDRAW,
-      currency,
-      amount,
-    )) || { feeAmount: 0, feeCurrency: currency, feeType: FeeType.FLAT };
+    const fee = this.limitsService
+      ? await this.limitsService.calculateFee(TransactionType.WITHDRAW, amount, currency)
+      : (await (this as any).feesService?.calculateFee(
+          TransactionType.WITHDRAW,
+          currency,
+          amount,
+        )) || { feeAmount: 0, feeCurrency: currency, feeType: FeeType.FLAT };
 
     const totalDeduction = amount + fee.feeAmount;
     if (parseFloat(userBalance) < totalDeduction) {
@@ -540,7 +555,11 @@ export class TransactionsService {
       `Creating swap for user ${userId}: ${amount} ${fromCurrency} to ${toCurrency}`,
     );
 
-    await this.transactionLimitService.check(userId, amount, fromCurrency);
+    if (this.limitsService) {
+      await this.limitsService.checkLimit(userId, TransactionType.SWAP, amount, fromCurrency);
+    } else {
+      await this.transactionLimitService.check(userId, amount, fromCurrency);
+    }
 
     if (fromCurrency === toCurrency) {
       throw new BadRequestException(
@@ -561,11 +580,13 @@ export class TransactionsService {
     }
 
     // 3. Calculate Fee
-    const fee = (await this.feesService.calculateFee(
-      FeeTransactionType.SWAP,
-      fromCurrency,
-      amount,
-    )) || { feeAmount: 0, feeCurrency: fromCurrency, feeType: FeeType.FLAT };
+    const fee = this.limitsService
+      ? await this.limitsService.calculateFee(TransactionType.SWAP, amount, fromCurrency)
+      : (await this.feesService.calculateFee(
+          FeeTransactionType.SWAP,
+          fromCurrency,
+          amount,
+        )) || { feeAmount: 0, feeCurrency: fromCurrency, feeType: FeeType.FLAT };
 
     if (parseFloat(userBalance) < amount + fee.feeAmount) {
       throw new BadRequestException(
@@ -730,6 +751,10 @@ export class TransactionsService {
           .catch((e) =>
             this.logger.error(`Webhook dispatch failed: ${e.message}`),
           );
+
+        this.amlService
+          .enqueue(transaction.id)
+          .catch((e) => this.logger.error(`AML enqueue failed: ${e.message}`));
 
         return transaction;
       } catch (err) {
@@ -977,6 +1002,10 @@ export class TransactionsService {
           .catch((e) =>
             this.logger.error(`Webhook dispatch failed: ${e.message}`),
           );
+
+        this.amlService
+          .enqueue(transaction.id)
+          .catch((e) => this.logger.error(`AML enqueue failed: ${e.message}`));
       } else if (transaction.status === TransactionStatus.FAILED) {
         this.webhookService
           .dispatch('transaction.failed', transaction, transaction.userId)
@@ -1059,6 +1088,12 @@ export class TransactionsService {
       ).catch((e) =>
         this.logger.error(`Failed to send push notification: ${e.message}`),
       );
+    }
+
+    if (status === TransactionStatus.SUCCESS) {
+      this.amlService
+        .enqueue(transaction.id)
+        .catch((e) => this.logger.error(`AML enqueue failed: ${e.message}`));
     }
 
     return transaction;

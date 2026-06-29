@@ -3,7 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan } from 'typeorm';
 import { User, UserKycTier } from '../users/user.entity';
 import { Transaction } from '../transactions/entities/transaction.entity';
-import { LoanApplication, LoanStatus } from './entities/loan-application.entity';
+import {
+  LoanApplication,
+  LoanStatus,
+} from './entities/loan-application.entity';
 import { ComplianceFlag } from './entities/compliance-flag.entity';
 
 @Injectable()
@@ -24,11 +27,8 @@ export class CreditScoringService {
 
     let score = 0;
 
-    // +20: KYC tier = ENHANCED (or FULL, which is higher)
-    if (
-      user.kycTier === UserKycTier.ENHANCED ||
-      user.kycTier === UserKycTier.FULL
-    ) {
+    // +20: KYC tier = ENHANCED
+    if (user.kycTier === UserKycTier.ENHANCED) {
       score += 20;
     }
 

@@ -5,6 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { BullModule } from '@nestjs/bullmq';
+import { ScheduleModule } from '@nestjs/schedule';
 import { join } from 'path';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
@@ -95,21 +96,16 @@ import { FiatModule } from './modules/fiat/fiat.module';
         autoLoadEntities: true,
       }),
     }),
-        BullModule.forRootAsync({
+    BullModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         connection: {
           url: configService.get<string>('REDIS_URL') || 'redis://localhost:6379',
         },
       }),
+    }),
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => [
-        {
-          ttl: (configService.get<number>('THROTTLE_TTL') ?? 60) * 1000,
-          limit: configService.get<number>('THROTTLE_LIMIT') ?? 100,
-        },
-      ],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ([{
         ttl: configService.get<number>('THROTTLE_TTL') ?? 60000,

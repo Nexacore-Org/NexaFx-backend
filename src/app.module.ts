@@ -73,6 +73,10 @@ import { OwaspZapDastModule } from './owasp-zap-dast/owasp-zap-dast.module';
 import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-anchor.module';
 import { FraudModule } from './modules/fraud/fraud.module';
 import { FiatModule } from './modules/fiat/fiat.module';
+import { StatusModule } from './modules/status/status.module';
+import { SavingsRecommendationsModule } from './modules/savings-recommendations/savings-recommendations.module';
+import { TrainingModule } from './modules/training/training.module';
+import { BankAccountsModule } from './modules/bank-accounts/bank-accounts.module';
 
 @Module({
   imports: [
@@ -184,6 +188,10 @@ import { FiatModule } from './modules/fiat/fiat.module';
     StellarSep24AnchorModule,
     FraudModule,
     FiatModule,
+    StatusModule,
+    SavingsRecommendationsModule,
+    TrainingModule,
+    BankAccountsModule,
   ],
   controllers: [AppController],
   providers: [

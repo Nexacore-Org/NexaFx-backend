@@ -73,6 +73,8 @@ import { OwaspZapDastModule } from './owasp-zap-dast/owasp-zap-dast.module';
 import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-anchor.module';
 import { FraudModule } from './modules/fraud/fraud.module';
 import { FiatModule } from './modules/fiat/fiat.module';
+import { ColdStorageModule } from './modules/cold-storage/cold-storage.module';
+import { SandboxModule } from './modules/sandbox/sandbox.module';
 
 @Module({
   imports: [
@@ -184,6 +186,8 @@ import { FiatModule } from './modules/fiat/fiat.module';
     StellarSep24AnchorModule,
     FraudModule,
     FiatModule,
+    ColdStorageModule,
+    SandboxModule,
   ],
   controllers: [AppController],
   providers: [

@@ -73,6 +73,10 @@ import { OwaspZapDastModule } from './owasp-zap-dast/owasp-zap-dast.module';
 import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-anchor.module';
 import { FraudModule } from './modules/fraud/fraud.module';
 import { FiatModule } from './modules/fiat/fiat.module';
+import { HealthReportModule } from './modules/health-report/health-report.module';
+import { SimulatorModule } from './modules/simulator/simulator.module';
+import { CorridorsModule } from './modules/corridors/corridors.module';
+import { ConfigModule as PlatformConfigModule } from './modules/config/config.module';
 
 @Module({
   imports: [
@@ -184,6 +188,10 @@ import { FiatModule } from './modules/fiat/fiat.module';
     StellarSep24AnchorModule,
     FraudModule,
     FiatModule,
+    HealthReportModule,
+    SimulatorModule,
+    CorridorsModule,
+    PlatformConfigModule,
   ],
   controllers: [AppController],
   providers: [

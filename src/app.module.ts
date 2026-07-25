@@ -73,6 +73,7 @@ import { OwaspZapDastModule } from './owasp-zap-dast/owasp-zap-dast.module';
 import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-anchor.module';
 import { FraudModule } from './modules/fraud/fraud.module';
 import { FiatModule } from './modules/fiat/fiat.module';
+import { WalletConnectModule } from './modules/walletconnect/walletconnect.module';
 
 @Module({
   imports: [
@@ -184,6 +185,7 @@ import { FiatModule } from './modules/fiat/fiat.module';
     StellarSep24AnchorModule,
     FraudModule,
     FiatModule,
+    WalletConnectModule,
   ],
   controllers: [AppController],
   providers: [

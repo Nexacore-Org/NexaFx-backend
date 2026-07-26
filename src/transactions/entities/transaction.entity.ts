@@ -139,4 +139,13 @@ export class Transaction {
 
   @Column({ type: 'tsvector', nullable: true })
   searchVector: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  confidenceScore: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  expectedCompletionSeconds: number | null;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  confidenceLabel: string | null;
 }

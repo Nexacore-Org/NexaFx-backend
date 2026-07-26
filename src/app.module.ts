@@ -74,6 +74,7 @@ import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-a
 import { FraudModule } from './modules/fraud/fraud.module';
 import { FiatModule } from './modules/fiat/fiat.module';
 import { WalletConnectModule } from './modules/walletconnect/walletconnect.module';
+import { ModerationModule } from './modules/moderation/moderation.module';
 
 @Module({
   imports: [
@@ -186,6 +187,7 @@ import { WalletConnectModule } from './modules/walletconnect/walletconnect.modul
     FraudModule,
     FiatModule,
     WalletConnectModule,
+    ModerationModule,
   ],
   controllers: [AppController],
   providers: [

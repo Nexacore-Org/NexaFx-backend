@@ -74,6 +74,9 @@ import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-a
 import { FraudModule } from './modules/fraud/fraud.module';
 import { FiatModule } from './modules/fiat/fiat.module';
 import { WalletConnectModule } from './modules/walletconnect/walletconnect.module';
+import { ColdStorageModule } from './modules/cold-storage/cold-storage.module';
+import { SandboxModule } from './modules/sandbox/sandbox.module';
+import { DbAdvisoryModule } from './modules/db-advisory/db-advisory.module';
 import { ModerationModule } from './modules/moderation/moderation.module';
 
 @Module({
@@ -187,6 +190,9 @@ import { ModerationModule } from './modules/moderation/moderation.module';
     FraudModule,
     FiatModule,
     WalletConnectModule,
+    ColdStorageModule,
+    SandboxModule,
+    DbAdvisoryModule,
     ModerationModule,
   ],
   controllers: [AppController],

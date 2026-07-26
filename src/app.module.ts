@@ -77,6 +77,8 @@ import { LendingModule } from './modules/lending/lending.module';
 import { RiskModule } from './modules/risk/risk.module';
 import { EmbeddedModule } from './modules/embedded/embedded.module';
 import { SigningModule } from './modules/signing/signing.module';
+import { DbAdvisoryModule } from './modules/db-advisory/db-advisory.module';
+import { ModerationModule } from './modules/moderation/moderation.module';
 
 @Module({
   imports: [
@@ -192,6 +194,8 @@ import { SigningModule } from './modules/signing/signing.module';
     RiskModule,
     EmbeddedModule,
     SigningModule,
+    DbAdvisoryModule,
+    ModerationModule,
   ],
   controllers: [AppController],
   providers: [

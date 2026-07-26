@@ -1631,4 +1631,19 @@ export class TransactionsService {
       await queryRunner.release();
     }
   }
+
+  async updateConfidenceScore(
+    transactionId: string,
+    scores: {
+      confidenceScore: number;
+      expectedCompletionSeconds: number;
+      confidenceLabel: string;
+    },
+  ): Promise<void> {
+    await this.transactionRepository.update(transactionId, {
+      confidenceScore: scores.confidenceScore,
+      expectedCompletionSeconds: scores.expectedCompletionSeconds,
+      confidenceLabel: scores.confidenceLabel,
+    });
+  }
 }

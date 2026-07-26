@@ -5,11 +5,17 @@ import {
   MessageBody,
   ConnectedSocket,
   OnGatewayInit,
+  OnGatewayConnection,
+  OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { UseGuards, Logger } from '@nestjs/common';
 import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
 import { WsJwtGuard } from './ws-jwt.guard';
+
+// #700: connection/subscription limits for the public rate feed.
+const MAX_CONNECTIONS = Number(process.env.RATE_WS_MAX_CONNECTIONS ?? 500);
+const MAX_SUBSCRIPTIONS_PER_CONNECTION = 5;
 
 @WebSocketGateway({
   namespace: '/rates',
@@ -19,13 +25,30 @@ import { WsJwtGuard } from './ws-jwt.guard';
   },
 })
 @UseGuards(WsJwtGuard)
-export class RatesGateway implements OnGatewayInit {
+export class RatesGateway
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server: Server;
 
   private readonly logger = new Logger(RatesGateway.name);
+  private connectionCount = 0;
 
   constructor(private readonly service: ExchangeRatesService) {}
+
+  // #700: cap concurrent connections to the /rates namespace.
+  handleConnection(client: Socket) {
+    if (this.connectionCount >= MAX_CONNECTIONS) {
+      client.emit('error', { message: 'Rate feed connection limit reached' });
+      client.disconnect(true);
+      return;
+    }
+    this.connectionCount += 1;
+  }
+
+  handleDisconnect() {
+    this.connectionCount = Math.max(0, this.connectionCount - 1);
+  }
 
   afterInit() {
     this.logger.log('RatesGateway initialized');
@@ -47,6 +70,15 @@ export class RatesGateway implements OnGatewayInit {
     if (!from || !to) {
       client.emit('error', {
         message: 'Currency "from" and "to" are required',
+      });
+      return;
+    }
+
+    // #700: cap subscriptions per connection. The client is always in its own
+    // id room, so subscribed pairs = rooms.size - 1.
+    if (client.rooms.size - 1 >= MAX_SUBSCRIPTIONS_PER_CONNECTION) {
+      client.emit('error', {
+        message: `A connection may subscribe to at most ${MAX_SUBSCRIPTIONS_PER_CONNECTION} pairs`,
       });
       return;
     }

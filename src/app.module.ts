@@ -74,6 +74,7 @@ import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-a
 import { FraudModule } from './modules/fraud/fraud.module';
 import { FiatModule } from './modules/fiat/fiat.module';
 import { DbAdvisoryModule } from './modules/db-advisory/db-advisory.module';
+import { ModerationModule } from './modules/moderation/moderation.module';
 
 @Module({
   imports: [
@@ -186,6 +187,7 @@ import { DbAdvisoryModule } from './modules/db-advisory/db-advisory.module';
     FraudModule,
     FiatModule,
     DbAdvisoryModule,
+    ModerationModule,
   ],
   controllers: [AppController],
   providers: [

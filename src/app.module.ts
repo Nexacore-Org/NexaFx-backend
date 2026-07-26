@@ -73,6 +73,10 @@ import { OwaspZapDastModule } from './owasp-zap-dast/owasp-zap-dast.module';
 import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-anchor.module';
 import { FraudModule } from './modules/fraud/fraud.module';
 import { FiatModule } from './modules/fiat/fiat.module';
+import { LendingModule } from './modules/lending/lending.module';
+import { RiskModule } from './modules/risk/risk.module';
+import { EmbeddedModule } from './modules/embedded/embedded.module';
+import { SigningModule } from './modules/signing/signing.module';
 import { StatusModule } from './modules/status/status.module';
 import { SavingsRecommendationsModule } from './modules/savings-recommendations/savings-recommendations.module';
 import { TrainingModule } from './modules/training/training.module';
@@ -200,6 +204,10 @@ import { ModerationModule } from './modules/moderation/moderation.module';
     StellarSep24AnchorModule,
     FraudModule,
     FiatModule,
+    LendingModule,
+    RiskModule,
+    EmbeddedModule,
+    SigningModule,
     StatusModule,
     SavingsRecommendationsModule,
     TrainingModule,

@@ -79,6 +79,8 @@ import { RevenueModule } from './modules/revenue/revenue.module';
 import { SpendingGoalsModule } from './modules/spending-goals/spending-goals.module';
 import { ForensicsModule } from './modules/forensics/forensics.module';
 import { OptionsModule } from './modules/options/options.module';
+import { DbAdvisoryModule } from './modules/db-advisory/db-advisory.module';
+import { ModerationModule } from './modules/moderation/moderation.module';
 
 @Module({
   imports: [
@@ -196,6 +198,8 @@ import { OptionsModule } from './modules/options/options.module';
     SpendingGoalsModule,
     ForensicsModule,
     OptionsModule,
+    DbAdvisoryModule,
+    ModerationModule,
   ],
   controllers: [AppController],
   providers: [

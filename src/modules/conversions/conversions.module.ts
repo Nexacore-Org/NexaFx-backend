@@ -10,15 +10,22 @@ import { LedgerModule } from '../../ledger/ledger.module';
 import { ConversionsService } from './conversions.service';
 import { ConversionsController } from './conversions.controller';
 import { ConversionsGateway } from './conversions.gateway';
+import { FeeEstimatorService } from '../../transactions/services/fee-estimator.service';
+import { FeesModule } from '../../fees/fees.module';
+import { BlockchainModule } from '../../blockchain/blockchain.module';
+import { RedisModule } from '../redis/redis.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([ConversionQuote, Transaction, User, Wallet, LedgerEntry]),
     ExchangeRatesModule,
     LedgerModule,
+    FeesModule,
+    BlockchainModule,
+    RedisModule,
   ],
   controllers: [ConversionsController],
-  providers: [ConversionsService, ConversionsGateway],
+  providers: [ConversionsService, ConversionsGateway, FeeEstimatorService],
   exports: [ConversionsService],
 })
 export class ConversionsModule {}

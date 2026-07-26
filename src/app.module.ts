@@ -73,6 +73,12 @@ import { OwaspZapDastModule } from './owasp-zap-dast/owasp-zap-dast.module';
 import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-anchor.module';
 import { FraudModule } from './modules/fraud/fraud.module';
 import { FiatModule } from './modules/fiat/fiat.module';
+import { ColdStorageModule } from './modules/cold-storage/cold-storage.module';
+import { SandboxModule } from './modules/sandbox/sandbox.module';
+import { RevenueModule } from './modules/revenue/revenue.module';
+import { SpendingGoalsModule } from './modules/spending-goals/spending-goals.module';
+import { ForensicsModule } from './modules/forensics/forensics.module';
+import { OptionsModule } from './modules/options/options.module';
 import { StatementsModule } from './modules/statements/statements.module';
 import { WalletConnectModule } from './modules/walletconnect/walletconnect.module';
 import { ColdStorageModule } from './modules/cold-storage/cold-storage.module';
@@ -190,6 +196,12 @@ import { ModerationModule } from './modules/moderation/moderation.module';
     StellarSep24AnchorModule,
     FraudModule,
     FiatModule,
+    ColdStorageModule,
+    SandboxModule,
+    RevenueModule,
+    SpendingGoalsModule,
+    ForensicsModule,
+    OptionsModule,
     StatementsModule,
     WalletConnectModule,
     ColdStorageModule,

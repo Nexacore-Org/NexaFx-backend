@@ -75,6 +75,8 @@ import { FraudModule } from './modules/fraud/fraud.module';
 import { FiatModule } from './modules/fiat/fiat.module';
 import { ColdStorageModule } from './modules/cold-storage/cold-storage.module';
 import { SandboxModule } from './modules/sandbox/sandbox.module';
+import { DbAdvisoryModule } from './modules/db-advisory/db-advisory.module';
+import { ModerationModule } from './modules/moderation/moderation.module';
 
 @Module({
   imports: [
@@ -188,6 +190,8 @@ import { SandboxModule } from './modules/sandbox/sandbox.module';
     FiatModule,
     ColdStorageModule,
     SandboxModule,
+    DbAdvisoryModule,
+    ModerationModule,
   ],
   controllers: [AppController],
   providers: [

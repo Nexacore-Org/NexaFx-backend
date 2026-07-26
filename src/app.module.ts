@@ -79,6 +79,10 @@ import { RevenueModule } from './modules/revenue/revenue.module';
 import { SpendingGoalsModule } from './modules/spending-goals/spending-goals.module';
 import { ForensicsModule } from './modules/forensics/forensics.module';
 import { OptionsModule } from './modules/options/options.module';
+import { StatementsModule } from './modules/statements/statements.module';
+import { WalletConnectModule } from './modules/walletconnect/walletconnect.module';
+import { ColdStorageModule } from './modules/cold-storage/cold-storage.module';
+import { SandboxModule } from './modules/sandbox/sandbox.module';
 import { DbAdvisoryModule } from './modules/db-advisory/db-advisory.module';
 import { ModerationModule } from './modules/moderation/moderation.module';
 
@@ -198,6 +202,10 @@ import { ModerationModule } from './modules/moderation/moderation.module';
     SpendingGoalsModule,
     ForensicsModule,
     OptionsModule,
+    StatementsModule,
+    WalletConnectModule,
+    ColdStorageModule,
+    SandboxModule,
     DbAdvisoryModule,
     ModerationModule,
   ],

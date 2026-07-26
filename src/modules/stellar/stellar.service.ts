@@ -651,6 +651,25 @@ export class StellarService {
     }
   }
 
+  async getNetworkFeeStats(): Promise<Horizon.HorizonApi.FeeStatsResponse> {
+    return this.server.feeStats().call();
+  }
+
+  async getLatestLedger(): Promise<Horizon.ServerApi.LedgerRecord | null> {
+    try {
+      const response = await this.server
+        .ledgers()
+        .order('desc')
+        .limit(1)
+        .call();
+      return response.records?.[0] ?? null;
+    } catch (err: unknown) {
+      const error = toStellarError(err);
+      this.logger.warn(`Failed to fetch latest ledger: ${error.message}`);
+      return null;
+    }
+  }
+
   /* -------------------- HELPERS -------------------- */
 
   private hashPrivateKey(privateKey: string): string {

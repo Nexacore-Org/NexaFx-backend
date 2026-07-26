@@ -18,6 +18,10 @@ import {
   EstimateConversionDto,
   BatchEstimateDto,
 } from '../dtos/fee-estimate.dto';
+import {
+  TransactionConfidenceService,
+  UserCompletionStats,
+} from '../services/transaction-confidence.service';
 import { CreateDepositDto } from '../dtos/transaction.dto';
 import { TransactionResponseDto } from '../dtos/transaction-response.dto';
 
@@ -30,6 +34,9 @@ export class TransactionV2Controller {
   constructor(
     private readonly transactionsService: TransactionsService,
     private readonly feeEstimatorService: FeeEstimatorService,
+  constructor(
+    private readonly transactionsService: TransactionsService,
+    private readonly confidenceService: TransactionConfidenceService,
   ) {}
 
   @Post()
@@ -57,10 +64,32 @@ export class TransactionV2Controller {
     @Request() req,
     @Body() createDepositDto: CreateDepositDto,
   ): Promise<TransactionResponseDto> {
-    return this.transactionsService.createDeposit(
+    const transaction = await this.transactionsService.createDeposit(
       req.user.userId,
       createDepositDto,
     );
+
+    try {
+      const confidence = await this.confidenceService.score(transaction);
+      await this.transactionsService.updateConfidenceScore(transaction.id, {
+        confidenceScore: confidence.score,
+        expectedCompletionSeconds: confidence.expectedCompletionSeconds,
+        confidenceLabel: confidence.label,
+      });
+
+      return {
+        ...transaction,
+        confidenceScore: confidence.score,
+        expectedCompletionSeconds: confidence.expectedCompletionSeconds,
+        expectedCompletionLabel: confidence.expectedCompletionLabel,
+        confidenceLabel: confidence.label,
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Failed to compute confidence score for transaction ${transaction.id}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return transaction;
+    }
   }
 
   @Post('estimate')
@@ -108,4 +137,28 @@ export class TransactionV2Controller {
       dto.transactions,
     );
   }
+  @Get('completion-stats')
+  @ApiOperation({
+    summary: 'Get transaction completion statistics',
+    description:
+      'Returns average completion time for the authenticated user\'s ' +
+      'SEND transactions in the last 30 days.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Completion statistics retrieved successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        averageCompletionSeconds: { type: 'number', example: 8.5 },
+        totalTransactions: { type: 'number', example: 42 },
+        periodDays: { type: 'number', example: 30 },
+      },
+    },
+  })
+  async getCompletionStats(@Request() req): Promise<UserCompletionStats> {
+    return this.confidenceService.getCompletionStats(req.user.userId);
+  }
+
+  private readonly logger = new Logger(TransactionV2Controller.name);
 }

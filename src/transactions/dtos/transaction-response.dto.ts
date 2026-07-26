@@ -70,6 +70,21 @@ export class TransactionResponseDto {
   /** User-defined tags for grouping and filtering. */
   @ApiPropertyOptional({ nullable: true, type: [String], example: ['rent', 'october'] })
   tags: string[] | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 95 })
+  confidenceScore: number | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 10 })
+  expectedCompletionSeconds: number | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: 'Expected to complete in under 10 seconds',
+  })
+  expectedCompletionLabel: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 'HIGH' })
+  confidenceLabel: string | null;
 }
 
 export class DepositResponseDto extends TransactionResponseDto {

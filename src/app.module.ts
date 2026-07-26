@@ -77,6 +77,8 @@ import { HealthReportModule } from './modules/health-report/health-report.module
 import { SimulatorModule } from './modules/simulator/simulator.module';
 import { CorridorsModule } from './modules/corridors/corridors.module';
 import { ConfigModule as PlatformConfigModule } from './modules/config/config.module';
+import { DbAdvisoryModule } from './modules/db-advisory/db-advisory.module';
+import { ModerationModule } from './modules/moderation/moderation.module';
 
 @Module({
   imports: [
@@ -192,6 +194,8 @@ import { ConfigModule as PlatformConfigModule } from './modules/config/config.mo
     SimulatorModule,
     CorridorsModule,
     PlatformConfigModule,
+    DbAdvisoryModule,
+    ModerationModule,
   ],
   controllers: [AppController],
   providers: [

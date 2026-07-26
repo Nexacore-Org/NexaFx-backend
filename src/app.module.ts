@@ -77,6 +77,8 @@ import { StatusModule } from './modules/status/status.module';
 import { SavingsRecommendationsModule } from './modules/savings-recommendations/savings-recommendations.module';
 import { TrainingModule } from './modules/training/training.module';
 import { BankAccountsModule } from './modules/bank-accounts/bank-accounts.module';
+import { DbAdvisoryModule } from './modules/db-advisory/db-advisory.module';
+import { ModerationModule } from './modules/moderation/moderation.module';
 
 @Module({
   imports: [
@@ -192,6 +194,8 @@ import { BankAccountsModule } from './modules/bank-accounts/bank-accounts.module
     SavingsRecommendationsModule,
     TrainingModule,
     BankAccountsModule,
+    DbAdvisoryModule,
+    ModerationModule,
   ],
   controllers: [AppController],
   providers: [

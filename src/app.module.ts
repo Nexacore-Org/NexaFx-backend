@@ -97,6 +97,9 @@ import { ColdStorageModule } from './modules/cold-storage/cold-storage.module';
 import { SandboxModule } from './modules/sandbox/sandbox.module';
 import { DbAdvisoryModule } from './modules/db-advisory/db-advisory.module';
 import { ModerationModule } from './modules/moderation/moderation.module';
+import { CarbonOffsetModule } from './carbon-offset/carbon-offset.module';
+import { VolumeFeeTiersModule } from './volume-fee-tiers/volume-fee-tiers.module';
+import { AdminBulkModule } from './admin-bulk/admin-bulk.module';
 
 @Module({
   imports: [
@@ -232,6 +235,9 @@ import { ModerationModule } from './modules/moderation/moderation.module';
     SandboxModule,
     DbAdvisoryModule,
     ModerationModule,
+    CarbonOffsetModule,
+    VolumeFeeTiersModule,
+    AdminBulkModule,
   ],
   controllers: [AppController],
   providers: [

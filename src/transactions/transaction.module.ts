@@ -2,8 +2,11 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TransactionsService } from './services/transaction.service';
 import { TransactionVerificationService } from './services/transaction-verification.service';
+import { TransactionReversalService } from './services/transaction-reversal.service';
+import { TransactionReversalController } from './controllers/transaction-reversal.controller';
 import { TransactionsController } from './controllers/transaction.controller';
 import { Transaction } from './entities/transaction.entity';
+import { TransactionReversal } from './entities/transaction-reversal.entity';
 import { TransactionCategory } from '../analytics/entities/transaction-category.entity';
 import { CurrenciesModule } from '../currencies/currencies.module';
 import { ExchangeRatesModule } from '../exchange-rates/exchange-rates.module';
@@ -26,7 +29,7 @@ import { MicroSavingsModule } from '../modules/micro-savings/micro-savings.modul
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Transaction, TransactionCategory]),
+    TypeOrmModule.forFeature([Transaction, TransactionCategory, TransactionReversal]),
     CurrenciesModule,
     ExchangeRatesModule,
     BlockchainModule,
@@ -46,8 +49,8 @@ import { MicroSavingsModule } from '../modules/micro-savings/micro-savings.modul
     KycModule,
     MicroSavingsModule,
   ],
-  controllers: [TransactionsController],
-  providers: [TransactionsService, TransactionVerificationService],
+  controllers: [TransactionsController, TransactionReversalController],
+  providers: [TransactionsService, TransactionVerificationService, TransactionReversalService],
   exports: [TransactionsService],
 })
 export class TransactionsModule {}

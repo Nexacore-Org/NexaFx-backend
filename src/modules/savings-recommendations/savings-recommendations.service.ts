@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan, MoreThan } from 'typeorm';
+import { Repository, LessThan, Not } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
 import {
   SavingsRecommendation,
@@ -66,7 +66,7 @@ export class SavingsRecommendationsService {
       where: {
         userId,
         isActedOn: false,
-        expiresAt: MoreThan(now),
+        expiresAt: LessThan(now),
       },
       order: { generatedAt: 'DESC' },
     });

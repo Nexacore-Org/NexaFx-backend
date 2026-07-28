@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { GdprConsent } from './entities/gdpr-consent.entity';
+import { ErasureAuditLog } from './entities/erasure-audit-log.entity';
 import { GdprService } from './gdpr.service';
 
 import { GdprController } from './gdpr.controller';
@@ -13,6 +14,8 @@ import { WebhookEndpoint } from '../../webhooks/entities/webhook-endpoint.entity
 import { WebhookDelivery } from '../../webhooks/entities/webhook-delivery.entity';
 import { AuditLog } from '../../audit-logs/entities/audit-log.entity';
 import { RefreshToken } from '../../tokens/refresh-token.entity';
+import { Expense } from '../../modules/expenses/entities/expense.entity';
+import { StorageModule } from '../storage/storage.module';
 import { BullModule } from '@nestjs/bullmq';
 import { ExportProcessor } from './processors/export.processor';
 import { Wallet } from '../../wallets/entities/wallet.entity';
@@ -23,6 +26,7 @@ import { Referral } from '../../referrals/entities/referral.entity';
   imports: [
     TypeOrmModule.forFeature([
       GdprConsent,
+      ErasureAuditLog,
       User,
       Transaction,
       KycRecord,
@@ -32,10 +36,12 @@ import { Referral } from '../../referrals/entities/referral.entity';
       WebhookDelivery,
       AuditLog,
       RefreshToken,
+      Expense,
       Wallet,
       LedgerEntry,
       Referral,
     ]),
+    StorageModule,
     BullModule.registerQueue({
       name: 'gdpr-export',
     }),

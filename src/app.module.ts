@@ -89,7 +89,6 @@ import { ColdStorageModule } from './modules/cold-storage/cold-storage.module';
 import { SandboxModule } from './modules/sandbox/sandbox.module';
 import { RevenueModule } from './modules/revenue/revenue.module';
 import { SpendingGoalsModule } from './modules/spending-goals/spending-goals.module';
-import { FinancialInsightsModule } from './modules/financial-insights/financial-insights.module';
 import { ForensicsModule } from './modules/forensics/forensics.module';
 import { OptionsModule } from './modules/options/options.module';
 import { StatementsModule } from './modules/statements/statements.module';
@@ -101,7 +100,8 @@ import { ModerationModule } from './modules/moderation/moderation.module';
 import { CarbonOffsetModule } from './carbon-offset/carbon-offset.module';
 import { VolumeFeeTiersModule } from './volume-fee-tiers/volume-fee-tiers.module';
 import { AdminBulkModule } from './admin-bulk/admin-bulk.module';
-import { BalanceAlertsModule } from './modules/balance-alerts/balance-alerts.module';
+import { MicroSavingsModule } from './modules/micro-savings/micro-savings.module';
+import { RateComparisonModule } from './exchange-rates/rate-comparison.module';
 
 @Module({
   imports: [
@@ -229,7 +229,6 @@ import { BalanceAlertsModule } from './modules/balance-alerts/balance-alerts.mod
     SandboxModule,
     RevenueModule,
     SpendingGoalsModule,
-    FinancialInsightsModule,
     ForensicsModule,
     OptionsModule,
     StatementsModule,
@@ -241,7 +240,8 @@ import { BalanceAlertsModule } from './modules/balance-alerts/balance-alerts.mod
     CarbonOffsetModule,
     VolumeFeeTiersModule,
     AdminBulkModule,
-    BalanceAlertsModule,
+    MicroSavingsModule,
+    RateComparisonModule,
   ],
   controllers: [AppController],
   providers: [

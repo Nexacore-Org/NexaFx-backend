@@ -1,57 +1,60 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { BalanceAlert } from './entities/balance-alert.entity';
 import { CreateBalanceAlertDto, CheckBalanceDto } from './dto/balance-alerts.dto';
-
-const COOLDOWN_MS = 3_600_000;
 
 @Injectable()
 export class BalanceAlertsService {
-  constructor(
-    @InjectRepository(BalanceAlert)
-    private readonly alertRepo: Repository<BalanceAlert>,
-  ) {}
+  private alerts = new Map<string, CreateBalanceAlertDto[]>();
+  private lastTriggered = new Map<string, number>(); // tracking cooldowns
 
-  async setupAlert(dto: CreateBalanceAlertDto): Promise<BalanceAlert> {
-    return this.alertRepo.save(this.alertRepo.create({ ...dto, lastTriggeredAt: 0 }));
+  /**
+   * Configures a new balance alert for a user's wallet.
+   */
+  public setupAlert(dto: CreateBalanceAlertDto): CreateBalanceAlertDto {
+    const existing = this.alerts.get(dto.walletId) || [];
+    existing.push(dto);
+    this.alerts.set(dto.walletId, existing);
+    return dto;
   }
 
-  async checkBalanceAndNotify(dto: CheckBalanceDto): Promise<BalanceAlert[]> {
-    const alerts = await this.alertRepo.find({
-      where: { walletId: dto.walletId, assetCode: dto.assetCode },
-    });
+  /**
+   * Checks the current balance against configured alerts.
+   * Emits notifications if thresholds are breached and cooldowns are respected.
+   */
+  public checkBalanceAndNotify(dto: CheckBalanceDto) {
+    const configuredAlerts = this.alerts.get(dto.walletId) || [];
+    const triggered = [];
 
-    const triggered: BalanceAlert[] = [];
-    const now = Date.now();
+    for (const alert of configuredAlerts) {
+      if (alert.assetCode !== dto.assetCode) continue;
+      
+      const alertKey = `${dto.walletId}-${alert.assetCode}-${alert.triggerType}`;
+      const lastTime = this.lastTriggered.get(alertKey) || 0;
+      const now = Date.now();
+      
+      // 1 hour cooldown
+      if (now - lastTime < 3600000) {
+        continue; 
+      }
 
-    for (const alert of alerts) {
-      if (now - Number(alert.lastTriggeredAt) < COOLDOWN_MS) continue;
+      let isTriggered = false;
+      if (alert.triggerType === 'BELOW' && dto.currentBalance < alert.thresholdAmount) {
+        isTriggered = true;
+      } else if (alert.triggerType === 'ABOVE' && dto.currentBalance > alert.thresholdAmount) {
+        isTriggered = true;
+      }
 
-      const hit =
-        (alert.triggerType === 'BELOW' && dto.currentBalance < alert.thresholdAmount) ||
-        (alert.triggerType === 'ABOVE' && dto.currentBalance > alert.thresholdAmount);
-
-      if (hit) {
-        alert.lastTriggeredAt = now;
-        await this.alertRepo.save(alert);
-        this.sendNotification(alert, dto.currentBalance);
+      if (isTriggered) {
         triggered.push(alert);
+        this.lastTriggered.set(alertKey, now);
+        // Emulate sending real-time notification
+        this.sendNotification(alert, dto.currentBalance);
       }
     }
 
     return triggered;
   }
 
-  async deleteAlert(id: string): Promise<void> {
-    const alert = await this.alertRepo.findOne({ where: { id } });
-    if (!alert) throw new NotFoundException('Alert not found');
-    await this.alertRepo.remove(alert);
-  }
-
-  private sendNotification(alert: BalanceAlert, currentBalance: number): void {
-    console.log(
-      `[ALERT] Sent ${alert.notificationMethod} to wallet ${alert.walletId}: Balance is ${currentBalance} (Trigger: ${alert.triggerType} ${alert.thresholdAmount})`,
-    );
+  private sendNotification(alert: CreateBalanceAlertDto, currentBalance: number) {
+    console.log(`[ALERT] Sent ${alert.notificationMethod} to wallet ${alert.walletId}: Balance is ${currentBalance} (Trigger: ${alert.triggerType} ${alert.thresholdAmount})`);
   }
 }

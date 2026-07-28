@@ -6,7 +6,22 @@ import {
   Min,
   Max,
   IsOptional,
+  IsEnum,
+  IsUrl,
+  ValidateNested,
+  IsObject,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ProposalType } from '../entities/proposal.entity';
+
+export class UpgradeConfigDto {
+  @IsString() @IsNotEmpty() contractId: string;
+  @IsString() @IsNotEmpty() newWasmHash: string;
+  @IsString() @IsNotEmpty() contractName: string;
+  @IsString() @IsNotEmpty() changeDescription: string;
+  @IsUrl() auditReportUrl: string;
+}
 
 export class CreateProposalDto {
   @IsString()
@@ -40,4 +55,16 @@ export class CreateProposalDto {
   @IsOptional()
   @IsString()
   stellarContractId?: string;
+
+  @ApiPropertyOptional({ enum: ProposalType })
+  @IsOptional()
+  @IsEnum(ProposalType)
+  proposalType?: ProposalType;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => UpgradeConfigDto)
+  upgradeConfig?: UpgradeConfigDto;
 }

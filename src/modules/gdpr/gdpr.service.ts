@@ -1,9 +1,10 @@
 import { Injectable, UnauthorizedException, UnprocessableEntityException, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan, In } from 'typeorm';
+import { Repository, LessThan } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import * as bcrypt from 'bcrypt';
 import { GdprConsent } from './entities/gdpr-consent.entity';
+import { ErasureAuditLog } from './entities/erasure-audit-log.entity';
 import { User } from '../../users/user.entity';
 import { Transaction, TransactionStatus } from '../../transactions/entities/transaction.entity';
 import { KycRecord } from '../../kyc/entities/kyc.entity';
@@ -14,6 +15,9 @@ import { WebhookDelivery } from '../../webhooks/entities/webhook-delivery.entity
 import { AuditLog } from '../../audit-logs/entities/audit-log.entity';
 import { AuditEntityType } from '../../audit-logs/enums/audit-entity-type.enum';
 import { RefreshToken } from '../../tokens/refresh-token.entity';
+import { Expense } from '../../modules/expenses/entities/expense.entity';
+import { STORAGE_SERVICE_TOKEN, StorageService } from '../../modules/storage/storage.service';
+import { Inject } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
@@ -43,6 +47,12 @@ export class GdprService {
     private readonly auditLogRepository: Repository<AuditLog>,
     @InjectRepository(RefreshToken)
     private readonly refreshTokenRepository: Repository<RefreshToken>,
+    @InjectRepository(ErasureAuditLog)
+    private readonly erasureAuditLogRepository: Repository<ErasureAuditLog>,
+    @InjectRepository(Expense)
+    private readonly expenseRepository: Repository<Expense>,
+    @Inject(STORAGE_SERVICE_TOKEN)
+    private readonly storageService: StorageService,
     @InjectQueue('gdpr-export') private readonly exportQueue: Queue,
     private readonly configService: ConfigService,
   ) {}
@@ -63,14 +73,13 @@ export class GdprService {
     return this.gdprConsentRepository.save(consent);
   }
 
-  async eraseUser(userId: string, passwordInput: string, reason?: string): Promise<void> {
+  async eraseUser(userId: string, passwordInput: string, reason?: string): Promise<{ filesDeleted: number; status: string }> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
     const isPasswordValid = await bcrypt.compare(passwordInput, user.password);
     if (!isPasswordValid) throw new UnauthorizedException('Invalid password');
 
-    // Check for pending transactions
     const pendingTransactions = await this.transactionRepository.count({
       where: { userId, status: TransactionStatus.PENDING },
     });
@@ -78,12 +87,47 @@ export class GdprService {
       throw new UnprocessableEntityException('Cannot erase account with pending transactions');
     }
 
+    // Collect all S3 keys to delete BEFORE any DB writes
+    const keysToDelete: string[] = [];
+    const failedDeletions: string[] = [];
+
+    // 1. KYC document keys
+    const kyc = await this.kycRepository.findOne({ where: { userId } });
+    if (kyc) {
+      [kyc.documentFrontKey, kyc.documentBackKey, kyc.selfieKey, kyc.proofOfAddressKey]
+        .filter(Boolean)
+        .forEach((key) => keysToDelete.push(key!));
+    }
+
+    // 2. Expense receipt keys
+    const expenses = await this.expenseRepository.find({ where: { userId } });
+    expenses.forEach((e) => {
+      if (e.receiptKey) keysToDelete.push(e.receiptKey);
+    });
+
+    // 3. Profile photo key (if stored on user)
+    const userAny = user as any;
+    if (userAny.profilePhotoKey) keysToDelete.push(userAny.profilePhotoKey);
+
+    // Attempt S3 deletions — never block erasure on failure
+    if (keysToDelete.length > 0) {
+      const results = await Promise.allSettled(
+        keysToDelete.map((key) => this.storageService.delete(key)),
+      );
+      results.forEach((r, i) => {
+        if (r.status === 'rejected') {
+          const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+          this.logger.error(`CRITICAL: S3 deletion failed for key ${keysToDelete[i]}: ${msg}`);
+          failedDeletions.push(keysToDelete[i]);
+        }
+      });
+    }
+
     // Anonymise user
-    const deletedEmail = `deleted-${user.id}@nexafx.deleted`;
-    user.email = deletedEmail;
+    user.email = `deleted-${user.id}@nexafx.deleted`;
     user.firstName = 'Deleted';
     user.lastName = 'Deleted';
-    user.password = ''; // Cleared since we no longer need login
+    user.password = '';
     user.twoFactorSecret = null;
     user.isActive = false;
     user.deletedAt = new Date();
@@ -92,8 +136,17 @@ export class GdprService {
     // Clear refresh tokens
     await this.refreshTokenRepository.update({ userId }, { revokedAt: new Date() });
 
-    // Delete non-financial records
+    // Nullify KYC storage keys then delete
+    if (kyc) {
+      kyc.documentFrontKey = null as any;
+      kyc.documentBackKey = null as any;
+      kyc.selfieKey = null as any;
+      (kyc as any).proofOfAddressKey = null;
+      await this.kycRepository.save(kyc);
+    }
     await this.kycRepository.delete({ userId });
+
+    // Delete non-financial records
     await this.notificationRepository.delete({ userId });
     await this.rateAlertRepository.delete({ userId });
     await this.webhookEndpointRepository.delete({ userId });
@@ -104,11 +157,25 @@ export class GdprService {
       action: 'gdpr.erasure',
       entity: AuditEntityType.USER,
       entityId: userId,
-      metadata: { reason },
-      ipAddress: '0.0.0.0', // Not passed down for erasure in the issue spec, anonymised
+      metadata: { reason, filesDeleted: keysToDelete.length - failedDeletions.length, failedDeletions },
+      ipAddress: '0.0.0.0',
       userAgent: 'Anonymised',
     });
     await this.auditLogRepository.save(auditLog);
+
+    // Create ErasureAuditLog
+    const erasureLog = this.erasureAuditLogRepository.create({
+      userId,
+      filesDeleted: keysToDelete.length - failedDeletions.length,
+      failedDeletions,
+    });
+    await this.erasureAuditLogRepository.save(erasureLog);
+
+    if (failedDeletions.length > 0) {
+      this.logger.error(`CRITICAL: ${failedDeletions.length} S3 keys failed to delete during GDPR erasure for user ${userId}: ${failedDeletions.join(', ')}`);
+    }
+
+    return { filesDeleted: keysToDelete.length - failedDeletions.length, status: 'erased' };
   }
 
   async requestExport(userId: string): Promise<string> {

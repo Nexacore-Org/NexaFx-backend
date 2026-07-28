@@ -2,7 +2,8 @@ import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nest
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { SpendingGoal } from './entities/spending-goal.entity';
-import { NotificationsService } from '../../notifications/notifications.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { MicroSavingsService } from '../micro-savings/micro-savings.service';
 
 @Injectable()
 export class SpendingGoalsService {
@@ -12,6 +13,7 @@ export class SpendingGoalsService {
     @InjectRepository(SpendingGoal)
     private readonly goalRepo: Repository<SpendingGoal>,
     private readonly notificationsService: NotificationsService,
+    private readonly microSavingsService: MicroSavingsService,
   ) {}
 
   async create(
@@ -106,14 +108,21 @@ export class SpendingGoalsService {
       const target = Number(goal.targetAmount);
 
       if (percentUsed > 80 || projected > target) {
-        await this.notificationsService.dispatch(
+        await this.notificationsService.send({
           userId,
-          'SPENDING_GOAL_WARNING' as any,
-          'Spending Goal Alert',
-          percentUsed > 80
+          type: 'SPENDING_GOAL_WARNING',
+          title: 'Spending Goal Alert',
+          message: percentUsed > 80
             ? `You've used ${percentUsed.toFixed(1)}% of your "${goal.name}" goal.`
             : `Your projected spending for "${goal.name}" ($${projected}) exceeds your target ($${target}).`,
-        );
+        });
+      }
+
+      // Trigger micro-savings when goal reaches 100%
+      if (percentUsed >= 100) {
+        this.microSavingsService
+          .evaluateSpendingGoalHit(userId, goal.id)
+          .catch((e) => this.logger.error(`Micro-savings spending-goal-hit eval failed: ${e.message}`));
       }
     }
   }

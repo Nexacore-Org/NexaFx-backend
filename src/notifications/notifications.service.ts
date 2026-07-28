@@ -116,7 +116,9 @@ export class NotificationsService {
       // 2. Fetch the user and their notification preferences
       const user = await this.userRepository.findOne({ where: { id: userId } });
       if (!user) {
-        this.logger.warn(`User ${userId} not found during notification dispatch.`);
+        this.logger.warn(
+          `User ${userId} not found during notification dispatch.`,
+        );
         return notification;
       }
 
@@ -128,8 +130,7 @@ export class NotificationsService {
 
       // Check if this type is enabled for the user
       const isTypeEnabled =
-        type === NotificationType.SYSTEM ||
-        prefs.types?.[type] !== false;
+        type === NotificationType.SYSTEM || prefs.types?.[type] !== false;
 
       if (!isTypeEnabled) {
         this.logger.log(
@@ -168,12 +169,13 @@ export class NotificationsService {
       where.isRead = isRead;
     }
 
-    const [data, total] = await this.notificationRepository.findAndCount({
-      where,
-      order: { createdAt: 'DESC' },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
+    const [data, total] = await this.notificationRepository
+      .createQueryBuilder('notification')
+      .where(where)
+      .orderBy('notification.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
 
     return {
       data,
@@ -213,7 +215,11 @@ export class NotificationsService {
     return { count };
   }
 
-  private async sendEmail(to: string, subject: string, body: string): Promise<void> {
+  private async sendEmail(
+    to: string,
+    subject: string,
+    body: string,
+  ): Promise<void> {
     const skipEmail = this.configService.get<string>('SKIP_EMAIL_SENDING');
 
     if (skipEmail === 'true') {

@@ -165,12 +165,13 @@ export class DisputesService {
     if (query.status) where.status = query.status;
     if (query.reason) where.reason = query.reason;
 
-    const [disputes, total] = await this.disputeRepo.findAndCount({
-      where,
-      order: { createdAt: 'DESC' },
-      skip,
-      take: limit,
-    });
+    const [disputes, total] = await this.disputeRepo
+      .createQueryBuilder('dispute')
+      .where(where)
+      .orderBy('dispute.createdAt', 'DESC')
+      .skip(skip)
+      .take(limit)
+      .getManyAndCount();
 
     return { disputes, total };
   }

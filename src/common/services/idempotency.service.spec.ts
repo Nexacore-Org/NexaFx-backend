@@ -76,6 +76,23 @@ describe('IdempotencyService', () => {
       expect(result.match).toBe(true);
       expect(result.cached).toBeUndefined();
     });
+
+    it('should isolate cached entries by user', async () => {
+      await cache.set('user-a', 'same-key', {
+        endpoint: 'POST /v2/transactions',
+        statusCode: 201,
+        body: { id: 'tx-a' },
+      });
+
+      const result = await service.checkEndpointMatch(
+        'user-b',
+        'same-key',
+        'POST /v2/transactions',
+      );
+
+      expect(result.match).toBe(true);
+      expect(result.cached).toBeUndefined();
+    });
   });
 });
 

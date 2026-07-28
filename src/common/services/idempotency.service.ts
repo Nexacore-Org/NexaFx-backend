@@ -107,7 +107,8 @@ export class IdempotencyService {
     idempotencyKey: string,
     endpoint: string,
   ): Promise<{ match: boolean; cached?: IdempotencyCacheEntry }> {
-    const cached = await this.cache.get(userId, idempotencyKey);
+    const normalizedUserId = userId || 'anonymous';
+    const cached = await this.cache.get(normalizedUserId, idempotencyKey);
     if (!cached) {
       return { match: true };
     }

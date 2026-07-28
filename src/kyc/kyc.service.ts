@@ -162,10 +162,7 @@ export class KycService {
       };
 
       documents['videoSelfie'] = {
-        s3Key: await this.storageService.upload(
-          files.videoSelfie,
-          storagePath,
-        ),
+        s3Key: await this.storageService.upload(files.videoSelfie, storagePath),
         mimeType: files.videoSelfie.mimetype,
       };
     }
@@ -373,13 +370,15 @@ export class KycService {
       where.status = status;
     }
 
-    const [records, total] = await this.kycRepository.findAndCount({
-      where,
-      relations: ['user', 'reviewer'],
-      order: { createdAt: 'ASC' },
-      skip,
-      take: limit,
-    });
+    const [records, total] = await this.kycRepository
+      .createQueryBuilder('kyc')
+      .leftJoinAndSelect('kyc.user', 'user')
+      .leftJoinAndSelect('kyc.reviewer', 'reviewer')
+      .where(where)
+      .orderBy('kyc.createdAt', 'ASC')
+      .skip(skip)
+      .take(limit)
+      .getManyAndCount();
 
     return {
       data: records.map((r) => ({

@@ -8,7 +8,8 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository, FindOptionsWhere } from 'typeorm';
+import { DataSource, Repository, FindOptionsWhere, LessThan, MoreThanOrEqual } from 'typeorm';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { Dispute, DisputeStatus } from './entities/dispute.entity';
 import {
   DisputeEvidence,
@@ -28,9 +29,13 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/enum/notificationType.enum';
 import { LedgerService } from '../ledger/services/ledger.service';
 import { UsersService } from '../users/users.service';
+import { User, UserRole } from '../users/user.entity';
 
 /** Number of days within which a completed transaction may be disputed. */
 const DISPUTE_WINDOW_DAYS = 30;
+
+/** SLA business days for dispute resolution. */
+const SLA_DISPUTE_BUSINESS_DAYS = 5;
 
 /** Metadata key used to link a chargeback to its origin. */
 const CHARGEBACK_META_KEY = 'originalTransactionId';
@@ -46,6 +51,8 @@ export class DisputesService {
     private readonly evidenceRepo: Repository<DisputeEvidence>,
     @InjectRepository(Transaction)
     private readonly transactionRepo: Repository<Transaction>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly notificationsService: NotificationsService,
     private readonly ledgerService: LedgerService,
     private readonly usersService: UsersService,
@@ -120,6 +127,9 @@ export class DisputesService {
     const windowExpiry = new Date(transaction.createdAt);
     windowExpiry.setDate(windowExpiry.getDate() + DISPUTE_WINDOW_DAYS);
 
+    const slaDeadline = new Date(now);
+    slaDeadline.setDate(slaDeadline.getDate() + SLA_DISPUTE_BUSINESS_DAYS);
+
     const dispute = this.disputeRepo.create({
       transactionId: dto.transactionId,
       raisedById: userId,
@@ -127,6 +137,7 @@ export class DisputesService {
       description: dto.description,
       status: DisputeStatus.OPEN,
       disputeWindowExpiry: windowExpiry,
+      slaDeadline,
       resolvedAt: null,
       resolution: null,
       assignedAdminId: null,
@@ -598,5 +609,139 @@ export class DisputesService {
           this.logger.error(`Failed to notify respondent: ${errorMsg}`);
         });
     }
+  }
+
+  // ── SLA Enforcement ─────────────────────────────────────────────────────────
+
+  @Cron('*/30 * * * *')
+  async checkSlaBreaches(): Promise<void> {
+    this.logger.log('[Cron] Checking dispute SLA breaches');
+    const now = new Date();
+
+    const breachedDisputes = await this.disputeRepo.find({
+      where: [
+        { status: DisputeStatus.OPEN, isSlaBreached: false, slaDeadline: LessThan(now) },
+        { status: DisputeStatus.UNDER_REVIEW, isSlaBreached: false, slaDeadline: LessThan(now) },
+      ],
+    });
+
+    for (const dispute of breachedDisputes) {
+      try {
+        dispute.isSlaBreached = true;
+        dispute.slaBreachedAt = now;
+        dispute.escalationLevel = 1;
+
+        const hoursOverdue = Math.floor((now.getTime() - dispute.slaDeadline!.getTime()) / (1000 * 60 * 60));
+
+        if (hoursOverdue >= 48) {
+          dispute.escalationLevel = 3;
+          this.logger.error(`CRITICAL: Dispute ${dispute.id} reached SLA escalation level 3 (${hoursOverdue}h overdue) — may trigger regulatory reporting`);
+        } else if (hoursOverdue >= 24) {
+          dispute.escalationLevel = 2;
+          // Notify SUPER_ADMIN
+          const superAdmins = await this.userRepository.find({ where: { role: UserRole.SUPER_ADMIN, isActive: true } });
+          for (const admin of superAdmins) {
+            await this.notificationsService.create({
+              userId: admin.id,
+              type: NotificationType.TRANSACTION,
+              title: 'Dispute SLA Escalation (Level 2)',
+              message: `Dispute #${dispute.id.slice(0, 8)} has been open for ${hoursOverdue}h beyond SLA. Escalated to SUPER_ADMIN.`,
+              relatedId: dispute.id,
+            }).catch(() => {});
+          }
+        } else {
+          // Level 1: assign to most senior admin
+          const seniorAdmin = await this.userRepository.findOne({ where: { role: UserRole.ADMIN, isActive: true } });
+          if (seniorAdmin) {
+            dispute.assignedAdminId = seniorAdmin.id;
+            dispute.status = DisputeStatus.UNDER_REVIEW;
+          }
+        }
+
+        await this.disputeRepo.save(dispute);
+
+        // Notify user
+        await this.notificationsService.create({
+          userId: dispute.raisedById,
+          type: NotificationType.TRANSACTION,
+          title: 'Dispute Escalated',
+          message: `Your dispute #${dispute.id.slice(0, 8)} has been escalated for priority review (SLA breach).`,
+          relatedId: dispute.id,
+        }).catch(() => {});
+
+      } catch (err) {
+        this.logger.error(`SLA check failed for dispute ${dispute.id}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
+
+  async listAllDisputesWithSlaFilter(query: DisputeQueryDto & { slaBreached?: string }): Promise<{ disputes: Dispute[]; total: number }> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const qb = this.disputeRepo.createQueryBuilder('d');
+    if (query.status) qb.andWhere('d.status = :status', { status: query.status });
+    if (query.reason) qb.andWhere('d.reason = :reason', { reason: query.reason });
+    if (query.slaBreached === 'true') qb.andWhere('d.isSlaBreached = :breached', { breached: true });
+
+    const [disputes, total] = await qb
+      .orderBy('d.createdAt', 'DESC')
+      .skip(skip)
+      .take(limit)
+      .getManyAndCount();
+
+    return { disputes, total };
+  }
+
+  async getSlaStats(): Promise<{
+    totalOpen: number;
+    slaBreached: number;
+    slaBreachedPercent: number;
+    avgResolutionDays: number;
+    longestOpenDays: number;
+  }> {
+    const totalOpen = await this.disputeRepo.count({
+      where: [{ status: DisputeStatus.OPEN }, { status: DisputeStatus.UNDER_REVIEW }],
+    });
+
+    const slaBreached = await this.disputeRepo.count({
+      where: [
+        { status: DisputeStatus.OPEN, isSlaBreached: true },
+        { status: DisputeStatus.UNDER_REVIEW, isSlaBreached: true },
+      ],
+    });
+
+    const resolvedDisputes = await this.disputeRepo.find({
+      where: [{ status: DisputeStatus.RESOLVED_VALID }, { status: DisputeStatus.RESOLVED_CHARGEBACK }],
+      select: ['createdAt', 'resolvedAt'],
+    });
+
+    let avgResolutionDays = 0;
+    if (resolvedDisputes.length > 0) {
+      const totalDays = resolvedDisputes.reduce((sum, d) => {
+        if (!d.resolvedAt) return sum;
+        return sum + (d.resolvedAt.getTime() - d.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+      }, 0);
+      avgResolutionDays = Math.round((totalDays / resolvedDisputes.length) * 10) / 10;
+    }
+
+    const oldestOpen = await this.disputeRepo.findOne({
+      where: [{ status: DisputeStatus.OPEN }, { status: DisputeStatus.UNDER_REVIEW }],
+      order: { createdAt: 'ASC' },
+      select: ['createdAt'],
+    });
+
+    const longestOpenDays = oldestOpen
+      ? Math.floor((Date.now() - oldestOpen.createdAt.getTime()) / (1000 * 60 * 60 * 24))
+      : 0;
+
+    return {
+      totalOpen,
+      slaBreached,
+      slaBreachedPercent: totalOpen > 0 ? Math.round((slaBreached / totalOpen) * 10000) / 100 : 0,
+      avgResolutionDays,
+      longestOpenDays,
+    };
   }
 }

@@ -49,6 +49,7 @@ import { LedgerService } from '../../ledger/services/ledger.service';
 import { TransactionLimitService } from './transaction-limit.service';
 import { AmlService } from '../../modules/compliance/aml.service';
 import { RedisService } from '../../modules/redis/redis.service';
+import { MicroSavingsService } from '../../modules/micro-savings/micro-savings.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { TAX_QUEUE } from '../../modules/queues/queue.constants';
@@ -178,6 +179,7 @@ export class TransactionsService {
     private readonly transactionLimitService: TransactionLimitService,
     private readonly amlService: AmlService,
     private readonly redisService: RedisService,
+    private readonly microSavingsService: MicroSavingsService,
     @InjectQueue(TAX_QUEUE)
     private readonly taxQueue: Queue,
   ) {}
@@ -816,6 +818,14 @@ export class TransactionsService {
           .enqueue(transaction.id)
           .catch((e) => this.logger.error(`AML enqueue failed: ${e.message}`));
 
+        // Async micro-savings evaluation — never blocks the originating transaction
+        this.microSavingsService
+          .evaluatePerTransaction(userId, transaction.id, parseFloat(transaction.amount), fromCurrency)
+          .catch((e) => this.logger.error(`Micro-savings per-transaction eval failed: ${e.message}`));
+        this.microSavingsService
+          .evaluateBalanceThreshold(userId, fromCurrency)
+          .catch((e) => this.logger.error(`Micro-savings balance-threshold eval failed: ${e.message}`));
+
         return transaction;
       } catch (err) {
         const error = toError(err);
@@ -1027,6 +1037,16 @@ export class TransactionsService {
         this.taxQueue.add('process-transaction', { transactionId: transaction.id }).catch((e) =>
           this.logger.error(`Failed to enqueue tax processing for verified transaction ${transaction.id}: ${e.message}`)
         );
+
+        // Async micro-savings evaluation — never blocks the originating transaction
+        if (transaction.type === TransactionType.WITHDRAW) {
+          this.microSavingsService
+            .evaluatePerTransaction(transaction.userId, transaction.id, parseFloat(transaction.amount), transaction.currency)
+            .catch((e) => this.logger.error(`Micro-savings per-transaction eval failed: ${e.message}`));
+          this.microSavingsService
+            .evaluateBalanceThreshold(transaction.userId, transaction.currency)
+            .catch((e) => this.logger.error(`Micro-savings balance-threshold eval failed: ${e.message}`));
+        }
       }
 
       await this.auditLogsService.logTransactionEvent(

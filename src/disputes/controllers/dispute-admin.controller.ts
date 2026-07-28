@@ -21,6 +21,7 @@ import {
   ApiConsumes,
   ApiResponse,
   ApiParam,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { DisputesService } from '../disputes.service';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -42,13 +43,25 @@ export class DisputeAdminController {
 
   /**
    * GET /admin/disputes
-   * List all disputes with optional status/reason filters.
+   * List all disputes with optional status/reason/slaBreached filters.
    */
   @Get()
   @ApiOperation({ summary: 'Admin: list all disputes with filters' })
+  @ApiQuery({ name: 'slaBreached', required: false, example: 'true' })
   @ApiResponse({ status: 200, description: 'Paginated list of disputes' })
-  async listAll(@Query() query: DisputeQueryDto) {
-    return this.disputesService.listAllDisputes(query);
+  async listAll(@Query() query: DisputeQueryDto & { slaBreached?: string }) {
+    return this.disputesService.listAllDisputesWithSlaFilter(query);
+  }
+
+  /**
+   * GET /admin/disputes/sla-stats
+   * SLA breach statistics for the compliance dashboard.
+   */
+  @Get('sla-stats')
+  @ApiOperation({ summary: 'Admin: get SLA breach statistics' })
+  @ApiResponse({ status: 200, description: 'SLA statistics returned' })
+  async getSlaStats() {
+    return this.disputesService.getSlaStats();
   }
 
   /**

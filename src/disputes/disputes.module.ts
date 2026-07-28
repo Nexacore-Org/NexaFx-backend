@@ -6,13 +6,14 @@ import { DisputesService } from './disputes.service';
 import { DisputesController } from './controllers/disputes.controller';
 import { DisputeAdminController } from './controllers/dispute-admin.controller';
 import { Transaction } from '../transactions/entities/transaction.entity';
+import { User } from '../users/user.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { LedgerModule } from '../ledger/ledger.module';
 import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Dispute, DisputeEvidence, Transaction]),
+    TypeOrmModule.forFeature([Dispute, DisputeEvidence, Transaction, User]),
     NotificationsModule,
     LedgerModule,
     UsersModule,

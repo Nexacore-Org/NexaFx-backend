@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nest
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { SpendingGoal } from './entities/spending-goal.entity';
-import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsService } from '../../notifications/notifications.service';
 
 @Injectable()
 export class SpendingGoalsService {
@@ -106,14 +106,14 @@ export class SpendingGoalsService {
       const target = Number(goal.targetAmount);
 
       if (percentUsed > 80 || projected > target) {
-        await this.notificationsService.send({
+        await this.notificationsService.dispatch(
           userId,
-          type: 'SPENDING_GOAL_WARNING',
-          title: 'Spending Goal Alert',
-          message: percentUsed > 80
+          'SPENDING_GOAL_WARNING' as any,
+          'Spending Goal Alert',
+          percentUsed > 80
             ? `You've used ${percentUsed.toFixed(1)}% of your "${goal.name}" goal.`
             : `Your projected spending for "${goal.name}" ($${projected}) exceeds your target ($${target}).`,
-        });
+        );
       }
     }
   }

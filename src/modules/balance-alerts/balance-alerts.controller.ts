@@ -1,4 +1,4 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Delete, Body, Param } from '@nestjs/common';
 import { BalanceAlertsService } from './balance-alerts.service';
 import { CreateBalanceAlertDto, CheckBalanceDto } from './dto/balance-alerts.dto';
 
@@ -12,12 +12,13 @@ export class BalanceAlertsController {
   }
 
   @Post('check')
-  checkBalance(@Body() dto: CheckBalanceDto) {
-    const triggered = this.alertsService.checkBalanceAndNotify(dto);
-    return {
-      message: 'Balance check completed',
-      alertsTriggered: triggered.length,
-      details: triggered,
-    };
+  async checkBalance(@Body() dto: CheckBalanceDto) {
+    const triggered = await this.alertsService.checkBalanceAndNotify(dto);
+    return { message: 'Balance check completed', alertsTriggered: triggered.length, details: triggered };
+  }
+
+  @Delete(':id')
+  deleteAlert(@Param('id') id: string) {
+    return this.alertsService.deleteAlert(id);
   }
 }

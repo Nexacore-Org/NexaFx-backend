@@ -22,6 +22,7 @@ import { CommonModule } from '../common/common.module';
 import { TransactionLimitsModule } from './transaction-limits.module';
 import { ComplianceModule } from '../modules/compliance/compliance.module';
 import { KycModule } from '../kyc/kyc.module';
+import { MicroSavingsModule } from '../modules/micro-savings/micro-savings.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { KycModule } from '../kyc/kyc.module';
     TransactionLimitsModule,
     ComplianceModule,
     KycModule,
+    MicroSavingsModule,
   ],
   controllers: [TransactionsController],
   providers: [TransactionsService, TransactionVerificationService],

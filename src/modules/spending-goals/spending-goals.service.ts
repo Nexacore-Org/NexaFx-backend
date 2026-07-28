@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { SpendingGoal } from './entities/spending-goal.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { MicroSavingsService } from '../micro-savings/micro-savings.service';
 
 @Injectable()
 export class SpendingGoalsService {
@@ -12,6 +13,7 @@ export class SpendingGoalsService {
     @InjectRepository(SpendingGoal)
     private readonly goalRepo: Repository<SpendingGoal>,
     private readonly notificationsService: NotificationsService,
+    private readonly microSavingsService: MicroSavingsService,
   ) {}
 
   async create(
@@ -114,6 +116,13 @@ export class SpendingGoalsService {
             ? `You've used ${percentUsed.toFixed(1)}% of your "${goal.name}" goal.`
             : `Your projected spending for "${goal.name}" ($${projected}) exceeds your target ($${target}).`,
         });
+      }
+
+      // Trigger micro-savings when goal reaches 100%
+      if (percentUsed >= 100) {
+        this.microSavingsService
+          .evaluateSpendingGoalHit(userId, goal.id)
+          .catch((e) => this.logger.error(`Micro-savings spending-goal-hit eval failed: ${e.message}`));
       }
     }
   }

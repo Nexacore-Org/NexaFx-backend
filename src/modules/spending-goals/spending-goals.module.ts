@@ -4,11 +4,13 @@ import { SpendingGoal } from './entities/spending-goal.entity';
 import { SpendingGoalsService } from './spending-goals.service';
 import { SpendingGoalsController } from './spending-goals.controller';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { MicroSavingsModule } from '../micro-savings/micro-savings.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([SpendingGoal]),
     NotificationsModule,
+    MicroSavingsModule,
   ],
   controllers: [SpendingGoalsController],
   providers: [SpendingGoalsService],

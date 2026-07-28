@@ -100,6 +100,8 @@ import { ModerationModule } from './modules/moderation/moderation.module';
 import { CarbonOffsetModule } from './carbon-offset/carbon-offset.module';
 import { VolumeFeeTiersModule } from './volume-fee-tiers/volume-fee-tiers.module';
 import { AdminBulkModule } from './admin-bulk/admin-bulk.module';
+import { MicroSavingsModule } from './modules/micro-savings/micro-savings.module';
+import { RateComparisonModule } from './exchange-rates/rate-comparison.module';
 
 @Module({
   imports: [
@@ -238,6 +240,8 @@ import { AdminBulkModule } from './admin-bulk/admin-bulk.module';
     CarbonOffsetModule,
     VolumeFeeTiersModule,
     AdminBulkModule,
+    MicroSavingsModule,
+    RateComparisonModule,
   ],
   controllers: [AppController],
   providers: [

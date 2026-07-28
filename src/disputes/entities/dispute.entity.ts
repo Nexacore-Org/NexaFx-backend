@@ -32,6 +32,7 @@ export enum DisputeStatus {
 @Index(['status'])
 // Optimizes per-user dispute lookups
 @Index(['raisedById', 'status'])
+@Index(['isSlaBreached', 'status'])
 @Entity('disputes')
 export class Dispute {
   @PrimaryGeneratedColumn('uuid')
@@ -85,4 +86,17 @@ export class Dispute {
 
   @OneToMany(() => DisputeEvidence, (e) => e.dispute, { cascade: ['insert'] })
   evidence: DisputeEvidence[];
+
+  // SLA fields
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  slaDeadline: Date | null;
+
+  @Column({ type: 'boolean', default: false })
+  isSlaBreached: boolean;
+
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  slaBreachedAt: Date | null;
+
+  @Column({ type: 'int', default: 0 })
+  escalationLevel: number;
 }

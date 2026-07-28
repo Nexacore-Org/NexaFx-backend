@@ -22,8 +22,8 @@ export class GdprController {
     @Request() req: { user: { userId: string } },
     @Body() erasureDto: ErasureDto,
   ) {
-    await this.gdprService.eraseUser(req.user.userId, erasureDto.password, erasureDto.reason);
-    return { message: 'Account erased and anonymised successfully' };
+    const result = await this.gdprService.eraseUser(req.user.userId, erasureDto.password, erasureDto.reason);
+    return { message: 'Account erased and anonymised successfully', ...result };
   }
 
   @Post('export')

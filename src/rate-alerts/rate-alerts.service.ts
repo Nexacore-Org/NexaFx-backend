@@ -133,7 +133,7 @@ export class RateAlertsService {
       };
     }
 
-    const rateByPair = new Map<string, number>();
+    const rateByPair = new Map<string, Decimal>();
     const uniquePairs: Set<string> = new Set(
       activeAlerts.map((alert) => `${alert.fromCurrency}|${alert.toCurrency}`),
     );
@@ -147,7 +147,7 @@ export class RateAlertsService {
           toCurrency,
         );
         // @ts-ignore - Pre-existing type issue
-        rateByPair.set(pair, rateResult.rate);
+        rateByPair.set(pair, new Decimal(String(rateResult.rate)));
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
@@ -167,11 +167,10 @@ export class RateAlertsService {
         continue;
       }
 
-      const targetRate = parseFloat(alert.targetRate);
       const shouldTrigger = this.shouldTriggerAlert(
         alert.condition,
         currentRate,
-        targetRate,
+        new Decimal(alert.targetRate),
       );
 
       if (!shouldTrigger) {
@@ -191,37 +190,34 @@ export class RateAlertsService {
 
   private shouldTriggerAlert(
     condition: RateAlertCondition,
-    currentRate: number,
-    targetRate: number,
+    currentRate: Decimal,
+    targetRate: Decimal,
   ): boolean {
-    const current = new Decimal(currentRate);
-    const target = new Decimal(targetRate);
-
     if (condition === RateAlertCondition.ABOVE) {
-      return current.greaterThanOrEqualTo(target);
+      return currentRate.greaterThanOrEqualTo(targetRate);
     }
-
-    return current.lessThanOrEqualTo(target);
+    return currentRate.lessThanOrEqualTo(targetRate);
   }
 
   private async triggerAlert(
     alert: RateAlert,
-    currentRate: number,
+    currentRate: Decimal,
   ): Promise<void> {
+    const currentRateNum = currentRate.toNumber();
     const now = new Date();
 
     await this.notificationsService.dispatch(
       alert.userId,
       NotificationType.RATE_ALERT,
       'Rate Alert Triggered',
-      `${alert.fromCurrency}/${alert.toCurrency} is now ${currentRate}. Your ${alert.condition} ${alert.targetRate} alert was triggered.`,
+      `${alert.fromCurrency}/${alert.toCurrency} is now ${currentRateNum}. Your ${alert.condition} ${alert.targetRate} alert was triggered.`,
       {
         alertId: alert.id,
         fromCurrency: alert.fromCurrency,
         toCurrency: alert.toCurrency,
         condition: alert.condition,
         targetRate: alert.targetRate,
-        currentRate,
+        currentRate: currentRateNum,
         recurring: alert.recurring,
       },
     );
@@ -244,7 +240,7 @@ export class RateAlertsService {
         toCurrency: alert.toCurrency,
         condition: alert.condition,
         targetRate: alert.targetRate,
-        currentRate,
+        currentRate: currentRateNum,
         recurring: alert.recurring,
         triggeredAt: now.toISOString(),
       },

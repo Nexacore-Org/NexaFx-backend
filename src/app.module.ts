@@ -102,6 +102,9 @@ import { VolumeFeeTiersModule } from './volume-fee-tiers/volume-fee-tiers.module
 import { AdminBulkModule } from './admin-bulk/admin-bulk.module';
 import { MicroSavingsModule } from './modules/micro-savings/micro-savings.module';
 import { RateComparisonModule } from './exchange-rates/rate-comparison.module';
+import { GeoRestrictionsModule } from './geo-restrictions/geo-restrictions.module';
+import { DonationsModule } from './donations/donations.module';
+import { WidgetsModule } from './widgets/widgets.module';
 
 @Module({
   imports: [
@@ -242,6 +245,9 @@ import { RateComparisonModule } from './exchange-rates/rate-comparison.module';
     AdminBulkModule,
     MicroSavingsModule,
     RateComparisonModule,
+    GeoRestrictionsModule,
+    DonationsModule,
+    WidgetsModule,
   ],
   controllers: [AppController],
   providers: [

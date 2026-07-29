@@ -1,12 +1,15 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Version, VERSION_NEUTRAL } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { Public } from './auth/decorators/public.decorator';
 
 @Controller()
 export class AppController {
   constructor(private readonly configService: ConfigService) {}
 
+  @Public()
+  @Version(VERSION_NEUTRAL)
   @Get()
   getStatus() {
     return {

@@ -4,6 +4,7 @@ import {
   Column,
   PrimaryGeneratedColumn,
   CreateDateColumn,
+  UpdateDateColumn,
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
@@ -31,7 +32,6 @@ export class Notification {
   @Column({
     type: 'enum',
     enum: NotificationType,
-    default: NotificationType.SYSTEM,
   })
   type: NotificationType;
 
@@ -55,9 +55,6 @@ export class Notification {
 
   @UpdateDateColumn()
   updatedAt: Date;
-
-  @Column({ type: 'timestamp', nullable: true })
-  readAt?: Date;
 
   @Column({ type: 'tsvector', nullable: true })
   searchVector: string | null;

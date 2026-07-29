@@ -37,3 +37,9 @@ notifications:
   - changed-files:
       - any-glob-to-any-file:
           - 'src/notifications/**'
+
+compliance:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/modules/compliance/**'
+          - 'src/modules/financial-crime-reports/**'

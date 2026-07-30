@@ -7,6 +7,16 @@ import { WebhookEndpoint } from '../entities/webhook-endpoint.entity';
 import { WebhookDelivery } from '../entities/webhook-delivery.entity';
 import { WEBHOOK_QUEUE } from '../../modules/queues/queue.constants';
 import type { WebhookDeliveryJob } from '../../modules/webhooks/webhook.processor';
+import {
+  buildSchemaHeaders,
+  getSchemaVersionInfo,
+  isDeprecatedSchemaVersion,
+  WEBHOOK_SCHEMA_VERSIONS,
+  WebhookSchemaTransformer,
+  WebhookSchemaVersion,
+} from '../../modules/webhooks/schemas';
+import { AuditLogsService } from '../../audit-logs/audit-logs.service';
+import { UpdateWebhookEndpointDto } from '../dto/update-webhook-endpoint.dto';
 import * as crypto from 'crypto';
 import axios from 'axios';
 import { URL } from 'url';
@@ -28,6 +38,7 @@ export class WebhookService {
     private readonly deliveryRepo: Repository<WebhookDelivery>,
     @InjectQueue(WEBHOOK_QUEUE)
     private readonly webhookQueue: Queue<WebhookDeliveryJob>,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   private validateWebhookUrl(raw: string): void {
@@ -45,10 +56,22 @@ export class WebhookService {
     }
   }
 
+  private assertSupportedSchemaVersion(version: string): WebhookSchemaVersion {
+    if (!WebhookSchemaTransformer.isSupportedVersion(version)) {
+      throw new BadRequestException(
+        `Unsupported schema version '${version}'. Supported versions: ${WEBHOOK_SCHEMA_VERSIONS.join(
+          ', ',
+        )}`,
+      );
+    }
+    return version;
+  }
+
   async createEndpoint(
     userId: string,
     url: string,
     events: string[],
+    preferredSchemaVersion?: string,
   ): Promise<WebhookEndpoint> {
     this.validateWebhookUrl(url);
 
@@ -58,7 +81,41 @@ export class WebhookService {
       events,
       secret: crypto.randomBytes(32).toString('hex'),
       isActive: true,
+      // Left undefined so the column default (latest version) applies.
+      ...(preferredSchemaVersion !== undefined && {
+        preferredSchemaVersion:
+          this.assertSupportedSchemaVersion(preferredSchemaVersion),
+      }),
     });
+
+    return this.endpointRepo.save(endpoint);
+  }
+
+  async updateEndpoint(
+    userId: string,
+    id: string,
+    updates: UpdateWebhookEndpointDto,
+  ): Promise<WebhookEndpoint> {
+    const endpoint = await this.endpointRepo.findOne({ where: { id, userId } });
+    if (!endpoint) {
+      throw new BadRequestException('Endpoint not found');
+    }
+
+    if (updates.url !== undefined) {
+      this.validateWebhookUrl(updates.url);
+      endpoint.url = updates.url;
+    }
+    if (updates.events !== undefined) {
+      endpoint.events = updates.events;
+    }
+    if (updates.isActive !== undefined) {
+      endpoint.isActive = updates.isActive;
+    }
+    if (updates.preferredSchemaVersion !== undefined) {
+      endpoint.preferredSchemaVersion = this.assertSupportedSchemaVersion(
+        updates.preferredSchemaVersion,
+      );
+    }
 
     return this.endpointRepo.save(endpoint);
   }
@@ -72,14 +129,20 @@ export class WebhookService {
       (e) => e.events.includes(eventType) || e.events.includes('*'),
     );
 
-    const payload = {
-      id: crypto.randomUUID(),
-      event: eventType,
-      data,
-      timestamp: new Date().toISOString(),
-    };
+    // One event id and timestamp shared across the fan-out, so consumers can
+    // still correlate the same event across endpoints that are pinned to
+    // different schema versions.
+    const eventId = crypto.randomUUID();
+    const timestamp = new Date().toISOString();
 
     for (const endpoint of relevantEndpoints) {
+      const payload = WebhookSchemaTransformer.transform(
+        eventType,
+        data,
+        endpoint.preferredSchemaVersion,
+        { id: eventId, timestamp },
+      );
+
       const delivery = this.deliveryRepo.create({
         endpointId: endpoint.id,
         eventType,
@@ -123,6 +186,17 @@ export class WebhookService {
       .update(payloadString)
       .digest('hex');
 
+    // Prefer the version the payload was actually shaped for; fall back to the
+    // endpoint's preference for deliveries stored before versioning shipped.
+    const schemaVersion = WebhookSchemaTransformer.resolveVersion(
+      (delivery.payload as { schemaVersion?: string } | null)?.schemaVersion ??
+        endpoint.preferredSchemaVersion,
+    );
+
+    if (isDeprecatedSchemaVersion(schemaVersion)) {
+      this.recordDeprecatedSchemaUsage(endpoint, delivery, schemaVersion);
+    }
+
     delivery.attemptCount++;
 
     try {
@@ -134,6 +208,7 @@ export class WebhookService {
           'Content-Type': 'application/json',
           'X-NexaFX-Signature': `sha256=${signature}`,
           'User-Agent': 'NexaFX-Webhook/1.0',
+          ...buildSchemaHeaders(schemaVersion),
         },
         timeout: 10000,
         maxRedirects: 0, // prevent redirect-based SSRF
@@ -167,6 +242,47 @@ export class WebhookService {
     }
 
     await this.deliveryRepo.save(delivery);
+  }
+
+  /**
+   * Records that a delivery went out on a deprecated schema version.
+   *
+   * Fire-and-forget: audit bookkeeping must never add latency to, or fail, a
+   * webhook delivery. AuditLogsService.log already swallows its own errors.
+   */
+  private recordDeprecatedSchemaUsage(
+    endpoint: WebhookEndpoint,
+    delivery: WebhookDelivery,
+    schemaVersion: WebhookSchemaVersion,
+  ): void {
+    const { deprecatedOn, sunsetOn } = getSchemaVersionInfo(schemaVersion);
+
+    this.logger.warn(
+      `Endpoint ${endpoint.id} received event ${delivery.eventType} on deprecated schema ${schemaVersion} (sunset ${sunsetOn})`,
+    );
+
+    this.auditLogsService
+      .log(
+        endpoint.userId ?? null,
+        'webhook.deprecated_schema_used',
+        'WEBHOOK_ENDPOINT',
+        endpoint.id,
+        'SUCCESS',
+        {
+          schemaVersion,
+          eventType: delivery.eventType,
+          deliveryId: delivery.id,
+          deprecatedOn,
+          sunsetOn,
+        },
+      )
+      .catch((error: unknown) => {
+        this.logger.warn(
+          `Failed to record deprecated schema audit event: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      });
   }
 
   async processRetries(): Promise<void> {
@@ -238,12 +354,11 @@ export class WebhookService {
       throw new BadRequestException('Endpoint not found');
     }
 
-    const payload = {
-      id: crypto.randomUUID(),
-      event: 'ping',
-      data: { message: 'Test ping from NexaFX' },
-      timestamp: new Date().toISOString(),
-    };
+    const payload = WebhookSchemaTransformer.transform(
+      'ping',
+      { message: 'Test ping from NexaFX' },
+      endpoint.preferredSchemaVersion,
+    );
 
     const delivery = this.deliveryRepo.create({
       endpointId: endpoint.id,

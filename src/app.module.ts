@@ -42,6 +42,7 @@ import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
 import { ExperimentsModule } from './experiments/experiments.module';
 import { ComplianceModule } from './modules/compliance/compliance.module';
+import { FinancialCrimeReportsModule } from './modules/financial-crime-reports/financial-crime-reports.module';
 import { SearchModule } from './search/search.module';
 import { MessagingModule } from './messaging/messaging.module';
 import { TransactionsV2Module } from './transactions/transaction-v2.module';
@@ -204,6 +205,7 @@ import { WidgetsModule } from './widgets/widgets.module';
     UsersModule,
     ExperimentsModule,
     ComplianceModule,
+    FinancialCrimeReportsModule,
     SearchModule,
     MessagingModule,
     TaxModule,

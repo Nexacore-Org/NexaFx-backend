@@ -70,9 +70,6 @@ export class Transaction {
   txHash: string | null;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  counterpartyMemo: string | null;
-
-  @Column({ type: 'varchar', length: 255, nullable: true })
   reference: string | null;
   stellarTxHash: string | null;
 

@@ -7,17 +7,20 @@ import { dataSource } from './data-source';
 config();
 
 async function main() {
-    if (['production', 'staging'].includes(process.env.NODE_ENV || '')) {
-        throw new Error('Seeding is not allowed in production or staging environments.');
-    }
-    await dataSource.initialize();
-    await runAllSeeders(dataSource);
-    await dataSource.destroy();
-    console.log('Database seeded successfully.');
+  if (['production', 'staging'].includes(process.env.NODE_ENV || '')) {
+    throw new Error(
+      'Seeding is not allowed in production or staging environments.',
+    );
+  }
+  await dataSource.initialize();
+  await runAllSeeders(dataSource);
+  await dataSource.destroy();
+  console.log('Database seeded successfully.');
 }
 
 main().catch((err) => {
-    const message = err instanceof Error ? err.message.replace(/[\r\n]/g, ' ') : String(err);
-    console.error('Seed failed:', message);
-    process.exit(1);
+  const message =
+    err instanceof Error ? err.message.replace(/[\r\n]/g, ' ') : String(err);
+  console.error('Seed failed:', message);
+  process.exit(1);
 });

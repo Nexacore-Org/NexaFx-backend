@@ -1,8 +1,10 @@
+// OAuth feature implementation
 import {
   Injectable,
   UnauthorizedException,
   ConflictException,
   BadRequestException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { ThrottlerException } from '@nestjs/throttler';
 import { JwtService } from '@nestjs/jwt';
@@ -25,7 +27,10 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SignupDto } from './dto/signup.dto';
 import { VerifySignupOtpDto } from './dto/verify-signup-otp.dto';
 import { VerifySignupResponseDto } from './dto/signup-response.dto';
-import { AuthUserResponseDto, VerifyLoginOtpResponseDto } from './dto/signup-response.dto';
+import {
+  AuthUserResponseDto,
+  VerifyLoginOtpResponseDto,
+} from './dto/signup-response.dto';
 import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
@@ -33,6 +38,8 @@ import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import { ReferralsService } from '../referrals/referrals.service';
 import { TwoFactorService } from '../two-factor/two-factor.service';
 import { WalletsService } from '../wallets/wallets.service';
+import { OAuthAccount, OAuthProvider } from './entities/oauth-account.entity';
+import { I18nService } from 'nestjs-i18n';
 
 @Injectable()
 export class AuthService {
@@ -49,8 +56,11 @@ export class AuthService {
     private readonly referralsService: ReferralsService,
     private readonly twoFactorService: TwoFactorService,
     private readonly walletsService: WalletsService,
+    private readonly i18nService: I18nService,
     @InjectRepository(PasswordResetAttempt)
     private readonly passwordResetAttemptRepository: Repository<PasswordResetAttempt>,
+    @InjectRepository(OAuthAccount)
+    private readonly oauthAccountRepository: Repository<OAuthAccount>,
   ) {}
 
   async login(
@@ -62,8 +72,8 @@ export class AuthService {
     const genericMessage =
       'If an account exists with this email, an OTP has been sent.';
 
-    if (!user || !user.isVerified) {
-      await this.simulateProcessingDelay(loginDto.password);
+    if (!user || !user.isVerified || !user.isActive) {
+      await this.simulateProcessingDelay();
 
       // Log failed login attempt
       await this.auditLogsService.logAuthEvent(
@@ -72,6 +82,23 @@ export class AuthService {
         {
           email: loginDto.email,
           reason: 'User not found or not verified',
+          ip: ipAddress,
+          device: userAgent,
+        },
+      );
+
+      return { message: genericMessage };
+    }
+
+    if (!user.password) {
+      await this.simulateProcessingDelay();
+
+      await this.auditLogsService.logAuthEvent(
+        user.id,
+        AuditAction.FAILED_LOGIN,
+        {
+          email: loginDto.email,
+          reason: 'OAuth-only account — no password set',
           ip: ipAddress,
           device: userAgent,
         },
@@ -123,13 +150,57 @@ export class AuthService {
     return { message: genericMessage };
   }
 
+  async loginV2(
+    loginDto: LoginDto,
+    lang: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<{ message: string }> {
+    const user = await this.usersService.findByEmail(loginDto.email);
+
+    if (!user || !user.isVerified) {
+      await this.simulateProcessingDelay();
+      throw new UnauthorizedException(
+        this.i18nService.translate('auth.INVALID_CREDENTIALS', { lang })
+      );
+    }
+
+    if (!user.password) {
+      await this.simulateProcessingDelay();
+      throw new UnauthorizedException(
+        this.i18nService.translate('auth.INVALID_CREDENTIALS', { lang })
+      );
+    }
+
+    const isPasswordValid = await bcrypt.compare(
+      loginDto.password,
+      user.password,
+    );
+
+    if (!isPasswordValid) {
+      await this.simulateProcessingDelay();
+      throw new UnauthorizedException(
+        this.i18nService.translate('auth.INVALID_CREDENTIALS', { lang }),
+      );
+    }
+
+    const otp = await this.otpsService.generateOtp(user, OtpType.LOGIN);
+    await this.otpDeliveryService.sendOtp({
+      email: user.email,
+      type: OtpType.LOGIN,
+      otp,
+    });
+
+    return { message: this.i18nService.translate('auth.LOGIN_OTP_SENT', { lang }) };
+  }
+
   async verifyLoginOtp(
     verifyDto: VerifyLoginOtpDto,
     ipAddress?: string,
     userAgent?: string,
   ): Promise<any> {
     const user = await this.usersService.findByEmail(verifyDto.email);
-    if (!user || !user.isVerified) {
+    if (!user || !user.isVerified || !user.isActive) {
       // Log failed OTP verification
       await this.auditLogsService.logAuthEvent(
         undefined,
@@ -342,7 +413,7 @@ export class AuthService {
       await this.refreshTokensService.validateRefreshToken(refreshToken);
     const user = await this.usersService.findById(tokenEntity.userId);
 
-    if (!user || !user.isVerified) {
+    if (!user || !user.isVerified || !user.isActive) {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
@@ -361,7 +432,11 @@ export class AuthService {
     };
   }
 
-  async signup(signupDto: SignupDto): Promise<{ message: string }> {
+  async signup(
+    signupDto: SignupDto,
+    ipAddress: string | null = null,
+    userAgent: string | null = null,
+  ): Promise<{ message: string }> {
     const normalizedEmail = signupDto.email.toLowerCase().trim();
     const normalizedReferralCode = signupDto.referralCode?.toUpperCase().trim();
     const genericMessage =
@@ -421,7 +496,19 @@ export class AuthService {
       walletSecretKeyEncrypted: encryptedSecretKey,
       referralCode: generatedReferralCode,
       referredBy,
+      consentGdpr: signupDto.consentGdpr,
+      consentGdprAt: new Date(),
+      consentGdprVersion: this.configService.get<string>('PRIVACY_POLICY_VERSION') || '1.0',
     });
+
+    if (signupDto.consentGdpr) {
+      await this.gdprService.recordConsent(
+        user.id,
+        this.configService.get<string>('PRIVACY_POLICY_VERSION') || '1.0',
+        ipAddress,
+        userAgent,
+      );
+    }
 
     await this.walletsService.seedPrimaryWalletFromUserCredentials(
       user.id,
@@ -662,7 +749,133 @@ export class AuthService {
     return decoded.sub;
   }
 
-  private async issueAuthTokens(userId: string, email: string, role: string): Promise<VerifyLoginOtpResponseDto> {
+  async handleOAuthLogin(params: {
+    provider: OAuthProvider;
+    providerAccountId: string;
+    email: string;
+    firstName: string | null;
+    lastName: string | null;
+    accessToken: string;
+    refreshToken: string | null;
+    profile: Record<string, any>;
+  }): Promise<{ user: any; isNew: boolean }> {
+    const { provider, providerAccountId, email } = params;
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const encryptedAccessToken = this.encryptionService.encrypt(
+      params.accessToken,
+    );
+    const encryptedRefreshToken = params.refreshToken
+      ? this.encryptionService.encrypt(params.refreshToken)
+      : null;
+
+    const existingAccount = await this.oauthAccountRepository.findOne({
+      where: { provider, providerAccountId },
+      relations: ['user'],
+    });
+
+    if (existingAccount) {
+      existingAccount.accessToken = encryptedAccessToken;
+      existingAccount.refreshToken = encryptedRefreshToken;
+      existingAccount.profile = params.profile;
+      await this.oauthAccountRepository.save(existingAccount);
+
+      return { user: existingAccount.user, isNew: false };
+    }
+
+    const user = await this.usersService.findByEmail(normalizedEmail);
+
+    if (user) {
+      await this.oauthAccountRepository.save(
+        this.oauthAccountRepository.create({
+          userId: user.id,
+          provider,
+          providerAccountId,
+          accessToken: encryptedAccessToken,
+          refreshToken: encryptedRefreshToken,
+          profile: params.profile,
+        }),
+      );
+
+      return { user, isNew: false };
+    }
+
+    const wallet = await this.stellarService.generateWallet();
+    const encryptedSecretKey = this.encryptionService.encrypt(wallet.secretKey);
+    const referralCode = await this.generateUniqueReferralCode();
+
+    const createdUser = await this.usersService.createUser({
+      email: normalizedEmail,
+      firstName: params.firstName ?? undefined,
+      lastName: params.lastName ?? undefined,
+      walletPublicKey: wallet.publicKey,
+      walletSecretKeyEncrypted: encryptedSecretKey,
+      referralCode,
+    });
+
+    await this.usersService.verifyUser(createdUser.id);
+    await this.walletsService.seedPrimaryWalletFromUserCredentials(
+      createdUser.id,
+      wallet.publicKey,
+      encryptedSecretKey,
+    );
+
+    await this.oauthAccountRepository.save(
+      this.oauthAccountRepository.create({
+        userId: createdUser.id,
+        provider,
+        providerAccountId,
+        accessToken: encryptedAccessToken,
+        refreshToken: encryptedRefreshToken,
+        profile: params.profile,
+      }),
+    );
+
+    const fullUser = await this.usersService.findById(createdUser.id);
+    return { user: fullUser, isNew: true };
+  }
+
+  async unlinkOAuth(userId: string, provider: OAuthProvider): Promise<void> {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (!user.password) {
+      throw new UnprocessableEntityException(
+        'Cannot unlink the only authentication method. Set a password first.',
+      );
+    }
+
+    const account = await this.oauthAccountRepository.findOne({
+      where: { userId, provider },
+    });
+
+    if (!account) {
+      throw new BadRequestException(`No linked ${provider} account found`);
+    }
+
+    await this.oauthAccountRepository.delete(account.id);
+  }
+
+  async setPassword(userId: string, newPassword: string): Promise<void> {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (user.password) {
+      throw new BadRequestException('User already has a password set');
+    }
+
+    await this.usersService.updatePassword(userId, newPassword);
+  }
+
+  private async issueAuthTokens(
+    userId: string,
+    email: string,
+    role: string,
+  ): Promise<VerifyLoginOtpResponseDto> {
     const user = await this.usersService.findById(userId);
     const payload = { sub: userId, email, role };
     const authUser: AuthUserResponseDto = {

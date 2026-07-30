@@ -9,5 +9,7 @@
   "testTimeout": 300000,
   "moduleNameMapper": {
     "^src/(.*)$": "<rootDir>/../src/$1"
-  }
+  },
+  "setupFilesAfterEnv": ["<rootDir>/setup.e2e.ts"],
+  "testPathIgnorePatterns": ["/node_modules/", "/dist/"]
 }

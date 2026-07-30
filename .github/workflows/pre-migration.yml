@@ -1,0 +1,306 @@
+name: Pre-Migration Workflow
+
+# ---------------------------------------------------------------------------
+# Trigger: manual dispatch only.
+# This workflow must be run before applying migrations to staging or production.
+# ---------------------------------------------------------------------------
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment for migration'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  S3_BUCKET: ${{ secrets.MIGRATION_SNAPSHOT_S3_BUCKET }}
+  S3_PREFIX: nexafx/pre-migration
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Take a pg_dump snapshot and upload to S3
+  # ---------------------------------------------------------------------------
+  snapshot:
+    name: Snapshot — ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+
+    outputs:
+      snapshot_key: ${{ steps.upload.outputs.snapshot_key }}
+      migration_count: ${{ steps.count.outputs.migration_count }}
+      snapshot_record_id: ${{ steps.record.outputs.snapshot_record_id }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Count pending migrations
+        id: count
+        run: |
+          COUNT=$(ls src/migrations/*.ts 2>/dev/null | grep -v '\.spec\.ts$' | wc -l | tr -d ' ')
+          echo "migration_count=${COUNT}" >> "$GITHUB_OUTPUT"
+          echo "Found ${COUNT} migration file(s)"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Take pg_dump snapshot
+        id: dump
+        env:
+          PGPASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H-%M-%SZ")
+          DUMP_FILE="/tmp/nexafx-${TIMESTAMP}-${{ steps.count.outputs.migration_count }}.dump"
+          echo "dump_file=${DUMP_FILE}" >> "$GITHUB_OUTPUT"
+          echo "timestamp=${TIMESTAMP}" >> "$GITHUB_OUTPUT"
+
+          pg_dump \
+            --host="${{ secrets.DB_HOST }}" \
+            --port="${{ secrets.DB_PORT || '5432' }}" \
+            --username="${{ secrets.DB_USER }}" \
+            --dbname="${{ secrets.DB_NAME }}" \
+            --format=custom \
+            --no-password \
+            --file="${DUMP_FILE}"
+
+          echo "✅ pg_dump completed: ${DUMP_FILE}"
+
+      - name: Upload snapshot to S3
+        id: upload
+        run: |
+          SNAPSHOT_KEY="${{ env.S3_PREFIX }}/${{ inputs.environment }}/${{ steps.dump.outputs.timestamp }}-${{ steps.count.outputs.migration_count }}.dump"
+          echo "snapshot_key=${SNAPSHOT_KEY}" >> "$GITHUB_OUTPUT"
+
+          aws s3 cp \
+            "${{ steps.dump.outputs.dump_file }}" \
+            "s3://${{ env.S3_BUCKET }}/${SNAPSHOT_KEY}"
+
+          echo "✅ Snapshot uploaded: s3://${{ env.S3_BUCKET }}/${SNAPSHOT_KEY}"
+
+      - name: Record snapshot metadata in migration_snapshots
+        id: record
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SNAPSHOT_KEY: ${{ steps.upload.outputs.snapshot_key }}
+          MIGRATION_COUNT: ${{ steps.count.outputs.migration_count }}
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          # Insert a PENDING snapshot record and capture the generated UUID.
+          RECORD_ID=$(node -e "
+            const { Client } = require('pg');
+            const client = new Client({ connectionString: process.env.DATABASE_URL });
+            client.connect().then(async () => {
+              const res = await client.query(
+                \`INSERT INTO migration_snapshots
+                   (environment, \"snapshotKey\", \"migrationCount\", status)
+                 VALUES (\$1, \$2, \$3, 'PENDING')
+                 RETURNING id\`,
+                [process.env.ENVIRONMENT, process.env.SNAPSHOT_KEY, parseInt(process.env.MIGRATION_COUNT)]
+              );
+              console.log(res.rows[0].id);
+              await client.end();
+            }).catch(err => { console.error(err.message); process.exit(1); });
+          ")
+          echo "snapshot_record_id=${RECORD_ID}" >> "$GITHUB_OUTPUT"
+          echo "✅ Snapshot record created: ${RECORD_ID}"
+
+  # ---------------------------------------------------------------------------
+  # 2. Run migrations + health checks
+  # ---------------------------------------------------------------------------
+  migrate-and-verify:
+    name: Migrate & Verify — ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: snapshot
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run TypeORM migrations
+        env:
+          NODE_ENV: ${{ inputs.environment }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run typeorm:migration:run
+
+      - name: Mark snapshot as APPLIED
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          RECORD_ID: ${{ needs.snapshot.outputs.snapshot_record_id }}
+        run: |
+          node -e "
+            const { Client } = require('pg');
+            const client = new Client({ connectionString: process.env.DATABASE_URL });
+            client.connect().then(async () => {
+              await client.query(
+                \`UPDATE migration_snapshots
+                 SET status = 'APPLIED', \"appliedAt\" = now()
+                 WHERE id = \$1\`,
+                [process.env.RECORD_ID]
+              );
+              await client.end();
+              console.log('✅ Snapshot marked APPLIED');
+            }).catch(err => { console.error(err.message); process.exit(1); });
+          "
+
+      - name: Health check — GET /health
+        id: health_check
+        run: |
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            "${{ secrets.APP_BASE_URL }}/health")
+          echo "http_status=${HTTP_STATUS}" >> "$GITHUB_OUTPUT"
+          if [ "${HTTP_STATUS}" != "200" ]; then
+            echo "❌ /health returned ${HTTP_STATUS}"
+            exit 1
+          fi
+          echo "✅ /health OK (${HTTP_STATUS})"
+        continue-on-error: true
+
+      - name: Health check — GET /admin/metrics
+        id: metrics_check
+        env:
+          ADMIN_TOKEN: ${{ secrets.ADMIN_HEALTH_CHECK_TOKEN }}
+        run: |
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+            "${{ secrets.APP_BASE_URL }}/admin/metrics")
+          echo "http_status=${HTTP_STATUS}" >> "$GITHUB_OUTPUT"
+          if [ "${HTTP_STATUS}" != "200" ]; then
+            echo "❌ /admin/metrics returned ${HTTP_STATUS}"
+            exit 1
+          fi
+          echo "✅ /admin/metrics OK (${HTTP_STATUS})"
+        continue-on-error: true
+
+      # -----------------------------------------------------------------------
+      # STAGING: auto-rollback on health check failure
+      # -----------------------------------------------------------------------
+      - name: "[staging] Rollback migrations if health checks failed"
+        if: |
+          inputs.environment == 'staging' &&
+          (steps.health_check.outcome == 'failure' ||
+           steps.metrics_check.outcome == 'failure')
+        env:
+          NODE_ENV: staging
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+          RECORD_ID: ${{ needs.snapshot.outputs.snapshot_record_id }}
+          SNAPSHOT_KEY: ${{ needs.snapshot.outputs.snapshot_key }}
+          S3_BUCKET: ${{ secrets.MIGRATION_SNAPSHOT_S3_BUCKET }}
+          PGPASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          echo "⚠️ Health checks failed on staging. Starting auto-rollback..."
+
+          # 1. Revert TypeORM migrations
+          MIGRATION_COUNT=${{ needs.snapshot.outputs.migration_count }}
+          for i in $(seq 1 "$MIGRATION_COUNT"); do
+            echo "Reverting migration $i of $MIGRATION_COUNT..."
+            npm run typeorm:migration:revert
+          done
+
+          # 2. Restore the S3 snapshot
+          DUMP_FILE="/tmp/rollback.dump"
+          aws s3 cp "s3://${S3_BUCKET}/${SNAPSHOT_KEY}" "${DUMP_FILE}"
+          pg_restore \
+            --host="${{ secrets.DB_HOST }}" \
+            --port="${{ secrets.DB_PORT || '5432' }}" \
+            --username="${{ secrets.DB_USER }}" \
+            --dbname="${{ secrets.DB_NAME }}" \
+            --clean \
+            --if-exists \
+            --no-password \
+            "${DUMP_FILE}"
+
+          # 3. Mark snapshot as ROLLED_BACK
+          node -e "
+            const { Client } = require('pg');
+            const client = new Client({ connectionString: process.env.DATABASE_URL });
+            client.connect().then(async () => {
+              await client.query(
+                \`UPDATE migration_snapshots
+                 SET status = 'ROLLED_BACK', \"rolledBackAt\" = now()
+                 WHERE id = \$1\`,
+                [process.env.RECORD_ID]
+              );
+              await client.end();
+              console.log('✅ Snapshot marked ROLLED_BACK');
+            }).catch(err => { console.error(err.message); process.exit(1); });
+          "
+
+          echo "✅ Staging rollback complete."
+
+      - name: "[staging] Send rollback alert"
+        if: |
+          inputs.environment == 'staging' &&
+          (steps.health_check.outcome == 'failure' ||
+           steps.metrics_check.outcome == 'failure')
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SNAPSHOT_KEY: ${{ needs.snapshot.outputs.snapshot_key }}
+        run: |
+          curl -s -X POST "${SLACK_WEBHOOK_URL}" \
+            -H 'Content-type: application/json' \
+            --data "{
+              \"text\": \"⚠️ *NexaFX Staging* — Migration health checks FAILED. Auto-rollback complete.\n*Snapshot restored:* \`${SNAPSHOT_KEY}\`\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Workflow>\"
+            }"
+
+      # -----------------------------------------------------------------------
+      # PRODUCTION: NO auto-rollback — require manual confirmation
+      # -----------------------------------------------------------------------
+      - name: "[production] Halt and require manual rollback confirmation"
+        if: |
+          inputs.environment == 'production' &&
+          (steps.health_check.outcome == 'failure' ||
+           steps.metrics_check.outcome == 'failure')
+        run: |
+          echo "❌ Health checks FAILED on production."
+          echo ""
+          echo "Production does NOT support automatic rollback."
+          echo "To roll back manually:"
+          echo "  1. Run: npm run typeorm:migration:revert  (repeat for each applied migration)"
+          echo "  2. Restore the S3 snapshot:"
+          echo "       aws s3 cp s3://${{ secrets.MIGRATION_SNAPSHOT_S3_BUCKET }}/${{ needs.snapshot.outputs.snapshot_key }} /tmp/rollback.dump"
+          echo "       pg_restore --clean --if-exists -d <DB_NAME> /tmp/rollback.dump"
+          echo "  3. Update migration_snapshots record to ROLLED_BACK"
+          echo "  4. Notify the on-call engineer."
+          echo ""
+          echo "Snapshot key: ${{ needs.snapshot.outputs.snapshot_key }}"
+          echo "Snapshot record ID: ${{ needs.snapshot.outputs.snapshot_record_id }}"
+          exit 1
+
+      # Final failure gate — ensure the job fails if health checks failed
+      - name: Verify health checks passed
+        if: |
+          steps.health_check.outcome == 'failure' ||
+          steps.metrics_check.outcome == 'failure'
+        run: exit 1

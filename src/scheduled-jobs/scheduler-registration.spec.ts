@@ -24,6 +24,10 @@ import { WebhookService } from '../webhooks/services/webhook.service';
 import { CurrencyPairService } from '../currencies/services/currency-pair.service';
 import { ProposalService } from '../dao/services/proposal.service';
 import { LedgerVerificationService } from '../ledger/services/ledger-verification.service';
+import { RedisService } from '../common/services/redis.service';
+import { AnalyticsService } from '../analytics/analytics.service';
+import { SanctionsService } from '../sanctions/sanctions.service';
+import { LoansService } from '../loans/loans.service';
 
 type ProviderWrapper = {
   name: string;
@@ -54,6 +58,10 @@ describe('Scheduler registration', () => {
 
   const serviceMock = {};
 
+  const mockRedisService = {
+    del: jest.fn(),
+  }
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -63,20 +71,102 @@ describe('Scheduler registration', () => {
         ScheduledJobsService,
         TransactionVerificationService,
         { provide: TransactionsService, useValue: serviceMock },
-        { provide: UsersService, useValue: { syncWalletBalanceSnapshots: jest.fn().mockResolvedValue({ processed: 0, updated: 0, failed: 0 }) } },
-        { provide: RateAlertsService, useValue: { checkAndTriggerAlerts: jest.fn().mockResolvedValue({ checked: 0, triggered: 0, reactivated: 0 }) } },
+        { provide: RedisService, useValue: mockRedisService },
+        {
+          provide: UsersService,
+          useValue: {
+            syncWalletBalanceSnapshots: jest
+              .fn()
+              .mockResolvedValue({ processed: 0, updated: 0, failed: 0 }),
+          },
+        },
+        {
+          provide: RateAlertsService,
+          useValue: {
+            checkAndTriggerAlerts: jest
+              .fn()
+              .mockResolvedValue({ checked: 0, triggered: 0, reactivated: 0 }),
+          },
+        },
         { provide: NotificationsService, useValue: serviceMock },
-        { provide: StellarService, useValue: { verifyTransaction: jest.fn(), getWalletBalances: jest.fn() } },
-        { provide: AuditLogsService, useValue: { logEvent: jest.fn(), createLog: jest.fn(), logTransactionEvent: jest.fn() } },
+        {
+          provide: StellarService,
+          useValue: {
+            verifyTransaction: jest.fn(),
+            getWalletBalances: jest.fn(),
+          },
+        },
+        {
+          provide: AuditLogsService,
+          useValue: {
+            logEvent: jest.fn(),
+            createLog: jest.fn(),
+            logTransactionEvent: jest.fn(),
+          },
+        },
         { provide: WebhookService, useValue: { dispatch: jest.fn() } },
         { provide: CurrencyPairService, useValue: serviceMock },
-        { provide: ProposalService, useValue: { getExpiredActiveProposals: jest.fn().mockResolvedValue([]), finalizeProposal: jest.fn() } },
-        { provide: LedgerVerificationService, useValue: { verify: jest.fn().mockResolvedValue({ status: 'BALANCED', discrepancies: [] }) } },
-        { provide: DataSource, useValue: { createQueryRunner: jest.fn(() => ({ connect: jest.fn(), startTransaction: jest.fn(), commitTransaction: jest.fn(), rollbackTransaction: jest.fn(), release: jest.fn(), manager: { save: jest.fn() } })) } },
+        {
+          provide: ProposalService,
+          useValue: {
+            getExpiredActiveProposals: jest.fn().mockResolvedValue([]),
+            finalizeProposal: jest.fn(),
+          },
+        },
+        {
+          provide: LedgerVerificationService,
+          useValue: {
+            verify: jest
+              .fn()
+              .mockResolvedValue({ status: 'BALANCED', discrepancies: [] }),
+          },
+        },
+        {
+          provide: DataSource,
+          useValue: {
+            createQueryRunner: jest.fn(() => ({
+              connect: jest.fn(),
+              startTransaction: jest.fn(),
+              commitTransaction: jest.fn(),
+              rollbackTransaction: jest.fn(),
+              release: jest.fn(),
+              manager: { save: jest.fn() },
+            })),
+          },
+        },
         { provide: getRepositoryToken(Transaction), useValue: repositoryMock },
         { provide: getRepositoryToken(Notification), useValue: repositoryMock },
         { provide: getRepositoryToken(DataRequest), useValue: repositoryMock },
-        { provide: getRepositoryToken(IdempotencyRecord), useValue: { ...repositoryMock, createQueryBuilder: jest.fn(() => ({ delete: jest.fn().mockReturnThis(), from: jest.fn().mockReturnThis(), where: jest.fn().mockReturnThis(), execute: jest.fn().mockResolvedValue({ affected: 0 }) })) } },
+        {
+          provide: getRepositoryToken(IdempotencyRecord),
+          useValue: {
+            ...repositoryMock,
+            createQueryBuilder: jest.fn(() => ({
+              delete: jest.fn().mockReturnThis(),
+              from: jest.fn().mockReturnThis(),
+              where: jest.fn().mockReturnThis(),
+              execute: jest.fn().mockResolvedValue({ affected: 0 }),
+            })),
+          },
+        },
+        {
+          provide: AnalyticsService,
+          useValue: {
+            recordBalanceSnapshotsForAllUsers: jest.fn(),
+          },
+        },
+        {
+          provide: SanctionsService,
+          useValue: {
+            screenUser: jest.fn(),
+          },
+        },
+        {
+          provide: LoansService,
+          useValue: {
+            processInterestAccruals: jest.fn(),
+          },
+        },
       ],
     }).compile();
   });
@@ -111,7 +201,7 @@ describe('Scheduler registration', () => {
     await moduleRef.init();
 
     const registry = moduleRef.get(SchedulerRegistry);
-    expect(registry.getCronJobs().size).toBe(14);
+    expect(registry.getCronJobs().size).toBe(18);
     expect(warnSpy).not.toHaveBeenCalledWith(
       expect.stringContaining('Cannot register cron job'),
     );

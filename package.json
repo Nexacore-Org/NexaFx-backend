@@ -73,7 +73,7 @@
     "exceljs": "^4.4.0",
     "express-basic-auth": "^1.2.1",
     "fast-csv": "^5.0.5",
-    "file-type": "^16.5.4",
+    "file-type": "^22.0.1",
     "firebase-admin": "^13.7.0",
     "form-data": "^4.0.5",
     "graphql": "^16.13.2",

@@ -24,6 +24,7 @@ import { LoginDto } from './dto/login.dto';
 import { VerifyLoginOtpDto } from './dto/verify-login-otp.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { SignupDto } from './dto/signup.dto';
 import { VerifySignupOtpDto } from './dto/verify-signup-otp.dto';
 import { VerifySignupResponseDto } from './dto/signup-response.dto';
@@ -113,7 +114,8 @@ export class AuthService {
     );
 
     if (!isPasswordValid) {
-      await this.simulateProcessingDelay();
+      // simulateProcessingDelay is NOT needed here as bcrypt.compare was already executed
+      // and taking the required time.
 
       // Log failed login attempt
       await this.auditLogsService.logAuthEvent(
@@ -404,6 +406,37 @@ export class AuthService {
     };
   }
 
+  async changePassword(
+    userId: string,
+    dto: ChangePasswordDto,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<{ message: string }> {
+    const user = await this.usersService.findById(userId);
+    if (!user) throw new UnauthorizedException('User not found');
+    
+    const isPasswordValid = await bcrypt.compare(dto.oldPassword, user.password);
+    if (!isPasswordValid) throw new UnauthorizedException('Invalid current password');
+    
+    await this.usersService.updatePassword(user.id, dto.newPassword);
+    
+    // Security Fix: Redis key purge and session cleanup
+    await this.refreshTokensService.revokeAllUserTokens(user.id);
+    await this.otpsService.invalidateAllUserOtps(user.id);
+    
+    await this.auditLogsService.logAuthEvent(
+      user.id,
+      AuditAction.PASSWORD_RESET_COMPLETE,
+      {
+        reason: 'User changed password manually',
+        ip: ipAddress,
+        device: userAgent,
+      },
+    );
+    
+    return { message: 'Password changed successfully' };
+  }
+
   async refreshAccessToken(refreshToken: string): Promise<{
     accessToken: string;
     expiresIn: number;
@@ -447,7 +480,7 @@ export class AuthService {
     if (existingUser) {
       if (existingUser.isVerified) {
         // Email already registered and verified - return generic message to prevent enumeration
-        await this.simulateProcessingDelay();
+        await this.simulateProcessingDelay(signupDto.password);
         return { message: genericMessage };
       } else {
         // Unverified user exists - delete and allow re-signup
@@ -716,9 +749,10 @@ export class AuthService {
     });
   }
 
-  private async simulateProcessingDelay(): Promise<void> {
-    const delay = 50 + Math.random() * 100;
-    await new Promise((resolve) => setTimeout(resolve, delay));
+  private async simulateProcessingDelay(password: string = 'dummy_password'): Promise<void> {
+    // Perform a real bcrypt hash to simulate the CPU time taken by bcrypt.compare,
+    // which prevents timing attacks that could reveal if a user exists.
+    await bcrypt.hash(password, 10);
   }
 
   async issueFullAccessToken(

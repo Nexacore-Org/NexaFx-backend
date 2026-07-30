@@ -15,4 +15,12 @@ export class HealthService {
   checkHealth(): Promise<HealthCheckResult> {
     return this.health.check([() => this.dbIndicator.pingCheck('database')]);
   }
+
+  checkLiveness(): Promise<HealthCheckResult> {
+    return this.health.check([]);
+  }
+
+  checkReadiness(): Promise<HealthCheckResult> {
+    return this.health.check([() => this.dbIndicator.pingCheck('database')]);
+  }
 }

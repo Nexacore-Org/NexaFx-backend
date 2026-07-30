@@ -1,13 +1,10 @@
-import { NestFactory, Reflector } from '@nestjs/core';
 import './tracing'; // <-- CRITICAL: MUST REMAIN ON LINE 1 BEFORE ANY NODE LOADERS
-import { NestFactory } from '@nestjs/core';
+import { NestFactory, Reflector } from '@nestjs/core';
 import { AppModule } from './app.module';
 import {
   ClassSerializerInterceptor,
   Logger,
   ValidationPipe,
-  Logger,
-  ClassSerializerInterceptor,
   VersioningType,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';

@@ -8,10 +8,23 @@ Welcome! We're excited that you're interested in contributing to the **NexaFX Ba
 
 To contribute to this project, ensure you have the following installed:
 
-- **Node.js**: v20+ (LTS recommended)
+- **Node.js**: v20+ (LTS recommended) — always use the version pinned in [`.nvmrc`](./.nvmrc) (`nvm use`) so your local lock file matches CI
 - **Docker & Docker Compose**: For running PostgreSQL and other services
 - **npm**: v9+ (comes with Node.js)
 - **Git**: For version control
+
+---
+
+## 🔒 Lock File Hygiene
+
+`package-lock.json` must always stay in sync with `package.json`. CI runs `npm ci`,
+which fails hard on any drift — this blocks every PR until it's fixed.
+
+- **Always run `npm install`** (never edit `package.json` by hand and skip regenerating the lock file) after adding, removing, or updating a dependency, and commit the resulting `package-lock.json` change.
+- **Never run `npm ci` to "fix" a failing install** — `npm ci` does not update the lock file; use `npm install` and verify with `npm ci --dry-run` before pushing.
+- A pre-commit hook (via Husky, see `.husky/pre-commit`) runs `npm ci --dry-run` automatically and blocks the commit if the lock file is out of sync.
+- CI also runs a `Verify lock file sync` step (`npm ci --dry-run`) before installing, so drift fails fast with a clear message instead of a confusing `npm ci` error.
+- Dependabot is configured (`.github/dependabot.yml`) to open weekly PRs for npm updates, keeping the lock file fresh and reducing manual drift.
 
 ---
 

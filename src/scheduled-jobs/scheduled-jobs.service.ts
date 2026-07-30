@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Scope } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Repository } from 'typeorm';
 import * as os from 'os';
@@ -35,7 +35,7 @@ import { TAX_QUEUE } from '../modules/queues/queue.constants';
 import { SanctionsService } from '../sanctions/sanctions.service';
 import { VaultsService } from '../vaults/vaults.service';
 
-@Injectable()
+@Injectable({ scope: Scope.DEFAULT })
 export class ScheduledJobsService {
   private readonly logger = new Logger(ScheduledJobsService.name);
   private readonly LOCK_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes

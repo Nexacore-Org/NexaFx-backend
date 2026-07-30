@@ -203,6 +203,18 @@ export class AuthController {
     return this.authService.resetPassword(resetDto);
   }
 
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Change password for authenticated user' })
+  @ApiBody({ type: ChangePasswordDto })
+  @ApiResponse({ status: 200, description: 'Password changed successfully' })
+  async changePassword(@Req() req: any, @Body() dto: ChangePasswordDto) {
+    const userId = req.user.userId;
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('User-Agent');
+    return this.authService.changePassword(userId, dto, ipAddress, userAgent);
+  }
+
   @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)

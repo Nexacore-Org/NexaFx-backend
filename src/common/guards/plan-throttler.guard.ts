@@ -8,6 +8,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { GqlExecutionContext } from '@nestjs/graphql';
 import { User, UserRole } from '../../users/user.entity';
 import { RateLimitConfig } from '../../users/rate-limit-config.entity';
 
@@ -35,6 +36,18 @@ export class PlanThrottlerGuard extends ThrottlerGuard {
   }
 
   /**
+   * Override getRequestResponse to support GraphQL contexts.
+   */
+  getRequestResponse(context: ExecutionContext) {
+    if (context.getType<string>() === 'graphql') {
+      const gqlCtx = GqlExecutionContext.create(context);
+      const ctx = gqlCtx.getContext();
+      return { req: ctx.req, res: ctx.req?.res };
+    }
+    return super.getRequestResponse(context);
+  }
+
+  /**
    * Override generateKey to use a consistent key based only on user tracker for authenticated users.
    * For unauthenticated requests, fallback to default behavior (includes route prefix).
    */
@@ -43,8 +56,9 @@ export class PlanThrottlerGuard extends ThrottlerGuard {
     suffix: string,
     name: string,
   ): string {
-    const req = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    if (req.user?.userId) {
+    const { req } = this.getRequestResponse(context);
+    const authReq = req as AuthenticatedRequest;
+    if (authReq?.user?.userId) {
       return suffix;
     }
     return super.generateKey(context, suffix, name);
@@ -79,10 +93,10 @@ export class PlanThrottlerGuard extends ThrottlerGuard {
       if (role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN) {
         requestProps.limit = Number.MAX_SAFE_INTEGER;
       } else {
-        // Fetch user's plan and trust signals from DB to determine limit
+        // Fetch user's plan from DB to determine limit
         const userRecord = await this.userRepository.findOne({
           where: { id: user.userId },
-          select: ['plan', 'kycTier', 'trustScore'],
+          select: ['plan'],
         });
 
         if (userRecord) {
@@ -90,24 +104,11 @@ export class PlanThrottlerGuard extends ThrottlerGuard {
             where: { plan: userRecord.plan },
           });
 
-          let baseLimit = config?.limitPerMinute ?? 60;
-          
-          if (config?.limitPerMinute === null) {
-            requestProps.limit = Number.MAX_SAFE_INTEGER;
+          if (config?.limitPerMinute !== null) {
+            requestProps.limit = config?.limitPerMinute ?? 60; // fallback if no config
           } else {
-            // Apply trust multiplier
-            let multiplier = 1.0;
-            if (userRecord.kycTier === 'BASIC') multiplier += 0.5;
-            else if (userRecord.kycTier === 'ENHANCED') multiplier += 1.0;
-            else if (userRecord.kycTier === 'FULL') multiplier += 2.0;
-            
-            if (userRecord.trustScore > 80) multiplier += 0.5;
-            else if (userRecord.trustScore < 30) multiplier -= 0.5;
-            
-            // Ensure at least 1 multiplier
-            multiplier = Math.max(0.5, multiplier);
-            
-            requestProps.limit = Math.floor(baseLimit * multiplier);
+            // Unlimited (ENTERPRISE or no config limit)
+            requestProps.limit = Number.MAX_SAFE_INTEGER;
           }
         } else {
           // User not found, use fallback limit to avoid blocking

@@ -3,12 +3,16 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
   Request,
   UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
+import { Audit } from '../../common/decorators/audit.decorator';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -24,6 +28,9 @@ import {
   CreateWithdrawalDto,
   CreateSwapDto,
   TransactionQueryDto,
+  UpdateNoteDto,
+  UpdateTagsDto,
+  TagUsageDto,
 } from '../dtos/transaction.dto';
 import {
   TransactionResponseDto,
@@ -32,15 +39,21 @@ import {
 } from '../dtos/transaction-response.dto';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { RolesGuard } from '../../auth/guards/roles.guard';
+import { KycGuard } from '../../common/guards/kyc.guard';
 import { UserRole } from '../../users/user.entity';
+import { TransactionLimitService } from '../services/transaction-limit.service';
 
 @ApiTags('Transactions')
 @ApiBearerAuth('access-token')
 @Controller('transactions')
 export class TransactionsController {
-  constructor(private readonly transactionsService: TransactionsService) {}
+  constructor(
+    private readonly transactionsService: TransactionsService,
+    private readonly transactionLimitService: TransactionLimitService,
+  ) {}
 
   @Post('deposit')
+  @UseGuards(KycGuard)
   @ApiOperation({ summary: 'Initiate a deposit transaction' })
   @ApiBody({ type: CreateDepositDto })
   @ApiResponse({
@@ -57,6 +70,7 @@ export class TransactionsController {
     description: 'Unauthorized - Invalid or missing JWT token',
   })
   @ApiResponse({ status: 500, description: 'Blockchain transaction failed' })
+  @Audit('transaction.created')
   async createDeposit(
     @Request() req,
     @Body() createDepositDto: CreateDepositDto,
@@ -68,6 +82,7 @@ export class TransactionsController {
   }
 
   @Post('withdraw')
+  @UseGuards(KycGuard)
   @ApiOperation({ summary: 'Initiate a withdrawal transaction' })
   @ApiBody({ type: CreateWithdrawalDto })
   @ApiResponse({
@@ -85,6 +100,7 @@ export class TransactionsController {
     description: 'Unauthorized - Invalid or missing JWT token',
   })
   @ApiResponse({ status: 500, description: 'Blockchain transaction failed' })
+  @Audit('transaction.created')
   async createWithdrawal(
     @Request() req,
     @Body() createWithdrawalDto: CreateWithdrawalDto,
@@ -96,6 +112,7 @@ export class TransactionsController {
   }
 
   @Post('swap')
+  @UseGuards(KycGuard)
   @ApiOperation({ summary: 'Initiate a currency swap transaction' })
   @ApiBody({ type: CreateSwapDto })
   @ApiResponse({
@@ -113,6 +130,7 @@ export class TransactionsController {
     description: 'Unauthorized - Invalid or missing JWT token',
   })
   @ApiResponse({ status: 500, description: 'Blockchain transaction failed' })
+  @Audit('transaction.created')
   async createSwap(
     @Request() req,
     @Body() createSwapDto: CreateSwapDto,
@@ -172,6 +190,17 @@ export class TransactionsController {
       req.user.id,
       req.user.role,
     );
+  }
+
+  @Get('tags')
+  @ApiOperation({ summary: 'Get all unique tags used by the authenticated user with usage count' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of tags and their usage counts',
+    type: [TagUsageDto],
+  })
+  async getUserTags(@Request() req): Promise<TagUsageDto[]> {
+    return this.transactionsService.getUserTags(req.user.userId);
   }
 
   @Get()
@@ -235,6 +264,63 @@ export class TransactionsController {
     return this.transactionsService.findOne(id, req.user.userId);
   }
 
+  @Patch(':id/note')
+  @ApiOperation({ summary: 'Add or update a private note on a transaction (owner only)' })
+  @ApiParam({ name: 'id', description: 'Transaction UUID' })
+  @ApiBody({ type: UpdateNoteDto })
+  @ApiResponse({ status: 200, description: 'Note updated', type: TransactionResponseDto })
+  @ApiResponse({ status: 403, description: 'Forbidden - not the transaction owner' })
+  @ApiResponse({ status: 404, description: 'Transaction not found' })
+  async updateNote(
+    @Param('id') id: string,
+    @Body() body: UpdateNoteDto,
+    @Request() req,
+  ): Promise<TransactionResponseDto> {
+    return this.transactionsService.updateNote(
+      id,
+      req.user.userId,
+      body.note ?? null,
+    ) as unknown as TransactionResponseDto;
+  }
+
+  @Delete(':id/note')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Clear the private note on a transaction (owner only)' })
+  @ApiParam({ name: 'id', description: 'Transaction UUID' })
+  @ApiResponse({ status: 200, description: 'Note cleared', type: TransactionResponseDto })
+  @ApiResponse({ status: 403, description: 'Forbidden - not the transaction owner' })
+  @ApiResponse({ status: 404, description: 'Transaction not found' })
+  async deleteNote(
+    @Param('id') id: string,
+    @Request() req,
+  ): Promise<TransactionResponseDto> {
+    return this.transactionsService.updateNote(
+      id,
+      req.user.userId,
+      null,
+    ) as unknown as TransactionResponseDto;
+  }
+
+  @Patch(':id/tags')
+  @ApiOperation({ summary: 'Replace the tag list on a transaction (owner only)' })
+  @ApiParam({ name: 'id', description: 'Transaction UUID' })
+  @ApiBody({ type: UpdateTagsDto })
+  @ApiResponse({ status: 200, description: 'Tags updated', type: TransactionResponseDto })
+  @ApiResponse({ status: 400, description: 'More than 10 tags or a tag exceeds 30 chars' })
+  @ApiResponse({ status: 403, description: 'Forbidden - not the transaction owner' })
+  @ApiResponse({ status: 404, description: 'Transaction not found' })
+  async updateTags(
+    @Param('id') id: string,
+    @Body() body: UpdateTagsDto,
+    @Request() req,
+  ): Promise<TransactionResponseDto> {
+    return this.transactionsService.updateTags(
+      id,
+      req.user.userId,
+      body.tags,
+    ) as unknown as TransactionResponseDto;
+  }
+
   @Patch(':id/cancel')
   @ApiOperation({ summary: 'Cancel a PENDING transaction' })
   @ApiParam({
@@ -260,10 +346,49 @@ export class TransactionsController {
     description: 'Forbidden - Transaction does not belong to the user',
   })
   @ApiResponse({ status: 404, description: 'Transaction not found' })
+  @Audit('transaction.cancelled')
   async cancelTransaction(
     @Param('id') id: string,
     @Request() req,
   ): Promise<TransactionResponseDto> {
     return this.transactionsService.cancelTransaction(id, req.user.userId);
+  }
+
+  @Get('limits/me')
+  @ApiOperation({ summary: 'Get current user KYC tier and transaction limits' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns user KYC tier and remaining limits',
+    schema: {
+      type: 'object',
+      properties: {
+        tier: { type: 'string' },
+        limits: {
+          type: 'object',
+          properties: {
+            dailyLimitUsd: { type: 'number' },
+            monthlyLimitUsd: { type: 'number' },
+            singleTxLimitUsd: { type: 'number' },
+          },
+        },
+        usage: {
+          type: 'object',
+          properties: {
+            todayUsd: { type: 'number' },
+            monthUsd: { type: 'number' },
+          },
+        },
+        remaining: {
+          type: 'object',
+          properties: {
+            dailyUsd: { type: 'number' },
+            monthlyUsd: { type: 'number' },
+          },
+        },
+      },
+    },
+  })
+  async getMyLimits(@Request() req) {
+    return this.transactionLimitService.getUserLimitStatus(req.user.userId);
   }
 }

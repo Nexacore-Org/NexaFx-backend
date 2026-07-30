@@ -10,16 +10,10 @@ import {
 } from 'typeorm';
 import { User } from '../../users/user.entity';
 import { NotificationType } from '../enum/notificationType.enum';
+
 export { NotificationType };
 
-export enum NotificationStatus {
-  UNREAD = 'UNREAD',
-  READ = 'READ',
-}
-
-// Optimizes notification list filtering by user and read/unread status.
-@Index(['userId', 'status'])
-// Optimizes user notification history sorted by recency.
+@Index(['userId', 'isRead'])
 @Index(['userId', 'createdAt'])
 @Entity('notifications')
 export class Notification {
@@ -38,7 +32,6 @@ export class Notification {
   @Column({
     type: 'enum',
     enum: NotificationType,
-    default: NotificationType.SYSTEM,
   })
   type: NotificationType;
 
@@ -46,43 +39,23 @@ export class Notification {
   title: string;
 
   @Column('text')
-  message: string;
+  body: string;
 
-  @Column({
-    type: 'enum',
-    enum: NotificationStatus,
-    default: NotificationStatus.UNREAD,
-  })
-  status: NotificationStatus;
+  @Column({ type: 'jsonb', default: {} })
+  data: Record<string, any>;
 
-  @Column({ type: 'jsonb', nullable: true })
-  metadata?: Record<string, any>;
+  @Column({ type: 'boolean', default: false })
+  isRead: boolean;
 
-  @Column({ nullable: true })
-  relatedId?: string;
+  @Column({ type: 'timestamp', nullable: true })
+  readAt?: Date | null;
 
-  @Column({ nullable: true })
-  actionUrl?: string;
-
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamp with time zone' })
   createdAt: Date;
 
   @UpdateDateColumn()
   updatedAt: Date;
 
-  @Column({ type: 'timestamp', nullable: true })
-  readAt?: Date;
-
-  // A/B Testing fields
-  @Column({ nullable: true })
-  experimentId?: string;
-
-  @Column({ nullable: true })
-  variantId?: string;
-
-  @Column({ type: 'boolean', default: false })
-  isConverted: boolean;
-
-  @Column({ type: 'timestamp', nullable: true })
-  convertedAt?: Date;
+  @Column({ type: 'tsvector', nullable: true })
+  searchVector: string | null;
 }

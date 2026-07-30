@@ -16,10 +16,6 @@ export class NotificationResponseDto {
   createdAt: Date;
   updatedAt: Date;
   readAt?: Date;
-  experimentId?: string;
-  variantId?: string;
-  isConverted?: boolean;
-  convertedAt?: Date;
 }
 
 export class PaginatedNotificationResponse {

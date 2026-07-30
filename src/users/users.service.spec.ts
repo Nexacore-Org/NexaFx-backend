@@ -8,6 +8,7 @@ import { RateLimitConfig } from './rate-limit-config.entity';
 import { StellarService } from '../blockchain/stellar/stellar.service';
 import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
 import { NotificationPreferenceService } from '../notifications/services/notification-preference.service';
+import { RedisService } from '../common/services/redis.service';
 
 describe('UsersService', () => {
   let service: UsersService;
@@ -28,13 +29,19 @@ describe('UsersService', () => {
     referredBy: null,
     isVerified: true,
     kycTier: UserKycTier.ENHANCED,
-    trustScore: 50,
     isSuspended: false,
     isTwoFactorEnabled: false,
     role: UserRole.USER,
     plan: UserPlan.FREE,
     isDeleted: false,
+    isActive: true,
     fcmTokens: [],
+    notificationPreferences: {
+      email: true,
+      push: true,
+      types: { TRANSACTION: true, KYC: true, RATE_ALERT: true },
+    },
+    fcmToken: null,
     failedLoginAttempts: 0,
     lockedUntil: null,
     createdAt: new Date('2025-01-01T00:00:00Z'),
@@ -42,6 +49,7 @@ describe('UsersService', () => {
     password: process.env.TEST_USER_PASSWORD ?? 'hashed-password',
     kycRecords: [],
     notifications: [],
+    preferredLanguage: 'en',
   };
 
   beforeEach(async () => {
@@ -91,6 +99,7 @@ describe('UsersService', () => {
             createDefaults: jest.fn(),
           },
         },
+        { provide: RedisService, useValue: { del: jest.fn() } },
       ],
     }).compile();
 

@@ -76,7 +76,7 @@
     "file-type": "^16.5.4",
     "firebase-admin": "^13.7.0",
     "form-data": "^4.0.5",
-    "graphql": "^16.13.2",
+    "graphql": "^17.0.2",
     "graphql-depth-limit": "^1.1.0",
     "graphql-query-complexity": "^1.1.1",
     "helmet": "^8.1.0",

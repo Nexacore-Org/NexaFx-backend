@@ -1,0 +1,26 @@
+type Transaction {
+  id: ID!
+  userId: String!
+  type: String!
+  amount: String!
+  currency: String!
+  rate: String
+  status: String!
+  txHash: String
+  failureReason: String
+  feeAmount: String
+  feeCurrency: String
+  toCurrency: String
+  toAmount: String
+  createdAt: String!
+  updatedAt: String!
+}
+
+type PaginatedTransactions {
+  transactions: [Transaction!]!
+  total: Int!
+}
+
+extend type Query {
+  transactions(limit: Int, offset: Int, status: String): PaginatedTransactions!
+}

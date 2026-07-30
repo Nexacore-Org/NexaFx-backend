@@ -1,0 +1,19 @@
+type User {
+  id: ID!
+  email: String!
+  firstName: String
+  lastName: String
+  phone: String
+  walletPublicKey: String!
+  isVerified: Boolean!
+  isSuspended: Boolean!
+  isTwoFactorEnabled: Boolean!
+  role: String!
+  referralCode: String!
+  createdAt: String!
+  updatedAt: String!
+}
+
+extend type Query {
+  me: User!
+}

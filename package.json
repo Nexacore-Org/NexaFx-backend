@@ -37,7 +37,7 @@
     "@aws-sdk/s3-request-presigner": "^3.500.0",
     "@bull-board/api": "^8.0.1",
     "@bull-board/express": "^8.0.1",
-    "@maxmind/geoip2-node": "^6.3.4",
+    "@maxmind/geoip2-node": "^7.1.0",
     "@nestjs/apollo": "^13.3.0",
     "@nestjs/axios": "^4.0.0",
     "@nestjs/bullmq": "^11.0.4",

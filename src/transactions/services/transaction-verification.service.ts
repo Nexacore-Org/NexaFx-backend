@@ -1,11 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Scope } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { TransactionsService } from './transaction.service';
 import { UserRole } from '../../users/user.entity';
 
 const SYSTEM_USER_ID = 'system';
 
-@Injectable()
+@Injectable({ scope: Scope.DEFAULT })
 export class TransactionVerificationService {
   private readonly logger = new Logger(TransactionVerificationService.name);
 

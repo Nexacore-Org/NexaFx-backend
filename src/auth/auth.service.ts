@@ -24,6 +24,7 @@ import { LoginDto } from './dto/login.dto';
 import { VerifyLoginOtpDto } from './dto/verify-login-otp.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { SignupDto } from './dto/signup.dto';
 import { VerifySignupOtpDto } from './dto/verify-signup-otp.dto';
 import { VerifySignupResponseDto } from './dto/signup-response.dto';
@@ -402,6 +403,37 @@ export class AuthService {
       message:
         'Password has been reset successfully. Please login with your new password.',
     };
+  }
+
+  async changePassword(
+    userId: string,
+    dto: ChangePasswordDto,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<{ message: string }> {
+    const user = await this.usersService.findById(userId);
+    if (!user) throw new UnauthorizedException('User not found');
+    
+    const isPasswordValid = await bcrypt.compare(dto.oldPassword, user.password);
+    if (!isPasswordValid) throw new UnauthorizedException('Invalid current password');
+    
+    await this.usersService.updatePassword(user.id, dto.newPassword);
+    
+    // Security Fix: Redis key purge and session cleanup
+    await this.refreshTokensService.revokeAllUserTokens(user.id);
+    await this.otpsService.invalidateAllUserOtps(user.id);
+    
+    await this.auditLogsService.logAuthEvent(
+      user.id,
+      AuditAction.PASSWORD_RESET_COMPLETE,
+      {
+        reason: 'User changed password manually',
+        ip: ipAddress,
+        device: userAgent,
+      },
+    );
+    
+    return { message: 'Password changed successfully' };
   }
 
   async refreshAccessToken(refreshToken: string): Promise<{

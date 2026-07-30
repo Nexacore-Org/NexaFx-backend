@@ -72,4 +72,17 @@ export class Notification {
 
   @Column({ type: 'timestamp', nullable: true })
   readAt?: Date;
+
+  // A/B Testing fields
+  @Column({ nullable: true })
+  experimentId?: string;
+
+  @Column({ nullable: true })
+  variantId?: string;
+
+  @Column({ type: 'boolean', default: false })
+  isConverted: boolean;
+
+  @Column({ type: 'timestamp', nullable: true })
+  convertedAt?: Date;
 }

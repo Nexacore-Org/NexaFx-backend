@@ -79,10 +79,10 @@ export class PlanThrottlerGuard extends ThrottlerGuard {
       if (role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN) {
         requestProps.limit = Number.MAX_SAFE_INTEGER;
       } else {
-        // Fetch user's plan from DB to determine limit
+        // Fetch user's plan and trust signals from DB to determine limit
         const userRecord = await this.userRepository.findOne({
           where: { id: user.userId },
-          select: ['plan'],
+          select: ['plan', 'kycTier', 'trustScore'],
         });
 
         if (userRecord) {
@@ -90,11 +90,24 @@ export class PlanThrottlerGuard extends ThrottlerGuard {
             where: { plan: userRecord.plan },
           });
 
-          if (config?.limitPerMinute !== null) {
-            requestProps.limit = config?.limitPerMinute ?? 60; // fallback if no config
-          } else {
-            // Unlimited (ENTERPRISE or no config limit)
+          let baseLimit = config?.limitPerMinute ?? 60;
+          
+          if (config?.limitPerMinute === null) {
             requestProps.limit = Number.MAX_SAFE_INTEGER;
+          } else {
+            // Apply trust multiplier
+            let multiplier = 1.0;
+            if (userRecord.kycTier === 'BASIC') multiplier += 0.5;
+            else if (userRecord.kycTier === 'ENHANCED') multiplier += 1.0;
+            else if (userRecord.kycTier === 'FULL') multiplier += 2.0;
+            
+            if (userRecord.trustScore > 80) multiplier += 0.5;
+            else if (userRecord.trustScore < 30) multiplier -= 0.5;
+            
+            // Ensure at least 1 multiplier
+            multiplier = Math.max(0.5, multiplier);
+            
+            requestProps.limit = Math.floor(baseLimit * multiplier);
           }
         } else {
           // User not found, use fallback limit to avoid blocking

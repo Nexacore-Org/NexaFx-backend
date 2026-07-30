@@ -38,6 +38,18 @@ export class Wallet {
   @Column({ type: 'varchar', length: 100 })
   label: string;
 
+  @Column({ type: 'varchar', array: true, default: [] })
+  customLabels: string[];
+
+  @Column({ type: 'varchar', nullable: true })
+  purpose: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  colorCode: string | null;
+
+  @Column({ type: 'boolean', default: false })
+  isHidden: boolean;
+
   @Column({ type: 'boolean', default: false })
   isDefault: boolean;
 

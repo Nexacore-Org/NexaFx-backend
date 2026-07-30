@@ -75,7 +75,7 @@ export class WalletsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateWalletLabelDto,
   ) {
-    return this.walletsService.updateLabel(req.user.userId, id, dto.label);
+    return this.walletsService.updateLabel(req.user.userId, id, dto);
   }
 
   @Patch(':id/set-default')

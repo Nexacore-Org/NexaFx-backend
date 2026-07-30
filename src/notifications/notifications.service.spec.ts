@@ -29,6 +29,7 @@ describe('NotificationsService', () => {
     updatedAt: new Date(),
     readAt: undefined,
     user: {} as any,
+    isConverted: false,
   };
 
   const mockRepository = {

@@ -17,6 +17,25 @@ export class GenerateWalletDto {
   @IsString()
   @MaxLength(100)
   label?: string;
+
+  @ApiPropertyOptional({ example: ['trading', 'savings'] })
+  @IsOptional()
+  @IsString({ each: true })
+  customLabels?: string[];
+
+  @ApiPropertyOptional({ example: 'Trading' })
+  @IsOptional()
+  @IsString()
+  purpose?: string;
+
+  @ApiPropertyOptional({ example: '#FF0000' })
+  @IsOptional()
+  @IsString()
+  colorCode?: string;
+
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  isHidden?: boolean;
 }
 
 export class ImportWalletDto {
@@ -37,12 +56,50 @@ export class ImportWalletDto {
   @IsString()
   @MaxLength(100)
   label?: string;
+
+  @ApiPropertyOptional({ example: ['watch-only', 'cold'] })
+  @IsOptional()
+  @IsString({ each: true })
+  customLabels?: string[];
+
+  @ApiPropertyOptional({ example: 'Savings' })
+  @IsOptional()
+  @IsString()
+  purpose?: string;
+
+  @ApiPropertyOptional({ example: '#0000FF' })
+  @IsOptional()
+  @IsString()
+  colorCode?: string;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  isHidden?: boolean;
 }
 
 export class UpdateWalletLabelDto {
-  @ApiProperty({ example: 'Savings' })
+  @ApiPropertyOptional({ example: 'Savings' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MaxLength(100)
-  label: string;
+  label?: string;
+
+  @ApiPropertyOptional({ example: ['savings', 'personal'] })
+  @IsOptional()
+  @IsString({ each: true })
+  customLabels?: string[];
+
+  @ApiPropertyOptional({ example: 'Savings' })
+  @IsOptional()
+  @IsString()
+  purpose?: string;
+
+  @ApiPropertyOptional({ example: '#00FF00' })
+  @IsOptional()
+  @IsString()
+  colorCode?: string;
+
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  isHidden?: boolean;
 }

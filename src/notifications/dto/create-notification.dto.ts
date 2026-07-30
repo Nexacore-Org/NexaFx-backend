@@ -32,4 +32,12 @@ export class CreateNotificationDto {
   @IsOptional()
   @IsUrl()
   actionUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  experimentId?: string;
+
+  @IsOptional()
+  @IsString()
+  variantId?: string;
 }

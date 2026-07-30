@@ -332,6 +332,33 @@ export class NotificationsController {
     return this.notificationsService.markAsRead(id);
   }
 
+  @Patch(':id/convert')
+  @ApiOperation({
+    summary: 'Record a conversion for a notification',
+    description: 'Records that a user performed the desired action for a notification (used for A/B testing)',
+  })
+  @ApiParam({
+    name: 'id',
+    type: String,
+    description: 'Notification ID',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Conversion recorded successfully',
+    type: 'object',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Notification not found',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+  })
+  recordConversion(@Param('id') id: string) {
+    return this.notificationsService.recordConversion(id);
+  }
+
   @Patch(':id')
   @ApiOperation({
     summary: 'Update a notification',

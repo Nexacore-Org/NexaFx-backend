@@ -157,6 +157,12 @@ export class NotificationsService {
 
     notification.status = NotificationStatus.READ;
     notification.readAt = new Date();
+    
+    // Automatically record conversion if it's part of an experiment and opened
+    if (notification.experimentId && !notification.isConverted) {
+      notification.isConverted = true;
+      notification.convertedAt = new Date();
+    }
 
     const updated = await this.notificationsRepository.save(notification);
     return this.mapToResponseDto(updated);
@@ -284,6 +290,24 @@ export class NotificationsService {
     return this.mapToResponseDto(updated);
   }
 
+  async recordConversion(id: string): Promise<NotificationResponseDto> {
+    const notification = await this.notificationsRepository.findOne({
+      where: { id },
+    });
+
+    if (!notification) {
+      throw new NotFoundException(`Notification with ID ${id} not found`);
+    }
+
+    if (!notification.isConverted) {
+      notification.isConverted = true;
+      notification.convertedAt = new Date();
+      const updated = await this.notificationsRepository.save(notification);
+      return this.mapToResponseDto(updated);
+    }
+    return this.mapToResponseDto(notification);
+  }
+
   private mapToResponseDto(
     notification: Notification,
   ): NotificationResponseDto {
@@ -300,6 +324,10 @@ export class NotificationsService {
       createdAt: notification.createdAt,
       updatedAt: notification.updatedAt,
       readAt: notification.readAt,
+      experimentId: notification.experimentId,
+      variantId: notification.variantId,
+      isConverted: notification.isConverted,
+      convertedAt: notification.convertedAt,
     };
   }
 }

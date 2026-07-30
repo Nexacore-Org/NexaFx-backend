@@ -23,6 +23,10 @@ export interface WalletListItem {
   id: string;
   publicKey: string;
   label: string;
+  customLabels: string[];
+  purpose: string | null;
+  colorCode: string | null;
+  isHidden: boolean;
   isDefault: boolean;
   network: StellarNetwork;
   createdAt: Date;
@@ -126,6 +130,10 @@ export class WalletsService {
           id: w.id,
           publicKey: w.publicKey,
           label: w.label,
+          customLabels: w.customLabels,
+          purpose: w.purpose,
+          colorCode: w.colorCode,
+          isHidden: w.isHidden,
           isDefault: w.isDefault,
           network: w.network,
           createdAt: w.createdAt,
@@ -155,6 +163,10 @@ export class WalletsService {
       publicKey: generated.publicKey,
       encryptedSecretKey: encrypted,
       label,
+      customLabels: dto?.customLabels ?? [],
+      purpose: dto?.purpose ?? null,
+      colorCode: dto?.colorCode ?? null,
+      isHidden: dto?.isHidden ?? false,
       isDefault: false,
       network: this.getNetwork(),
     });
@@ -164,6 +176,10 @@ export class WalletsService {
       id: saved.id,
       publicKey: saved.publicKey,
       label: saved.label,
+      customLabels: saved.customLabels,
+      purpose: saved.purpose,
+      colorCode: saved.colorCode,
+      isHidden: saved.isHidden,
       isDefault: saved.isDefault,
       network: saved.network,
       createdAt: saved.createdAt,
@@ -191,6 +207,10 @@ export class WalletsService {
       publicKey: normalized,
       encryptedSecretKey: null,
       label,
+      customLabels: dto.customLabels ?? [],
+      purpose: dto.purpose ?? null,
+      colorCode: dto.colorCode ?? null,
+      isHidden: dto.isHidden ?? false,
       isDefault: false,
       network: this.getNetwork(),
     });
@@ -200,6 +220,10 @@ export class WalletsService {
       id: saved.id,
       publicKey: saved.publicKey,
       label: saved.label,
+      customLabels: saved.customLabels,
+      purpose: saved.purpose,
+      colorCode: saved.colorCode,
+      isHidden: saved.isHidden,
       isDefault: saved.isDefault,
       network: saved.network,
       createdAt: saved.createdAt,
@@ -209,15 +233,24 @@ export class WalletsService {
   async updateLabel(
     userId: string,
     walletId: string,
-    label: string,
+    dto: import('./dto/wallet.dto').UpdateWalletLabelDto,
   ): Promise<Omit<WalletListItem, 'balances'>> {
     const wallet = await this.requireOwnedWallet(userId, walletId);
-    wallet.label = label.trim();
+    if (dto.label !== undefined) wallet.label = dto.label.trim();
+    if (dto.customLabels !== undefined) wallet.customLabels = dto.customLabels;
+    if (dto.purpose !== undefined) wallet.purpose = dto.purpose;
+    if (dto.colorCode !== undefined) wallet.colorCode = dto.colorCode;
+    if (dto.isHidden !== undefined) wallet.isHidden = dto.isHidden;
+
     const saved = await this.walletRepository.save(wallet);
     return {
       id: saved.id,
       publicKey: saved.publicKey,
       label: saved.label,
+      customLabels: saved.customLabels,
+      purpose: saved.purpose,
+      colorCode: saved.colorCode,
+      isHidden: saved.isHidden,
       isDefault: saved.isDefault,
       network: saved.network,
       createdAt: saved.createdAt,

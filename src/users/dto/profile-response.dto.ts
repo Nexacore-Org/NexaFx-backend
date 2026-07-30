@@ -85,4 +85,11 @@ export class ProfileResponseDto {
     description: 'Last profile update timestamp',
   })
   updatedAt: Date;
+
+  @ApiPropertyOptional({
+    example: 'en',
+    description: 'User preferred language (en, fr, ar)',
+    default: 'en',
+  })
+  preferredLanguage?: string;
 }

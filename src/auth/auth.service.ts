@@ -63,7 +63,7 @@ export class AuthService {
       'If an account exists with this email, an OTP has been sent.';
 
     if (!user || !user.isVerified) {
-      await this.simulateProcessingDelay();
+      await this.simulateProcessingDelay(loginDto.password);
 
       // Log failed login attempt
       await this.auditLogsService.logAuthEvent(
@@ -86,7 +86,8 @@ export class AuthService {
     );
 
     if (!isPasswordValid) {
-      await this.simulateProcessingDelay();
+      // simulateProcessingDelay is NOT needed here as bcrypt.compare was already executed
+      // and taking the required time.
 
       // Log failed login attempt
       await this.auditLogsService.logAuthEvent(
@@ -372,7 +373,7 @@ export class AuthService {
     if (existingUser) {
       if (existingUser.isVerified) {
         // Email already registered and verified - return generic message to prevent enumeration
-        await this.simulateProcessingDelay();
+        await this.simulateProcessingDelay(signupDto.password);
         return { message: genericMessage };
       } else {
         // Unverified user exists - delete and allow re-signup
@@ -629,9 +630,10 @@ export class AuthService {
     });
   }
 
-  private async simulateProcessingDelay(): Promise<void> {
-    const delay = 50 + Math.random() * 100;
-    await new Promise((resolve) => setTimeout(resolve, delay));
+  private async simulateProcessingDelay(password: string = 'dummy_password'): Promise<void> {
+    // Perform a real bcrypt hash to simulate the CPU time taken by bcrypt.compare,
+    // which prevents timing attacks that could reveal if a user exists.
+    await bcrypt.hash(password, 10);
   }
 
   async issueFullAccessToken(

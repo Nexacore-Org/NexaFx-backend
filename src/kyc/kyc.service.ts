@@ -4,6 +4,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { KycRecord, KycStatus, KycTier } from './entities/kyc.entity';
@@ -270,5 +271,62 @@ export class KycService {
       return UserKycTier.BASIC;
     }
     return UserKycTier.UNVERIFIED;
+  }
+
+  @Cron(CronExpression.EVERY_1ST_DAY_OF_MONTH_AT_MIDNIGHT)
+  async bulkReverifyApprovedUsers() {
+    this.logger.log('Starting monthly bulk KYC re-verification for approved users');
+    
+    // Fetch all approved users
+    const approvedUsers = await this.userRepository.find({
+      where: { isVerified: true },
+    });
+    
+    let matchCount = 0;
+
+    for (const user of approvedUsers) {
+      // Simulate checking against updated sanctions lists
+      const hasSanctionsMatch = await this.checkSanctionsLists(user);
+      
+      if (hasSanctionsMatch) {
+        this.logger.warn(`User ${user.id} matched against sanctions list during re-screening.`);
+        
+        // Revoke verification
+        user.isVerified = false;
+        user.kycTier = UserKycTier.UNVERIFIED;
+        
+        // Add to rejected/suspended state or similar
+        const kyc = await this.kycRepository.findOne({
+          where: { userId: user.id },
+          order: { createdAt: 'DESC' },
+        });
+
+        if (kyc) {
+          kyc.status = KycStatus.REJECTED;
+          kyc.rejectionReason = 'Sanctions match found during monthly re-screening';
+          await this.kycRepository.save(kyc);
+        }
+
+        await this.userRepository.save(user);
+
+        // Notify user
+        const notificationPayload = {
+          userId: user.id,
+          type: NotificationType.SYSTEM,
+          title: 'Account Suspended - KYC Issue',
+          message: 'During routine re-screening, a match was found requiring further review. Your account features have been restricted. Please contact support.',
+          status: NotificationStatus.UNREAD,
+        };
+        await this.dataSource.manager.save(Notification, notificationPayload);
+        matchCount++;
+      }
+    }
+
+    this.logger.log(`Completed bulk re-verification. Users re-screened: ${approvedUsers.length}, Matches: ${matchCount}`);
+  }
+
+  private async checkSanctionsLists(user: User): Promise<boolean> {
+    // Dummy external sanctions API call
+    return false; // For now, we simulate no matches, but logic is in place.
   }
 }

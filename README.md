@@ -1,6 +1,77 @@
-# NexaFX Backend
+# NexaFX Backend v2
+
+<div align="center">
+
+![CI/CD](https://github.com/Nexacore-Org/NexaFx-backend/actions/workflows/ci.yml/badge.svg)
+![Coverage](https://img.shields.io/codecov/c/github/Nexacore-Org/NexaFx-backend)
+![License](https://img.shields.io/github/license/Nexacore-Org/NexaFx-backend)
+![Node Version](https://img.shields.io/node/v/@nestjs/core)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)
+
+</div>
 
 **NexaFX** is a Web3-powered currency exchange platform that supports real-time fiat and crypto conversions. The backend is built using **NestJS** and interfaces with smart contracts written in **Rust** on the **Stellar network**.
+
+---
+
+## 🏗️ Architecture Diagram
+
+```mermaid
+flowchart TD
+    subgraph Client
+        Web[Web App]
+        Mobile[Mobile App]
+        API[API Consumers]
+    end
+
+    subgraph Backend
+        Gateway[API Gateway]
+        Auth[Auth Module]
+        Users[Users Module]
+        Currencies[Currencies Module]
+        Transactions[Transactions Module]
+        ExchangeRates[Exchange Rates Module]
+        Admin[Admin Module]
+        Notifications[Notifications Module]
+    end
+
+    subgraph Database
+        PostgreSQL[(PostgreSQL)]
+        Redis[(Redis Cache)]
+    end
+
+    subgraph External
+        Stellar[Stellar Network]
+        Mailgun[Mailgun]
+        Firebase[Firebase]
+        RateProvider[Exchange Rate Provider]
+    end
+
+    Web --> Gateway
+    Mobile --> Gateway
+    API --> Gateway
+    
+    Gateway --> Auth
+    Gateway --> Users
+    Gateway --> Currencies
+    Gateway --> Transactions
+    Gateway --> ExchangeRates
+    Gateway --> Admin
+    Gateway --> Notifications
+    
+    Auth --> PostgreSQL
+    Users --> PostgreSQL
+    Currencies --> PostgreSQL
+    Transactions --> PostgreSQL
+    ExchangeRates --> Redis
+    Notifications --> PostgreSQL
+    
+    Transactions --> Stellar
+    Notifications --> Mailgun
+    Notifications --> Firebase
+    ExchangeRates --> RateProvider
+```
+
 
 ## 🚀 Features
 
@@ -75,24 +146,45 @@ nexafx-backend/
 
 ### Prerequisites
 
-- **Node.js**: v18+ (LTS recommended)
-- **PostgreSQL**: v12+ running locally or via Docker
-- **npm** or **yarn**
+- **Node.js**: v20+ (LTS recommended)
+- **Docker & Docker Compose**: For running PostgreSQL
+- **npm**: v9+ (comes with Node.js)
+- **Git**: For version control
 
-### 1. Clone the Repository
+### Quick Start (Automated)
+
+The fastest way to get started is using our automated setup script:
+
+```bash
+# Clone the repository
+git clone https://github.com/Nexacore-Org/NexaFx-backend.git
+cd NexaFx-backend
+
+# Run the setup script (does everything for you!)
+./scripts/setup-dev.sh
+
+# Start the application
+npm run start:dev
+```
+
+### Manual Setup
+
+If you prefer to set up manually:
+
+#### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/Nexacore-Org/NexaFx-backend.git
 cd NexaFx-backend
 ```
 
-### 2. Install Dependencies
+#### 2. Install Dependencies
 
 ```bash
-npm install
+npm ci
 ```
 
-### 3. Setup Environment Variables
+#### 3. Setup Environment Variables
 
 Copy the `.env.example` file and create a `.env` file:
 
@@ -102,45 +194,36 @@ cp .env.example .env
 
 Edit `.env` and configure your variables (see [Environment Variables](#-environment-variables) section below).
 
-### 4. Setup Database with TypeORM
-
-Initialize the PostgreSQL database and apply migrations:
+#### 4. Start Database with Docker
 
 ```bash
-# Ensure PostgreSQL is running and DATABASE_URL is configured in .env
-# TypeORM will auto-synchronize schema on startup if synchronize: true
+docker-compose up -d
+```
 
-# Create the database (first time only)
-npm run typeorm:db:create
+#### 5. Run Database Migrations
 
-# Run migrations
+```bash
 npm run typeorm:migration:run
-
-# OR generate a new migration after schema changes
-npm run typeorm:migration:generate -- src/migrations/my-migration-name
-
-# To revert the last migration
-npm run typeorm:migration:revert
 ```
 
-> **Note**: The application uses TypeORM with `autoLoadEntities: true`, which automatically loads all entity metadata. Ensure all `.entity.ts` files are properly decorated with `@Entity()`.
-
-### 5. Run the Application
+#### 6. Start the Application
 
 ```bash
-# Development (watch mode)
 npm run start:dev
-
-# Debug mode
-npm run start:debug
-
-# Production
-npm run build
-npm run start:prod
 ```
 
-The API will be available at `http://localhost:3000`
-API documentation: `http://localhost:3000/api/docs`
+---
+
+### Development Workflow
+
+- **API Docs**: Visit `http://localhost:3000/api/docs` for Swagger UI
+- **Health Check**: `http://localhost:3000/health`
+- **Run Tests**: `npm run test`
+- **Run Lint**: `npm run lint`
+- **Format Code**: `npm run format`
+
+
+
 
 ---
 
@@ -330,336 +413,16 @@ npm run test:e2e       # Run end-to-end tests
 npm run test:debug     # Debug mode (use Chrome DevTools on port 9229)
 ```
 
-E2E test suite: `test/jest-e2e.json`
-
-### Best Practices
-- Use `describe()` blocks for logical grouping
-- Mock external services (Stellar, Mailgun, etc.)
-- Test controller endpoints with `supertest`
-- Test services in isolation with mocked repositories
-- Aim for 80%+ coverage for critical paths
-
----
-
-## 📝 Development Workflow
-
-### Commit Message Format
-
-Follow **Conventional Commits**:
-
-```bash
-type(scope): subject
-
-# Types: feat, fix, docs, style, refactor, perf, test, chore
-# Scopes: auth, users, transactions, etc.
-
-# Examples:
-git commit -m "feat(transactions): add Stellar integration"
-git commit -m "fix(auth): validate JWT expiration"
-git commit -m "docs(readme): update setup instructions"  
-git commit -m "chore(deps): upgrade NestJS to 11.0.2"
-```
-
-### Pull Request Workflow
-
-1. Create feature branch: `git checkout -b feature/your-feature-name`
-2. Make changes and write tests
-3. Submit PR with description and linked issue
-4. Wait for CI/CD checks and code review
-5. Merge after approval
-
----
-
-## 📌 Project Roadmap
-
-### ✅ Completed
-
-- [x] Authentication module with JWT and refresh tokens
-- [x] User management (CRUD, profile, roles)
-- [x] Multi-currency support (fiat + crypto)
-- [x] **Transactions module with full Stellar integration** ← Currently fully implemented
-- [x] Real-time exchange rate updates
-- [x] KYC/AML compliance workflows
-- [x] Email notifications (Mailgun)
-- [x] Push notifications (Firebase)
-- [x] Admin controls and audit logging
-- [x] Transaction receipts and export (PDF/CSV/Excel)
-- [x] Two-factor authentication (TOTP)
-- [x] Referral program
-- [x] Fee management system
-- [x] Scheduled background jobs
-- [x] Rate alerts
-- [x] Beneficiary management
-
-### 🚧 In Progress
-
-- [ ] Advanced payment routing (path payments)
-- [ ] DAO governance and voting
-- [ ] Smart contract optimization
-
-### 📋 Planned
-
-- [ ] Mobile app (React Native)
-- [ ] Multi-wallet support
-- [ ] API rate tiering
-- [ ] Advanced reporting and analytics
-- [ ] Webhook events system
-- [ ] GraphQL API layer
-
----
-
-## 🛠️ Troubleshooting
-
-### Common Setup Issues
-
-#### 1. **Database Connection Error**
-
-```
-Error: connect ECONNREFUSED 127.0.0.1:5432
-```
-
-**Solution**:
-- Verify PostgreSQL is running: `brew services list` (macOS) or `sudo systemctl status postgresql` (Linux)
-- Check `DATABASE_URL` in `.env`
-- Default: `postgresql://postgres:postgres@localhost:5432/nexafx`
-- Create database if missing: `createdb nexafx`
-
-#### 2. **TypeORM Migrations Fail**
-
-```
-Error: migrations not found
-```
-
-**Solution**:
-```bash
-# Ensure migration scripts exist in package.json
-npm run typeorm:migration:run  # Run pending migrations
-npm run typeorm:migration:create -- src/migrations/fresh-migration
-```
-
-#### 3. **JWT Token Verification Failed**
-
-```
-Error: jwt malformed
-```
-
-**Solution**:
-- Verify `JWT_SECRET` is set in `.env` (minimum 32 characters)
-- Ensure token format: `Authorization: Bearer <token>`
-- Check token expiration: `JWT_EXPIRES_IN` (default: 15m)
-
-#### 4. **Stellar Network Connection Error**
-
-```
-Error: ECONNREFUSED (Horizon endpoint)
-```
-
-**Solution**:
-- Verify `STELLAR_HORIZON_URL`: testnet=`https://horizon-testnet.stellar.org`
-- Check internet connectivity
-- Verify `STELLAR_NETWORK` is set to `TESTNET` or `PUBLIC`
-- Testnet transactions: browse at https://stellar.expert/explorer/testnet
-
-#### 5. **Email Sending Not Working**
-
-```
-Error: Mailgun credentials invalid
-```
-
-**Solution**:
-- Verify Mailgun API key and domain in `.env`
-- Check `MAILGUN_DOMAIN` is verified in Mailgun dashboard
-- Test: `SKIP_EMAIL_SENDING=true` to bypass sending locally
-- Ensure `MAILGUN_FROM_EMAIL` matches verified sender
-
-#### 6. **Port 3000 Already in Use**
-
-```
-Error: listen EADDRINUSE :::3000
-```
-
-**Solution**:
-```bash
-# Kill the process
-lsof -ti:3000 | xargs kill -9       # macOS/Linux
-netstat -ano | findstr :3000        # Windows
-
-# Or use a different port
-PORT=3001 npm run start:dev
-```
-
-#### 7. **Module Not Found Error**
-
-```
-Error: Cannot find module '@nestjs/typeorm'
-```
-
-**Solution**:
-```bash
-# Reinstall dependencies
-rm -rf node_modules package-lock.json
-npm install
-npm run build
-```
-
-### Debugging Tips
-
-**Enable Debug Logging**:
-```bash
-DEBUG=* npm run start:dev
-```
-
-**TypeORM Query Logging**:
-Add to `.env`:
-```
-TYPEORM_LOGGING=true
-```
-
-**Check Application State**:
-```bash
-curl http://localhost:3000/health
-```
-
-**View API Docs**:
-```
-http://localhost:3000/api/docs
-```
-
----
-
-## � Monitoring
-
-The NexaFX API provides health check endpoints for monitoring and uptime verification. These endpoints are designed for use with load balancers, orchestration platforms (e.g., Render, Kubernetes), and monitoring systems.
-
-### Root Status Endpoint (`GET /`)
-
-Returns the current status of the API service without making database queries. This endpoint is used by Render and other platforms to verify service liveness.
-
-**Request:**
-```bash
-curl http://localhost:3000/
-```
-
-**Response:**
-```json
-{
-  "status": "ok",
-  "service": "NexaFX API",
-  "version": "1.0.0",
-  "timestamp": "2024-04-24T10:30:45.123Z",
-  "environment": "production"
-}
-```
-
-**Status Code**: `200 OK`  
-**Response Time**: < 100ms (no database calls)  
-**Authentication**: Not required (`@Public()`)
-
-### Health Check Endpoint (`GET /health`)
-
-Performs a comprehensive health check including database connectivity and Stellar blockchain status. This endpoint is used for readiness probes to verify the service is fully operational.
-
-**Request:**
-```bash
-curl http://localhost:3000/health
-```
-
-**Response:**
-```json
-{
-  "status": "ok",
-  "details": {
-    "database": "ok",
-    "stellar": "ok",
-    "cache": "ok"
-  }
-}
-```
-
-**Status Codes**:
-- `200 OK` - Service and all dependencies are healthy
-- `503 Service Unavailable` - One or more dependencies are down
-
-**Authentication**: Not required (`@Public()`)
-
-### Usage with Render
-
-Render's infrastructure uses the `GET /` endpoint (HEAD requests) to verify service availability during deployments:
-
-1. **Liveness Check**: Render sends `HEAD /` every 30 seconds
-2. **Readiness Check**: Render sends `GET /health` before marking service as healthy
-3. **Configuration**: No additional setup needed; Render uses the default health check
-
-To monitor in Render's dashboard:
-- View live logs: Check **Logs** tab for "GET /" requests
-- Monitor uptime: Verify zero `Cannot HEAD /` errors in error logs
-- Check dependencies: Use `GET /health` endpoint manually if database appears down
-
-### Manual Health Verification
-
-```bash
-# Test liveness (quick check)
-curl -i http://localhost:3000/
-
-# Test readiness (full health check)
-curl -i http://localhost:3000/health
-
-# Monitor logs (development)
-npm run start:dev | grep -i "health\|head\|404"
-```
-
----
-
-## �🔗 Related Repositories & Resources
-
-| Resource | URL | Purpose |
-|----------|-----|---------|
-| **Frontend** | [NexaFx-frontend](https://github.com/Nexacore-Org/NexaFx-frontend) | Next.js 14 web UI with React, Tailwind CSS |
-| **Smart Contracts** | [NexaFx-contract](https://github.com/Nexacore-Org/NexaFx-contract) | Rust smart contracts deployed on Stellar |
-| **API Docs** | [http://localhost:3000/api/docs](http://localhost:3000/api/docs) | Interactive Swagger documentation (local) |
-| **Stellar Testnet Explorer** | [stellar.expert/explorer/testnet](https://stellar.expert/explorer/testnet) | View transactions and accounts on Stellar testnet |
-| **Stellar Horizon API** | [horizon-testnet.stellar.org](https://horizon-testnet.stellar.org) | Official Stellar Horizon API endpoint |
-
----
-
-## 📜 License
-
-This project is licensed under the **MIT License**. See the [LICENSE](./LICENSE) file for details.
-
----
-
-## 📧 Support & Community
-
-Have questions, need help, or want to contribute? Here's how to reach us:
-
-| Channel | Link | Purpose |
-|---------|------|---------|
-| **Email** | [contact@nexacore.org](mailto:contact@nexacore.org) | Business inquiries, partnerships |
-| **Telegram** | [t.me/NexaFx](https://t.me/+WkWO3kNnA-1mYzVk) | Community chat, quick support |
-| **GitHub Issues** | [Issues](https://github.com/Nexacore-Org/NexaFx-backend/issues) | Bug reports, feature requests |
-| **Discussions** | [Discussions](https://github.com/Nexacore-Org/NexaFx-backend/discussions) | Technical questions, ideas |
-
----
-
-## 👥 Contributing
-
-We welcome contributions from the community! Please start with:
-
-1. **Fork** the repository
-2. **Create** a feature branch: `git checkout -b feature/your-feature`
-3. **Commit** changes: `git commit -m "feat(module): description"` (see [Commit Format](#-development-workflow))
-4. **Push** to your fork: `git push origin feature/your-feature`
-5. **Open** a Pull Request with your changes
-
-**Before submitting**:
-- [x] **CI Pipeline Passes:** Ensure GitHub Actions (Lint, Type-check, Tests, Build) complete successfully. Failing CI will block PR merges.
-- [x] Tests pass locally: `npm run test`
-- [x] Linting passes locally: `npm run lint`
-- [x] Coverage is adequate
-- [x] Updated README if adding major features
-
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed guidelines.
-
----
-
-**Happy coding! 🚀**
+## Environment Variables
+
+- `NODE_ENV` — runtime environment. Allowed values: `development`, `staging`, `production`, `test`.
+- `PORT` — application port, default `3000`.
+- `DATABASE_URL` — PostgreSQL connection string.
+- `JWT_SECRET` — JWT signing secret, minimum 32 characters.
+- `JWT_EXPIRES_IN` — JWT expiration time, e.g. `15m`, `1h`, `7d`.
+- `ALLOWED_ORIGINS` — comma-separated allowed CORS origins.
+
+## Health Check
+
+- `GET /`
+- `GET /health`

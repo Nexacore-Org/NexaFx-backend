@@ -108,13 +108,13 @@ export class LedgerVerificationService {
 
     await Promise.all(
       admins.map((admin) =>
-        this.notificationsService.create({
-          userId: admin.id,
-          type: NotificationType.SYSTEM,
-          title: 'Ledger discrepancy detected',
+        this.notificationsService.dispatch(
+          admin.id,
+          NotificationType.SYSTEM,
+          'Ledger discrepancy detected',
           message,
-          metadata: result,
-        }),
+          result as any,
+        ),
       ),
     );
   }

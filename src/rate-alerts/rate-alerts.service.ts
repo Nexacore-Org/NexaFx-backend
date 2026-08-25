@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThanOrEqual, Repository } from 'typeorm';
+import Decimal from 'decimal.js';
 import { RateAlert, RateAlertCondition } from './entities/rate-alert.entity';
 import { CreateRateAlertDto } from './dto/create-rate-alert.dto';
 import { RateAlertResponseDto } from './dto/rate-alert-response.dto';
@@ -15,6 +16,7 @@ import { NotificationType } from '../notifications/entities/notification.entity'
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import { CurrenciesService } from '../currencies/currencies.service';
+import { WebhookService } from '../webhooks/services/webhook.service';
 
 export interface RateAlertCheckResult {
   checked: number;
@@ -33,6 +35,7 @@ export class RateAlertsService {
     private readonly notificationsService: NotificationsService,
     private readonly auditLogsService: AuditLogsService,
     private readonly currenciesService: CurrenciesService,
+    private readonly webhookService: WebhookService,
   ) {}
 
   async createAlert(
@@ -90,6 +93,31 @@ export class RateAlertsService {
     await this.rateAlertsRepository.delete(alert.id);
   }
 
+  /**
+   * Re-activate a previously triggered alert owned by the user.
+   * Clears the triggeredAt timestamp and sets isActive back to true.
+   * @throws NotFoundException when the alert does not exist or is not owned by the user
+   */
+  async resetAlert(
+    userId: string,
+    alertId: string,
+  ): Promise<RateAlertResponseDto> {
+    const alert = await this.rateAlertsRepository.findOne({
+      where: { id: alertId, userId },
+    });
+
+    if (!alert) {
+      throw new NotFoundException('Rate alert not found');
+    }
+
+    alert.isActive = true;
+    alert.triggeredAt = null;
+
+    const saved = await this.rateAlertsRepository.save(alert);
+
+    return this.toResponseDto(saved);
+  }
+
   async checkAndTriggerAlerts(): Promise<RateAlertCheckResult> {
     const reactivated = await this.reactivateRecurringAlerts();
 
@@ -105,7 +133,7 @@ export class RateAlertsService {
       };
     }
 
-    const rateByPair = new Map<string, number>();
+    const rateByPair = new Map<string, Decimal>();
     const uniquePairs: Set<string> = new Set(
       activeAlerts.map((alert) => `${alert.fromCurrency}|${alert.toCurrency}`),
     );
@@ -119,7 +147,7 @@ export class RateAlertsService {
           toCurrency,
         );
         // @ts-ignore - Pre-existing type issue
-        rateByPair.set(pair, rateResult.rate);
+        rateByPair.set(pair, new Decimal(String(rateResult.rate)));
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
@@ -139,11 +167,10 @@ export class RateAlertsService {
         continue;
       }
 
-      const targetRate = parseFloat(alert.targetRate);
       const shouldTrigger = this.shouldTriggerAlert(
         alert.condition,
         currentRate,
-        targetRate,
+        new Decimal(alert.targetRate),
       );
 
       if (!shouldTrigger) {
@@ -163,42 +190,46 @@ export class RateAlertsService {
 
   private shouldTriggerAlert(
     condition: RateAlertCondition,
-    currentRate: number,
-    targetRate: number,
+    currentRate: Decimal,
+    targetRate: Decimal,
   ): boolean {
     if (condition === RateAlertCondition.ABOVE) {
-      return currentRate >= targetRate;
+      return currentRate.greaterThanOrEqualTo(targetRate);
     }
-
-    return currentRate <= targetRate;
+    return currentRate.lessThanOrEqualTo(targetRate);
   }
 
   private async triggerAlert(
     alert: RateAlert,
-    currentRate: number,
+    currentRate: Decimal,
   ): Promise<void> {
+    const currentRateNum = currentRate.toNumber();
     const now = new Date();
 
-    await this.notificationsService.create({
-      userId: alert.userId,
-      type: NotificationType.SYSTEM,
-      title: 'Rate Alert Triggered',
-      message: `${alert.fromCurrency}/${alert.toCurrency} is now ${currentRate}. Your ${alert.condition} ${alert.targetRate} alert was triggered.`,
-      relatedId: alert.id,
-      metadata: {
+    await this.notificationsService.dispatch(
+      alert.userId,
+      NotificationType.RATE_ALERT,
+      'Rate Alert Triggered',
+      `${alert.fromCurrency}/${alert.toCurrency} is now ${currentRateNum}. Your ${alert.condition} ${alert.targetRate} alert was triggered.`,
+      {
         alertId: alert.id,
         fromCurrency: alert.fromCurrency,
         toCurrency: alert.toCurrency,
         condition: alert.condition,
         targetRate: alert.targetRate,
-        currentRate,
+        currentRate: currentRateNum,
         recurring: alert.recurring,
       },
-    });
+    );
 
-    alert.isActive = false;
-    alert.triggeredAt = now;
-    await this.rateAlertsRepository.save(alert);
+    // Atomically deactivate only if still active, preventing a double-trigger
+    // when multiple scheduler instances evaluate the same alert concurrently.
+    await this.rateAlertsRepository
+      .createQueryBuilder()
+      .update(RateAlert)
+      .set({ isActive: false, triggeredAt: now })
+      .where('id = :id AND "isActive" = true', { id: alert.id })
+      .execute();
 
     await this.auditLogsService.logSystemEvent(
       AuditAction.RATE_ALERT_TRIGGERED,
@@ -209,11 +240,17 @@ export class RateAlertsService {
         toCurrency: alert.toCurrency,
         condition: alert.condition,
         targetRate: alert.targetRate,
-        currentRate,
+        currentRate: currentRateNum,
         recurring: alert.recurring,
         triggeredAt: now.toISOString(),
       },
     );
+
+    this.webhookService
+      .dispatch('rate_alert.triggered', alert, alert.userId)
+      .catch((err) =>
+        this.logger.error(`Webhook dispatch failed: ${err.message}`),
+      );
   }
 
   private async reactivateRecurringAlerts(): Promise<number> {

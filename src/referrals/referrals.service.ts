@@ -19,6 +19,7 @@ import { NotificationType } from '../notifications/entities/notification.entity'
 import { ReferralStatsDto } from './dto/referral-stats.dto';
 import { ReferralItemDto } from './dto/referral-item.dto';
 import { FirebaseService } from '../firebase/firebase.service';
+import { WebhookService } from '../webhooks/services/webhook.service';
 
 @Injectable()
 export class ReferralsService {
@@ -34,6 +35,7 @@ export class ReferralsService {
     private readonly notificationsService: NotificationsService,
     private readonly configService: ConfigService,
     private readonly firebaseService: FirebaseService,
+    private readonly webhookService: WebhookService,
   ) {}
 
   async createPendingReferral(
@@ -175,19 +177,18 @@ export class ReferralsService {
 
     const saved = await this.referralsRepository.save(referral);
 
-    await this.notificationsService.create({
-      userId: referral.referrerId,
-      type: NotificationType.REFERRAL_REWARDED,
-      title: 'Referral Reward Earned',
-      message: `You earned ${rewardAmount} ${rewardCurrency} from your referral.`,
-      metadata: {
+    await this.notificationsService.dispatch(
+      referral.referrerId,
+      NotificationType.TRANSACTION,
+      'Referral Reward Earned',
+      `You earned ${rewardAmount} ${rewardCurrency} from your referral.`,
+      {
         referralId: saved.id,
         refereeId,
-        rewardAmount,
+        rewardAmount: rewardAmount.toString(),
         rewardCurrency,
       },
-      relatedId: saved.id,
-    });
+    );
 
     const referrer = await this.usersRepository.findOne({
       where: { id: referral.referrerId },
@@ -210,5 +211,11 @@ export class ReferralsService {
     this.logger.log(
       `Referral reward issued for referrer ${referral.referrerId} and referee ${refereeId}`,
     );
+
+    this.webhookService
+      .dispatch('referral.rewarded', saved, saved.referrerId)
+      .catch((err) =>
+        this.logger.error(`Webhook dispatch failed: ${err.message}`),
+      );
   }
 }

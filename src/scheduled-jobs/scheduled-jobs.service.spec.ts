@@ -24,6 +24,10 @@ import { WebhookService } from '../webhooks/services/webhook.service';
 import { CurrencyPairService } from '../currencies/services/currency-pair.service';
 import { ProposalService } from '../dao/services/proposal.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { RedisService } from '../common/services/redis.service';
+import { AnalyticsService } from '../analytics/analytics.service';
+import { SanctionsService } from '../sanctions/sanctions.service';
+import { LoansService } from '../loans/loans.service';
 
 describe('ScheduledJobsService', () => {
   let service: ScheduledJobsService;
@@ -52,6 +56,10 @@ describe('ScheduledJobsService', () => {
     verify: jest.fn(),
   };
 
+  const mockRedisService = {
+    del: jest.fn(),
+  }
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -66,11 +74,27 @@ describe('ScheduledJobsService', () => {
         },
         {
           provide: getRepositoryToken(DataRequest),
-          useValue: { find: jest.fn(), findOne: jest.fn(), save: jest.fn(), createQueryBuilder: jest.fn() },
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+            save: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          },
         },
         {
           provide: getRepositoryToken(IdempotencyRecord),
-          useValue: { find: jest.fn(), findOne: jest.fn(), save: jest.fn(), delete: jest.fn(), createQueryBuilder: jest.fn(() => ({ delete: jest.fn().mockReturnThis(), from: jest.fn().mockReturnThis(), where: jest.fn().mockReturnThis(), execute: jest.fn().mockResolvedValue({ affected: 0 }) })) },
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+            save: jest.fn(),
+            delete: jest.fn(),
+            createQueryBuilder: jest.fn(() => ({
+              delete: jest.fn().mockReturnThis(),
+              from: jest.fn().mockReturnThis(),
+              where: jest.fn().mockReturnThis(),
+              execute: jest.fn().mockResolvedValue({ affected: 0 }),
+            })),
+          },
         },
         {
           provide: TransactionsService,
@@ -102,7 +126,16 @@ describe('ScheduledJobsService', () => {
         },
         {
           provide: DataSource,
-          useValue: { createQueryRunner: jest.fn(() => ({ connect: jest.fn(), startTransaction: jest.fn(), commitTransaction: jest.fn(), rollbackTransaction: jest.fn(), release: jest.fn(), manager: { save: jest.fn() } })) },
+          useValue: {
+            createQueryRunner: jest.fn(() => ({
+              connect: jest.fn(),
+              startTransaction: jest.fn(),
+              commitTransaction: jest.fn(),
+              rollbackTransaction: jest.fn(),
+              release: jest.fn(),
+              manager: { save: jest.fn() },
+            })),
+          },
         },
         {
           provide: CurrencyPairService,
@@ -110,11 +143,37 @@ describe('ScheduledJobsService', () => {
         },
         {
           provide: ProposalService,
-          useValue: { getExpiredActiveProposals: jest.fn().mockResolvedValue([]), finalizeProposal: jest.fn() },
+          useValue: {
+            getExpiredActiveProposals: jest.fn().mockResolvedValue([]),
+            finalizeProposal: jest.fn(),
+          },
         },
         {
           provide: AuditLogsService,
-          useValue: { logEvent: jest.fn(), createLog: jest.fn(), logTransactionEvent: jest.fn() },
+          useValue: {
+            logEvent: jest.fn(),
+            createLog: jest.fn(),
+            logTransactionEvent: jest.fn(),
+          },
+        },
+        { provide: RedisService, useValue: mockRedisService },
+        {
+          provide: AnalyticsService,
+          useValue: {
+            recordBalanceSnapshotsForAllUsers: jest.fn(),
+          },
+        },
+        {
+          provide: SanctionsService,
+          useValue: {
+            screenUser: jest.fn(),
+          },
+        },
+        {
+          provide: LoansService,
+          useValue: {
+            processInterestAccruals: jest.fn(),
+          },
         },
       ],
     }).compile();

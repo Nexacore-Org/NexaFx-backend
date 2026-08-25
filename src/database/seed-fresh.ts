@@ -22,7 +22,8 @@ async function main() {
 }
 
 main().catch((err) => {
-  const message = err instanceof Error ? err.message.replace(/[\r\n]/g, ' ') : String(err);
+  const message =
+    err instanceof Error ? err.message.replace(/[\r\n]/g, ' ') : String(err);
   console.error('Seed-fresh failed:', message);
   process.exit(1);
 });

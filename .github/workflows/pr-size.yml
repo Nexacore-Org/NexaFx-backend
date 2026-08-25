@@ -1,0 +1,43 @@
+name: PR Size Checker
+
+on:
+  pull_request:
+    branches: [ "v2" ]
+
+jobs:
+  check-size:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate PR size
+        id: calc_size
+        run: |
+          # Calculate total added and removed lines, excluding exempted files
+          # Exemptions: *.md, openapi.json, and anything with "migration" in the path
+          LINES=$(git diff origin/${{ github.base_ref }}...${{ github.event.pull_request.head.sha }} --numstat | awk '!/\.md$/ && !/openapi\.json$/ && !/package-lock\.json$/ && !/migration/ {add+=$1; subs+=$2} END {print add+subs+0}')
+          echo "Total changed lines (excluding exemptions): $LINES"
+          echo "lines=$LINES" >> $GITHUB_OUTPUT
+
+      - name: Comment on PR if size > 500
+        if: ${{ steps.calc_size.outputs.lines > 500 }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: "⚠️ **Warning**: This PR modifies more than 500 lines of code (current size: ${{ steps.calc_size.outputs.lines }} lines). Please consider breaking it down into smaller PRs to make reviewing easier."
+            })
+
+      - name: Fail if size > 1500
+        if: ${{ steps.calc_size.outputs.lines > 1500 }}
+        run: |
+          echo "Error: PR size (${{ steps.calc_size.outputs.lines }} lines) exceeds the 1500 lines limit."
+          exit 1

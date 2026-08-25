@@ -1,8 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import Mailgun from 'mailgun.js';
-import FormData from 'form-data';
 import { OtpType } from '../../otps/otp.entity';
+import { MailService } from '../../modules/mail/mail.service';
 
 interface SendOtpParams {
   email: string;
@@ -20,7 +19,10 @@ interface EmailTemplate {
 export class OtpDeliveryService {
   private readonly logger = new Logger(OtpDeliveryService.name);
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly mailService: MailService,
+  ) {}
 
   async sendOtp(params: SendOtpParams): Promise<void> {
     const skipEmail = this.configService.get<string>('SKIP_EMAIL_SENDING');
@@ -167,12 +169,9 @@ export class OtpDeliveryService {
       );
     }
 
-    const mailgun = new Mailgun(FormData);
-    const client = mailgun.client({ username: 'api', key: apiKey });
-
-    await client.messages.create(domain, {
+    await this.mailService.enqueueEmail({
       from: `${fromName} <${fromEmail}>`,
-      to: [to],
+      to,
       subject: template.subject,
       html: template.html,
       text: template.text,

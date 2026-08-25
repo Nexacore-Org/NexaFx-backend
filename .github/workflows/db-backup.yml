@@ -1,0 +1,135 @@
+name: Database Backup
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    name: pg_dump → encrypt → upload to S3
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Generate backup timestamp
+        id: timestamp
+        run: |
+          echo "date=$(date +%Y%m%d)" >> $GITHUB_OUTPUT
+          echo "datetime=$(date +%Y%m%d-%H%M%S)" >> $GITHUB_OUTPUT
+          echo "year=$(date +%Y)" >> $GITHUB_OUTPUT
+          echo "month=$(date +%m)" >> $GITHUB_OUTPUT
+          echo "day=$(date +%d)" >> $GITHUB_OUTPUT
+
+      - name: Dump production database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          pg_dump "$DATABASE_URL" \
+            --format=custom \
+            --no-acl \
+            --no-owner \
+            --file=backup.dump
+
+      - name: Compress dump
+        run: |
+          gzip -9 backup.dump
+
+      - name: Encrypt archive (AES-256-CBC)
+        env:
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+        run: |
+          openssl enc -aes-256-cbc -pbkdf2 \
+            -in backup.dump.gz \
+            -out backup.dump.gz.enc \
+            -k "$BACKUP_ENCRYPTION_KEY"
+          rm -f backup.dump.gz
+
+      - name: Compute checksum
+        id: checksum
+        run: |
+          echo "sha256=$(sha256sum backup.dump.gz.enc | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+          echo "size=$(stat -c%s backup.dump.gz.enc)" >> $GITHUB_OUTPUT
+
+      - name: Upload encrypted backup to S3
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          BACKUP_BUCKET: ${{ secrets.BACKUP_BUCKET }}
+        run: |
+          S3_KEY="nexafx/${{ steps.timestamp.outputs.year }}/${{ steps.timestamp.outputs.month }}/${{ steps.timestamp.outputs.day }}/backup-${{ steps.timestamp.outputs.datetime }}.dump.gz.enc"
+          aws s3 cp backup.dump.gz.enc "s3://${BACKUP_BUCKET}/${S3_KEY}"
+          echo "Uploaded to s3://${BACKUP_BUCKET}/${S3_KEY}"
+          echo "s3_key=${S3_KEY}" >> $GITHUB_OUTPUT
+
+      - name: Write backup manifest
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          BACKUP_BUCKET: ${{ secrets.BACKUP_BUCKET }}
+        run: |
+          SHA256="${{ steps.checksum.outputs.sha256 }}"
+          SIZE="${{ steps.checksum.outputs.size }}"
+          TIMESTAMP="${{ steps.timestamp.outputs.date }}"
+          PG_VERSION=$(pg_dump --version | head -1)
+
+          MANIFEST=$(cat <<MANIFEST_EOF
+          {
+            "filename": "backup-${{ steps.timestamp.outputs.datetime }}.dump.gz.enc",
+            "size": ${SIZE},
+            "checksum": "${SHA256}",
+            "createdAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "pgVersion": "${PG_VERSION}"
+          }
+          MANIFEST_EOF
+          )
+
+          echo "${MANIFEST}" > manifest.json
+
+          aws s3 cp manifest.json "s3://${BACKUP_BUCKET}/nexafx/manifests/backup-${{ steps.timestamp.outputs.datetime }}.manifest.json"
+
+      - name: Clean up temporary files
+        if: always()
+        run: |
+          rm -f backup.dump backup.dump.gz backup.dump.gz.enc manifest.json
+
+      - name: Notify success
+        if: success()
+        env:
+          BACKUP_ALERT_WEBHOOK: ${{ secrets.BACKUP_ALERT_WEBHOOK }}
+        run: |
+          if [ -n "$BACKUP_ALERT_WEBHOOK" ]; then
+            curl -s -X POST "$BACKUP_ALERT_WEBHOOK" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "text": "✅ *DB Backup Successful*\nDate: ${{ steps.timestamp.outputs.date }}\nSize: ${{ steps.checksum.outputs.size }} bytes\nChecksum: `${{ steps.checksum.outputs.sha256 }}`",
+                "attachments": []
+              }' || true
+          fi
+
+      - name: Notify failure
+        if: failure()
+        env:
+          BACKUP_ALERT_WEBHOOK: ${{ secrets.BACKUP_ALERT_WEBHOOK }}
+        run: |
+          if [ -n "$BACKUP_ALERT_WEBHOOK" ]; then
+            curl -s -X POST "$BACKUP_ALERT_WEBHOOK" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "text": "❌ *DB Backup FAILED*\nDate: ${{ steps.timestamp.outputs.date }}\nWorkflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                "attachments": []
+              }' || true
+          fi

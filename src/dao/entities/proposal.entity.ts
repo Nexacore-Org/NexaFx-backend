@@ -16,6 +16,16 @@ export enum ProposalStatus {
   CANCELLED = 'CANCELLED',
 }
 
+export enum ProposalType {
+  STANDARD = 'STANDARD',
+  CONTRACT_UPGRADE = 'CONTRACT_UPGRADE',
+}
+
+export enum VoteWeightSource {
+  STAKING_BALANCE = 'STAKING_BALANCE',
+  XLM_BALANCE = 'XLM_BALANCE',
+}
+
 @Entity('proposals')
 @Index(['votingEndAt'])
 export class Proposal {
@@ -68,8 +78,29 @@ export class Proposal {
   totalVotingWeight: number | null;
 
   @Column({ type: 'varchar', length: 128, nullable: true })
+  stellarContractId: string | null;
+
+  @Column({ type: 'varchar', length: 128, nullable: true })
   @Index()
   onChainTxHash: string | null;
+
+  @Column({ type: 'enum', enum: ProposalType, default: ProposalType.STANDARD })
+  proposalType: ProposalType;
+
+  @Column({ type: 'jsonb', nullable: true })
+  upgradeConfig: {
+    contractId: string;
+    newWasmHash: string;
+    contractName: string;
+    changeDescription: string;
+    auditReportUrl: string;
+  } | null;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  requiredStakeTier: string | null;
+
+  @Column({ type: 'enum', enum: VoteWeightSource, nullable: true })
+  voteWeightSource: VoteWeightSource | null;
 
   @CreateDateColumn({ type: 'timestamp with time zone' })
   createdAt: Date;

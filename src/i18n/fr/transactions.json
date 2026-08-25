@@ -1,0 +1,9 @@
+{
+  "CURRENCY_NOT_SUPPORTED": "La devise {currency} n'est pas prise en charge ou est inactive",
+  "UNABLE_TO_GET_EXCHANGE_RATE": "Impossible d'obtenir le taux de change pour {currency}",
+  "SWAP_SAME_CURRENCY": "Les devises source et de destination doivent être différentes",
+  "SWAP_LIQUIDITY_PATH_NOT_FOUND": "Aucun chemin de liquidité trouvé pour {from} vers {to}",
+  "SWAP_FAILED": "Échec de l'échange: {message}",
+  "SOURCE_ADDRESS_MISMATCH": "L'adresse source doit correspondre à la clé publique du portefeuille utilisé pour cet échange",
+  "PREVIEW_LIQUIDITY_PATH_NOT_FOUND": "Aucun chemin de liquidité trouvé pour {from} vers {to}"
+}

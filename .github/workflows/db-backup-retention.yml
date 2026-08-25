@@ -1,0 +1,86 @@
+name: DB Backup Retention
+
+on:
+  schedule:
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    name: Remove backups older than 30 days
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Install AWS CLI
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq awscli
+
+      - name: List and delete expired backups
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          BACKUP_BUCKET: ${{ secrets.BACKUP_BUCKET }}
+        run: |
+          set -euo pipefail
+
+          CUTOFF=$(date -u -d '30 days ago' +%s)
+          DELETED_COUNT=0
+          DELETED_SIZE=0
+
+          # List all backup objects
+          OBJECTS=$(aws s3api list-objects-v2 \
+            --bucket "${BACKUP_BUCKET}" \
+            --prefix "nexafx/" \
+            --query "Contents[?contains(Key, 'backup-')].{Key: Key, LastModified: LastModified, Size: Size}" \
+            --output json 2>/dev/null || echo "[]")
+
+          if [ "$(echo "$OBJECTS" | jq length)" -eq 0 ]; then
+            echo "No backup objects found"
+            echo "deleted_count=0" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "$OBJECTS" | jq -c '.[]' | while read -r obj; do
+            KEY=$(echo "$obj" | jq -r '.Key')
+            LASTMOD=$(echo "$obj" | jq -r '.LastModified')
+            SIZE=$(echo "$obj" | jq -r '.Size')
+            LASTMOD_TS=$(date -u -d "$LASTMOD" +%s 2>/dev/null || echo "0")
+
+            if [ "$LASTMOD_TS" -lt "$CUTOFF" ]; then
+              echo "Deleting expired: ${KEY} (last modified: ${LASTMOD})"
+              aws s3 rm "s3://${BACKUP_BUCKET}/${KEY}"
+              DELETED_COUNT=$((DELETED_COUNT + 1))
+              DELETED_SIZE=$((DELETED_SIZE + SIZE))
+            fi
+          done
+
+          echo "Retention cleanup complete: deleted ${DELETED_COUNT} objects (${DELETED_SIZE} bytes)"
+          echo "deleted_count=${DELETED_COUNT}" >> $GITHUB_OUTPUT
+
+      - name: Notify retention cleanup
+        if: always()
+        env:
+          BACKUP_ALERT_WEBHOOK: ${{ secrets.BACKUP_ALERT_WEBHOOK }}
+        run: |
+          DELETED_COUNT="${{ steps.cleanup.outputs.deleted_count }}"
+          if [ -n "$BACKUP_ALERT_WEBHOOK" ]; then
+            STATUS_EMOJI="✅"
+            STATUS_TEXT="Completed"
+            if [ "${DELETED_COUNT:-0}" -gt 0 ]; then
+              STATUS_TEXT="Removed ${DELETED_COUNT} expired backup(s)"
+            else
+              STATUS_TEXT="No expired backups to remove"
+            fi
+            curl -s -X POST "$BACKUP_ALERT_WEBHOOK" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"text\": \"${STATUS_EMOJI} *Backup Retention Weekly*\nStatus: ${STATUS_TEXT}\",
+                \"attachments\": []
+              }" || true
+          fi

@@ -1,3 +1,3 @@
-# TruffleHog v3 detector configuration.
-# Path exclusions are handled via .trufflehog-ignore (--exclude-paths flag).
-detectors: []
+rules:
+  - rule: file
+    filepath: .env.example  # placeholder values — not real secrets

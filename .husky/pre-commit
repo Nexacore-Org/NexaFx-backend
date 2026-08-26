@@ -1,0 +1,2 @@
+npm ci --dry-run 2>/dev/null || (echo 'package-lock.json is out of sync. Run npm install.' && exit 1)
+npx lint-staged

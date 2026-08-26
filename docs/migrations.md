@@ -280,6 +280,14 @@ npm run typeorm:migration:generate -- -n MyMigrationName
 
 Then wrap the generated `up()` and `down()` in the transactional pattern above.
 
+### Canonical migration location
+
+All migrations live in a single directory: `src/migrations/`.
+
+This is the only directory scanned by TypeORM for migration files (configured in
+`src/database/data-source.ts`). Do not create migrations under
+`src/database/migrations/` — that directory is no longer used.
+
 ---
 
 ## 7. Admin Endpoint

@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OtpType } from '../../otps/otp.entity';
 import { MailService } from '../../modules/mail/mail.service';
+import { UsersService } from '../../users/users.service';
+import { IntelligentSmsRoutingService } from '../../intelligent-sms-routing/intelligent-sms-routing.service';
 
 interface SendOtpParams {
   email: string;
@@ -22,6 +24,8 @@ export class OtpDeliveryService {
   constructor(
     private readonly configService: ConfigService,
     private readonly mailService: MailService,
+    private readonly usersService: UsersService,
+    private readonly smsRoutingService: IntelligentSmsRoutingService,
   ) {}
 
   async sendOtp(params: SendOtpParams): Promise<void> {
@@ -31,20 +35,32 @@ export class OtpDeliveryService {
       this.logger.log(
         `[OTP DEV] Email skipped — ${params.type} OTP for ${params.email}: ${params.otp}`,
       );
-      return;
+    } else {
+      try {
+        const template = this.buildTemplate(params.type, params.otp);
+        await this.sendEmail(params.email, template);
+        this.logger.log(
+          `[OTP] ${params.type} email sent successfully to ${params.email}`,
+        );
+      } catch (error) {
+        // Log but do not throw — email failure must never crash the auth flow
+        this.logger.error(
+          `[OTP] Failed to send ${params.type} email to ${params.email}`,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
     }
 
     try {
-      const template = this.buildTemplate(params.type, params.otp);
-      await this.sendEmail(params.email, template);
-      this.logger.log(
-        `[OTP] ${params.type} email sent successfully to ${params.email}`,
-      );
-    } catch (error) {
-      // Log but do not throw — email failure must never crash the auth flow
+      const user = await this.usersService.findByEmail(params.email);
+      if (user && user.phone) {
+        const smsMessage = `Your NexaFX ${params.type.toLowerCase().replace('_', ' ')} code is: ${params.otp}. Expiry 10 minutes.`;
+        await this.smsRoutingService.sendSms(user.phone, smsMessage);
+        this.logger.log(`[OTP] SMS sent successfully to ${user.phone}`);
+      }
+    } catch (smsError: any) {
       this.logger.error(
-        `[OTP] Failed to send ${params.type} email to ${params.email}`,
-        error instanceof Error ? error.message : String(error),
+        `[OTP] Failed to deliver OTP via SMS for ${params.email}: ${smsError.message}`,
       );
     }
   }

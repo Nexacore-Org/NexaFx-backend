@@ -37,7 +37,7 @@ export class FirebaseService implements OnModuleInit {
           };
         } catch (jsonError) {
           this.logger.error(
-            `Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON: ${jsonError.message}`,
+            `Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON: ${(jsonError as any).message}`,
           );
         }
       }

@@ -12,6 +12,7 @@ import { StorageModule } from '../modules/storage/storage.module';
 import { forwardRef } from '@nestjs/common';
 import { SanctionsModule } from '../sanctions/sanctions.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { UnifiedActivityFeedModule } from '../unified-activity-feed/unified-activity-feed.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     }),
     StorageModule,
     forwardRef(() => SanctionsModule),
+    UnifiedActivityFeedModule,
   ],
   controllers: [KycController],
   providers: [KycService, KycEmailService, KycGuard],

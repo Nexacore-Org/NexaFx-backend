@@ -71,6 +71,7 @@ import { GraphqlSubscriptionsModule } from './graphql-subscriptions/graphql-subs
 import { LoadTestingModule } from './load-testing/load-testing.module';
 import { AiKycDocVerificationModule } from './ai-kyc-doc-verification/ai-kyc-doc-verification.module';
 import { MobileSdkGuideModule } from './mobile-sdk-guide/mobile-sdk-guide.module';
+import { UnifiedActivityFeedModule } from './unified-activity-feed/unified-activity-feed.module';
 import { OwaspZapDastModule } from './owasp-zap-dast/owasp-zap-dast.module';
 import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-anchor.module';
 import { FraudModule } from './modules/fraud/fraud.module';
@@ -162,6 +163,7 @@ import { AnnouncementsModule } from './modules/announcements/announcements.modul
     GraphqlSubscriptionsModule,
     LoadTestingModule,
     AiKycDocVerificationModule,
+    UnifiedActivityFeedModule,
     MobileSdkGuideModule,
     OwaspZapDastModule,
     I18nModule.forRootAsync({

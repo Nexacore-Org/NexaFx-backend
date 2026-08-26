@@ -20,6 +20,8 @@ import { ReferralStatsDto } from './dto/referral-stats.dto';
 import { ReferralItemDto } from './dto/referral-item.dto';
 import { FirebaseService } from '../firebase/firebase.service';
 import { WebhookService } from '../webhooks/services/webhook.service';
+import { UnifiedActivityFeedService } from '../unified-activity-feed/unified-activity-feed.service';
+import { ActivityFeedType } from '../unified-activity-feed/entities/activity-feed-item.entity';
 
 @Injectable()
 export class ReferralsService {
@@ -36,6 +38,7 @@ export class ReferralsService {
     private readonly configService: ConfigService,
     private readonly firebaseService: FirebaseService,
     private readonly webhookService: WebhookService,
+    private readonly activityFeedService: UnifiedActivityFeedService,
   ) {}
 
   async createPendingReferral(
@@ -176,6 +179,15 @@ export class ReferralsService {
     referral.rewardedAt = new Date();
 
     const saved = await this.referralsRepository.save(referral);
+
+    await this.activityFeedService.append(
+      referral.referrerId,
+      ActivityFeedType.REFERRAL_REWARD,
+      saved.id,
+      'Referral',
+    ).catch((err) =>
+      this.logger.error(`Failed to append referral activity: ${err.message}`),
+    );
 
     await this.notificationsService.dispatch(
       referral.referrerId,

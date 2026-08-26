@@ -41,6 +41,8 @@ import { TwoFactorService } from '../two-factor/two-factor.service';
 import { WalletsService } from '../wallets/wallets.service';
 import { OAuthAccount, OAuthProvider } from './entities/oauth-account.entity';
 import { I18nService } from 'nestjs-i18n';
+import { UnifiedActivityFeedService } from '../unified-activity-feed/unified-activity-feed.service';
+import { ActivityFeedType } from '../unified-activity-feed/entities/activity-feed-item.entity';
 
 @Injectable()
 export class AuthService {
@@ -58,6 +60,7 @@ export class AuthService {
     private readonly twoFactorService: TwoFactorService,
     private readonly walletsService: WalletsService,
     private readonly i18nService: I18nService,
+    private readonly activityFeedService: UnifiedActivityFeedService,
     @InjectRepository(PasswordResetAttempt)
     private readonly passwordResetAttemptRepository: Repository<PasswordResetAttempt>,
     @InjectRepository(OAuthAccount)
@@ -254,6 +257,11 @@ export class AuthService {
 
     const tokens = await this.issueAuthTokens(user.id, user.email, user.role);
 
+    await this.activityFeedService.append(
+      user.id,
+      ActivityFeedType.NEW_DEVICE_LOGIN,
+    );
+
     await this.auditLogsService.logAuthEvent(user.id, AuditAction.LOGIN, {
       method: 'email',
       status: 'success',
@@ -313,6 +321,11 @@ export class AuthService {
     });
 
     const tokens = await this.issueAuthTokens(user.id, user.email, user.role);
+
+    await this.activityFeedService.append(
+      user.id,
+      ActivityFeedType.NEW_DEVICE_LOGIN,
+    );
 
     await this.auditLogsService.logAuthEvent(user.id, AuditAction.LOGIN, {
       method: 'email+totp',

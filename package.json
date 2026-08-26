@@ -82,7 +82,7 @@
     "helmet": "^8.1.0",
     "ioredis": "^5.11.1",
     "joi": "^18.2.3",
-    "mailgun.js": "^12.7.0",
+    "mailgun.js": "^14.0.0",
     "maxmind": "^5.0.6",
     "nestjs-i18n": "^10.8.4",
     "nestjs-throttler-storage-redis": "^0.5.1",

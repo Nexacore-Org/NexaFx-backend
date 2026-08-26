@@ -11,6 +11,11 @@ export enum RateAlertCondition {
   BELOW = 'below',
 }
 
+export enum RateAlertMode {
+  ABSOLUTE = 'absolute',
+  PERCENT_CHANGE = 'percent_change',
+}
+
 @Entity('rate_alerts')
 export class RateAlert {
   @PrimaryGeneratedColumn('uuid')
@@ -43,6 +48,19 @@ export class RateAlert {
 
   @Column({ type: 'boolean', default: false })
   recurring: boolean;
+
+  @Column({
+    type: 'enum',
+    enum: RateAlertMode,
+    default: RateAlertMode.ABSOLUTE,
+  })
+  alertMode: RateAlertMode;
+
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+  percentThreshold: string | null;
+
+  @Column({ type: 'decimal', precision: 20, scale: 8, nullable: true })
+  baselineRate: string | null;
 
   @Column({ type: 'timestamp with time zone', nullable: true })
   triggeredAt: Date | null;

@@ -108,6 +108,7 @@ import { GeoRestrictionsModule } from './geo-restrictions/geo-restrictions.modul
 import { DonationsModule } from './donations/donations.module';
 import { WidgetsModule } from './widgets/widgets.module';
 import { TestnetFaucetModule } from './modules/testnet-faucet/testnet-faucet.module';
+import { AnnouncementsModule } from './modules/announcements/announcements.module';
 
 @Module({
   imports: [
@@ -254,6 +255,7 @@ import { TestnetFaucetModule } from './modules/testnet-faucet/testnet-faucet.mod
     DonationsModule,
     WidgetsModule,
     TestnetFaucetModule,
+    AnnouncementsModule,
   ],
   controllers: [AppController],
   providers: [

@@ -22,7 +22,7 @@ which fails hard on any drift — this blocks every PR until it's fixed.
 
 - **Always run `npm install`** (never edit `package.json` by hand and skip regenerating the lock file) after adding, removing, or updating a dependency, and commit the resulting `package-lock.json` change.
 - **Never run `npm ci` to "fix" a failing install** — `npm ci` does not update the lock file; use `npm install` and verify with `npm ci --dry-run` before pushing.
-- A pre-commit hook (via Husky, see `.husky/pre-commit`) runs `npm ci --dry-run` automatically and blocks the commit if the lock file is out of sync.
+- A pre-commit hook (via Husky, see `.husky/pre-commit`) runs `npm ci --dry-run` to verify lock file sync, then runs `npx lint-staged` to lint and format only staged files. If lint-staged finds issues, the commit is blocked. You can bypass the hook for emergency commits with `git commit --no-verify`.
 - CI also runs a `Verify lock file sync` step (`npm ci --dry-run`) before installing, so drift fails fast with a clear message instead of a confusing `npm ci` error.
 - Dependabot is configured (`.github/dependabot.yml`) to open weekly PRs for npm updates, keeping the lock file fresh and reducing manual drift.
 

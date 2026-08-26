@@ -100,7 +100,7 @@
     "stellar-sdk": "^13.3.0",
     "swagger-ui-express": "^5.0.1",
     "typeorm": "^0.3.20",
-    "uuid": "^9.0.1"
+    "uuid": "^14.0.2"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.1.0",

@@ -246,7 +246,7 @@ The application implements role-based access control (RBAC) with the following r
 
 - **USER**: Can perform standard exchange operations, manage own profile, view transactions
 - **ADMIN**: Full control of all resources, user management, configuration, audit logs
-- **SUPER_ADMIN**: System-level administrative access (future)
+- **SUPER_ADMIN**: System-level administrative access — manages managed admins, platform configuration, and elevated role assignments via `src/super-admin/`
 
 Guards are applied at controller and route levels using custom decorators (`@RequireRole()`, `@Permissions()`) and NestJS Guards.
 
@@ -254,12 +254,13 @@ Guards are applied at controller and route levels using custom decorators (`@Req
 
 ## 📁 Module Overview & Architecture
 
-All major modules are fully implemented and integrated:
+The codebase contains 150+ module directories. The following table lists the core modules that are fully implemented and integrated. Scaffold-stub modules (those containing `NotImplementedException` placeholders) are not listed here as complete.
 
 | Module | File Location | Purpose | Status |
 |--------|---|---------|--------|
 | **auth** | `src/auth/` | JWT authentication, password reset, OAuth2 strategies. Implements Passport.js strategies and JWT verification | ✅ Complete |
 | **admin** | `src/admin/` | Admin dashboard, user moderation, system controls, configuration management | ✅ Complete |
+| **super-admin** | `src/super-admin/` | Managed admin CRUD, role assignments, platform configuration. restricted to SUPER_ADMIN role | ✅ Complete |
 | **users** | `src/users/` | User CRUD operations, profile management, roles, KYC status, personal data storage | ✅ Complete |
 | **currencies** | `src/currencies/` | Fiat and crypto currency registry, metadata, pairs, support matrix | ✅ Complete |
 | **transactions** | `src/transactions/` | Core exchange transactions, Stellar blockchain integration, settlement tracking, reversals | ✅ Complete |
@@ -278,6 +279,18 @@ All major modules are fully implemented and integrated:
 | **blockchain** | `src/blockchain/` | Stellar SDK integration, Horizon API communication, contract deployment, transaction signing | ✅ Complete |
 | **two-factor** | `src/two-factor/` | TOTP-based 2FA, recovery codes, backup authentication methods | ✅ Complete |
 | **otps** | `src/otps/` | One-time password generation, validation, expiration, retry limits | ✅ Complete |
+| **analytics** | `src/analytics/` | Platform analytics, usage metrics, reporting dashboards | ✅ Complete |
+| **dao** | `src/dao/` | Decentralized governance, proposal creation, voting mechanisms | ✅ Complete |
+| **rate-alerts** | `src/rate-alerts/` | Above/below absolute-threshold rate alerts with cron evaluation | ✅ Complete |
+| **sanctions** | `src/sanctions/` | Sanctions screening, provider integration, compliance checks | ✅ Complete |
+| **disputes** | `src/disputes/` | Dispute management, resolution workflows, admin controls | ✅ Complete |
+| **escrow** | `src/escrow/` | Escrow accounts, fund locking, release/reversal workflows | ✅ Complete |
+| **compliance** | `src/compliance/` | Compliance rules, checks, and reporting across modules | ✅ Complete |
+| **donations** | `src/donations/` | Charitable donation processing, receipts, campaign tracking | ✅ Complete |
+| **cards** | `src/cards/` | Virtual and physical card management, issuance, limits | ✅ Complete |
+| **loans** | `src/loans/` | Loan products, applications, disbursement, repayment tracking | ✅ Complete |
+| **splits** | `src/splits/` | Payment splits, beneficiary allocation, proportional distribution | ✅ Complete |
+| **vaults** | `src/vaults/` | Secure storage, cold wallet management, key custody | ✅ Complete |
 
 ---
 

@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { StellarService } from '../blockchain/stellar/stellar.service';
+import { RedisHealthIndicator } from './indicators/redis-health.indicator';
+import { StellarHealthIndicator } from './indicators/stellar-health.indicator';
+import { BullMQHealthIndicator } from './indicators/bullmq-health.indicator';
 
 @Injectable()
 export class HealthService {
@@ -8,42 +10,94 @@ export class HealthService {
 
   constructor(
     private readonly dataSource: DataSource,
-    private readonly stellarService: StellarService,
+    private readonly redisHealthIndicator: RedisHealthIndicator,
+    private readonly stellarHealthIndicator: StellarHealthIndicator,
+    private readonly bullmqHealthIndicator: BullMQHealthIndicator,
   ) {}
 
-  async checkHealth() {
-    const dbStatus = await this.checkDatabase();
-    const stellarStatus = await this.checkStellar();
-    const cacheStatus = 'ok'; // Placeholder
+  /* ------------------------------------------------------------------ */
+  /*  Liveness — is the process alive?  (no external deps)             */
+  /* ------------------------------------------------------------------ */
 
-    const isHealthy = dbStatus === 'ok' && stellarStatus === 'ok';
+  checkLiveness() {
+    return {
+      status: 'ok' as const,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Readiness — can the instance serve traffic?                       */
+  /* ------------------------------------------------------------------ */
+
+  async checkReadiness() {
+    const [dbStatus, redisStatus, stellarStatus, bullmqStatus] =
+      await Promise.all([
+        this.checkDatabase(),
+        this.redisHealthIndicator.isHealthy(),
+        this.stellarHealthIndicator.isHealthy(),
+        this.bullmqHealthIndicator.isHealthy(),
+      ]);
+
+    // A dependency that is "not_configured" does NOT block readiness —
+    // only "down" does.
+    const allReady =
+      dbStatus === 'ok' &&
+      redisStatus.status !== 'down' &&
+      stellarStatus.status !== 'down' &&
+      bullmqStatus.status !== 'down';
 
     return {
-      status: isHealthy ? 'ok' : 'error',
+      status: allReady ? ('ok' as const) : ('error' as const),
       details: {
         database: dbStatus,
-        stellar: stellarStatus,
-        cache: cacheStatus,
+        redis: redisStatus.status,
+        stellar: stellarStatus.status,
+        bullmq: bullmqStatus.status,
       },
     };
   }
 
+  /* ------------------------------------------------------------------ */
+  /*  Overall health (legacy endpoint — same semantics as readiness)     */
+  /* ------------------------------------------------------------------ */
+
+  async checkHealth() {
+    return this.checkReadiness();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Private helpers                                                    */
+  /* ------------------------------------------------------------------ */
+
   private async checkDatabase(): Promise<string> {
+    const timeoutMs = parseInt(
+      process.env.HEALTH_DB_TIMEOUT_MS ?? '3000',
+      10,
+    );
+
     try {
       if (!this.dataSource.isInitialized) {
         return 'disconnected';
       }
-      // Simple keep-alive query
-      await this.dataSource.query('SELECT 1');
+
+      await Promise.race([
+        this.dataSource.query('SELECT 1'),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () =>
+              reject(
+                new Error(`Database query timed out after ${timeoutMs}ms`),
+              ),
+            timeoutMs,
+          ),
+        ),
+      ]);
+
       return 'ok';
     } catch (error: any) {
       this.logger.error(`Database health check failed: ${error.message}`);
       return 'error';
     }
-  }
-
-  private async checkStellar(): Promise<string> {
-    const isConnected = await this.stellarService.checkConnectivity();
-    return isConnected ? 'ok' : 'error';
   }
 }

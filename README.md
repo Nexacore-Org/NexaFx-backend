@@ -439,3 +439,8 @@ npm run test:debug     # Debug mode (use Chrome DevTools on port 9229)
 
 - `GET /`
 - `GET /health`
+
+## Real-Time Transport Architecture
+This platform supports real-time updates via two complementary transports:
+1. **Socket.IO Gateways (`src/gateways/`)**: Optimized for high-throughput WebSocket clients and exchange rate feeds.
+2. **GraphQL Subscriptions (`src/graphql-subscriptions/`)**: Powered by `graphql-ws`, sharing underlying event streams with gateways for Apollo Client consumers with strict JWT authentication boundaries.

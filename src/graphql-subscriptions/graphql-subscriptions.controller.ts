@@ -1,22 +1,28 @@
-import { Controller, Get, Post, NotImplementedException } from '@nestjs/common';
-import { GraphqlSubscriptionsService } from './graphql-subscriptions.service';
+import { Resolver, Subscription, Args, ID } from '@nestjs/graphql';
+import { UseGuards } from '@nestjs/common';
+import { GraphqlSubscriptionsService, ExchangeRateUpdate, TransactionStatusUpdate } from './graphql-subscriptions.service';
+import { GqlAuthGuard } from '../graphql/guards/gql-auth.guard'; // Reusing existing guard
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
-/**
- * Stub controller for v2 feature: graphql-subscriptions (issue #492).
- * Routes are prefixed with /v2 to align with the v2 branch base.
- * Closes #492.
- */
-@Controller('v2/graphql-subscriptions')
-export class GraphqlSubscriptionsController {
-  constructor(private readonly service: GraphqlSubscriptionsService) {}
+@Resolver()
+@UseGuards(GqlAuthGuard)
+export class GraphqlSubscriptionsResolver {
+  constructor(private readonly subscriptionsService: GraphqlSubscriptionsService) {}
 
-  @Get()
-  list(): never {
-    throw new NotImplementedException('Closes #492 - scaffold stub');
+  @Subscription(() => ExchangeRateUpdate, {
+    name: 'exchangeRateUpdated',
+  })
+  public exchangeRateUpdated(@Args('pair') pair: string) {
+    return this.subscriptionsService.getExchangeRateStream(pair);
   }
 
-  @Post()
-  create(): never {
-    throw new NotImplementedException('Closes #492 - scaffold stub');
+  @Subscription(() => TransactionStatusUpdate, {
+    name: 'transactionStatusChanged',
+  })
+  public transactionStatusChanged(
+    @Args('transactionId', { type: () => ID }) transactionId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.subscriptionsService.getTransactionStream(transactionId, user.id);
   }
 }

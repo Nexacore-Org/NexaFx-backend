@@ -1,22 +1,17 @@
-import { Controller, Get, Post, NotImplementedException } from '@nestjs/common';
+import { Controller, Get, UseGuards } from '@nestjs/common';
 import { RegulatoryReportingService } from './regulatory-reporting.service';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
-/**
- * Stub controller for v2 feature: regulatory-reporting (issue #500).
- * Routes are prefixed with /v2 to align with the v2 branch base.
- * Closes #500.
- */
 @Controller('v2/regulatory-reporting')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
 export class RegulatoryReportingController {
-  constructor(private readonly service: RegulatoryReportingService) {}
+  constructor(private readonly reportingService: RegulatoryReportingService) {}
 
-  @Get()
-  list(): never {
-    throw new NotImplementedException('Closes #500 - scaffold stub');
-  }
-
-  @Post()
-  create(): never {
-    throw new NotImplementedException('Closes #500 - scaffold stub');
+  @Get('history')
+  public async getHistory() {
+    return this.reportingService.getReportHistory();
   }
 }

@@ -107,6 +107,7 @@ import { RateComparisonModule } from './exchange-rates/rate-comparison.module';
 import { GeoRestrictionsModule } from './geo-restrictions/geo-restrictions.module';
 import { DonationsModule } from './donations/donations.module';
 import { WidgetsModule } from './widgets/widgets.module';
+import { AnnouncementsModule } from './modules/announcements/announcements.module';
 
 @Module({
   imports: [
@@ -252,6 +253,7 @@ import { WidgetsModule } from './widgets/widgets.module';
     GeoRestrictionsModule,
     DonationsModule,
     WidgetsModule,
+    AnnouncementsModule,
   ],
   controllers: [AppController],
   providers: [

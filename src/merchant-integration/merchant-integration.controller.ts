@@ -1,22 +1,24 @@
-import { Controller, Get, Post, NotImplementedException } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, UseGuards, Req } from '@nestjs/common';
 import { MerchantIntegrationService } from './merchant-integration.service';
+import { MerchantApiKeyGuard } from './guards/merchant-api-key.guard';
 
-/**
- * Stub controller for v2 feature: merchant-integration (issue #495).
- * Routes are prefixed with /v2 to align with the v2 branch base.
- * Closes #495.
- */
 @Controller('v2/merchant-integration')
 export class MerchantIntegrationController {
-  constructor(private readonly service: MerchantIntegrationService) {}
+  constructor(private readonly integrationService: MerchantIntegrationService) {}
 
-  @Get()
-  list(): never {
-    throw new NotImplementedException('Closes #495 - scaffold stub');
+  @Post('checkout-sessions')
+  @UseGuards(MerchantApiKeyGuard)
+  public async createCheckoutSession(
+    @Req() req: any,
+    @Body('amount') amount: number,
+    @Body('currency') currency: string,
+    @Body('redirectUrl') redirectUrl?: string,
+  ) {
+    return this.integrationService.createCheckoutSession(req.merchantId, amount, currency, redirectUrl);
   }
 
-  @Post()
-  create(): never {
-    throw new NotImplementedException('Closes #495 - scaffold stub');
+  @Get('checkout-sessions/:id')
+  public async getCheckoutSession(@Param('id') id: string) {
+    return this.integrationService.getSessionStatus(id);
   }
 }

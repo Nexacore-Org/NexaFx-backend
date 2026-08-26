@@ -26,6 +26,7 @@ import { TransactionLimitsModule } from './transaction-limits.module';
 import { ComplianceModule } from '../modules/compliance/compliance.module';
 import { KycModule } from '../kyc/kyc.module';
 import { MicroSavingsModule } from '../modules/micro-savings/micro-savings.module';
+import { UnifiedActivityFeedModule } from '../unified-activity-feed/unified-activity-feed.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { MicroSavingsModule } from '../modules/micro-savings/micro-savings.modul
     ComplianceModule,
     KycModule,
     MicroSavingsModule,
+    UnifiedActivityFeedModule,
   ],
   controllers: [TransactionsController, TransactionReversalController],
   providers: [TransactionsService, TransactionVerificationService, TransactionReversalService],

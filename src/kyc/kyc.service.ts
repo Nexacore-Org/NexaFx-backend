@@ -26,6 +26,8 @@ import { scanBuffer } from '../common/helpers/virus-scanner.helper';
 import { validateSelfieVideo } from '../common/helpers/video-duration-scanner.helper';
 import { SanctionsService } from '../sanctions/sanctions.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { UnifiedActivityFeedService } from '../unified-activity-feed/unified-activity-feed.service';
+import { ActivityFeedType } from '../unified-activity-feed/entities/activity-feed-item.entity';
 
 type DocumentFiles = {
   governmentIdFront?: Express.Multer.File;
@@ -50,6 +52,7 @@ export class KycService {
     private readonly webhookService: WebhookService,
     @Inject(STORAGE_SERVICE_TOKEN)
     private readonly storageService: StorageService,
+    private readonly activityFeedService: UnifiedActivityFeedService,
     @Optional()
     private readonly sanctionsService?: SanctionsService,
   ) {}
@@ -428,7 +431,7 @@ export class KycService {
       await manager.save(kyc);
       await manager.save(user);
 
-      const notificationPayload: Partial<Notification> = {
+      const notificationPayload: any = {
         userId: user.id,
         type: NotificationType.SYSTEM,
         title: 'KYC Approved',
@@ -469,6 +472,12 @@ export class KycService {
         .dispatch('kyc.approved', kyc, user.id)
         .catch((err: Error) =>
           this.logger.error(`Webhook dispatch failed: ${err.message}`),
+        );
+
+      this.activityFeedService
+        .append(kyc.userId, ActivityFeedType.KYC_DECISION, kyc.id, 'KYCApplication')
+        .catch((err: Error) =>
+          this.logger.error(`Failed to append KYC activity: ${err.message}`),
         );
 
       this.sanctionsService
@@ -517,7 +526,7 @@ export class KycService {
           ? `Your KYC submission requires changes. Reason: ${reason}`
           : `Your KYC submission was rejected. Reason: ${reason}`;
 
-      const notificationPayload: Partial<Notification> = {
+      const notificationPayload: any = {
         userId: user.id,
         type: NotificationType.SYSTEM,
         title:
@@ -561,6 +570,12 @@ export class KycService {
         .dispatch(webhookEvent, kyc, user.id)
         .catch((err: Error) =>
           this.logger.error(`Webhook dispatch failed: ${err.message}`),
+        );
+
+      this.activityFeedService
+        .append(kyc.userId, ActivityFeedType.KYC_DECISION, kyc.id, 'KYCApplication')
+        .catch((err: Error) =>
+          this.logger.error(`Failed to append KYC activity: ${err.message}`),
         );
 
       return {

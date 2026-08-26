@@ -1,22 +1,19 @@
-import { Controller, Get, Post, NotImplementedException } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards } from '@nestjs/common';
 import { AiKycDocVerificationService } from './ai-kyc-doc-verification.service';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 
-/**
- * Stub controller for v2 feature: ai-kyc-doc-verification (issue #493).
- * Routes are prefixed with /v2 to align with the v2 branch base.
- * Closes #493.
- */
+@ApiTags('AI KYC Document Verification')
+@ApiBearerAuth('access-token')
 @Controller('v2/ai-kyc-doc-verification')
+@UseGuards(JwtAuthGuard)
 export class AiKycDocVerificationController {
   constructor(private readonly service: AiKycDocVerificationService) {}
 
-  @Get()
-  list(): never {
-    throw new NotImplementedException('Closes #493 - scaffold stub');
-  }
-
-  @Post()
-  create(): never {
-    throw new NotImplementedException('Closes #493 - scaffold stub');
+  @Post('verify')
+  @ApiOperation({ summary: 'Trigger AI-assisted verification of a KYC application document' })
+  @ApiResponse({ status: 200, description: 'AI verification run completed' })
+  async verifyApplication(@Body() body: { kycApplicationId: string; simulatedOcr?: any }) {
+    return this.service.verifyApplication(body.kycApplicationId, body.simulatedOcr);
   }
 }

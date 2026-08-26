@@ -17,6 +17,8 @@ import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import { CurrenciesService } from '../currencies/currencies.service';
 import { WebhookService } from '../webhooks/services/webhook.service';
+import { UnifiedActivityFeedService } from '../unified-activity-feed/unified-activity-feed.service';
+import { ActivityFeedType } from '../unified-activity-feed/entities/activity-feed-item.entity';
 
 export interface RateAlertCheckResult {
   checked: number;
@@ -36,6 +38,7 @@ export class RateAlertsService {
     private readonly auditLogsService: AuditLogsService,
     private readonly currenciesService: CurrenciesService,
     private readonly webhookService: WebhookService,
+    private readonly activityFeedService: UnifiedActivityFeedService,
   ) {}
 
   async createAlert(
@@ -220,6 +223,15 @@ export class RateAlertsService {
         currentRate: currentRateNum,
         recurring: alert.recurring,
       },
+    );
+
+    await this.activityFeedService.append(
+      alert.userId,
+      ActivityFeedType.RATE_ALERT_TRIGGER,
+      alert.id,
+      'RateAlert',
+    ).catch((err) =>
+      this.logger.error(`Failed to append rate alert trigger activity: ${err.message}`),
     );
 
     // Atomically deactivate only if still active, preventing a double-trigger

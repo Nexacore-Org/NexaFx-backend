@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/require-await */
+import { Operation, Asset } from 'stellar-sdk';
 import {
   Injectable,
   NotFoundException,
@@ -53,6 +54,8 @@ import { MicroSavingsService } from '../../modules/micro-savings/micro-savings.s
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { TAX_QUEUE } from '../../modules/queues/queue.constants';
+import { UnifiedActivityFeedService } from '../../unified-activity-feed/unified-activity-feed.service';
+import { ActivityFeedType } from '../../unified-activity-feed/entities/activity-feed-item.entity';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -153,6 +156,7 @@ async function validateStellarDestination(
 @Injectable()
 export class TransactionsService {
   private readonly logger = new Logger(TransactionsService.name);
+  private readonly limitsService?: any;
 
   constructor(
     @InjectRepository(Transaction)
@@ -182,6 +186,7 @@ export class TransactionsService {
     private readonly microSavingsService: MicroSavingsService,
     @InjectQueue(TAX_QUEUE)
     private readonly taxQueue: Queue,
+    private readonly activityFeedService: UnifiedActivityFeedService,
   ) {}
 
   /**
@@ -776,6 +781,12 @@ export class TransactionsService {
         transaction.stellarTxHash = rawResult.hash;
         transaction.status = TransactionStatus.SUCCESS;
         await this.transactionRepository.save(transaction);
+        await this.activityFeedService.append(
+          transaction.userId,
+          ActivityFeedType.TRANSACTION_COMPLETE,
+          transaction.id,
+          'Transaction',
+        );
         await this.redisService.delete('admin_stats');
         this.taxQueue.add('process-transaction', { transactionId: transaction.id }).catch((e) =>
           this.logger.error(`Failed to enqueue tax processing for swap transaction ${transaction.id}: ${e.message}`)
@@ -1001,6 +1012,12 @@ export class TransactionsService {
 
       if (verificationResult.status === 'SUCCESS') {
         transaction.status = TransactionStatus.SUCCESS;
+        await this.activityFeedService.append(
+          transaction.userId,
+          ActivityFeedType.TRANSACTION_COMPLETE,
+          transaction.id,
+          'Transaction',
+        );
         await this.redisService.delete('admin_stats');
 
         if (transaction.type === TransactionType.DEPOSIT) {
@@ -1133,6 +1150,12 @@ export class TransactionsService {
     await this.transactionRepository.save(transaction);
 
     if (transaction.status === TransactionStatus.SUCCESS) {
+      await this.activityFeedService.append(
+        transaction.userId,
+        ActivityFeedType.TRANSACTION_COMPLETE,
+        transaction.id,
+        'Transaction',
+      );
       this.taxQueue.add('process-transaction', { transactionId: transaction.id }).catch((e) =>
         this.logger.error(`Failed to enqueue tax processing for manual status update ${transaction.id}: ${e.message}`)
       );
@@ -1583,6 +1606,9 @@ export class TransactionsService {
     failureReason?: string,
   ): Promise<void> {
     try {
+      const user = await this.usersService.findById(userId);
+      if (!user || !user.fcmTokens || user.fcmTokens.length === 0) return;
+
       const actionText =
         transaction.type === TransactionType.DEPOSIT ? 'Deposit' : 'Withdrawal';
       let title = '';

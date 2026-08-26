@@ -129,6 +129,9 @@ export class User {
   @Column({ type: 'boolean', default: false })
   isSuspended: boolean;
 
+  @Column({ type: 'int', default: 0 })
+  complianceRiskScore: number;
+
   @Column({ type: 'boolean', default: false })
   isTwoFactorEnabled: boolean;
 

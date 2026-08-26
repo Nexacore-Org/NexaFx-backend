@@ -3,16 +3,22 @@ import { DataSource } from 'typeorm';
 import { RedisHealthIndicator } from './indicators/redis-health.indicator';
 import { StellarHealthIndicator } from './indicators/stellar-health.indicator';
 import { BullMQHealthIndicator } from './indicators/bullmq-health.indicator';
+import { Injectable } from '@nestjs/common';
+import {
+  HealthCheckService,
+  HealthCheckResult,
+  TypeOrmHealthIndicator,
+} from '@nestjs/terminus';
 
 @Injectable()
 export class HealthService {
-  private readonly logger = new Logger(HealthService.name);
-
   constructor(
     private readonly dataSource: DataSource,
     private readonly redisHealthIndicator: RedisHealthIndicator,
     private readonly stellarHealthIndicator: StellarHealthIndicator,
     private readonly bullmqHealthIndicator: BullMQHealthIndicator,
+    private readonly health: HealthCheckService,
+    private readonly dbIndicator: TypeOrmHealthIndicator,
   ) {}
 
   /* ------------------------------------------------------------------ */
@@ -99,5 +105,19 @@ export class HealthService {
       this.logger.error(`Database health check failed: ${error.message}`);
       return 'error';
     }
+  }
+
+  ) {}
+
+  checkHealth(): Promise<HealthCheckResult> {
+    return this.health.check([() => this.dbIndicator.pingCheck('database')]);
+  }
+
+  checkLiveness(): Promise<HealthCheckResult> {
+    return this.health.check([]);
+  }
+
+  checkReadiness(): Promise<HealthCheckResult> {
+    return this.health.check([() => this.dbIndicator.pingCheck('database')]);
   }
 }

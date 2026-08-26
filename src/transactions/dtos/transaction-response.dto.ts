@@ -55,6 +55,36 @@ export class TransactionResponseDto {
 
   @ApiProperty({ example: '2024-01-15T10:30:00.000Z' })
   updatedAt: Date;
+
+  /**
+   * Private note — visible to the transaction owner only.
+   * NEVER included in counterparty-facing responses.
+   */
+  @ApiPropertyOptional({ nullable: true, example: 'Gift for mum' })
+  userNote: string | null;
+
+  /** Shared memo visible to both parties. */
+  @ApiPropertyOptional({ nullable: true, example: 'Payment for October rent' })
+  counterpartyMemo: string | null;
+
+  /** User-defined tags for grouping and filtering. */
+  @ApiPropertyOptional({ nullable: true, type: [String], example: ['rent', 'october'] })
+  tags: string[] | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 95 })
+  confidenceScore: number | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 10 })
+  expectedCompletionSeconds: number | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: 'Expected to complete in under 10 seconds',
+  })
+  expectedCompletionLabel: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 'HIGH' })
+  confidenceLabel: string | null;
 }
 
 export class DepositResponseDto extends TransactionResponseDto {

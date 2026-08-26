@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
+import { Decimal } from 'decimal.js';
 import {
   FeeConfig,
   FeeTransactionType,
@@ -48,27 +49,27 @@ export class FeesService {
       return { feeAmount: 0, feeCurrency: currency, feeType: FeeType.FLAT };
     }
 
-    let feeAmount: number;
+    let feeAmountDecimal: Decimal;
 
     if (config.feeType === FeeType.FLAT) {
-      feeAmount = parseFloat(config.feeValue);
+      feeAmountDecimal = new Decimal(config.feeValue);
     } else {
-      const percentage = parseFloat(config.feeValue);
-      feeAmount = (percentage / 100) * amount;
+      const percentage = new Decimal(config.feeValue);
+      feeAmountDecimal = percentage.div(100).mul(amount);
 
-      const minFee = config.minFee ? parseFloat(config.minFee) : null;
-      const maxFee = config.maxFee ? parseFloat(config.maxFee) : null;
+      const minFee = config.minFee ? new Decimal(config.minFee) : null;
+      const maxFee = config.maxFee ? new Decimal(config.maxFee) : null;
 
-      if (minFee !== null && feeAmount < minFee) {
-        feeAmount = minFee;
+      if (minFee !== null && feeAmountDecimal.lt(minFee)) {
+        feeAmountDecimal = minFee;
       }
-      if (maxFee !== null && feeAmount > maxFee) {
-        feeAmount = maxFee;
+      if (maxFee !== null && feeAmountDecimal.gt(maxFee)) {
+        feeAmountDecimal = maxFee;
       }
     }
 
     // Round to 8 decimal places to match the precision used in the DB
-    feeAmount = parseFloat(feeAmount.toFixed(8));
+    const feeAmount = feeAmountDecimal.toDecimalPlaces(8).toNumber();
 
     return {
       feeAmount,

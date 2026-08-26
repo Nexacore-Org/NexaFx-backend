@@ -107,6 +107,7 @@ import { RateComparisonModule } from './exchange-rates/rate-comparison.module';
 import { GeoRestrictionsModule } from './geo-restrictions/geo-restrictions.module';
 import { DonationsModule } from './donations/donations.module';
 import { WidgetsModule } from './widgets/widgets.module';
+import { TestnetFaucetModule } from './modules/testnet-faucet/testnet-faucet.module';
 import { AnnouncementsModule } from './modules/announcements/announcements.module';
 
 @Module({
@@ -253,6 +254,7 @@ import { AnnouncementsModule } from './modules/announcements/announcements.modul
     GeoRestrictionsModule,
     DonationsModule,
     WidgetsModule,
+    TestnetFaucetModule,
     AnnouncementsModule,
   ],
   controllers: [AppController],

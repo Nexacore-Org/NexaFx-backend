@@ -68,7 +68,7 @@
     "class-validator": "^0.14.1",
     "compression": "^1.8.1",
     "dataloader": "^2.2.3",
-    "date-fns": "^3.3.1",
+    "date-fns": "^4.4.0",
     "decimal.js": "^10.4.3",
     "exceljs": "^4.4.0",
     "express-basic-auth": "^1.2.1",

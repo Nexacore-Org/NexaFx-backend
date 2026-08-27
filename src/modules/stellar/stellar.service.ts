@@ -652,7 +652,7 @@ export class StellarService {
   }
 
   async getNetworkFeeStats(): Promise<Horizon.HorizonApi.FeeStatsResponse> {
-    return this.server.feeStats().call();
+    return this.server.feeStats();
   }
 
   async getLatestLedger(): Promise<Horizon.ServerApi.LedgerRecord | null> {

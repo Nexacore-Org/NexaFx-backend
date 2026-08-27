@@ -80,7 +80,7 @@
     "graphql-depth-limit": "^1.1.0",
     "graphql-query-complexity": "^1.1.1",
     "helmet": "^8.1.0",
-    "ioredis": "^5.11.1",
+    "ioredis": "^6.0.0",
     "joi": "^18.2.3",
     "mailgun.js": "^14.0.0",
     "maxmind": "^5.0.6",

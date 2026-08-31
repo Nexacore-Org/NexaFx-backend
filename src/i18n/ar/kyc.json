@@ -1,0 +1,18 @@
+{
+  "ALREADY_SUBMITTED": "لديك بالفعل طلب معرفة عميلك قيد المراجعة.",
+  "REQUIRES_RESUBMISSION": "يتطلب معرفة عميلك إعادة إرسال. يرجى استخدام مسار /kyc/resubmit.",
+  "DOCUMENT_FRONT_REQUIRED": "ملف الوجه الأمامي للمستند مطلوب",
+  "SELFIE_REQUIRED": "ملف الصورة الشخصية (سيلفي) مطلوب",
+  "NO_SUBMISSION_FOUND": "لم يتم العثور على طلب معرفة عميلك الحالي. يرجى تقديم طلب جديد.",
+  "RESUBMISSION_NOT_ALLOWED": "إعادة التقديم مسموح بها فقط عندما تكون حالة طلبك هي RESUBMISSION_REQUIRED.",
+  "ALREADY_REVIEWED": "تمت مراجعة معرفة عميلك بالفعل",
+  "ONLY_PENDING_CAN_APPROVE": "يمكن الموافقة على الطلبات المعلقة فقط",
+  "INVALID_DECISION": "قرار غير صالح",
+  "INVALID_FILE_UPLOADED": "تم تحميل ملف غير صالح",
+  "INVALID_FILE_TYPE": "نوع الملف غير صالح: {mimetype}. الأنواع المسموح بها: {types}",
+  "SUBMITTED_SUCCESS": "تم تقديم طلب معرفة عميلك بنجاح",
+  "RESUBMITTED_SUCCESS": "تم إعادة تقديم طلب معرفة عميلك بنجاح",
+  "APPROVED_SUCCESS": "تمت الموافقة على معرفة عميلك بنجاح",
+  "RESUBMISSION_REQUESTED": "تم طلب إعادة تقديم معرفة عميلك بنجاح",
+  "REJECTED_SUCCESS": "تم رفض معرفة عميلك بنجاح"
+}

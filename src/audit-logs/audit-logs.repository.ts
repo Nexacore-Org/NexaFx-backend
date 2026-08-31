@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { DataSource, Repository, Between, Like } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { AuditLog } from './entities/audit-log.entity';
 import { CreateAuditLogDto } from './dto/create-audit-log.dto';
 import { GetAuditLogsDto } from './dto/get-audit-logs.dto';
@@ -16,36 +16,54 @@ export class AuditLogsRepository extends Repository<AuditLog> {
     createAuditLogDto: CreateAuditLogDto,
   ): Promise<AuditLog> {
     try {
-      const auditLog = this.create(createAuditLogDto);
+      const auditLog = this.create({
+        ...createAuditLogDto,
+        actorId: createAuditLogDto.actorId || createAuditLogDto.userId,
+        resourceType: createAuditLogDto.resourceType || createAuditLogDto.entity,
+        resourceId: createAuditLogDto.resourceId || createAuditLogDto.entityId,
+        status: createAuditLogDto.status as any,
+      });
       const savedLog = await this.save(auditLog);
 
       // Prevent logging sensitive data in the general log
       if (!createAuditLogDto.isSensitive) {
         this.logger.debug(
-          `Audit log created: ${savedLog.action} for ${savedLog.entity}`,
+          `Audit log created: ${savedLog.action} for ${savedLog.resourceType}`,
         );
       }
 
       return savedLog;
-    } catch (error) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       this.logger.error(
-        `Failed to create audit log: ${error.message}`,
-        error.stack,
+        `Failed to create audit log: ${err.message}`,
+        err.stack,
       );
-      throw error;
+      throw err;
     }
   }
 
   async findLogsWithPagination(
-    filters: GetAuditLogsDto,
+    filters: GetAuditLogsDto & {
+      actorId?: string;
+      from?: string;
+      to?: string;
+      status?: string;
+      resourceType?: string;
+    },
     options?: { includeSensitive?: boolean },
   ) {
     const {
       entity,
+      resourceType,
       userId,
+      actorId,
       action,
       startDate,
+      from,
       endDate,
+      to,
+      status,
       page = 1,
       limit = 20,
     } = filters;
@@ -57,31 +75,39 @@ export class AuditLogsRepository extends Repository<AuditLog> {
       .skip(skip)
       .take(limit);
 
-    if (entity) {
-      query.andWhere('audit_log.entity = :entity', { entity });
+    const typeFilter = resourceType || entity;
+    if (typeFilter) {
+      query.andWhere('audit_log.resourceType = :resourceType', { resourceType: typeFilter });
     }
 
-    if (userId) {
-      query.andWhere('audit_log.userId = :userId', { userId });
+    const userFilter = actorId || userId;
+    if (userFilter) {
+      query.andWhere('audit_log.actorId = :actorId', { actorId: userFilter });
     }
 
     if (action) {
-      query.andWhere('audit_log.action LIKE :action', {
-        action: `%${action}%`,
-      });
+      query.andWhere('audit_log.action = :action', { action });
     }
 
-    if (startDate && endDate) {
-      query.andWhere({
-        createdAt: Between(new Date(startDate), new Date(endDate)),
+    if (status) {
+      query.andWhere('audit_log.status = :status', { status });
+    }
+
+    const start = from || startDate;
+    const end = to || endDate;
+
+    if (start && end) {
+      query.andWhere('audit_log.createdAt BETWEEN :start AND :end', {
+        start: new Date(start),
+        end: new Date(end),
       });
-    } else if (startDate) {
-      query.andWhere('audit_log.createdAt >= :startDate', {
-        startDate: new Date(startDate),
+    } else if (start) {
+      query.andWhere('audit_log.createdAt >= :start', {
+        start: new Date(start),
       });
-    } else if (endDate) {
-      query.andWhere('audit_log.createdAt <= :endDate', {
-        endDate: new Date(endDate),
+    } else if (end) {
+      query.andWhere('audit_log.createdAt <= :end', {
+        end: new Date(end),
       });
     }
 
@@ -106,7 +132,7 @@ export class AuditLogsRepository extends Repository<AuditLog> {
 
   async findSensitiveLogs(userId: string) {
     return this.find({
-      where: { userId, isSensitive: true },
+      where: { actorId: userId, isSensitive: true },
       order: { createdAt: 'DESC' },
     });
   }

@@ -6,11 +6,15 @@ import { Referral } from './entities/referral.entity';
 import { User } from '../users/user.entity';
 import { Transaction } from '../transactions/entities/transaction.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { WebhooksModule } from '../webhooks/webhooks.module';
+import { UnifiedActivityFeedModule } from '../unified-activity-feed/unified-activity-feed.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Referral, User, Transaction]),
     NotificationsModule,
+    WebhooksModule,
+    UnifiedActivityFeedModule,
   ],
   controllers: [ReferralsController],
   providers: [ReferralsService],

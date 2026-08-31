@@ -1,84 +1,165 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { IdempotencyRecord } from '../entities/idempotency-record.entity';
+import { Injectable, Inject, Optional } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';
+
+export interface IdempotencyCacheEntry {
+  endpoint: string;
+  statusCode: number;
+  body: any;
+  expiresAt: number;
+}
+
+@Injectable()
+export class IdempotencyRedisCache {
+  private store = new Map<string, IdempotencyCacheEntry>();
+
+  constructor(
+    @Optional() @Inject('REDIS_CLIENT') private readonly redisClient: any,
+    private readonly configService: ConfigService,
+  ) {}
+
+  private getKey(userId: string, idempotencyKey: string): string {
+    return `nexafx:idempotency:${userId}:${idempotencyKey}`;
+  }
+
+  private getTtlSeconds(): number {
+    return 24 * 60 * 60;
+  }
+
+  async get(
+    userId: string,
+    idempotencyKey: string,
+  ): Promise<IdempotencyCacheEntry | null> {
+    const key = this.getKey(userId, idempotencyKey);
+
+    if (this.redisClient) {
+      const cached = await this.redisClient.get(key);
+      if (!cached) return null;
+      return JSON.parse(cached) as IdempotencyCacheEntry;
+    }
+
+    const entry = this.store.get(key);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) {
+      this.store.delete(key);
+      return null;
+    }
+    return entry;
+  }
+
+  async set(
+    userId: string,
+    idempotencyKey: string,
+    entry: Omit<IdempotencyCacheEntry, 'expiresAt'>,
+  ): Promise<void> {
+    const key = this.getKey(userId, idempotencyKey);
+    const value: IdempotencyCacheEntry = {
+      ...entry,
+      expiresAt: Date.now() + this.getTtlSeconds() * 1000,
+    };
+
+    if (this.redisClient) {
+      await this.redisClient.set(
+        key,
+        JSON.stringify(value),
+        'EX',
+        this.getTtlSeconds(),
+      );
+      return;
+    }
+
+    this.store.set(key, value);
+  }
+}
 
 @Injectable()
 export class IdempotencyService {
-  constructor(
-    @InjectRepository(IdempotencyRecord)
-    private readonly idempotencyRepository: Repository<IdempotencyRecord>,
-  ) {}
+  constructor(private readonly cache: IdempotencyRedisCache) {}
 
-  /**
-   * Generate SHA-256 hash of the request body
-   */
   generateRequestHash(body: any): string {
     const hash = createHash('sha256');
     hash.update(JSON.stringify(body));
     return hash.digest('hex');
   }
 
-  /**
-   * Check if an idempotency record exists for the given key and userId
-   * If exists and matches the request hash, return the stored response
-   * If exists but request hash differs, throw conflict error
-   * If not exists, return null
-   */
+  validateIdempotencyKey(key: string): { valid: boolean; error?: string } {
+    if (!key) {
+      return { valid: false, error: 'Idempotency-Key header is required' };
+    }
+    if (key.length > 128) {
+      return {
+        valid: false,
+        error: 'Idempotency-Key must be at most 128 characters',
+      };
+    }
+    if (!/^[a-zA-Z0-9_-]+$/.test(key)) {
+      return {
+        valid: false,
+        error:
+          'Idempotency-Key must contain only alphanumeric characters, hyphens, and underscores',
+      };
+    }
+    return { valid: true };
+  }
+
+  async checkEndpointMatch(
+    userId: string,
+    idempotencyKey: string,
+    endpoint: string,
+  ): Promise<{ match: boolean; cached?: IdempotencyCacheEntry }> {
+    const normalizedUserId = userId || 'anonymous';
+    const cached = await this.cache.get(normalizedUserId, idempotencyKey);
+    if (!cached) {
+      return { match: true };
+    }
+    if (cached.endpoint === endpoint) {
+      return { match: true, cached };
+    }
+    return { match: false, cached };
+  }
+
   async checkIdempotency(
     key: string,
     userId: string,
     requestBody: any,
-  ): Promise<{ statusCode: number; body: any } | null> {
-    const requestHash = this.generateRequestHash(requestBody);
-    const record = await this.idempotencyRepository.findOne({
-      where: { key, userId },
-    });
+    endpoint: string,
+  ): Promise<{ statusCode: number; body: any; replayed: boolean } | null> {
+    const { match, cached } = await this.checkEndpointMatch(
+      userId,
+      key,
+      endpoint,
+    );
 
-    if (!record) {
-      return null;
-    }
-
-    if (record.requestHash !== requestHash) {
-      // Conflict: same key but different body
-      const error = new Error('IDEMPOTENCY_KEY_CONFLICT');
-      error['code'] = 'IDEMPOTENCY_KEY_CONFLICT';
+    if (!match) {
+      const error: any = new Error(
+        'Idempotency key already used for a different endpoint',
+      );
+      error.code = 'IDEMPOTENCY_KEY_CONFLICT';
       throw error;
     }
 
-    // Return stored response
-    return {
-      statusCode: record.responseStatus,
-      body: record.responseBody,
-    };
+    if (cached) {
+      return {
+        statusCode: cached.statusCode,
+        body: cached.body,
+        replayed: true,
+      };
+    }
+
+    return null;
   }
 
-  /**
-   * Store the idempotency record for the request
-   */
   async storeIdempotency(
     key: string,
     userId: string,
     endpoint: string,
-    requestBody: any,
     responseStatus: number,
     responseBody: any,
   ): Promise<void> {
-    const requestHash = this.generateRequestHash(requestBody);
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + 24); // 24 hours from now
-
-    const record = this.idempotencyRepository.create({
-      key,
-      userId,
+    await this.cache.set(userId, key, {
       endpoint,
-      requestHash,
-      responseStatus,
-      responseBody,
-      expiresAt,
+      statusCode: responseStatus,
+      body: responseBody,
     });
-
-    await this.idempotencyRepository.save(record);
   }
 }

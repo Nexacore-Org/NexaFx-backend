@@ -158,6 +158,17 @@ export class NotificationsService {
     return notification;
   }
 
+  /**
+   * Create and deliver a notification from a compact payload, e.g. when a
+   * background job (like statement generation) notifies a user.
+   */
+  async createAndSend(
+    userId: string,
+    payload: { title: string; body: string; type: NotificationType },
+  ): Promise<Notification> {
+    return this.dispatch(userId, payload.type, payload.title, payload.body);
+  }
+
   async getNotifications(
     userId: string,
     page: number = 1,

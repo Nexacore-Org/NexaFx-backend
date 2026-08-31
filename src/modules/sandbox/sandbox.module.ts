@@ -5,8 +5,8 @@ import { SandboxEvent } from './entities/sandbox-event.entity';
 import { SandboxRequestLog } from './entities/sandbox-request-log.entity';
 import { SandboxService } from './sandbox.service';
 import { SandboxController } from './sandbox.controller';
-import { UsersModule } from '../users/users.module';
-import { WalletsModule } from '../wallets/wallets.module';
+import { UsersModule } from '../../users/users.module';
+import { WalletsModule } from '../../wallets/wallets.module';
 import { RedisModule } from '../redis/redis.module';
 
 @Module({

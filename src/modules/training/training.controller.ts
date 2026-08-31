@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, Param } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole } from '../../common/enums/user-role.enum';
+import { UserRole } from '../../users/user.entity';
 import { TrainingService } from './training.service';
 
 @ApiTags('Admin Training')
@@ -20,7 +20,9 @@ export class TrainingController {
   @Roles(UserRole.ADMIN)
   listModules() {
     // Would return all training modules — wired up via module repo in production
-    return this.trainingService['moduleRepo'].find({ order: { createdAt: 'DESC' } });
+    return this.trainingService['moduleRepo'].find({
+      order: { createdAt: 'DESC' },
+    });
   }
 
   @Post('/modules')

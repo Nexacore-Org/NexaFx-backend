@@ -1,7 +1,15 @@
-import { Controller, Get, Post, Patch, Body, Param, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Body,
+  Param,
+  Query,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole } from '../../common/enums/user-role.enum';
+import { UserRole } from '../../users/user.entity';
 import { StatusService } from './status.service';
 import { ComponentStatus } from './entities/status-component.entity';
 import { IncidentStatus } from './entities/status-incident.entity';
@@ -17,7 +25,10 @@ export class StatusPublicController {
   }
 
   @Get('/incidents')
-  getIncidentHistory(@Query('page') page?: string, @Query('limit') limit?: string) {
+  getIncidentHistory(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
     return this.statusService.getIncidentHistory(
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 20,
@@ -67,6 +78,10 @@ export class StatusAdminController {
     @Param('slug') slug: string,
     @Body() body: { status: ComponentStatus; uptimePercent?: string },
   ) {
-    return this.statusService.updateComponentStatus(slug, body.status, body.uptimePercent);
+    return this.statusService.updateComponentStatus(
+      slug,
+      body.status,
+      body.uptimePercent,
+    );
   }
 }

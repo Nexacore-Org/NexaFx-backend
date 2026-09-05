@@ -1,8 +1,14 @@
-import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { SpendingGoal } from './entities/spending-goal.entity';
-import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { NotificationType } from '../../notifications/enum/notificationType.enum';
 import { MicroSavingsService } from '../micro-savings/micro-savings.service';
 
 @Injectable()
@@ -44,7 +50,12 @@ export class SpendingGoalsService {
   async update(
     id: string,
     userId: string,
-    dto: Partial<Pick<SpendingGoal, 'name' | 'targetAmount' | 'currency' | 'categoryId' | 'isActive'>>,
+    dto: Partial<
+      Pick<
+        SpendingGoal,
+        'name' | 'targetAmount' | 'currency' | 'categoryId' | 'isActive'
+      >
+    >,
   ): Promise<SpendingGoal> {
     const goal = await this.findByIdAndUser(id, userId);
     Object.assign(goal, dto);
@@ -59,7 +70,14 @@ export class SpendingGoalsService {
   async getProgress(goal: SpendingGoal) {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    const monthEnd = new Date(
+      now.getFullYear(),
+      now.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+    );
 
     const spent = await this.querySpent(
       goal.userId,
@@ -80,7 +98,8 @@ export class SpendingGoalsService {
       now.getMonth() + 1,
       0,
     ).getDate();
-    const projectedTotal = dayOfMonth > 0 ? (spent / dayOfMonth) * daysInMonth : 0;
+    const projectedTotal =
+      dayOfMonth > 0 ? (spent / dayOfMonth) * daysInMonth : 0;
 
     return {
       spent: spent.toString(),
@@ -108,13 +127,14 @@ export class SpendingGoalsService {
       const target = Number(goal.targetAmount);
 
       if (percentUsed > 80 || projected > target) {
-        await this.notificationsService.send({
+        await this.notificationsService.create({
           userId,
-          type: 'SPENDING_GOAL_WARNING',
+          type: NotificationType.SPENDING_GOAL_WARNING,
           title: 'Spending Goal Alert',
-          message: percentUsed > 80
-            ? `You've used ${percentUsed.toFixed(1)}% of your "${goal.name}" goal.`
-            : `Your projected spending for "${goal.name}" ($${projected}) exceeds your target ($${target}).`,
+          message:
+            percentUsed > 80
+              ? `You've used ${percentUsed.toFixed(1)}% of your "${goal.name}" goal.`
+              : `Your projected spending for "${goal.name}" ($${projected}) exceeds your target ($${target}).`,
         });
       }
 
@@ -122,12 +142,19 @@ export class SpendingGoalsService {
       if (percentUsed >= 100) {
         this.microSavingsService
           .evaluateSpendingGoalHit(userId, goal.id)
-          .catch((e) => this.logger.error(`Micro-savings spending-goal-hit eval failed: ${e.message}`));
+          .catch((e) =>
+            this.logger.error(
+              `Micro-savings spending-goal-hit eval failed: ${e.message}`,
+            ),
+          );
       }
     }
   }
 
-  private async findByIdAndUser(id: string, userId: string): Promise<SpendingGoal> {
+  private async findByIdAndUser(
+    id: string,
+    userId: string,
+  ): Promise<SpendingGoal> {
     const goal = await this.goalRepo.findOne({ where: { id, userId } });
     if (!goal) {
       throw new NotFoundException('Spending goal not found');

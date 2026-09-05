@@ -152,6 +152,38 @@ export class WalletsService {
     this.logger.log(`Seeded primary wallet for user ${userId}`);
   }
 
+  /**
+   * Create a wallet with a prefilled balance for a user (e.g. sandbox seeding).
+   * Idempotent — a wallet for the same user/currency is not duplicated.
+   */
+  async create(
+    userId: string,
+    currency: string,
+    balance: string,
+  ): Promise<Wallet> {
+    const targetCurrency = currency.trim().toUpperCase();
+    const existing = await this.walletRepository.findOne({
+      where: { userId, currency: targetCurrency },
+    });
+    if (existing) return existing;
+
+    const wallet = this.walletRepository.create({
+      userId,
+      currency: targetCurrency,
+      balance,
+      label: 'Sandbox',
+      network: this.network,
+    });
+    return this.walletRepository.save(wallet);
+  }
+
+  /**
+   * Delete every wallet owned by a user (used when resetting a sandbox).
+   */
+  async deleteByUserId(userId: string): Promise<void> {
+    await this.walletRepository.delete({ userId });
+  }
+
   // ── Resolution ────────────────────────────────────────────────────────────
 
   /**

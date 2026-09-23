@@ -34,8 +34,6 @@ export class TransactionV2Controller {
   constructor(
     private readonly transactionsService: TransactionsService,
     private readonly feeEstimatorService: FeeEstimatorService,
-  constructor(
-    private readonly transactionsService: TransactionsService,
     private readonly confidenceService: TransactionConfidenceService,
   ) {}
 
@@ -141,7 +139,7 @@ export class TransactionV2Controller {
   @ApiOperation({
     summary: 'Get transaction completion statistics',
     description:
-      'Returns average completion time for the authenticated user\'s ' +
+      "Returns average completion time for the authenticated user's " +
       'SEND transactions in the last 30 days.',
   })
   @ApiResponse({
@@ -159,6 +157,4 @@ export class TransactionV2Controller {
   async getCompletionStats(@Request() req): Promise<UserCompletionStats> {
     return this.confidenceService.getCompletionStats(req.user.userId);
   }
-
-  private readonly logger = new Logger(TransactionV2Controller.name);
 }

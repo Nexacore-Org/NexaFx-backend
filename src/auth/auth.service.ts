@@ -43,6 +43,7 @@ import { OAuthAccount, OAuthProvider } from './entities/oauth-account.entity';
 import { I18nService } from 'nestjs-i18n';
 import { UnifiedActivityFeedService } from '../unified-activity-feed/unified-activity-feed.service';
 import { ActivityFeedType } from '../unified-activity-feed/entities/activity-feed-item.entity';
+import { GdprService } from '../modules/gdpr/gdpr.service';
 
 @Injectable()
 export class AuthService {
@@ -61,6 +62,7 @@ export class AuthService {
     private readonly walletsService: WalletsService,
     private readonly i18nService: I18nService,
     private readonly activityFeedService: UnifiedActivityFeedService,
+    private readonly gdprService: GdprService,
     @InjectRepository(PasswordResetAttempt)
     private readonly passwordResetAttemptRepository: Repository<PasswordResetAttempt>,
     @InjectRepository(OAuthAccount)
@@ -165,14 +167,14 @@ export class AuthService {
     if (!user || !user.isVerified) {
       await this.simulateProcessingDelay();
       throw new UnauthorizedException(
-        this.i18nService.translate('auth.INVALID_CREDENTIALS', { lang })
+        this.i18nService.translate('auth.INVALID_CREDENTIALS', { lang }),
       );
     }
 
     if (!user.password) {
       await this.simulateProcessingDelay();
       throw new UnauthorizedException(
-        this.i18nService.translate('auth.INVALID_CREDENTIALS', { lang })
+        this.i18nService.translate('auth.INVALID_CREDENTIALS', { lang }),
       );
     }
 
@@ -195,7 +197,9 @@ export class AuthService {
       otp,
     });
 
-    return { message: this.i18nService.translate('auth.LOGIN_OTP_SENT', { lang }) };
+    return {
+      message: this.i18nService.translate('auth.LOGIN_OTP_SENT', { lang }),
+    };
   }
 
   async verifyLoginOtp(
@@ -427,16 +431,24 @@ export class AuthService {
   ): Promise<{ message: string }> {
     const user = await this.usersService.findById(userId);
     if (!user) throw new UnauthorizedException('User not found');
-    
-    const isPasswordValid = await bcrypt.compare(dto.oldPassword, user.password);
-    if (!isPasswordValid) throw new UnauthorizedException('Invalid current password');
-    
+
+    if (!user.password) {
+      throw new UnauthorizedException('No password set for this account');
+    }
+
+    const isPasswordValid = await bcrypt.compare(
+      dto.oldPassword,
+      user.password,
+    );
+    if (!isPasswordValid)
+      throw new UnauthorizedException('Invalid current password');
+
     await this.usersService.updatePassword(user.id, dto.newPassword);
-    
+
     // Security Fix: Redis key purge and session cleanup
     await this.refreshTokensService.revokeAllUserTokens(user.id);
     await this.otpsService.invalidateAllUserOtps(user.id);
-    
+
     await this.auditLogsService.logAuthEvent(
       user.id,
       AuditAction.PASSWORD_RESET_COMPLETE,
@@ -446,7 +458,7 @@ export class AuthService {
         device: userAgent,
       },
     );
-    
+
     return { message: 'Password changed successfully' };
   }
 
@@ -543,7 +555,8 @@ export class AuthService {
       referredBy,
       consentGdpr: signupDto.consentGdpr,
       consentGdprAt: new Date(),
-      consentGdprVersion: this.configService.get<string>('PRIVACY_POLICY_VERSION') || '1.0',
+      consentGdprVersion:
+        this.configService.get<string>('PRIVACY_POLICY_VERSION') || '1.0',
     });
 
     if (signupDto.consentGdpr) {
@@ -762,7 +775,9 @@ export class AuthService {
     });
   }
 
-  private async simulateProcessingDelay(password: string = 'dummy_password'): Promise<void> {
+  private async simulateProcessingDelay(
+    password: string = 'dummy_password',
+  ): Promise<void> {
     // Perform a real bcrypt hash to simulate the CPU time taken by bcrypt.compare,
     // which prevents timing attacks that could reveal if a user exists.
     await bcrypt.hash(password, 10);

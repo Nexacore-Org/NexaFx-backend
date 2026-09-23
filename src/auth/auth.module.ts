@@ -9,7 +9,6 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { GithubStrategy } from './strategies/github.strategy';
 import { OtpDeliveryService } from './email/otp-delivery.service';
-import { EmailService } from './email.service';
 import { PasswordResetAttempt } from './entities/password-reset-attempt.entity';
 import { OAuthAccount } from './entities/oauth-account.entity';
 import { UsersModule } from '../users/users.module';
@@ -22,6 +21,7 @@ import { WalletsModule } from '../wallets/wallets.module';
 import { MailModule } from '../modules/mail/mail.module';
 import { UnifiedActivityFeedModule } from '../unified-activity-feed/unified-activity-feed.module';
 import { IntelligentSmsRoutingModule } from '../intelligent-sms-routing/intelligent-sms-routing.module';
+import { GdprModule } from '../modules/gdpr/gdpr.module';
 
 type JwtExpiryValue = `${number}${'s' | 'm' | 'h' | 'd'}`;
 
@@ -39,6 +39,7 @@ type JwtExpiryValue = `${number}${'s' | 'm' | 'h' | 'd'}`;
     PassportModule,
     UnifiedActivityFeedModule,
     IntelligentSmsRoutingModule,
+    GdprModule,
     TypeOrmModule.forFeature([PasswordResetAttempt, OAuthAccount]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -69,8 +70,7 @@ type JwtExpiryValue = `${number}${'s' | 'm' | 'h' | 'd'}`;
     GoogleStrategy,
     GithubStrategy,
     OtpDeliveryService,
-    EmailService,
   ],
-  exports: [AuthService, JwtModule, EmailService],
+  exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

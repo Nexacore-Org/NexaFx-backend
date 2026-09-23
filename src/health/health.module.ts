@@ -7,8 +7,6 @@ import { StellarHealthIndicator } from './indicators/stellar-health.indicator';
 import { BullMQHealthIndicator } from './indicators/bullmq-health.indicator';
 
 @Module({
-
-@Module({
   imports: [TerminusModule],
   controllers: [HealthController],
   providers: [

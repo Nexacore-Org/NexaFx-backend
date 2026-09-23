@@ -1,0 +1,472 @@
+src/analytics/analytics.controller.ts(108,8): error TS1146: Declaration expected.
+src/analytics/analytics.controller.ts(108,34): error TS1109: Expression expected.
+src/analytics/analytics.controller.ts(108,35): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(108,47): error TS1109: Expression expected.
+src/analytics/analytics.controller.ts(108,48): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(108,51): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(108,72): error TS1005: ';' expected.
+src/analytics/analytics.controller.ts(114,8): error TS1146: Declaration expected.
+src/analytics/analytics.controller.ts(114,33): error TS1109: Expression expected.
+src/analytics/analytics.controller.ts(114,34): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(114,39): error TS1005: ';' expected.
+src/analytics/analytics.controller.ts(122,8): error TS1146: Declaration expected.
+src/analytics/analytics.controller.ts(122,30): error TS1109: Expression expected.
+src/analytics/analytics.controller.ts(122,31): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(122,44): error TS1109: Expression expected.
+src/analytics/analytics.controller.ts(122,45): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(122,50): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(122,69): error TS1005: ';' expected.
+src/analytics/analytics.controller.ts(135,8): error TS1146: Declaration expected.
+src/analytics/analytics.controller.ts(135,29): error TS1109: Expression expected.
+src/analytics/analytics.controller.ts(135,30): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(135,43): error TS1109: Expression expected.
+src/analytics/analytics.controller.ts(135,44): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(135,49): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(135,67): error TS1005: ';' expected.
+src/analytics/analytics.controller.ts(143,8): error TS1146: Declaration expected.
+src/analytics/analytics.controller.ts(144,15): error TS1109: Expression expected.
+src/analytics/analytics.controller.ts(144,16): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(145,13): error TS1109: Expression expected.
+src/analytics/analytics.controller.ts(145,14): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(145,19): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(146,5): error TS1005: ';' expected.
+src/analytics/analytics.controller.ts(156,8): error TS1146: Declaration expected.
+src/analytics/analytics.controller.ts(156,32): error TS1109: Expression expected.
+src/analytics/analytics.controller.ts(156,33): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(156,46): error TS1109: Expression expected.
+src/analytics/analytics.controller.ts(156,47): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(156,52): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(156,70): error TS1005: ';' expected.
+src/analytics/analytics.controller.ts(167,8): error TS1146: Declaration expected.
+src/analytics/analytics.controller.ts(167,35): error TS1109: Expression expected.
+src/analytics/analytics.controller.ts(167,36): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(167,53): error TS1109: Expression expected.
+src/analytics/analytics.controller.ts(167,54): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(167,56): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(167,66): error TS1005: ';' expected.
+src/analytics/analytics.controller.ts(175,8): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.controller.ts(175,14): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.controller.ts(175,44): error TS1068: Unexpected token. A constructor, method, accessor, or property was expected.
+src/analytics/analytics.controller.ts(176,23): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(176,32): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(176,48): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(176,68): error TS1005: ';' expected.
+src/analytics/analytics.controller.ts(180,8): error TS1146: Declaration expected.
+src/analytics/analytics.controller.ts(181,15): error TS1109: Expression expected.
+src/analytics/analytics.controller.ts(181,16): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(182,17): error TS1109: Expression expected.
+src/analytics/analytics.controller.ts(182,18): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(182,20): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(183,12): error TS1109: Expression expected.
+src/analytics/analytics.controller.ts(183,13): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(183,16): error TS1005: ',' expected.
+src/analytics/analytics.controller.ts(184,5): error TS1005: ';' expected.
+src/analytics/analytics.module.ts(29,5): error TS1136: Property assignment expected.
+src/analytics/analytics.module.ts(29,6): error TS1136: Property assignment expected.
+src/analytics/analytics.module.ts(29,7): error TS1146: Declaration expected.
+src/analytics/analytics.module.ts(32,3): error TS1109: Expression expected.
+src/analytics/analytics.module.ts(32,4): error TS1128: Declaration or statement expected.
+src/analytics/analytics.module.ts(34,12): error TS1005: ';' expected.
+src/analytics/analytics.module.ts(35,10): error TS1005: ';' expected.
+src/analytics/analytics.module.ts(36,1): error TS1109: Expression expected.
+src/analytics/analytics.module.ts(36,2): error TS1128: Declaration or statement expected.
+src/analytics/analytics.service.spec.ts(306,118): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(35,1): error TS1131: Property or signature expected.
+src/analytics/analytics.service.ts(98,62): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(109,4): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(111,14): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(113,21): error TS1109: Expression expected.
+src/analytics/analytics.service.ts(113,22): error TS1005: ')' expected.
+src/analytics/analytics.service.ts(115,21): error TS1109: Expression expected.
+src/analytics/analytics.service.ts(115,22): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(117,21): error TS1109: Expression expected.
+src/analytics/analytics.service.ts(117,22): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(119,21): error TS1109: Expression expected.
+src/analytics/analytics.service.ts(119,22): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(121,21): error TS1109: Expression expected.
+src/analytics/analytics.service.ts(121,22): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(122,13): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(123,3): error TS1109: Expression expected.
+src/analytics/analytics.service.ts(125,3): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(125,34): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(125,49): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(125,67): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(126,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(126,116): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(127,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(127,73): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(129,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(134,71): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(136,14): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(136,25): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(136,27): error TS1136: Property assignment expected.
+src/analytics/analytics.service.ts(145,62): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(145,73): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(145,75): error TS1002: Unterminated string literal.
+src/analytics/analytics.service.ts(154,38): error TS1005: ')' expected.
+src/analytics/analytics.service.ts(165,62): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(165,73): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(165,75): error TS1002: Unterminated string literal.
+src/analytics/analytics.service.ts(173,53): error TS1005: ')' expected.
+src/analytics/analytics.service.ts(206,3): error TS1128: Declaration or statement expected.
+src/analytics/analytics.service.ts(208,3): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(208,30): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(208,43): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(208,63): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(209,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(211,7): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(217,5): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(217,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(221,7): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(223,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(223,63): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(224,9): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(224,71): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(225,12): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(225,17): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(228,3): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(228,34): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(228,43): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(228,73): error TS1011: An element access expression should take an argument.
+src/analytics/analytics.service.ts(229,12): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(232,7): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(235,3): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(235,30): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(235,43): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(235,63): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(236,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(238,7): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(240,9): error TS1003: Identifier expected.
+src/analytics/analytics.service.ts(244,5): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(244,20): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(244,38): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(244,40): error TS1136: Property assignment expected.
+src/analytics/analytics.service.ts(268,3): error TS1128: Declaration or statement expected.
+src/analytics/analytics.service.ts(270,3): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(270,31): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(270,47): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(270,62): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(271,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(275,7): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(277,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(277,59): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(278,9): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(278,73): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(279,12): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(279,17): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(282,3): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(282,39): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(282,48): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(282,74): error TS1011: An element access expression should take an argument.
+src/analytics/analytics.service.ts(283,12): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(287,7): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(290,3): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(290,37): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(290,54): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(290,72): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(290,81): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(291,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(296,7): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(298,12): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(298,57): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(299,5): error TS1136: Property assignment expected.
+src/analytics/analytics.service.ts(300,21): error TS1146: Declaration expected.
+src/analytics/analytics.service.ts(301,13): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(302,13): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(303,3): error TS1109: Expression expected.
+src/analytics/analytics.service.ts(305,3): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(305,30): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(305,60): error TS1011: An element access expression should take an argument.
+src/analytics/analytics.service.ts(306,12): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(306,71): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(309,3): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(309,29): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(309,38): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(309,68): error TS1011: An element access expression should take an argument.
+src/analytics/analytics.service.ts(310,12): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(313,7): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(316,3): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(317,11): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(318,9): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(318,25): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(318,40): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(319,4): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(320,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(326,7): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(327,12): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(327,50): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(330,3): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(331,18): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(332,11): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(333,15): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(334,4): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(335,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(337,7): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(338,9): error TS1003: Identifier expected.
+src/analytics/analytics.service.ts(341,5): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(341,20): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(341,38): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(341,40): error TS1136: Property assignment expected.
+src/analytics/analytics.service.ts(357,3): error TS1128: Declaration or statement expected.
+src/analytics/analytics.service.ts(359,3): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(360,11): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(361,9): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(362,10): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(363,4): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(364,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(364,51): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(365,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(365,62): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(367,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(372,7): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(374,21): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(374,34): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(374,36): error TS1136: Property assignment expected.
+src/analytics/analytics.service.ts(475,3): error TS1128: Declaration or statement expected.
+src/analytics/analytics.service.ts(477,3): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(477,25): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(477,41): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(477,50): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(477,75): error TS1011: An element access expression should take an argument.
+src/analytics/analytics.service.ts(478,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(478,31): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(479,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(479,33): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(480,14): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(480,54): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(482,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(487,7): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(489,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(489,62): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(490,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(490,78): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(492,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(492,79): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(493,14): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(493,19): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(493,23): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(493,31): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(493,34): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(493,36): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(526,3): error TS1128: Declaration or statement expected.
+src/analytics/analytics.service.ts(528,3): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(529,11): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(530,9): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(531,4): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(531,31): error TS1011: An element access expression should take an argument.
+src/analytics/analytics.service.ts(532,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(532,33): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(533,14): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(533,50): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(535,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(541,7): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(543,12): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(546,8): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(549,3): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(549,37): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(549,46): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(549,60): error TS1109: Expression expected.
+src/analytics/analytics.service.ts(550,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(550,58): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(551,9): error TS1003: Identifier expected.
+src/analytics/analytics.service.ts(551,16): error TS1005: '{' expected.
+src/analytics/analytics.service.ts(551,22): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(553,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(553,57): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(554,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(556,7): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(557,19): error TS1005: '{' expected.
+src/analytics/analytics.service.ts(557,25): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(559,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(563,7): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(564,11): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(564,15): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(564,56): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(567,3): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(567,44): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(568,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(568,69): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(569,9): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(569,18): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(570,10): error TS1359: Identifier expected. 'const' is a reserved word that cannot be used here.
+src/analytics/analytics.service.ts(570,16): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(570,21): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(570,24): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(580,5): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(580,12): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(580,17): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(583,3): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(584,11): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(585,11): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(586,9): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(587,7): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(588,4): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(589,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(589,36): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(590,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(590,32): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(592,14): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(592,61): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(611,3): error TS1128: Declaration or statement expected.
+src/analytics/analytics.service.ts(613,3): error TS1128: Declaration or statement expected.
+src/analytics/analytics.service.ts(613,11): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(613,37): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(613,55): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(613,69): error TS1109: Expression expected.
+src/analytics/analytics.service.ts(614,11): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(614,15): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(616,7): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(618,9): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(619,13): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(625,9): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(627,13): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(627,62): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(628,13): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(628,68): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(630,11): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(630,25): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(631,11): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(631,27): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(632,11): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(632,30): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(634,14): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(634,42): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(634,44): error TS1136: Property assignment expected.
+src/analytics/analytics.service.ts(639,9): error TS1128: Declaration or statement expected.
+src/analytics/analytics.service.ts(658,5): error TS1128: Declaration or statement expected.
+src/analytics/analytics.service.ts(658,7): error TS1005: 'try' expected.
+src/analytics/analytics.service.ts(665,3): error TS1128: Declaration or statement expected.
+src/analytics/analytics.service.ts(667,3): error TS1128: Declaration or statement expected.
+src/analytics/analytics.service.ts(667,11): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(668,17): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(668,31): error TS1011: An element access expression should take an argument.
+src/analytics/analytics.service.ts(669,16): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(670,4): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(670,30): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(671,12): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(699,7): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(702,3): error TS1128: Declaration or statement expected.
+src/analytics/analytics.service.ts(702,11): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(703,17): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(703,31): error TS1011: An element access expression should take an argument.
+src/analytics/analytics.service.ts(704,16): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(705,13): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(706,11): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(707,4): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(707,30): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(708,12): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(809,7): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(812,3): error TS1128: Declaration or statement expected.
+src/analytics/analytics.service.ts(812,11): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(812,45): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(812,59): error TS1011: An element access expression should take an argument.
+src/analytics/analytics.service.ts(812,61): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(813,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(813,69): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(814,20): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(814,31): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(814,40): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(814,45): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(815,20): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(815,32): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(815,41): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(815,47): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(816,12): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(816,54): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(819,3): error TS1128: Declaration or statement expected.
+src/analytics/analytics.service.ts(819,11): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(820,17): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(820,31): error TS1011: An element access expression should take an argument.
+src/analytics/analytics.service.ts(821,19): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(822,4): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(823,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(823,44): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(824,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(824,68): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(825,10): error TS1359: Identifier expected. 'const' is a reserved word that cannot be used here.
+src/analytics/analytics.service.ts(825,16): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(825,21): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(825,24): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(840,5): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(840,12): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(840,17): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(843,3): error TS1128: Declaration or statement expected.
+src/analytics/analytics.service.ts(844,7): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(845,10): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(846,4): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(846,6): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(851,28): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(851,56): error TS1109: Expression expected.
+src/analytics/analytics.service.ts(851,62): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(851,78): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(874,3): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(874,35): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(874,44): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(875,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(877,7): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(878,12): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(878,27): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(881,3): error TS1434: Unexpected keyword or identifier.
+src/analytics/analytics.service.ts(881,27): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(881,43): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(881,52): error TS1005: ';' expected.
+src/analytics/analytics.service.ts(882,11): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(884,7): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(885,9): error TS1003: Identifier expected.
+src/analytics/analytics.service.ts(888,5): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(888,12): error TS1005: ':' expected.
+src/analytics/analytics.service.ts(888,15): error TS1005: ',' expected.
+src/analytics/analytics.service.ts(890,1): error TS1128: Declaration or statement expected.
+src/analytics/dto/assign-category.dto.ts(10,1): error TS1434: Unexpected keyword or identifier.
+src/analytics/dto/assign-category.dto.ts(10,8): error TS1068: Unexpected token. A constructor, method, accessor, or property was expected.
+src/analytics/dto/assign-category.dto.ts(10,31): error TS1434: Unexpected keyword or identifier.
+src/analytics/dto/create-category.dto.ts(13,1): error TS1068: Unexpected token. A constructor, method, accessor, or property was expected.
+src/analytics/dto/summary-query.dto.ts(16,1): error TS1068: Unexpected token. A constructor, method, accessor, or property was expected.
+src/analytics/entities/report-export-job.entity.ts(24,30): error TS1146: Declaration expected.
+src/analytics/entities/report-export-job.entity.ts(25,1): error TS1128: Declaration or statement expected.
+src/modules/cold-storage/cold-storage.service.spec.ts(221,3): error TS1128: Declaration or statement expected.
+src/modules/cold-storage/cold-storage.service.spec.ts(221,4): error TS1128: Declaration or statement expected.
+src/modules/cold-storage/cold-storage.service.spec.ts(222,1): error TS1128: Declaration or statement expected.
+src/modules/cold-storage/cold-storage.service.spec.ts(222,2): error TS1128: Declaration or statement expected.
+src/modules/db-advisory/index-advisor.service.spec.ts(184,3): error TS1128: Declaration or statement expected.
+src/modules/db-advisory/index-advisor.service.spec.ts(184,4): error TS1128: Declaration or statement expected.
+src/modules/db-advisory/index-advisor.service.spec.ts(185,1): error TS1128: Declaration or statement expected.
+src/modules/db-advisory/index-advisor.service.spec.ts(185,2): error TS1128: Declaration or statement expected.
+src/splits/entities/payment-split-participant.entity.ts(32,78): error TS1005: ',' expected.
+src/splits/entities/payment-split-participant.entity.ts(32,79): error TS1136: Property assignment expected.
+src/splits/entities/payment-split.entity.ts(28,66): error TS1005: ',' expected.
+src/splits/entities/payment-split.entity.ts(28,67): error TS1136: Property assignment expected.
+src/splits/splits.service.ts(35,31): error TS1005: ';' expected.
+src/splits/splits.service.ts(35,32): error TS1128: Declaration or statement expected.
+src/splits/splits.service.ts(49,47): error TS1005: ';' expected.
+src/splits/splits.service.ts(49,48): error TS1128: Declaration or statement expected.
+src/splits/splits.service.ts(54,47): error TS1005: ';' expected.
+src/splits/splits.service.ts(54,48): error TS1128: Declaration or statement expected.
+src/splits/splits.service.ts(74,49): error TS1005: ')' expected.
+src/splits/splits.service.ts(74,50): error TS1109: Expression expected.
+src/splits/splits.service.ts(74,51): error TS1434: Unexpected keyword or identifier.
+src/splits/splits.service.ts(74,58): error TS1128: Declaration or statement expected.
+src/splits/splits.service.ts(85,43): error TS1005: ';' expected.
+src/splits/splits.service.ts(85,44): error TS1128: Declaration or statement expected.
+src/splits/splits.service.ts(92,37): error TS1005: ')' expected.
+src/splits/splits.service.ts(92,38): error TS1109: Expression expected.
+src/splits/splits.service.ts(92,39): error TS1434: Unexpected keyword or identifier.
+src/splits/splits.service.ts(92,46): error TS1128: Declaration or statement expected.
+src/splits/splits.service.ts(93,33): error TS1005: ';' expected.
+src/splits/splits.service.ts(93,34): error TS1128: Declaration or statement expected.
+src/splits/splits.service.ts(109,43): error TS1005: ';' expected.
+src/splits/splits.service.ts(109,44): error TS1128: Declaration or statement expected.
+src/splits/splits.service.ts(119,83): error TS1005: ',' expected.
+src/splits/splits.service.ts(119,84): error TS1135: Argument expression expected.
+src/splits/splits.service.ts(130,85): error TS1005: ',' expected.
+src/splits/splits.service.ts(130,86): error TS1135: Argument expression expected.
+src/splits/splits.service.ts(133,31): error TS1005: ';' expected.
+src/splits/splits.service.ts(133,32): error TS1128: Declaration or statement expected.
+src/splits/splits.service.ts(150,83): error TS1005: ',' expected.
+src/splits/splits.service.ts(150,84): error TS1135: Argument expression expected.
+src/splits/splits.service.ts(152,52): error TS1005: ')' expected.
+src/splits/splits.service.ts(152,53): error TS1109: Expression expected.
+src/splits/splits.service.ts(152,54): error TS1434: Unexpected keyword or identifier.
+src/splits/splits.service.ts(152,63): error TS1128: Declaration or statement expected.
+src/splits/splits.service.ts(153,33): error TS1005: ';' expected.
+src/splits/splits.service.ts(153,34): error TS1128: Declaration or statement expected.

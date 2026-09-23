@@ -1,4 +1,13 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  Index,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
 import { User } from '../../users/user.entity';
 
 export enum TransactionCategoryColor {
@@ -13,39 +22,12 @@ export enum TransactionCategoryColor {
   GRAY = '#6B7280',
 }
 
-@Entity('transaction_categories')
-@Index(['userId', 'name'], { unique: true })
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-  ManyToOne,
-  JoinColumn,
-} from 'typeorm';
-import { User } from '../../users/user.entity';
-
+@Index(['userId'])
 @Entity('transaction_categories')
 export class TransactionCategory {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'user_id', type: 'uuid' })
-  userId: string;
-
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'user_id' })
-  user: User;
-
-  @Column({ length: 100 })
-  name: string;
-
-  @Column({ name: 'color', length: 7, nullable: true })
-  color: string | null;
-
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
   @Column({ type: 'varchar', length: 100 })
   name: string;
 
@@ -65,9 +47,9 @@ export class TransactionCategory {
   @JoinColumn({ name: 'userId' })
   user: User | null;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamp with time zone' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: 'timestamp with time zone' })
   updatedAt: Date;
 }

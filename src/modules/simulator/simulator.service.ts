@@ -3,10 +3,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
-import { ExchangeRateSnapshot } from '../exchange-rate/entities/exchange-rate-snapshot.entity';
-import { Wallet } from '../wallets/entities/wallet.entity';
+import { ExchangeRateSnapshot } from '../../exchange-rates/entities/exchange-rate-snapshot.entity';
+import { Wallet } from '../../wallets/entities/wallet.entity';
 
-const DISCLAIMER = 'This is a hypothetical simulation for educational purposes only. Past performance does not guarantee future results.';
+const DISCLAIMER =
+  'This is a hypothetical simulation for educational purposes only. Past performance does not guarantee future results.';
 const CACHE_TTL = 3600;
 
 @Injectable()
@@ -49,9 +50,8 @@ export class SimulatorService {
 
     const currentValueTo = balance * currentRate;
     const projectedValueTo = balance * targetRate;
-    const changePct = currentRate > 0
-      ? ((targetRate - currentRate) / currentRate) * 100
-      : 0;
+    const changePct =
+      currentRate > 0 ? ((targetRate - currentRate) / currentRate) * 100 : 0;
 
     const result = {
       currentRate,
@@ -166,7 +166,8 @@ export class SimulatorService {
 
     const currentValue = totalUnits * currentRate;
     const gainLoss = currentValue - totalInvested;
-    const gainLossPct = totalInvested > 0 ? (gainLoss / totalInvested) * 100 : 0;
+    const gainLossPct =
+      totalInvested > 0 ? (gainLoss / totalInvested) * 100 : 0;
 
     const result = {
       totalInvested,

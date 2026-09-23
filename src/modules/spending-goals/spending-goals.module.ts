@@ -3,7 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { SpendingGoal } from './entities/spending-goal.entity';
 import { SpendingGoalsService } from './spending-goals.service';
 import { SpendingGoalsController } from './spending-goals.controller';
-import { NotificationsModule } from '../notifications/notifications.module';
+import { NotificationsModule } from '../../notifications/notifications.module';
 import { MicroSavingsModule } from '../micro-savings/micro-savings.module';
 
 @Module({

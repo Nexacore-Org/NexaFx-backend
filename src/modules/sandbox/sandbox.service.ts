@@ -1,11 +1,16 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SandboxAccount } from './entities/sandbox-account.entity';
 import { SandboxEvent } from './entities/sandbox-event.entity';
 import { SandboxRequestLog } from './entities/sandbox-request-log.entity';
-import { UsersService } from '../users/users.service';
-import { WalletsService } from '../wallets/wallets.service';
+import { UsersService } from '../../users/users.service';
+import { WalletsService } from '../../wallets/wallets.service';
 import { RedisService } from '../redis/redis.service';
 import { randomBytes } from 'crypto';
 
@@ -26,9 +31,13 @@ export class SandboxService {
   ) {}
 
   async register(userId: string): Promise<{ apiKey: string }> {
-    const existing = await this.sandboxAccountRepo.findOne({ where: { userId } });
+    const existing = await this.sandboxAccountRepo.findOne({
+      where: { userId },
+    });
     if (existing) {
-      throw new BadRequestException('Sandbox account already exists for this user');
+      throw new BadRequestException(
+        'Sandbox account already exists for this user',
+      );
     }
 
     const apiKey = 'nxa_test_' + randomBytes(24).toString('hex');
@@ -47,7 +56,9 @@ export class SandboxService {
   }
 
   async reset(userId: string): Promise<SandboxAccount> {
-    const account = await this.sandboxAccountRepo.findOne({ where: { userId } });
+    const account = await this.sandboxAccountRepo.findOne({
+      where: { userId },
+    });
     if (!account) {
       throw new NotFoundException('Sandbox account not found');
     }
@@ -55,14 +66,16 @@ export class SandboxService {
     await this.sandboxEventRepo.delete({ sandboxAccountId: account.id });
     await this.sandboxRequestLogRepo.delete({ sandboxAccountId: account.id });
     await this.walletsService.deleteByUserId(userId);
-    await this.redisService.del(`sandbox:${account.id}:*`);
+    await this.redisService.deleteByPattern(`sandbox:${account.id}:*`);
 
     account.resetCount = account.resetCount + 1;
     const savedAccount = await this.sandboxAccountRepo.save(account);
 
     await this.seedSandboxData(savedAccount.id, userId);
 
-    this.logger.log(`Sandbox reset for user ${userId}, reset count: ${savedAccount.resetCount}`);
+    this.logger.log(
+      `Sandbox reset for user ${userId}, reset count: ${savedAccount.resetCount}`,
+    );
     return savedAccount;
   }
 
@@ -78,7 +91,11 @@ export class SandboxService {
     });
   }
 
-  async triggerEvent(sandboxAccountId: string, eventType: string, data: any): Promise<SandboxEvent> {
+  async triggerEvent(
+    sandboxAccountId: string,
+    eventType: string,
+    data: any,
+  ): Promise<SandboxEvent> {
     const event = this.sandboxEventRepo.create({
       sandboxAccountId,
       eventType,
@@ -129,7 +146,10 @@ export class SandboxService {
     return savedLog;
   }
 
-  private async seedSandboxData(sandboxAccountId: string, userId: string): Promise<void> {
+  private async seedSandboxData(
+    sandboxAccountId: string,
+    userId: string,
+  ): Promise<void> {
     await this.walletsService.create(userId, 'XLM', '10000.00000000');
 
     const sampleTransactions = [

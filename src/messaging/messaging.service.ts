@@ -13,7 +13,11 @@ import FormData from 'form-data';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { Message, MessageType } from './entities/message.entity';
-import { Broadcast, BroadcastStatus, BroadcastTargetAudience } from './entities/broadcast.entity';
+import {
+  Broadcast,
+  BroadcastStatus,
+  BroadcastTargetAudience,
+} from './entities/broadcast.entity';
 import { User, UserKycTier, UserRole } from '../users/user.entity';
 import { MessagingGateway } from '../gateways/messaging.gateway';
 
@@ -49,20 +53,20 @@ export class MessagingService {
 
   async getConversations(userId: string): Promise<ConversationPreview[]> {
     const messages = await this.messageRepo.find({
-      where: [
-        { senderId: userId },
-        { recipientId: userId },
-      ],
+      where: [{ senderId: userId }, { recipientId: userId }],
       order: { createdAt: 'DESC' },
       relations: ['sender', 'recipient'],
     });
 
-    const conversationMap = new Map<string, {
-      conversationId: string;
-      lastMessage: Message;
-      unreadCount: number;
-      otherUser: User;
-    }>();
+    const conversationMap = new Map<
+      string,
+      {
+        conversationId: string;
+        lastMessage: Message;
+        unreadCount: number;
+        otherUser: User;
+      }
+    >();
 
     for (const msg of messages) {
       if (!conversationMap.has(msg.conversationId)) {
@@ -83,11 +87,16 @@ export class MessagingService {
     }
 
     return Array.from(conversationMap.values())
-      .sort((a, b) => b.lastMessage.createdAt.getTime() - a.lastMessage.createdAt.getTime())
+      .sort(
+        (a, b) =>
+          b.lastMessage.createdAt.getTime() - a.lastMessage.createdAt.getTime(),
+      )
       .map((entry) => ({
         conversationId: entry.conversationId,
         otherUserId: entry.otherUser.id,
-        otherUserName: `${entry.otherUser.firstName ?? ''} ${entry.otherUser.lastName ?? ''}`.trim() || entry.otherUser.email,
+        otherUserName:
+          `${entry.otherUser.firstName ?? ''} ${entry.otherUser.lastName ?? ''}`.trim() ||
+          entry.otherUser.email,
         lastMessage: entry.lastMessage.body,
         lastMessageAt: entry.lastMessage.createdAt,
         unreadCount: entry.unreadCount,
@@ -114,7 +123,9 @@ export class MessagingService {
         (m) => m.senderId === userId || m.recipientId === userId,
       );
       if (!isParticipant) {
-        throw new ForbiddenException('You are not a participant in this conversation');
+        throw new ForbiddenException(
+          'You are not a participant in this conversation',
+        );
       }
     }
 
@@ -153,7 +164,9 @@ export class MessagingService {
     body: string,
     attachmentKeys?: string[],
   ) {
-    const recipient = await this.userRepo.findOne({ where: { id: recipientId } });
+    const recipient = await this.userRepo.findOne({
+      where: { id: recipientId },
+    });
     if (!recipient) {
       throw new NotFoundException('Recipient user not found');
     }
@@ -186,20 +199,20 @@ export class MessagingService {
 
   async getAdminConversations(adminId: string) {
     const messages = await this.messageRepo.find({
-      where: [
-        { senderId: adminId },
-        { recipientId: adminId },
-      ],
+      where: [{ senderId: adminId }, { recipientId: adminId }],
       order: { createdAt: 'DESC' },
       relations: ['sender', 'recipient'],
     });
 
-    const conversationMap = new Map<string, {
-      conversationId: string;
-      lastMessage: Message;
-      unreadCount: number;
-      user: User;
-    }>();
+    const conversationMap = new Map<
+      string,
+      {
+        conversationId: string;
+        lastMessage: Message;
+        unreadCount: number;
+        user: User;
+      }
+    >();
 
     for (const msg of messages) {
       const otherUser = msg.senderId === adminId ? msg.recipient : msg.sender;
@@ -221,11 +234,16 @@ export class MessagingService {
     }
 
     return Array.from(conversationMap.values())
-      .sort((a, b) => b.lastMessage.createdAt.getTime() - a.lastMessage.createdAt.getTime())
+      .sort(
+        (a, b) =>
+          b.lastMessage.createdAt.getTime() - a.lastMessage.createdAt.getTime(),
+      )
       .map((entry) => ({
         conversationId: entry.conversationId,
         userId: entry.user.id,
-        userName: `${entry.user.firstName ?? ''} ${entry.user.lastName ?? ''}`.trim() || entry.user.email,
+        userName:
+          `${entry.user.firstName ?? ''} ${entry.user.lastName ?? ''}`.trim() ||
+          entry.user.email,
         userEmail: entry.user.email,
         lastMessage: entry.lastMessage.body,
         lastMessageAt: entry.lastMessage.createdAt,
@@ -234,7 +252,12 @@ export class MessagingService {
       }));
   }
 
-  async getAdminUserHistory(adminId: string, userId: string, page: number, limit: number) {
+  async getAdminUserHistory(
+    adminId: string,
+    userId: string,
+    page: number,
+    limit: number,
+  ) {
     const conversationId = this.makeConversationId(adminId, userId);
 
     const [messages, total] = await this.messageRepo.findAndCount({
@@ -261,7 +284,12 @@ export class MessagingService {
 
   async createBroadcast(
     adminId: string,
-    dto: { subject: string; body: string; targetAudience: BroadcastTargetAudience; targetUserIds?: string[] },
+    dto: {
+      subject: string;
+      body: string;
+      targetAudience: BroadcastTargetAudience;
+      targetUserIds?: string[];
+    },
   ) {
     const broadcast = this.broadcastRepo.create({
       adminId,
@@ -285,7 +313,9 @@ export class MessagingService {
   }
 
   async processBroadcastFanOut(broadcastId: string) {
-    const broadcast = await this.broadcastRepo.findOne({ where: { id: broadcastId } });
+    const broadcast = await this.broadcastRepo.findOne({
+      where: { id: broadcastId },
+    });
     if (!broadcast) {
       this.logger.error(`Broadcast ${broadcastId} not found for fan-out`);
       return;
@@ -301,7 +331,13 @@ export class MessagingService {
       }
       case BroadcastTargetAudience.KYC_APPROVED: {
         const users = await this.userRepo.find({
-          where: { kycTier: In([UserKycTier.BASIC, UserKycTier.ENHANCED, UserKycTier.FULL]) },
+          where: {
+            kycTier: In([
+              UserKycTier.BASIC,
+              UserKycTier.STANDARD,
+              UserKycTier.ENHANCED,
+            ]),
+          },
           select: ['id'],
         });
         targetUserIds = users.map((u) => u.id);
@@ -309,7 +345,7 @@ export class MessagingService {
       }
       case BroadcastTargetAudience.UNVERIFIED: {
         const users = await this.userRepo.find({
-          where: { kycTier: UserKycTier.UNVERIFIED },
+          where: { kycTier: UserKycTier.NONE },
           select: ['id'],
         });
         targetUserIds = users.map((u) => u.id);
@@ -355,22 +391,39 @@ export class MessagingService {
     await this.broadcastRepo.save(broadcast);
 
     for (const recipientId of targetUserIds) {
-      const recipient = await this.userRepo.findOne({ where: { id: recipientId } });
+      const recipient = await this.userRepo.findOne({
+        where: { id: recipientId },
+      });
       if (recipient) {
-        this.messagingGateway.emitMessageNew(recipientId, { broadcastId: broadcast.id, body: broadcast.body, type: MessageType.BROADCAST });
-        await this.sendEmailNotification(recipient, broadcast.adminId, `[${broadcast.subject}] ${broadcast.body}`);
+        this.messagingGateway.emitMessageNew(recipientId, {
+          broadcastId: broadcast.id,
+          body: broadcast.body,
+          type: MessageType.BROADCAST,
+        });
+        await this.sendEmailNotification(
+          recipient,
+          broadcast.adminId,
+          `[${broadcast.subject}] ${broadcast.body}`,
+        );
       }
     }
 
-    this.logger.log(`Broadcast ${broadcastId} sent to ${targetUserIds.length} users`);
+    this.logger.log(
+      `Broadcast ${broadcastId} sent to ${targetUserIds.length} users`,
+    );
   }
 
-  private async sendEmailNotification(recipient: User, senderId: string, body: string) {
+  private async sendEmailNotification(
+    recipient: User,
+    senderId: string,
+    body: string,
+  ) {
     try {
       const apiKey = this.configService.get<string>('MAILGUN_API_KEY');
       const domain = this.configService.get<string>('MAILGUN_DOMAIN');
       const fromEmail = this.configService.get<string>('MAILGUN_FROM_EMAIL');
-      const fromName = this.configService.get<string>('MAILGUN_FROM_NAME') ?? 'NexaFX';
+      const fromName =
+        this.configService.get<string>('MAILGUN_FROM_NAME') ?? 'NexaFX';
 
       if (!apiKey || !domain || !fromEmail) {
         this.logger.warn('Mailgun not configured, skipping email notification');
@@ -395,7 +448,10 @@ export class MessagingService {
         text: `New message from NexaFX:\n\n${body}\n\nLog in to reply.`,
       });
     } catch (error) {
-      this.logger.error(`Failed to send email notification to ${recipient.email}`, error);
+      this.logger.error(
+        `Failed to send email notification to ${recipient.email}`,
+        error,
+      );
     }
   }
 }

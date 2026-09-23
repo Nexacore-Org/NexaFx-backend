@@ -96,8 +96,6 @@ import { ForensicsModule } from './modules/forensics/forensics.module';
 import { OptionsModule } from './modules/options/options.module';
 import { StatementsModule } from './modules/statements/statements.module';
 import { WalletConnectModule } from './modules/walletconnect/walletconnect.module';
-import { ColdStorageModule } from './modules/cold-storage/cold-storage.module';
-import { SandboxModule } from './modules/sandbox/sandbox.module';
 import { DbAdvisoryModule } from './modules/db-advisory/db-advisory.module';
 import { ModerationModule } from './modules/moderation/moderation.module';
 import { CarbonOffsetModule } from './carbon-offset/carbon-offset.module';
@@ -137,17 +135,20 @@ import { AnnouncementsModule } from './modules/announcements/announcements.modul
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         connection: {
-          url: configService.get<string>('REDIS_URL') || 'redis://localhost:6379',
+          url:
+            configService.get<string>('REDIS_URL') || 'redis://localhost:6379',
         },
       }),
     }),
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ([{
-        ttl: configService.get<number>('THROTTLE_TTL') ?? 60000,
-        limit: configService.get<number>('THROTTLE_LIMIT') ?? 100,
-      }]),
+      useFactory: (configService: ConfigService) => [
+        {
+          ttl: configService.get<number>('THROTTLE_TTL') ?? 60000,
+          limit: configService.get<number>('THROTTLE_LIMIT') ?? 100,
+        },
+      ],
     }),
     ZeroDowntimeDeploymentModule,
     RateAlertsEnhancementModule,
@@ -244,8 +245,6 @@ import { AnnouncementsModule } from './modules/announcements/announcements.modul
     OptionsModule,
     StatementsModule,
     WalletConnectModule,
-    ColdStorageModule,
-    SandboxModule,
     DbAdvisoryModule,
     ModerationModule,
     CarbonOffsetModule,
@@ -276,4 +275,3 @@ import { AnnouncementsModule } from './modules/announcements/announcements.modul
   ],
 })
 export class AppModule {}
-

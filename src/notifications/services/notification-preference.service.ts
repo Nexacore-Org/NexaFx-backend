@@ -14,9 +14,12 @@ import {
 } from '../entities/notification-preference.entity';
 import { NotificationPreferenceUpdateDto } from '../dto/notification-preference.dto';
 
+// NOTE: `NotificationType.SYSTEM` used to be listed here, but that member does
+// not exist on the enum — it evaluated to `undefined` at runtime, so TRANSACTION
+// was already the only effectively non-disableable type. Kept as-is to preserve
+// behaviour while making the file type-check.
 const NON_DISABLEABLE_TYPES = new Set<NotificationType>([
   NotificationType.TRANSACTION,
-  NotificationType.SYSTEM,
 ]);
 
 @Injectable()

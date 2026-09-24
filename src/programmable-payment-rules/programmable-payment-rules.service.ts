@@ -75,7 +75,7 @@ export class ProgrammablePaymentRulesService {
       const message = rule.actionParameters.message || `Your balance for ${rule.triggerCondition.currency} has crossed the threshold.`;
       await this.notificationsService.dispatch(
         rule.userId,
-        NotificationType.SYSTEM,
+        NotificationType.MESSAGING,
         'Payment Rule Alert',
         message,
         { ruleId: rule.id },

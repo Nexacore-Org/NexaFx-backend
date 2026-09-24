@@ -1,6 +1,6 @@
 import { Controller, Post, Body, Param, UseGuards, Req } from '@nestjs/common';
 import { PendingRetryService } from './pending-retry.service';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
 @Controller('v2/kyc/pending-retry')
 @UseGuards(JwtAuthGuard)

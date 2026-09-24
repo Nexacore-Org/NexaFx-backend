@@ -28,7 +28,7 @@ export class CardsService {
     private usersService: UsersService,
   ) {
     this.stripe = new Stripe(this.configService.get<string>('STRIPE_SECRET_KEY') || '', {
-      apiVersion: '2025-02-24.acacia',
+      apiVersion: '2025-02-24.acacia' as any,
     });
   }
 
@@ -68,6 +68,15 @@ export class CardsService {
         },
       },
       status: 'active',
+      billing: {
+        address: {
+          line1: '123 Main St',
+          city: 'San Francisco',
+          state: 'CA',
+          postal_code: '94105',
+          country: 'US',
+        },
+      },
     });
 
     user.stripeCardholderId = cardholder.id;
@@ -132,10 +141,10 @@ export class CardsService {
 
     const ephemeralKey = await this.stripe.ephemeralKeys.create(
       { issuing_card: card.stripeCardId },
-      { apiVersion: '2025-02-24.acacia' },
+      { apiVersion: '2025-02-24.acacia' as any },
     );
 
-    return { ephemeralKey: ephemeralKey.secret };
+    return { ephemeralKey: ephemeralKey.secret || '' };
   }
 
   async freezeCard(cardId: string, userId: string): Promise<VirtualCard> {
@@ -262,8 +271,9 @@ export class CardsService {
   private async handleAuthorizationRequest(
     authorization: Stripe.Issuing.Authorization,
   ): Promise<void> {
+    const stripeCardId = typeof authorization.card === 'string' ? authorization.card : authorization.card.id;
     const card = await this.virtualCardRepository.findOne({
-      where: { stripeCardId: authorization.card.id },
+      where: { stripeCardId },
     });
     if (!card) {
       await this.stripe.issuing.authorizations.decline(authorization.id);
@@ -290,8 +300,9 @@ export class CardsService {
   private async handleTransactionCreated(
     stripeTransaction: Stripe.Issuing.Transaction,
   ): Promise<void> {
+    const stripeCardId = typeof stripeTransaction.card === 'string' ? stripeTransaction.card : stripeTransaction.card.id;
     const card = await this.virtualCardRepository.findOne({
-      where: { stripeCardId: stripeTransaction.card.id },
+      where: { stripeCardId },
     });
     if (!card) {
       return;

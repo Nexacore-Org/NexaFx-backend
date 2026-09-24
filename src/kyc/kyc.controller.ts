@@ -9,6 +9,7 @@ import {
   Param,
   ParseUUIDPipe,
   BadRequestException,
+  Body,
 } from '@nestjs/common';
 import { Audit } from '../common/decorators/audit.decorator';
 import {

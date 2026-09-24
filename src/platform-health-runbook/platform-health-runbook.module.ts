@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { BullMQModule } from '@nestjs/bullmq';
+import { BullModule } from '@nestjs/bullmq';
 import { PlatformHealthRunbookController } from './platform-health-runbook.controller';
 import { PlatformHealthRunbookService } from './platform-health-runbook.service';
 import {
@@ -15,7 +15,7 @@ import {
 @Module({
   imports: [
     TypeOrmModule.forFeature([Transaction]),
-    BullMQModule.registerQueue(
+    BullModule.registerQueue(
       { name: EMAIL_QUEUE },
       { name: WEBHOOK_QUEUE },
       { name: TAX_QUEUE },

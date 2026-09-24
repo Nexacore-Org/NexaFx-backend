@@ -211,7 +211,7 @@ export class RateAlertsService {
 
     await this.notificationsService.dispatch(
       alert.userId,
-      NotificationType.RATE_ALERT,
+      NotificationType.RATE_ALERT_TRIGGERED,
       'Rate Alert Triggered',
       `${alert.fromCurrency}/${alert.toCurrency} is now ${currentRateNum}. Your ${alert.condition} ${alert.targetRate} alert was triggered.`,
       {

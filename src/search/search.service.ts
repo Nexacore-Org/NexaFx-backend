@@ -212,7 +212,7 @@ export class SearchService {
     try {
       this.logger.debug(`Track search term: ${normalized}`);
     } catch (error) {
-      this.logger.warn(`Failed to track search analytics: ${error.message}`);
+      this.logger.warn(`Failed to track search analytics: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

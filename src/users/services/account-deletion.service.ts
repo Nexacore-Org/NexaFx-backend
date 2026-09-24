@@ -125,7 +125,7 @@ export class AccountDeletionService {
       // Send notification
       await this.notificationsService.create({
         userId,
-        type: NotificationType.SYSTEM,
+        type: NotificationType.SECURITY_ALERT,
         title: 'Account Deletion Processed',
         message: `Your account has been anonymized. Your data will be permanently deleted in ${this.HARD_DELETE_DAYS} days.`,
         metadata: { hardDeleteAt: hardDeleteAt.toISOString(), requestId },
@@ -144,7 +144,7 @@ export class AccountDeletionService {
       try {
         await this.notificationsService.create({
           userId,
-          type: NotificationType.SYSTEM,
+          type: NotificationType.SECURITY_ALERT,
           title: 'Account Deletion Failed',
           message:
             'Your account deletion request failed. Please try again later.',
@@ -236,9 +236,8 @@ export class AccountDeletionService {
         { userId },
         {
           title: 'Account Deleted',
-          message: 'This account has been anonymized',
-          metadata: null as any,
-          actionUrl: null as any,
+          body: 'This account has been anonymized',
+          data: null as any,
         },
       );
 

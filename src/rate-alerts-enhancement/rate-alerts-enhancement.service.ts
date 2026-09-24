@@ -110,7 +110,7 @@ export class RateAlertsEnhancementService {
 
     await this.notificationsService.dispatch(
       alert.userId,
-      NotificationType.RATE_ALERT,
+      NotificationType.RATE_ALERT_TRIGGERED,
       'Rate Alert Triggered',
       `${alert.fromCurrency}/${alert.toCurrency} moved ${percentNum}% (now ${currentRateNum}). Your ${alert.percentThreshold}% threshold alert was triggered.`,
       {

@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { RebalancingController } from './rebalancing.controller';
 import { RebalancingService } from './rebalancing.service';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
 describe('RebalancingController', () => {
   let controller: RebalancingController;

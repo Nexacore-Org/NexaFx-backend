@@ -69,7 +69,7 @@ export class FlutterwaveProvider implements FiatRampProvider {
         expiresAt,
       };
     } catch (error) {
-      this.logger.error(`Deposit initiation error: ${error.message}`);
+      this.logger.error(`Deposit initiation error: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }
@@ -116,7 +116,7 @@ export class FlutterwaveProvider implements FiatRampProvider {
         estimatedArrival,
       };
     } catch (error) {
-      this.logger.error(`Withdrawal initiation error: ${error.message}`);
+      this.logger.error(`Withdrawal initiation error: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }
@@ -147,7 +147,7 @@ export class FlutterwaveProvider implements FiatRampProvider {
         accountName: response.data.data.account_name,
       };
     } catch (error) {
-      this.logger.error(`Bank account verification error: ${error.message}`);
+      this.logger.error(`Bank account verification error: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }

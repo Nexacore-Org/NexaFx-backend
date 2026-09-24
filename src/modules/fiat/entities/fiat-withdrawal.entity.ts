@@ -8,7 +8,7 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { User } from '../../users/user.entity';
+import { User } from '../../../users/user.entity';
 
 export enum FiatWithdrawalStatus {
   PENDING = 'PENDING',

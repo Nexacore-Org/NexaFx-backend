@@ -17,33 +17,20 @@ export class BalanceSnapshot {
   id: string;
 
   @Column({ name: 'user_id', type: 'uuid' })
-  userId: string;
-
-  @Column({ type: 'decimal', precision: 20, scale: 8 })
-  balance: string;
-
-  @Column({ length: 10 })
-  currency: string;
-
-  @Column({ name: 'snapshot_date', type: 'date' })
-  snapshotDate: Date;
-
-  @CreateDateColumn({ name: 'created_at' })
-  @Column({ type: 'uuid' })
   @Index()
   userId: string;
 
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'userId' })
+  @JoinColumn({ name: 'user_id' })
   user: User;
 
   @Column({ type: 'jsonb' })
   balances: Record<string, number>;
 
-  @Column({ type: 'date' })
+  @Column({ name: 'snapshot_date', type: 'date' })
   @Index()
   snapshotDate: string;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

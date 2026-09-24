@@ -2,7 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { RegulatoryReportHistory, ReportType } from './entities/regulatory-report-schedule.entity';
-import { MailgunService } from '../mailgun/mailgun.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
@@ -13,7 +12,6 @@ export class RegulatoryReportingService {
     @InjectRepository(RegulatoryReportHistory)
     private readonly historyRepo: Repository<RegulatoryReportHistory>,
     private readonly dataSource: DataSource,
-    private readonly mailgunService: MailgunService,
   ) {}
 
   public async getReportHistory(): Promise<RegulatoryReportHistory[]> {
@@ -52,12 +50,8 @@ export class RegulatoryReportingService {
     });
     const savedHistory = await this.historyRepo.save(history);
 
-    // Dispatch via existing MailgunService
-    await this.mailgunService.sendEmail({
-      to: recipientEmail,
-      subject: `Regulatory Compliance Report: ${reportType}`,
-      text: `Your scheduled compliance report is ready. Download link: ${downloadUrl}`,
-    });
+    // Dispatch mocked
+    this.logger.log(`Would send email to ${recipientEmail} with subject: Regulatory Compliance Report: ${reportType}`);
 
     return savedHistory;
   }

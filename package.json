@@ -34,10 +34,12 @@
     "@apollo/server": "^5.5.0",
     "@as-integrations/express5": "^1.1.2",
     "@aws-sdk/client-s3": "^3.1098.0",
+    "@aws-sdk/lib-storage": "^3.1139.0",
     "@aws-sdk/s3-request-presigner": "^3.500.0",
     "@bull-board/api": "^8.0.1",
     "@bull-board/express": "^8.3.0",
     "@maxmind/geoip2-node": "^7.1.0",
+    "@nestjs-modules/ioredis": "^2.2.2",
     "@nestjs/apollo": "^13.3.0",
     "@nestjs/axios": "^4.0.0",
     "@nestjs/bullmq": "^11.0.4",
@@ -98,6 +100,7 @@
     "socket.io": "^4.8.3",
     "speakeasy": "^2.0.0",
     "stellar-sdk": "^13.3.0",
+    "stripe": "^22.6.2",
     "swagger-ui-express": "^5.0.1",
     "typeorm": "^0.3.20",
     "uuid": "^14.0.2"
@@ -147,6 +150,7 @@
     "husky": "^9.1.7",
     "jest": "^29.7.0",
     "jsonwebtoken": "^9.0.3",
+    "lint-staged": "^15.0.0",
     "prettier": "^3.4.2",
     "semantic-release": "^25.0.5",
     "source-map-support": "^0.5.21",
@@ -156,8 +160,7 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.65.0",
-    "lint-staged": "^15.0.0"
+    "typescript-eslint": "^8.65.0"
   },
   "overrides": {
     "multer": "^2.2.0",
@@ -179,7 +182,12 @@
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.(t|j)s$": ["ts-jest", { "diagnostics": false }]
+      "^.+\\.(t|j)s$": [
+        "ts-jest",
+        {
+          "diagnostics": false
+        }
+      ]
     },
     "collectCoverageFrom": [
       "**/*.(t|j)s"

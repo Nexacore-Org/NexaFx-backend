@@ -99,11 +99,11 @@ export class ConfigService implements OnModuleInit {
       oldValue,
       newValue,
       changedBy,
-      changeReason: reason || null,
+      changeReason: reason ?? undefined,
     });
     await this.versionRepo.save(version);
 
-    config.value = newValue;
+    config.value = newValue as PlatformConfig['value'];
     await this.configRepo.save(config);
 
     const cacheKey = `${CACHE_PREFIX}${key}`;

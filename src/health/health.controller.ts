@@ -3,8 +3,7 @@ import { Public } from '../auth/decorators/public.decorator';
 import { HealthService } from './health.service';
 
 @Public()
-@Version(VERSION_NEUTRAL)
-@Controller('health')
+@Controller({ path: 'health', version: VERSION_NEUTRAL })
 export class HealthController {
   constructor(private readonly healthService: HealthService) {}
 

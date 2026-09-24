@@ -40,8 +40,8 @@ export class SimulatorService {
     const balance = wallet ? parseFloat(wallet.balance.toString()) : 0;
 
     const currentRateSnapshot = await this.exchangeRateSnapshotRepo.findOne({
-      where: { currency, toCurrency },
-      order: { createdAt: 'DESC' },
+      where: { from: currency, to: toCurrency },
+      order: { timestamp: 'DESC' },
     });
 
     const currentRate = currentRateSnapshot
@@ -80,8 +80,8 @@ export class SimulatorService {
     cutoffDate.setDate(cutoffDate.getDate() - daysAgo);
 
     const historicalSnapshot = await this.exchangeRateSnapshotRepo.findOne({
-      where: { currency, toCurrency },
-      order: { createdAt: 'ASC' },
+      where: { from: currency, to: toCurrency },
+      order: { timestamp: 'ASC' },
     });
 
     const purchaseRate = historicalSnapshot
@@ -89,8 +89,8 @@ export class SimulatorService {
       : 0;
 
     const currentSnapshot = await this.exchangeRateSnapshotRepo.findOne({
-      where: { currency, toCurrency },
-      order: { createdAt: 'DESC' },
+      where: { from: currency, to: toCurrency },
+      order: { timestamp: 'DESC' },
     });
 
     const currentRate = currentSnapshot
@@ -156,8 +156,8 @@ export class SimulatorService {
     const totalInvested = monthlyAmount * months;
 
     const currentSnapshot = await this.exchangeRateSnapshotRepo.findOne({
-      where: { currency, toCurrency },
-      order: { createdAt: 'DESC' },
+      where: { from: currency, to: toCurrency },
+      order: { timestamp: 'DESC' },
     });
 
     const currentRate = currentSnapshot

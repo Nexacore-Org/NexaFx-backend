@@ -116,7 +116,6 @@ export class CreateWithdrawalDto {
 
   @ApiPropertyOptional({
     example: 'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOUJ3UHMNGUAO7UP',
-    description: 'Stellar destination address. Optional when beneficiaryId is provided — if both are given, beneficiaryId takes precedence.',
     description:
       "The recipient's Stellar public key (G...) or fiat destination address. " +
       'Optional when beneficiaryId is provided - if both are given, beneficiaryId takes precedence. ' +
@@ -127,7 +126,6 @@ export class CreateWithdrawalDto {
   destinationAddress?: string;
 
   @ApiPropertyOptional({
-    description: "ID of a saved beneficiary. If provided, the beneficiary's walletAddress is used as the destination and lastUsedAt is updated on success.",
     description:
       "ID of a saved beneficiary. If provided, the beneficiary's walletAddress " +
       'is used as the destination and lastUsedAt is updated on success. ' +
@@ -138,10 +136,9 @@ export class CreateWithdrawalDto {
   @IsOptional()
   beneficiaryId?: string;
 
-  @ApiPropertyOptional({ description: 'Optional wallet to withdraw from (UUID). Defaults to primary wallet.', format: 'uuid' })
   @ApiPropertyOptional({
-    description:
-      'Optional wallet to withdraw from. When omitted, the user’s default wallet is used.',
+    description: 'Optional wallet to withdraw from (UUID). When omitted, the user’s default wallet is used.',
+    format: 'uuid'
   })
   @IsOptional()
   @IsUUID()

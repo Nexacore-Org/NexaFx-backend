@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Param, UseGuards, Request, Res } from '@nestjs/common';
 import { InvoiceService } from './invoice.service';
 import { PdfGeneratorService } from './pdf-generator.service';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Response } from 'express';
 
 @Controller('v2/invoices')

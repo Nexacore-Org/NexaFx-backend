@@ -1,10 +1,9 @@
 import { Module } from '@nestjs/common';
-import { GraphqlSubscriptionsController } from './graphql-subscriptions.controller';
+import { GraphqlSubscriptionsResolver } from './graphql-subscriptions.controller';
 import { GraphqlSubscriptionsService } from './graphql-subscriptions.service';
 
 @Module({
-  controllers: [GraphqlSubscriptionsController],
-  providers: [GraphqlSubscriptionsService],
+  providers: [GraphqlSubscriptionsResolver, GraphqlSubscriptionsService],
   exports: [GraphqlSubscriptionsService],
 })
 export class GraphqlSubscriptionsModule {}

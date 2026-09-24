@@ -1,17 +1,28 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException, Logger, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, In } from 'typeorm';
-import { Transaction, TransactionType } from '../../transactions/entities/transaction.entity';
-import {
-  TransactionCategory,
-  TransactionCategoryColor,
-} from '../entities/transaction-category.entity';
-import { BalanceSnapshot } from '../entities/balance-snapshot.entity';
-import { ReportExportJob, ExportJobStatus, ExportFormat } from '../entities/report-export-job.entity';
-import { SummaryQueryDto } from '../dto/summary-query.dto';
-import { CreateCategoryDto } from '../dto/create-category.dto';
-import { AssignCategoryDto } from '../dto/assign-category.dto';
+import { Repository, DataSource, In, Between, MoreThanOrEqual } from 'typeorm';
+import { SummaryQueryDto } from './dto/summary-query.dto';
+import { CreateCategoryDto } from './dto/create-category.dto';
+import { AssignCategoryDto } from './dto/assign-category.dto';
 import Decimal from 'decimal.js';
+import * as fastCsv from 'fast-csv';
+import * as PDFDocument from 'pdfkit';
+
+import {
+  Transaction,
+  TransactionType,
+  TransactionStatus,
+} from '../transactions/entities/transaction.entity';
+import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
+import { UsersService } from '../users/users.service';
+import { User } from '../users/user.entity';
+import { TransactionCategory, TransactionCategoryColor } from './entities/transaction-category.entity';
+import { BalanceSnapshot } from './entities/balance-snapshot.entity';
+import {
+  ReportExportJob,
+  ExportJobStatus,
+  ExportFormat,
+} from './entities/report-export-job.entity';
 
 export interface CategorySummary {
   categoryId: string;
@@ -32,32 +43,7 @@ export interface SpendingSummary {
   daily: DailySummary[];
   totalAmount: string;
   totalTransactionCount: number;
-import {
-  Injectable,
-  Logger,
-  NotFoundException,
-  BadRequestException,
-  ForbiddenException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, MoreThanOrEqual } from 'typeorm';
-import * as fastCsv from 'fast-csv';
-import * as PDFDocument from 'pdfkit';
-import {
-  Transaction,
-  TransactionType,
-  TransactionStatus,
-} from '../transactions/entities/transaction.entity';
-import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
-import { UsersService } from '../users/users.service';
-import { User } from '../users/user.entity';
-import { TransactionCategory } from './entities/transaction-category.entity';
-import { BalanceSnapshot } from './entities/balance-snapshot.entity';
-import {
-  ReportExportJob,
-  ExportJobStatus,
-  ExportFormat,
-} from './entities/report-export-job.entity';
+}
 
 export interface CategoryBreakdown {
   categoryId: string;
@@ -92,9 +78,6 @@ export interface BalanceDataPoint {
 
 @Injectable()
 export class AnalyticsService {
-  private readonly logger = new Logger('AnalyticsService');
-
-  constructor(
   private readonly logger = new Logger(AnalyticsService.name);
 
   private readonly SYSTEM_CATEGORIES = [
@@ -117,8 +100,10 @@ export class AnalyticsService {
     private readonly balanceSnapshotRepository: Repository<BalanceSnapshot>,
     @InjectRepository(ReportExportJob)
     private readonly exportJobRepository: Repository<ReportExportJob>,
-    @InjectRepository(Transaction)
-    private readonly transactionRepository: Repository<Transaction>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    private readonly usersService: UsersService,
+    private readonly exchangeRatesService: ExchangeRatesService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -142,7 +127,7 @@ export class AnalyticsService {
       .select('COALESCE(transaction_category.name, Uncategorised)', 'categoryName')
       .addSelect('transaction_category.id', 'categoryId')
       .addSelect('COALESCE(transaction_category.color, NULL)', 'color')
-      .addSelect('SUM(CAST(transaction.amount AS DECIMAL)), 'totalAmount')
+      .addSelect('SUM(CAST(transaction.amount AS DECIMAL))', 'totalAmount')
       .addSelect('COUNT(transaction.id)', 'transactionCount')
       .from('transactions', 'transaction')
       .leftJoin('transaction_categories', 'transaction_category', 'transaction.metadata->>categoryId = transaction_category.id')
@@ -162,7 +147,7 @@ export class AnalyticsService {
     const dailySummaryQb = this.dataSource
       .createQueryBuilder()
       .select('DATE(transaction.createdAt)', 'date')
-      .addSelect('SUM(CAST(transaction.amount AS DECIMAL)), 'totalAmount')
+      .addSelect('SUM(CAST(transaction.amount AS DECIMAL))', 'totalAmount')
       .addSelect('COUNT(transaction.id)', 'transactionCount')
       .from('transactions', 'transaction')
       .where('transaction.userId = :userId', { userId })
@@ -205,80 +190,6 @@ export class AnalyticsService {
     };
   }
 
-  async createCategory(userId: string, dto: CreateCategoryDto): Promise<TransactionCategory> {
-    const existing = await this.categoryRepository.findOne({
-      where: { userId, name: dto.name },
-    });
-
-    if (existing) {
-      throw new ConflictException(`Category with name '${dto.name}' already exists`);
-    }
-
-    const category = this.categoryRepository.create({
-      userId,
-      name: dto.name,
-      color: dto.color || TransactionCategoryColor.GRAY,
-    });
-
-    const saved = await this.categoryRepository.save(category);
-    this.logger.log(`Created category ${saved.id} for user ${userId}`);
-    return saved;
-  }
-
-  async findUserCategories(userId: string): Promise<TransactionCategory[]> {
-    return this.categoryRepository.find({
-      where: { userId },
-      order: { createdAt: 'ASC' },
-    });
-  }
-
-  async assignCategory(userId: string, dto: AssignCategoryDto): Promise<Transaction> {
-    const transaction = await this.transactionRepository.findOne({
-      where: { id: dto.transactionId },
-    });
-
-    if (!transaction) {
-      throw new NotFoundException(`Transaction ${dto.transactionId} not found`);
-    }
-
-    if (transaction.userId !== userId) {
-      throw new BadRequestException('Transaction does not belong to the current user');
-    }
-
-    const category = await this.categoryRepository.findOne({
-      where: { id: dto.categoryId },
-    });
-
-    if (!category) {
-      throw new NotFoundException(`Category ${dto.categoryId} not found`);
-    }
-
-    if (category.userId !== userId) {
-      throw new BadRequestException('Category does not belong to the current user');
-    }
-
-    transaction.metadata = {
-      ...(transaction.metadata ?? {}),
-      categoryId: dto.categoryId,
-    };
-
-    const updated = await this.transactionRepository.save(transaction);
-    this.logger.log(`Assigned category ${dto.categoryId} to transaction ${dto.transactionId}`);
-    return updated;
-  }
-
-  async createExportJob(userId: string, format: ExportFormat): Promise<ReportExportJob> {
-    const job = this.exportJobRepository.create({
-      userId,
-      format,
-      status: ExportJobStatus.PENDING,
-    });
-
-    const saved = await this.exportJobRepository.save(job);
-    this.logger.log(`Created export job ${saved.id} for user ${userId}`);
-    return saved;
-  }
-
   async getUserBalanceSnapshots(userId: string): Promise<BalanceSnapshot[]> {
     return this.balanceSnapshotRepository.find({
       where: { userId },
@@ -287,20 +198,6 @@ export class AnalyticsService {
     });
   }
 
-  async recordBalanceSnapshot(userId: string, balance: string, currency: string): Promise<BalanceSnapshot> {
-    const snapshot = this.balanceSnapshotRepository.create({
-      userId,
-      balance,
-      currency,
-      snapshotDate: new Date(),
-    });
-
-    return this.balanceSnapshotRepository.save(snapshot);
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
-    private readonly exchangeRatesService: ExchangeRatesService,
-    private readonly usersService: UsersService,
-  ) {}
 
   async getSystemCategories(): Promise<TransactionCategory[]> {
     return this.categoryRepository.find({ where: { isSystem: true } });

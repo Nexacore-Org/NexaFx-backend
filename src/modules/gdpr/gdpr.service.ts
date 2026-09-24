@@ -77,7 +77,7 @@ export class GdprService {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
-    const isPasswordValid = await bcrypt.compare(passwordInput, user.password);
+    const isPasswordValid = await bcrypt.compare(passwordInput, user.password as string);
     if (!isPasswordValid) throw new UnauthorizedException('Invalid password');
 
     const pendingTransactions = await this.transactionRepository.count({
@@ -94,7 +94,7 @@ export class GdprService {
     // 1. KYC document keys
     const kyc = await this.kycRepository.findOne({ where: { userId } });
     if (kyc) {
-      [kyc.documentFrontKey, kyc.documentBackKey, kyc.selfieKey, kyc.proofOfAddressKey]
+      [kyc.documentFrontKey, kyc.documentBackKey, kyc.selfieKey, (kyc as any).proofOfAddressKey]
         .filter(Boolean)
         .forEach((key) => keysToDelete.push(key!));
     }

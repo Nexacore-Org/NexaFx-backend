@@ -1,22 +1,22 @@
 import { Resolver, Subscription, Args, ID } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
-import { GraphqlSubscriptionsService, ExchangeRateUpdate, TransactionStatusUpdate } from './graphql-subscriptions.service';
-import { GqlAuthGuard } from '../graphql/guards/gql-auth.guard'; // Reusing existing guard
+import { GraphqlSubscriptionsService } from './graphql-subscriptions.service';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @Resolver()
-@UseGuards(GqlAuthGuard)
+@UseGuards(JwtAuthGuard)
 export class GraphqlSubscriptionsResolver {
   constructor(private readonly subscriptionsService: GraphqlSubscriptionsService) {}
 
-  @Subscription(() => ExchangeRateUpdate, {
+  @Subscription(() => Object, {
     name: 'exchangeRateUpdated',
   })
   public exchangeRateUpdated(@Args('pair') pair: string) {
     return this.subscriptionsService.getExchangeRateStream(pair);
   }
 
-  @Subscription(() => TransactionStatusUpdate, {
+  @Subscription(() => Object, {
     name: 'transactionStatusChanged',
   })
   public transactionStatusChanged(

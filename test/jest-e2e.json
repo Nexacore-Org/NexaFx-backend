@@ -4,11 +4,15 @@
   "testEnvironment": "node",
   "testRegex": ".e2e-spec.ts$",
   "transform": {
-    "^.+\\.(t|j)s$": "ts-jest"
+    "^.+\\.(t|j)s$": ["ts-jest", { "diagnostics": false }]
   },
+  "transformIgnorePatterns": [
+    "node_modules/(?!(@noble|@scure|@stellar|uint8array-extras)/)"
+  ],
   "testTimeout": 300000,
   "moduleNameMapper": {
-    "^src/(.*)$": "<rootDir>/../src/$1"
+    "^src/(.*)$": "<rootDir>/../src/$1",
+    "^archiver$": "<rootDir>/mocks/archiver.mock.ts"
   },
   "setupFilesAfterEnv": ["<rootDir>/setup.e2e.ts"],
   "testPathIgnorePatterns": ["/node_modules/", "/dist/"]

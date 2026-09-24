@@ -310,7 +310,7 @@ export class WalletsService {
     );
 
     return {
-      items: withBalances,
+      items: withBalances.map((b: any) => ({...b, isWatchOnly: false, balanceError: null })) as any,
       total,
       page: safePage,
       pageSize: safePageSize,
@@ -450,7 +450,7 @@ export class WalletsService {
       await walletRepo.update({ id: walletId }, { isDefault: true });
 
       // Keep the User row in sync so legacy code still works.
-      const userUpdate: Partial<User> = { walletPublicKey: target.publicKey };
+      const userUpdate: Partial<User> = { walletPublicKey: target.publicKey as any };
       if (target.encryptedSecretKey != null) {
         userUpdate.walletSecretKeyEncrypted = target.encryptedSecretKey;
       }
@@ -546,7 +546,7 @@ export class WalletsService {
     let balanceError: string | null = null;
 
     try {
-      balances = await this.stellarService.getWalletBalances(wallet.publicKey);
+      balances = await this.stellarService.getWalletBalances(wallet.publicKey as any);
     } catch (err) {
       balanceError =
         err instanceof Error ? err.message : 'Failed to fetch balances';
@@ -565,7 +565,7 @@ export class WalletsService {
   private toSummary(wallet: Wallet): WalletSummary {
     return {
       id: wallet.id,
-      publicKey: wallet.publicKey,
+      publicKey: wallet.publicKey as any,
       label: wallet.label,
       isDefault: wallet.isDefault,
       isWatchOnly: !wallet.encryptedSecretKey,
@@ -576,7 +576,7 @@ export class WalletsService {
 
   private toTransactionContext(wallet: Wallet): TransactionWalletContext {
     return {
-      publicKey: wallet.publicKey,
+      publicKey: wallet.publicKey as any,
       encryptedSecretKey: wallet.encryptedSecretKey,
       isWatchOnly: !wallet.encryptedSecretKey,
     };

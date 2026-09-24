@@ -5,7 +5,7 @@ import { Keypair, Operation } from '@stellar/stellar-sdk';
 describe('Stellar Concurrency Test (#783)', () => {
   let stellarService: StellarService;
   // Test hot wallet secret with funded testnet balance
-  const testSecret = process.env.TEST_HOT_WALLET_SECRET || 'SDXXX...';
+  const testSecret = process.env.TEST_HOT_WALLET_SECRET || 'SA72YVHVNXY4PFTZOTD35G6ZUTYZ5V2HHT6H5D26ZZRYH4VQQY3L34H6';
   const testKeypair = Keypair.fromSecret(testSecret);
 
   beforeAll(async () => {

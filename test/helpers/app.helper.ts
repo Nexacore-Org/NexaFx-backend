@@ -1,5 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe, VersioningType, ClassSerializerInterceptor } from '@nestjs/common';
+import {
+  INestApplication,
+  ValidationPipe,
+  VersioningType,
+  ClassSerializerInterceptor,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AppModule } from '../../src/app.module';
 import { AllExceptionsFilter } from '../../src/common/filters/all-exceptions.filter';
@@ -60,8 +65,10 @@ jest.mock('stellar-sdk', () => ({
   })),
   Keypair: {
     random: jest.fn().mockReturnValue({
-      publicKey: () => 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY2F3D',
-      secret: () => 'SBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      publicKey: () =>
+        'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY2F3D',
+      secret: () =>
+        'SBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
     }),
   },
   Networks: {
@@ -83,6 +90,62 @@ jest.mock('stellar-sdk', () => ({
     payment: jest.fn().mockReturnValue({}),
   },
 }));
+
+/**
+ * Mock Stripe SDK (Stripe Issuing) — no real external network calls.
+ * The concrete mock lives in test/mocks/stripe.mock.ts so specs can override it.
+ */
+jest.mock('stripe', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const stripeMock = require('../mocks/stripe.mock');
+  return {
+    __esModule: true,
+    default: stripeMock.default,
+    Stripe: stripeMock.default,
+  };
+});
+
+/**
+ * Virtual mocks for packages referenced by the app but not declared as
+ * dependencies (pre-existing defects). These keep the E2E app bootable while
+ * never touching the real external service.
+ */
+jest.mock(
+  '@aws-sdk/lib-storage',
+  () => ({
+    Upload: class MockUpload {
+      constructor(_options: unknown) {}
+      done() {
+        return Promise.resolve({});
+      }
+      on() {
+        return this;
+      }
+      abort() {
+        return Promise.resolve();
+      }
+    },
+  }),
+  { virtual: true },
+);
+
+// Services in the app use the (undeclared) package's @InjectRedis(), while the
+// repo's own RedisModule provides the REDIS_CLIENT symbol. Map the decorator to
+// the real repo client so Nest DI resolves and the app degrades gracefully.
+jest.mock(
+  '@nestjs-modules/ioredis',
+  () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Inject } = require('@nestjs/common');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { REDIS_CLIENT } = require('../../src/modules/redis/redis.constants');
+    return {
+      InjectRedis: () => Inject(REDIS_CLIENT),
+      getRedisToken: () => REDIS_CLIENT,
+    };
+  },
+  { virtual: true },
+);
 
 /**
  * Create and configure a test NestJS application

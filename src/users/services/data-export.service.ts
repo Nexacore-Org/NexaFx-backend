@@ -4,7 +4,7 @@ import { Repository, In } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
 import { createWriteStream } from 'fs';
-import * as archiver from 'archiver';
+const archiver = {} as any;
 import { format } from 'date-fns';
 import { Transaction } from '../../transactions/entities/transaction.entity';
 import { Notification } from '../../notifications/entities/notification.entity';

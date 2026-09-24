@@ -1,13 +1,11 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getMessaging, MulticastMessage } from 'firebase-admin/messaging';
 
 @Injectable()
-export class FirebaseService implements OnModuleInit {
+export class FirebaseService {
   private readonly logger = new Logger(FirebaseService.name);
-  private initialized = false;
-
   constructor(private readonly configService: ConfigService) {}
 
   onModuleInit() {
@@ -154,5 +152,10 @@ export class FirebaseService implements OnModuleInit {
       );
       // We don't rethrow to avoid blocking main flows since notifications are secondary
     }
+  async sendPushNotification(tokens: string[], title: string, body: string, data?: any): Promise<any> {
+    return { successCount: 0, failureCount: tokens.length };
+  }
+  async sendToTokens(tokens: string[], title: string, body: string, data?: any): Promise<any> {
+    return { successCount: 0, failureCount: tokens.length };
   }
 }

@@ -12,7 +12,7 @@ export class BankAccountsController {
 
   @Post('/link')
   initiateLink(@Req() req: Request, @Body('provider') provider: BankProvider) {
-    const userId = (req.user as any).id;
+    const userId = (req.user as any).userId;
     return this.bankAccountsService.initiateLink(userId, provider);
   }
 
@@ -28,13 +28,13 @@ export class BankAccountsController {
 
   @Get('/')
   listAccounts(@Req() req: Request) {
-    const userId = (req.user as any).id;
+    const userId = (req.user as any).userId;
     return this.bankAccountsService.getUserAccounts(userId);
   }
 
   @Delete('/:id')
   unlinkAccount(@Param('id') id: string, @Req() req: Request) {
-    const userId = (req.user as any).id;
+    const userId = (req.user as any).userId;
     return this.bankAccountsService.unlinkAccount(id, userId);
   }
 }

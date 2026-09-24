@@ -50,6 +50,7 @@ export async function seedTestUser(
     INSERT INTO "users" (
       email,
       password,
+      "passwordHash",
       "firstName",
       "lastName",
       role,
@@ -59,7 +60,7 @@ export async function seedTestUser(
       "walletSecretKeyEncrypted",
       "referralCode"
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     RETURNING *
     `,
     [
@@ -70,7 +71,7 @@ export async function seedTestUser(
       role,
       isVerified,
       isActive,
-      'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY2F3D',
+      'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
       'encrypted-test-secret',
       generateReferralCode(),
     ],

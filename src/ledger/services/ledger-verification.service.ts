@@ -110,7 +110,7 @@ export class LedgerVerificationService {
       admins.map((admin) =>
         this.notificationsService.dispatch(
           admin.id,
-          NotificationType.SYSTEM,
+          NotificationType.SECURITY_ALERT,
           'Ledger discrepancy detected',
           message,
           result as any,

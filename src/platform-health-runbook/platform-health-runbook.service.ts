@@ -103,7 +103,7 @@ export class PlatformHealthRunbookService {
       jobs.map(async (name) => {
         try {
           const lastHeartbeat = await this.transactionRepo.findOne({
-            where: { status: TransactionStatus.COMPLETED },
+            where: { status: TransactionStatus.SUCCESS },
             order: { createdAt: 'DESC' },
           });
 

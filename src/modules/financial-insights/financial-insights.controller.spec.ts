@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { FinancialInsightsController } from './financial-insights.controller';
 import { FinancialInsightsService } from './financial-insights.service';
 import { mock, DeepMockProxy } from 'jest-mock-extended';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Reflector } from '@nestjs/core';
 
 describe('FinancialInsightsController', () => {

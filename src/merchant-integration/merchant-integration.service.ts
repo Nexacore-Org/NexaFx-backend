@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MerchantCheckoutSession, CheckoutSessionStatus } from './entities/merchant-checkout-session.entity';
-import { WebhookService } from '../webhooks/webhook.service';
+import { WebhookService } from '../webhooks/services/webhook.service';
 
 @Injectable()
 export class MerchantIntegrationService {
@@ -62,7 +62,7 @@ export class MerchantIntegrationService {
       amount: updated.amount,
       currency: updated.currency,
       status: updated.status,
-    });
+    }, updated.merchantId);
 
     return updated;
   }

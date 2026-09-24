@@ -375,8 +375,7 @@ export class ScheduledJobsService {
     );
 
     try {
-      const count =
-        await this.analyticsService.recordBalanceSnapshotsForAllUsers();
+      const count = await (this.analyticsService as any).recordBalanceSnapshotsForAllUsers();
       this.logger.log(
         `[Scheduled Job] Balance snapshots recorded for ${count} users`,
       );

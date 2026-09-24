@@ -1,10 +1,157 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getMessaging, MulticastMessage } from 'firebase-admin/messaging';
 
 @Injectable()
 export class FirebaseService {
   private readonly logger = new Logger(FirebaseService.name);
   constructor(private readonly configService: ConfigService) {}
+
+  onModuleInit() {
+    this.initializeFirebase();
+  }
+
+  private initializeFirebase() {
+    try {
+      if (getApps().length > 0) {
+        this.initialized = true;
+        this.logger.log('Firebase Admin SDK already initialized');
+        return;
+      }
+
+      const serviceAccountJson = this.configService.get<string>(
+        'FIREBASE_SERVICE_ACCOUNT_JSON',
+      );
+
+      let credentialConfig: any = null;
+
+      if (serviceAccountJson) {
+        try {
+          const serviceAccount = JSON.parse(serviceAccountJson);
+          credentialConfig = {
+            projectId: serviceAccount.project_id || serviceAccount.projectId,
+            clientEmail: serviceAccount.client_email || serviceAccount.clientEmail,
+            privateKey: (serviceAccount.private_key || serviceAccount.privateKey)?.replace(/\\n/g, '\n'),
+          };
+        } catch (jsonError) {
+          this.logger.error(
+            `Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON: ${(jsonError as any).message}`,
+          );
+        }
+      }
+
+      if (!credentialConfig) {
+        const projectId = this.configService.get<string>('FIREBASE_PROJECT_ID');
+        const clientEmail = this.configService.get<string>(
+          'FIREBASE_CLIENT_EMAIL',
+        );
+        const privateKeyStr = this.configService.get<string>(
+          'FIREBASE_PRIVATE_KEY',
+        );
+
+        if (projectId && clientEmail && privateKeyStr) {
+          credentialConfig = {
+            projectId,
+            clientEmail,
+            privateKey: privateKeyStr.replace(/\\n/g, '\n'),
+          };
+        }
+      }
+
+      if (!credentialConfig || !credentialConfig.projectId || !credentialConfig.clientEmail || !credentialConfig.privateKey) {
+        this.logger.warn(
+          'Firebase credentials not fully configured. Push notifications will be disabled.',
+        );
+        return;
+      }
+
+      initializeApp({
+        credential: cert({
+          projectId: credentialConfig.projectId,
+          clientEmail: credentialConfig.clientEmail,
+          privateKey: credentialConfig.privateKey,
+        }),
+      });
+
+      this.initialized = true;
+      this.logger.log('Firebase Admin SDK initialized successfully');
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Failed to initialize Firebase Admin SDK: ${errorMessage}`,
+      );
+    }
+  }
+
+  async sendToTokens(
+    tokens: string[],
+    title: string,
+    body: string,
+    data?: Record<string, string>,
+    structuredData?: Record<string, string>,
+  ): Promise<void> {
+    if (!this.initialized) {
+      this.logger.warn(
+        'Firebase is not initialized. Skipping push notification delivery.',
+      );
+      return;
+    }
+
+    if (!tokens || tokens.length === 0) {
+      return;
+    }
+
+    try {
+      const mergedData: Record<string, string> = {
+        ...(data ?? {}),
+        ...(structuredData ?? {}),
+      };
+
+      const message: MulticastMessage = {
+        notification: {
+          title,
+          body,
+        },
+        tokens,
+      };
+
+      if (Object.keys(mergedData).length > 0) {
+        message.data = mergedData;
+      }
+
+      const response = await getMessaging().sendEachForMulticast(message);
+
+      if (response.failureCount > 0) {
+        const failedTokens: string[] = [];
+        response.responses.forEach((resp, idx) => {
+          if (!resp.success) {
+            failedTokens.push(tokens[idx]);
+            this.logger.warn(
+              `Failed to send to token ${tokens[idx]}: ${resp.error?.message}`,
+            );
+          }
+        });
+
+        // In the future, we can clean up these failed tokens from the user's fcmTokens array
+        this.logger.log(
+          `FCM send complete: ${response.successCount} successful, ${response.failureCount} failed.`,
+        );
+      } else {
+        this.logger.log(
+          `FCM send successful to ${response.successCount} tokens.`,
+        );
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Error sending push notifications: ${errorMessage}`,
+        error,
+      );
+      // We don't rethrow to avoid blocking main flows since notifications are secondary
+    }
   async sendPushNotification(tokens: string[], title: string, body: string, data?: any): Promise<any> {
     return { successCount: 0, failureCount: tokens.length };
   }

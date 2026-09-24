@@ -72,7 +72,7 @@ export class PushNotificationsService {
           userId: user.id,
           title: createBroadcastDto.title,
           message: createBroadcastDto.message,
-          type: NotificationType.SYSTEM,
+          type: NotificationType.MESSAGING,
           metadata: {
             broadcastId: savedBroadcast.id,
             isBroadcast: true,

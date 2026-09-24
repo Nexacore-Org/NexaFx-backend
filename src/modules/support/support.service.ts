@@ -496,7 +496,7 @@ export class SupportService {
       for (const admin of admins) {
         await this.notificationsService.create({
           userId: admin.id,
-          type: NotificationType.SYSTEM,
+          type: NotificationType.MESSAGING,
           title: `SLA Breach: ${ticket.ticketNumber}`,
           message: `Ticket ${ticket.ticketNumber} has breached its SLA. Priority escalated to URGENT.`,
           relatedId: ticket.id,

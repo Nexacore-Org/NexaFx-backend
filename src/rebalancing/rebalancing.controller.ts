@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { RebalancingService } from './rebalancing.service';
 import { CreateOrUpdatePolicyDto } from './dto/rebalancing-policy.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
 @Controller('v2/portfolio/rebalancing')
 @UseGuards(JwtAuthGuard)

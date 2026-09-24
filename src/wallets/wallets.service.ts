@@ -301,6 +301,8 @@ export class WalletsService {
           encryptedSecretKey: w.encryptedSecretKey,
           label: w.label,
           isDefault: w.isDefault,
+          isWatchOnly: !w.encryptedSecretKey,
+          balanceError: null,
           network: w.network,
           createdAt: w.createdAt,
           updatedAt: w.updatedAt,
@@ -450,6 +452,7 @@ export class WalletsService {
       await walletRepo.update({ id: walletId }, { isDefault: true });
 
       // Keep the User row in sync so legacy code still works.
+      const userUpdate: Partial<User> = { walletPublicKey: target.publicKey as string };
       const userUpdate: Partial<User> = { walletPublicKey: target.publicKey as any };
       if (target.encryptedSecretKey != null) {
         userUpdate.walletSecretKeyEncrypted = target.encryptedSecretKey;
@@ -546,6 +549,7 @@ export class WalletsService {
     let balanceError: string | null = null;
 
     try {
+      balances = await this.stellarService.getWalletBalances(wallet.publicKey as string);
       balances = await this.stellarService.getWalletBalances(wallet.publicKey as any);
     } catch (err) {
       balanceError =
@@ -557,6 +561,11 @@ export class WalletsService {
 
     return {
       ...this.toSummary(wallet),
+      userId: wallet.userId,
+      currency: wallet.currency,
+      balance: wallet.balance,
+      encryptedSecretKey: wallet.encryptedSecretKey,
+      updatedAt: wallet.updatedAt,
       balances,
       balanceError,
     };
@@ -565,6 +574,7 @@ export class WalletsService {
   private toSummary(wallet: Wallet): WalletSummary {
     return {
       id: wallet.id,
+      publicKey: wallet.publicKey as string,
       publicKey: wallet.publicKey as any,
       label: wallet.label,
       isDefault: wallet.isDefault,
@@ -576,6 +586,7 @@ export class WalletsService {
 
   private toTransactionContext(wallet: Wallet): TransactionWalletContext {
     return {
+      publicKey: wallet.publicKey as string,
       publicKey: wallet.publicKey as any,
       encryptedSecretKey: wallet.encryptedSecretKey,
       isWatchOnly: !wallet.encryptedSecretKey,

@@ -14,7 +14,7 @@ import { User, UserKycTier } from '../users/user.entity';
 import {
   Notification,
   NotificationType,
-  NotificationStatus,
+
 } from '../notifications/entities/notification.entity';
 import { FirebaseService } from '../firebase/firebase.service';
 import { WebhookService } from '../webhooks/services/webhook.service';
@@ -433,12 +433,12 @@ export class KycService {
 
       const notificationPayload: any = {
         userId: user.id,
-        type: NotificationType.SYSTEM,
+        type: NotificationType.SECURITY_ALERT,
         title: 'KYC Approved',
-        message: `Your identity verification for ${kyc.targetTier} tier has been approved.`,
-        status: NotificationStatus.UNREAD,
-        relatedId: kyc.id,
-        metadata: {
+        body: `Your identity verification for ${kyc.targetTier} tier has been approved.`,
+        isRead: false,
+        data: {
+          relatedId: kyc.id,
           entity: 'KYC',
           kycStatus: 'approved',
           tier: kyc.targetTier,
@@ -528,15 +528,19 @@ export class KycService {
 
       const notificationPayload: any = {
         userId: user.id,
-        type: NotificationType.SYSTEM,
+        type: NotificationType.SECURITY_ALERT,
         title:
           newStatus === KycStatus.RESUBMISSION_REQUIRED
             ? 'KYC Resubmission Required'
             : 'KYC Rejected',
-        message: notificationMessage,
-        status: NotificationStatus.UNREAD,
-        relatedId: kyc.id,
-        metadata: { entity: 'KYC', kycStatus: newStatus, reason },
+        body: notificationMessage,
+        isRead: false,
+        data: {
+          relatedId: kyc.id,
+          entity: 'KYC',
+          kycStatus: newStatus,
+          reason,
+        },
       };
       await manager.save(Notification, notificationPayload);
 

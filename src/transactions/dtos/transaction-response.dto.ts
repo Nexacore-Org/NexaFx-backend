@@ -72,19 +72,19 @@ export class TransactionResponseDto {
   tags: string[] | null;
 
   @ApiPropertyOptional({ nullable: true, example: 95 })
-  confidenceScore: number | null;
+  confidenceScore?: number | null;
 
   @ApiPropertyOptional({ nullable: true, example: 10 })
-  expectedCompletionSeconds: number | null;
+  expectedCompletionSeconds?: number | null;
 
   @ApiPropertyOptional({
     nullable: true,
     example: 'Expected to complete in under 10 seconds',
   })
-  expectedCompletionLabel: string | null;
+  expectedCompletionLabel?: string | null;
 
   @ApiPropertyOptional({ nullable: true, example: 'HIGH' })
-  confidenceLabel: string | null;
+  confidenceLabel?: string | null;
 }
 
 export class DepositResponseDto extends TransactionResponseDto {

@@ -366,7 +366,7 @@ export class VaultsService {
 
         await this.notificationsService.create({
           userId: vault.userId,
-          type: NotificationType.SYSTEM,
+          type: NotificationType.SECURITY_ALERT,
           title: 'Vault Matured',
           message: `Your savings vault "${vault.name}" has matured! Balance including interest: ${vault.currentBalance} ${vault.currency}. Withdraw your funds now.`,
           relatedId: vault.id,
@@ -432,7 +432,7 @@ export class VaultsService {
         if (currentBalance < amount) {
           await this.notificationsService.create({
             userId: vault.userId,
-            type: NotificationType.SYSTEM,
+            type: NotificationType.SECURITY_ALERT,
             title: 'Auto-Deposit Skipped',
             message: `Auto-deposit of ${amount} ${vault.currency} into vault "${vault.name}" was skipped due to insufficient main wallet balance.`,
             relatedId: vault.id,

@@ -2,7 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/user.entity';
-import * as admin from 'firebase-admin';
+import { getApps } from 'firebase-admin/app';
+import { getMessaging, Message } from 'firebase-admin/messaging';
 
 @Injectable()
 export class FCMService {
@@ -34,7 +35,7 @@ export class FCMService {
         return;
       }
 
-      if (admin.apps.length === 0) {
+      if (getApps().length === 0) {
         this.logger.warn(
           'Firebase Admin SDK is not initialized. Skipping push notification.',
         );
@@ -48,7 +49,7 @@ export class FCMService {
         }
       }
 
-      const message: admin.messaging.Message = {
+      const message: Message = {
         token,
         notification: {
           title,
@@ -57,7 +58,7 @@ export class FCMService {
         data: stringifiedData,
       };
 
-      await admin.messaging().send(message);
+      await getMessaging().send(message);
       this.logger.log(`Push notification sent successfully to user ${userId}`);
     } catch (error) {
       // Constraint: "Push delivery failure must not throw — log error and continue"

@@ -17,7 +17,7 @@ import { FiatRampProvider } from './providers/fiat-ramp-provider.interface';
 import { FlutterwaveProvider } from './providers/flutterwave.provider';
 import { CreateDepositDto, CreateWithdrawalDto, VerifyBankAccountDto } from './dto/fiat.dto';
 import { NotificationsService } from '../../notifications/notifications.service';
-import { NotificationType, NotificationStatus } from '../../notifications/entities/notification.entity';
+import { NotificationType } from '../../notifications/entities/notification.entity';
 import Decimal from 'decimal.js';
 
 @Injectable()
@@ -220,7 +220,7 @@ export class FiatService {
   async processDepositWebhook(payload: any, signature: string) {
     const secret = this.configService.get<string>('FLUTTERWAVE_SECRET_HASH');
     
-    if (!this.provider.verifyWebhookSignature(payload, signature, secret)) {
+    if (!this.provider.verifyWebhookSignature(payload, signature, secret!)) {
       throw new ForbiddenException('Invalid webhook signature');
     }
 
@@ -282,7 +282,6 @@ export class FiatService {
           type: NotificationType.TRANSACTION,
           title: 'Deposit Completed',
           message: `Your deposit of ${deposit.amount} ${deposit.currency} has been credited to your wallet.`,
-          status: NotificationStatus.UNREAD,
           relatedId: deposit.id,
           metadata: {
             entity: 'FIAT_DEPOSIT',
@@ -303,7 +302,6 @@ export class FiatService {
           type: NotificationType.TRANSACTION,
           title: 'Deposit Failed',
           message: `Your deposit of ${deposit.amount} ${deposit.currency} failed. ${deposit.failureReason}`,
-          status: NotificationStatus.UNREAD,
           relatedId: deposit.id,
           metadata: {
             entity: 'FIAT_DEPOSIT',
@@ -323,7 +321,7 @@ export class FiatService {
   async processWithdrawalWebhook(payload: any, signature: string) {
     const secret = this.configService.get<string>('FLUTTERWAVE_SECRET_HASH');
     
-    if (!this.provider.verifyWebhookSignature(payload, signature, secret)) {
+    if (!this.provider.verifyWebhookSignature(payload, signature, secret!)) {
       throw new ForbiddenException('Invalid webhook signature');
     }
 
@@ -369,7 +367,6 @@ export class FiatService {
           type: NotificationType.TRANSACTION,
           title: 'Withdrawal Completed',
           message: `Your withdrawal of ${withdrawal.amount} ${withdrawal.currency} has been successfully sent to your bank account.`,
-          status: NotificationStatus.UNREAD,
           relatedId: withdrawal.id,
           metadata: {
             entity: 'FIAT_WITHDRAWAL',
@@ -404,7 +401,6 @@ export class FiatService {
           type: NotificationType.TRANSACTION,
           title: 'Withdrawal Failed',
           message: `Your withdrawal of ${withdrawal.amount} ${withdrawal.currency} failed. The amount has been refunded to your wallet. ${withdrawal.failureReason}`,
-          status: NotificationStatus.UNREAD,
           relatedId: withdrawal.id,
           metadata: {
             entity: 'FIAT_WITHDRAWAL',

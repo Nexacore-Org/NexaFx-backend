@@ -12,7 +12,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { ConversionsService } from './conversions.service';
 import { CreateQuoteDto } from './dtos/create-quote.dto';
 import { ExecuteConversionDto } from './dtos/execute-conversion.dto';

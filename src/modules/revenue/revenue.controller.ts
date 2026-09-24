@@ -4,7 +4,7 @@ import { RevenueService, Period } from './revenue.service';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/entities/user.entity';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 @ApiTags('Admin — Revenue')
 @ApiBearerAuth()

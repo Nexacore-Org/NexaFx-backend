@@ -2,7 +2,7 @@
 import { Controller, Post, Get, Body, UseGuards, Req } from '@nestjs/common';
 import { DataResidencyService } from './data-residency.service';
 import { SetDataResidencyPolicyDto } from './dto/set-policy.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'; // Adjust based on your auth module path
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';       // Adjust based on your auth module path
 import { Roles } from '../auth/decorators/roles.decorator';    // Adjust based on your auth module path
 

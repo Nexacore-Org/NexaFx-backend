@@ -13,7 +13,7 @@ jest.mock(
 
 import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { OptionsController } from './options.controller';
 import { OptionsService } from './options.service';
 

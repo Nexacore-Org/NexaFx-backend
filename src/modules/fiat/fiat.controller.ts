@@ -90,20 +90,20 @@ export class FiatController {
     @Headers('verif-hash') signature: string,
     @Request() req: RawBodyRequest<Request>,
   ) {
-    const payload = req.body;
-    
+    const payload = req.body as any;
+
     try {
       // Determine if this is a deposit or withdrawal webhook based on event type
-      if (payload.event?.includes('payment') || payload.data?.tx_ref?.startsWith('FIAT_DEP_')) {
+      if (payload?.event?.includes('payment') || payload?.data?.tx_ref?.startsWith('FIAT_DEP_')) {
         return this.fiatService.processDepositWebhook(payload, signature);
-      } else if (payload.event?.includes('transfer') || payload.data?.reference?.startsWith('FIAT_WD_')) {
+      } else if (payload?.event?.includes('transfer') || payload?.data?.reference?.startsWith('FIAT_WD_')) {
         return this.fiatService.processWithdrawalWebhook(payload, signature);
       } else {
-        this.logger.warn(`Unknown webhook event type: ${payload.event}`);
+        this.logger.warn(`Unknown webhook event type: ${payload?.event}`);
         return { success: false, message: 'Unknown event type' };
       }
     } catch (error) {
-      this.logger.error(`Webhook processing error: ${error.message}`);
+      this.logger.error(`Webhook processing error: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }

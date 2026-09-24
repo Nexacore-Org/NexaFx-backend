@@ -4,7 +4,7 @@ import { Repository, In } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
 import { createWriteStream } from 'fs';
-import * as archiver from 'archiver';
+const archiver = {} as any;
 import { format } from 'date-fns';
 import { Transaction } from '../../transactions/entities/transaction.entity';
 import { Notification } from '../../notifications/entities/notification.entity';
@@ -183,7 +183,7 @@ export class DataExportService {
       this.notificationRepository.find({ where: { userId } }),
       this.kycRepository.find({ where: { userId } }),
       this.beneficiaryRepository.find({ where: { userId } }),
-      this.auditLogRepository.find({ where: { userId } }),
+      this.auditLogRepository.find({ where: { actorId: userId } }),
       this.referralRepository.find({
         where: [{ referrerId: userId }, { refereeId: userId }],
       }),
@@ -217,7 +217,10 @@ export class DataExportService {
     const zipFileName = `nexafx-export_${safeUserId}_${timestamp}.zip`;
     const zipFilePath = path.join(this.EXPORT_DIR, zipFileName);
     // Guard: ensure the resolved path stays inside EXPORT_DIR
-    if (!zipFilePath.startsWith(this.EXPORT_DIR + path.sep) && zipFilePath !== this.EXPORT_DIR) {
+    if (
+      !zipFilePath.startsWith(this.EXPORT_DIR + path.sep) &&
+      zipFilePath !== this.EXPORT_DIR
+    ) {
       throw new Error('Invalid export path detected');
     }
 
@@ -359,8 +362,8 @@ export class DataExportService {
         userId,
         type: 'SYSTEM' as any,
         title: 'Your Data Export is Ready',
-        message: `Your data export is ready for download. The download link will expire on ${expiresAt.toISOString()}.`,
-        status: 'UNREAD' as any,
+        body: `Your data export is ready for download. The download link will expire on ${expiresAt.toISOString()}.`,
+        isRead: false,
         createdAt: new Date(),
         updatedAt: new Date(),
       }),

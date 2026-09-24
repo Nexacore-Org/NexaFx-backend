@@ -1,0 +1,9 @@
+{
+  "CURRENCY_NOT_SUPPORTED": "العملة {currency} غير مدعومة أو غير نشطة",
+  "UNABLE_TO_GET_EXCHANGE_RATE": "تعذر الحصول على سعر الصرف لـ {currency}",
+  "SWAP_SAME_CURRENCY": "يجب أن تكون العملات المصدر والوجهة مختلفة",
+  "SWAP_LIQUIDITY_PATH_NOT_FOUND": "لم يتم العثور على مسار سيولة من {from} إلى {to}",
+  "SWAP_FAILED": "فشل التبديل: {message}",
+  "SOURCE_ADDRESS_MISMATCH": "يجب أن يتطابق عنوان المصدر مع المفتاح العام للمحفظة المستخدمة في هذا التبديل",
+  "PREVIEW_LIQUIDITY_PATH_NOT_FOUND": "لم يتم العثور على مسار سيولة من {from} إلى {to}"
+}

@@ -9,11 +9,14 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { User } from '../../users/user.entity';
+import { TransactionCategory } from '../../analytics/entities/transaction-category.entity';
 
 export enum TransactionType {
   DEPOSIT = 'DEPOSIT',
   WITHDRAW = 'WITHDRAW',
   SWAP = 'SWAP',
+  LOAN_DISBURSEMENT = 'LOAN_DISBURSEMENT',
+  LOAN_REPAYMENT = 'LOAN_REPAYMENT',
 }
 
 export enum TransactionStatus {
@@ -27,6 +30,8 @@ export enum TransactionStatus {
 @Index(['status', 'createdAt'])
 // Optimizes user transaction list filtering by status.
 @Index(['userId', 'status'])
+// Optimizes counterpartyMemo ILIKE search.
+@Index(['counterpartyMemo'])
 @Entity('transactions')
 export class Transaction {
   @PrimaryGeneratedColumn('uuid')
@@ -64,6 +69,10 @@ export class Transaction {
   @Column({ type: 'varchar', length: 255, nullable: true })
   txHash: string | null;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  reference: string | null;
+  stellarTxHash: string | null;
+
   @Column({ type: 'text', nullable: true })
   failureReason: string | null;
 
@@ -91,6 +100,49 @@ export class Transaction {
   @Column({ type: 'varchar', length: 255, nullable: true })
   processingLockedBy: string | null;
 
+  @Column({ type: 'uuid', nullable: true })
+  categoryId: string | null;
+
+  @ManyToOne(() => TransactionCategory, {
+    onDelete: 'SET NULL',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'categoryId' })
+  category: TransactionCategory | null;
+
   @Column({ type: 'jsonb', nullable: true })
   metadata: any;
+
+  /**
+   * Private note written by the transaction owner.
+   * NEVER returned in counterparty-facing responses.
+   */
+  @Column({ type: 'text', nullable: true })
+  userNote: string | null;
+
+  /**
+   * Shared memo visible to both parties. Also written to the Stellar
+   * transaction memo field (truncated to 28 bytes if needed).
+   */
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  counterpartyMemo: string | null;
+
+  /**
+   * User-defined tags for grouping and filtering.
+   * Stored as a PostgreSQL text array. GIN-indexed for efficient array queries.
+   */
+  @Column({ type: 'text', array: true, nullable: true, default: null })
+  tags: string[] | null;
+
+  @Column({ type: 'tsvector', nullable: true })
+  searchVector: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  confidenceScore: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  expectedCompletionSeconds: number | null;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  confidenceLabel: string | null;
 }

@@ -1,3 +1,6 @@
+/**
+ * Sms OTP Service – v2 implementation (no functional impact)
+ */
 import {
   Injectable,
   BadRequestException,

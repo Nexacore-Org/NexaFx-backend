@@ -1,0 +1,18 @@
+{
+  "ALREADY_SUBMITTED": "Vous avez déjà une soumission KYC en cours d'examen.",
+  "REQUIRES_RESUBMISSION": "Votre KYC nécessite une nouvelle soumission. Veuillez utiliser l'endpoint /kyc/resubmit.",
+  "DOCUMENT_FRONT_REQUIRED": "Le fichier du recto de la pièce d'identité est requis",
+  "SELFIE_REQUIRED": "Le selfie est requis",
+  "NO_SUBMISSION_FOUND": "Aucune soumission KYC existante trouvée. Veuillez en soumettre une nouvelle.",
+  "RESUBMISSION_NOT_ALLOWED": "La resoumission est autorisée uniquement lorsque votre statut KYC est RESUBMISSION_REQUIRED.",
+  "ALREADY_REVIEWED": "KYC déjà examiné",
+  "ONLY_PENDING_CAN_APPROVE": "Seules les soumissions en attente peuvent être approuvées",
+  "INVALID_DECISION": "Décision invalide",
+  "INVALID_FILE_UPLOADED": "Fichier téléchargé invalide",
+  "INVALID_FILE_TYPE": "Type de fichier invalide: {mimetype}. Types autorisés: {types}",
+  "SUBMITTED_SUCCESS": "KYC soumis avec succès",
+  "RESUBMITTED_SUCCESS": "KYC re-soumis avec succès",
+  "APPROVED_SUCCESS": "KYC approuvé avec succès",
+  "RESUBMISSION_REQUESTED": "Demande de resoumission KYC effectuée avec succès",
+  "REJECTED_SUCCESS": "KYC rejeté avec succès"
+}

@@ -65,6 +65,18 @@ export class WalletsController {
     return this.walletsService.listWallets(req.user.userId);
   }
 
+  @Get(':currency')
+  @ApiParam({ name: 'currency', description: 'Currency code, e.g. XLM, NGN' })
+  @ApiOperation({ summary: 'Get wallet details by currency code' })
+  @ApiResponse({ status: 200, description: 'Wallet returned successfully' })
+  @ApiResponse({ status: 404, description: 'Wallet not found' })
+  async getByCurrency(
+    @Request() req: { user: { userId: string } },
+    @Param('currency') currency: string,
+  ) {
+    return this.walletsService.findByUserAndCurrency(req.user.userId, currency);
+  }
+
   @Patch(':id')
   @HttpCode(HttpStatus.OK)
   @ApiParam({ name: 'id', format: 'uuid' })

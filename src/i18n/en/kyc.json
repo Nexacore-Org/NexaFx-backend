@@ -1,0 +1,18 @@
+{
+  "ALREADY_SUBMITTED": "You already have a KYC submission under review.",
+  "REQUIRES_RESUBMISSION": "Your KYC requires resubmission. Please use the /kyc/resubmit endpoint.",
+  "DOCUMENT_FRONT_REQUIRED": "documentFront file is required",
+  "SELFIE_REQUIRED": "selfie file is required",
+  "NO_SUBMISSION_FOUND": "No existing KYC submission found. Please submit a new one.",
+  "RESUBMISSION_NOT_ALLOWED": "Resubmission is only allowed when your KYC status is RESUBMISSION_REQUIRED.",
+  "ALREADY_REVIEWED": "KYC already reviewed",
+  "ONLY_PENDING_CAN_APPROVE": "Only pending submissions can be approved",
+  "INVALID_DECISION": "Invalid decision",
+  "INVALID_FILE_UPLOADED": "Invalid file uploaded",
+  "INVALID_FILE_TYPE": "Invalid file type: {mimetype}. Allowed types: {types}",
+  "SUBMITTED_SUCCESS": "KYC submitted successfully",
+  "RESUBMITTED_SUCCESS": "KYC resubmitted successfully",
+  "APPROVED_SUCCESS": "KYC approved successfully",
+  "RESUBMISSION_REQUESTED": "KYC resubmission requested successfully",
+  "REJECTED_SUCCESS": "KYC rejected successfully"
+}

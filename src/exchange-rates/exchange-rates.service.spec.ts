@@ -1,29 +1,23 @@
 import {
   ServiceUnavailableException,
   BadRequestException,
-  NotFoundException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { CurrenciesService } from '../currencies/currencies.service';
 import { ExchangeRatesService } from './exchange-rates.service';
 import {
   ExchangeRatesProviderClient,
   ExchangeRatesProviderError,
 } from './providers/exchange-rates.provider';
-import { ExchangeRatesCache } from './cache/exchange-rates.cache';
-import { ConfigService } from '@nestjs/config';
+import { ExchangeRateSnapshot } from './entities/exchange-rate-snapshot.entity';
 
 describe('ExchangeRatesService', () => {
   let service: ExchangeRatesService;
   let providerClient: ExchangeRatesProviderClient;
-
-  const mockConfigService = {
-    get: jest.fn((key: string) => {
-      if (key === 'EXCHANGE_RATES_CACHE_TTL_SECONDS') return '600';
-      if (key === 'EXCHANGE_RATES_CACHE_MAX_SIZE') return '100';
-      return undefined;
-    }),
-  };
+  let cacheManager: any;
+  let snapshotRepository: any;
 
   const mockCurrenciesService = {
     validateCurrency: jest.fn(),
@@ -33,12 +27,18 @@ describe('ExchangeRatesService', () => {
     fetchRate: jest.fn(),
   };
 
-  beforeEach(async () => {
-    jest.useFakeTimers();
-    const cache = new ExchangeRatesCache(
-      mockConfigService as unknown as ConfigService,
-    );
+  const mockCacheManager = {
+    get: jest.fn(),
+    set: jest.fn(),
+  };
 
+  const mockSnapshotRepository = {
+    create: jest.fn((dto) => dto),
+    save: jest.fn().mockResolvedValue({}),
+    find: jest.fn(),
+  };
+
+  beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ExchangeRatesService,
@@ -51,8 +51,12 @@ describe('ExchangeRatesService', () => {
           useValue: mockProviderClient,
         },
         {
-          provide: ExchangeRatesCache,
-          useValue: cache,
+          provide: CACHE_MANAGER,
+          useValue: mockCacheManager,
+        },
+        {
+          provide: getRepositoryToken(ExchangeRateSnapshot),
+          useValue: mockSnapshotRepository,
         },
       ],
     }).compile();
@@ -61,11 +65,12 @@ describe('ExchangeRatesService', () => {
     providerClient = module.get<ExchangeRatesProviderClient>(
       ExchangeRatesProviderClient,
     );
+    cacheManager = module.get(CACHE_MANAGER);
+    snapshotRepository = module.get(getRepositoryToken(ExchangeRateSnapshot));
   });
 
   afterEach(() => {
     jest.clearAllMocks();
-    jest.useRealTimers();
   });
 
   it('should be defined', () => {
@@ -73,139 +78,119 @@ describe('ExchangeRatesService', () => {
   });
 
   describe('getRate', () => {
-    it('should throw BadRequestException for invalid currency', async () => {
+    it('should throw BadRequestException if currency validation fails', async () => {
       mockCurrenciesService.validateCurrency.mockRejectedValue(
-        new NotFoundException("Currency 'XYZ' is not supported or inactive"),
+        new Error("Currency 'XYZ' is not supported"),
       );
 
-      await expect(service.getRate('XYZ', 'USD')).rejects.toBeInstanceOf(
+      await expect(service.getRate('XYZ', 'USD')).rejects.toThrow(
         BadRequestException,
       );
     });
 
-    it('should cache provider results within TTL', async () => {
+    it('should return valid cached rates without calling provider', async () => {
       mockCurrenciesService.validateCurrency.mockResolvedValue(undefined);
-      mockProviderClient.fetchRate.mockResolvedValue({
-        rate: 2,
-        fetchedAt: new Date('2026-01-26T00:00:00.000Z').toISOString(),
-        source: 'test',
+      const futureExpiry = new Date(Date.now() + 30000).toISOString();
+      mockCacheManager.get.mockResolvedValue({
+        from: 'XLM',
+        to: 'NGN',
+        rate: 250,
+        inverseRate: 0.004,
+        provider: 'coingecko',
+        cachedAt: new Date().toISOString(),
+        expiresAt: futureExpiry,
       });
 
-      jest.setSystemTime(new Date('2026-01-26T00:00:00.000Z'));
+      const result = await service.getRate('XLM', 'NGN');
 
-      const first = await service.getRate('NGN', 'USD');
-      const second = await service.getRate('NGN', 'USD');
-
-      expect(first.rate).toBe(2);
-      expect(second.rate).toBe(2);
-      expect(providerClient.fetchRate).toHaveBeenCalledTimes(1);
+      expect(result.rate).toBe(250);
+      expect(result.stale).toBeUndefined();
+      expect(providerClient.fetchRate).not.toHaveBeenCalled();
     });
 
-    it('should refresh cache after TTL expires', async () => {
+    it('should call provider and update cache if cache is expired', async () => {
       mockCurrenciesService.validateCurrency.mockResolvedValue(undefined);
-      mockProviderClient.fetchRate.mockResolvedValue({
-        rate: 2,
-        fetchedAt: new Date('2026-01-26T00:00:00.000Z').toISOString(),
-        source: 'test',
+      const pastExpiry = new Date(Date.now() - 5000).toISOString();
+      mockCacheManager.get.mockResolvedValue({
+        from: 'XLM',
+        to: 'NGN',
+        rate: 240,
+        inverseRate: 0.0041,
+        provider: 'coingecko',
+        cachedAt: new Date().toISOString(),
+        expiresAt: pastExpiry,
       });
 
-      const baseTime = new Date('2026-01-26T00:00:00.000Z');
-      jest.setSystemTime(baseTime);
-      await service.getRate('NGN', 'USD');
+      mockProviderClient.fetchRate.mockResolvedValue({
+        rate: 260,
+        fetchedAt: new Date().toISOString(),
+        source: 'coingecko',
+      });
 
-      jest.setSystemTime(new Date(baseTime.getTime() + 601000));
-      await service.getRate('NGN', 'USD');
+      const result = await service.getRate('XLM', 'NGN');
 
-      expect(providerClient.fetchRate).toHaveBeenCalledTimes(2);
+      expect(result.rate).toBe(260);
+      expect(providerClient.fetchRate).toHaveBeenCalledWith('XLM', 'NGN');
+      expect(cacheManager.set).toHaveBeenCalled();
+      expect(snapshotRepository.save).toHaveBeenCalled();
     });
 
-    it('should map provider errors to ServiceUnavailableException', async () => {
+    it('should fall back to stale cache with stale:true if provider fails', async () => {
       mockCurrenciesService.validateCurrency.mockResolvedValue(undefined);
+      const pastExpiry = new Date(Date.now() - 5000).toISOString();
+      const cached = {
+        from: 'XLM',
+        to: 'NGN',
+        rate: 240,
+        inverseRate: 0.0041,
+        provider: 'coingecko',
+        cachedAt: new Date().toISOString(),
+        expiresAt: pastExpiry,
+      };
+      mockCacheManager.get.mockResolvedValue(cached);
       mockProviderClient.fetchRate.mockRejectedValue(
-        new ExchangeRatesProviderError('Provider down'),
+        new ExchangeRatesProviderError('API Limit reached'),
       );
 
-      await expect(service.getRate('NGN', 'USD')).rejects.toBeInstanceOf(
+      const result = await service.getRate('XLM', 'NGN');
+
+      expect(result.rate).toBe(240);
+      expect(result.stale).toBe(true);
+    });
+
+    it('should throw ServiceUnavailableException if provider fails and no cache exists', async () => {
+      mockCurrenciesService.validateCurrency.mockResolvedValue(undefined);
+      mockCacheManager.get.mockResolvedValue(null);
+      mockProviderClient.fetchRate.mockRejectedValue(
+        new ExchangeRatesProviderError('CoinGecko down'),
+      );
+
+      await expect(service.getRate('XLM', 'NGN')).rejects.toThrow(
         ServiceUnavailableException,
       );
     });
-
-    it('should emit rate update when cache is set', async () => {
-      mockCurrenciesService.validateCurrency.mockResolvedValue(undefined);
-      const fetchedAt = new Date().toISOString();
-      mockProviderClient.fetchRate.mockResolvedValue({
-        rate: 3,
-        fetchedAt,
-      });
-
-      const updates: any[] = [];
-      service.rateUpdates$.subscribe((u) => updates.push(u));
-
-      await service.getRate('BTC', 'USD');
-
-      expect(updates.length).toBe(1);
-      expect(updates[0]).toEqual({
-        from: 'BTC',
-        to: 'USD',
-        rate: 3,
-        fetchedAt,
-      });
-    });
-
-    it('should emit rate update for same-currency pair (from === to)', async () => {
-      mockCurrenciesService.validateCurrency.mockResolvedValue(undefined);
-
-      const updates: any[] = [];
-      service.rateUpdates$.subscribe((u) => updates.push(u));
-
-      await service.getRate('USD', 'USD');
-
-      expect(updates.length).toBe(1);
-      expect(updates[0]).toMatchObject({
-        from: 'USD',
-        to: 'USD',
-        rate: 1,
-      });
-    });
-
-    it('should NOT emit rate update on cache hit', async () => {
-      mockCurrenciesService.validateCurrency.mockResolvedValue(undefined);
-      mockProviderClient.fetchRate.mockResolvedValue({
-        rate: 1.2,
-        fetchedAt: new Date().toISOString(),
-      });
-
-      const updates: any[] = [];
-      service.rateUpdates$.subscribe((u) => updates.push(u));
-
-      await service.getRate('EUR', 'USD');
-      await service.getRate('EUR', 'USD'); // cache hit
-
-      expect(updates.length).toBe(1);
-    });
   });
 
-  describe('convert', () => {
-    it('should convert amount using fetched rate', async () => {
-      mockCurrenciesService.validateCurrency.mockResolvedValue(undefined);
-      mockProviderClient.fetchRate.mockResolvedValue({
-        rate: 1.5,
-        fetchedAt: new Date('2026-01-26T00:00:00.000Z').toISOString(),
-        source: 'test',
+  describe('getDailyOHLCHistory', () => {
+    it('should correctly aggregate snapshots into daily OHLC data', async () => {
+      const mockSnapshots = [
+        { rate: '100.00000000', timestamp: new Date('2026-06-24T10:00:00Z') },
+        { rate: '105.00000000', timestamp: new Date('2026-06-24T11:00:00Z') },
+        { rate: '95.00000000', timestamp: new Date('2026-06-24T12:00:00Z') },
+        { rate: '102.00000000', timestamp: new Date('2026-06-24T13:00:00Z') },
+      ];
+      mockSnapshotRepository.find.mockResolvedValue(mockSnapshots);
+
+      const result = await service.getDailyOHLCHistory('XLM', 'NGN', 7);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({
+        date: '2026-06-24',
+        open: 100,
+        high: 105,
+        low: 95,
+        close: 102,
       });
-
-      const result = await service.convert('NGN', 'USD', 10);
-
-      expect(result.rate).toBe(1.5);
-      expect(result.convertedAmount).toBe(15);
-    });
-
-    it('should reject invalid amount values', async () => {
-      mockCurrenciesService.validateCurrency.mockResolvedValue(undefined);
-
-      await expect(
-        service.convert('NGN', 'USD', Number.NaN),
-      ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 });

@@ -25,4 +25,16 @@ export class UpdateProfileDto {
   @MinLength(1)
   @MaxLength(100)
   lastName?: string;
+
+  @ApiPropertyOptional({
+    example: 'fr',
+    description: 'User preferred language (en, fr, ar)',
+    minLength: 2,
+    maxLength: 10,
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(10)
+  preferredLanguage?: string;
 }

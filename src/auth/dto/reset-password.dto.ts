@@ -61,8 +61,7 @@ export class ResetPasswordDto {
    */
   @ApiProperty({
     example: 'NewStrongPassword!123',
-    description:
-      'New password to set for the account (12–128 characters)',
+    description: 'New password to set for the account (12–128 characters)',
   })
   @IsString({ message: 'newPassword must be a string' })
   @IsNotEmpty({ message: 'newPassword is required' })

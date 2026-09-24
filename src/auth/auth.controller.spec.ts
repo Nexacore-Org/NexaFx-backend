@@ -1,8 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe, HttpStatus, VersioningType, UnauthorizedException } from '@nestjs/common';
+import {
+  INestApplication,
+  ValidationPipe,
+  HttpStatus,
+  VersioningType,
+  UnauthorizedException,
+} from '@nestjs/common';
 import * as request from 'supertest';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { ConfigService } from '@nestjs/config';
 
 describe('AuthController (validation & responses)', () => {
   let app: INestApplication;
@@ -14,7 +21,10 @@ describe('AuthController (validation & responses)', () => {
   beforeAll(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
-      providers: [{ provide: AuthService, useValue: mockAuthService }],
+      providers: [
+        { provide: AuthService, useValue: mockAuthService },
+        { provide: ConfigService, useValue: { get: jest.fn() } },
+      ],
     }).compile();
 
     app = moduleRef.createNestApplication();

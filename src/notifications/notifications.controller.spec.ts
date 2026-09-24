@@ -1,16 +1,16 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
-import { CurrentUserPayload } from '../auth/decorators/current-user.decorator';
 
 describe('NotificationsController', () => {
   let controller: NotificationsController;
+  let service: jest.Mocked<NotificationsService>;
 
   const mockService = {
-    findAll: jest.fn(),
-    getUnreadCount: jest.fn(),
+    getNotifications: jest.fn(),
     markAllAsRead: jest.fn(),
-    deleteAllByUser: jest.fn(),
+    markAsRead: jest.fn(),
+    getUnreadCount: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -24,28 +24,48 @@ describe('NotificationsController', () => {
       ],
     }).compile();
 
-    controller = module.get(NotificationsController);
+    controller = module.get<NotificationsController>(NotificationsController);
+    service = module.get(NotificationsService);
   });
 
   afterEach(() => {
     jest.clearAllMocks();
   });
 
-  it('should extract userId from CurrentUser decorator', async () => {
-    const user: CurrentUserPayload = {
-      userId: 'user-123',
-      email: 'test@example.com',
-      role: 'USER',
-    };
+  it('should be defined', () => {
+    expect(controller).toBeDefined();
+  });
 
-    await controller.findAll(user, 1, 10);
+  it('should call getNotifications with correct params', async () => {
+    const req = { user: { userId: 'user-123' } };
+    await controller.getNotifications(req, 1, 10, 'true');
 
-    expect(mockService.findAll).toHaveBeenCalledWith(
+    expect(service.getNotifications).toHaveBeenCalledWith(
       'user-123',
       1,
       10,
-      undefined,
-      undefined,
+      true,
     );
+  });
+
+  it('should call markAllAsRead with correct params', async () => {
+    const req = { user: { userId: 'user-123' } };
+    await controller.markAllAsRead(req);
+
+    expect(service.markAllAsRead).toHaveBeenCalledWith('user-123');
+  });
+
+  it('should call markAsRead with correct params', async () => {
+    const req = { user: { userId: 'user-123' } };
+    await controller.markAsRead(req, 'notif-id');
+
+    expect(service.markAsRead).toHaveBeenCalledWith('user-123', 'notif-id');
+  });
+
+  it('should call getUnreadCount with correct params', async () => {
+    const req = { user: { userId: 'user-123' } };
+    await controller.getUnreadCount(req);
+
+    expect(service.getUnreadCount).toHaveBeenCalledWith('user-123');
   });
 });

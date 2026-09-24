@@ -1,14 +1,18 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { NotificationsService } from './notifications.service';
+import { NotificationsGateway } from './notifications.gateway';
 import { NotificationsController } from './notifications.controller';
 import { Notification } from './entities/notification.entity';
 import { NotificationPreference } from './entities/notification-preference.entity';
 import { NotificationPreferenceService } from './services/notification-preference.service';
 import { NotificationPreferenceController } from './controllers/notification-preference.controller';
+import { User } from '../users/user.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Notification, NotificationPreference])],
+  imports: [
+    TypeOrmModule.forFeature([Notification, NotificationPreference, User]),
+  ],
   controllers: [NotificationsController, NotificationPreferenceController],
   providers: [NotificationsService, NotificationPreferenceService],
   exports: [NotificationsService, NotificationPreferenceService],

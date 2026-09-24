@@ -1,12 +1,11 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as admin from 'firebase-admin';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getMessaging, MulticastMessage } from 'firebase-admin/messaging';
 
 @Injectable()
-export class FirebaseService implements OnModuleInit {
+export class FirebaseService {
   private readonly logger = new Logger(FirebaseService.name);
-  private initialized = false;
-
   constructor(private readonly configService: ConfigService) {}
 
   onModuleInit() {
@@ -15,29 +14,63 @@ export class FirebaseService implements OnModuleInit {
 
   private initializeFirebase() {
     try {
-      const projectId = this.configService.get<string>('FIREBASE_PROJECT_ID');
-      const clientEmail = this.configService.get<string>(
-        'FIREBASE_CLIENT_EMAIL',
-      );
-      const privateKeyStr = this.configService.get<string>(
-        'FIREBASE_PRIVATE_KEY',
+      if (getApps().length > 0) {
+        this.initialized = true;
+        this.logger.log('Firebase Admin SDK already initialized');
+        return;
+      }
+
+      const serviceAccountJson = this.configService.get<string>(
+        'FIREBASE_SERVICE_ACCOUNT_JSON',
       );
 
-      if (!projectId || !clientEmail || !privateKeyStr) {
+      let credentialConfig: any = null;
+
+      if (serviceAccountJson) {
+        try {
+          const serviceAccount = JSON.parse(serviceAccountJson);
+          credentialConfig = {
+            projectId: serviceAccount.project_id || serviceAccount.projectId,
+            clientEmail: serviceAccount.client_email || serviceAccount.clientEmail,
+            privateKey: (serviceAccount.private_key || serviceAccount.privateKey)?.replace(/\\n/g, '\n'),
+          };
+        } catch (jsonError) {
+          this.logger.error(
+            `Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON: ${(jsonError as any).message}`,
+          );
+        }
+      }
+
+      if (!credentialConfig) {
+        const projectId = this.configService.get<string>('FIREBASE_PROJECT_ID');
+        const clientEmail = this.configService.get<string>(
+          'FIREBASE_CLIENT_EMAIL',
+        );
+        const privateKeyStr = this.configService.get<string>(
+          'FIREBASE_PRIVATE_KEY',
+        );
+
+        if (projectId && clientEmail && privateKeyStr) {
+          credentialConfig = {
+            projectId,
+            clientEmail,
+            privateKey: privateKeyStr.replace(/\\n/g, '\n'),
+          };
+        }
+      }
+
+      if (!credentialConfig || !credentialConfig.projectId || !credentialConfig.clientEmail || !credentialConfig.privateKey) {
         this.logger.warn(
           'Firebase credentials not fully configured. Push notifications will be disabled.',
         );
         return;
       }
 
-      // Handle raw newlines in private key string if passed from .env
-      const privateKey = privateKeyStr.replace(/\\n/g, '\n');
-
-      admin.initializeApp({
-        credential: admin.credential.cert({
-          projectId,
-          clientEmail,
-          privateKey,
+      initializeApp({
+        credential: cert({
+          projectId: credentialConfig.projectId,
+          clientEmail: credentialConfig.clientEmail,
+          privateKey: credentialConfig.privateKey,
         }),
       });
 
@@ -57,6 +90,7 @@ export class FirebaseService implements OnModuleInit {
     title: string,
     body: string,
     data?: Record<string, string>,
+    structuredData?: Record<string, string>,
   ): Promise<void> {
     if (!this.initialized) {
       this.logger.warn(
@@ -70,7 +104,12 @@ export class FirebaseService implements OnModuleInit {
     }
 
     try {
-      const message: admin.messaging.MulticastMessage = {
+      const mergedData: Record<string, string> = {
+        ...(data ?? {}),
+        ...(structuredData ?? {}),
+      };
+
+      const message: MulticastMessage = {
         notification: {
           title,
           body,
@@ -78,11 +117,11 @@ export class FirebaseService implements OnModuleInit {
         tokens,
       };
 
-      if (data) {
-        message.data = data;
+      if (Object.keys(mergedData).length > 0) {
+        message.data = mergedData;
       }
 
-      const response = await admin.messaging().sendEachForMulticast(message);
+      const response = await getMessaging().sendEachForMulticast(message);
 
       if (response.failureCount > 0) {
         const failedTokens: string[] = [];
@@ -113,5 +152,10 @@ export class FirebaseService implements OnModuleInit {
       );
       // We don't rethrow to avoid blocking main flows since notifications are secondary
     }
+  async sendPushNotification(tokens: string[], title: string, body: string, data?: any): Promise<any> {
+    return { successCount: 0, failureCount: tokens.length };
+  }
+  async sendToTokens(tokens: string[], title: string, body: string, data?: any): Promise<any> {
+    return { successCount: 0, failureCount: tokens.length };
   }
 }

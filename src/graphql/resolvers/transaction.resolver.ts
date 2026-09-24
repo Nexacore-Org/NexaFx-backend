@@ -2,17 +2,18 @@ import { Resolver, Query, Args, Int } from '@nestjs/graphql';
 import { TransactionsService } from '../../transactions/services/transaction.service';
 import { TransactionStatus } from '../../transactions/entities/transaction.entity';
 import { CurrentUser, GqlUser } from '../decorators/current-user.decorator';
+import { PaginatedTransactions, Transaction } from '../types/transaction.type';
 
-@Resolver('Transaction')
+@Resolver(() => Transaction)
 export class TransactionResolver {
   constructor(private readonly transactionsService: TransactionsService) {}
 
-  @Query('transactions')
+  @Query(() => PaginatedTransactions, { name: 'transactions' })
   async transactions(
     @CurrentUser() user: GqlUser,
     @Args('limit', { type: () => Int, nullable: true }) limit?: number,
     @Args('offset', { type: () => Int, nullable: true }) offset?: number,
-    @Args('status', { nullable: true }) status?: string,
+    @Args('status', { type: () => String, nullable: true }) status?: string,
   ) {
     const resolvedLimit = limit ?? 20;
     const resolvedOffset = offset ?? 0;

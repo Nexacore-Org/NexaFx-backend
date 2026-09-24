@@ -1,0 +1,20 @@
+{
+  "APPROVAL_SUBJECT": "Your KYC Verification Has Been Approved",
+  "APPROVAL_TEXT": "Hi {userName},\n\nYour KYC verification has been approved! You now have full access to higher transaction limits on NexaFX.\n\n- NexaFX Team",
+  "APPROVAL_HTML_TITLE": "KYC Approved ✅",
+  "APPROVAL_HTML_BODY": "Hi {userName},<br><br>Your identity verification has been approved. You now have full access to higher transaction limits on NexaFX.",
+  "APPROVAL_HTML_BADGE": "🎉 Your account is now fully verified. Enjoy higher limits!",
+  
+  "RESUBMIT_SUBJECT": "KYC Resubmission Required",
+  "REJECT_SUBJECT": "KYC Verification Rejected",
+  "RESUBMIT_TEXT": "Hi {userName},\n\nYour KYC submission requires changes before it can be approved.\n\nReason: {reason}\n\nPlease log in and resubmit your documents.\n\n- NexaFX Team",
+  "REJECT_TEXT": "Hi {userName},\n\nYour KYC verification was rejected.\n\nReason: {reason}\n\n- NexaFX Team",
+  "RESUBMIT_BADGE": "Resubmission Required 🔄",
+  "REJECT_BADGE": "Rejected ❌",
+  "RESUBMIT_ACTION": "Please log in to your NexaFX account and resubmit your documents with the requested changes.",
+  "REJECT_ACTION": "If you believe this is an error, please contact our support team.",
+  "REJECT_INTRO": "Your KYC verification could not be approved at this time.",
+  "REJECT_REASON": "Reason:",
+  
+  "FOOTER": "© {year} NexaFX. All rights reserved."
+}

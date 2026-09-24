@@ -3,11 +3,13 @@ import { ConfigModule } from '@nestjs/config';
 import { HttpModule } from '@nestjs/axios';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { CacheModule } from '@nestjs/cache-manager';
 import { ExchangeRatesService } from './exchange-rates.service';
 import { ExchangeRatesController } from './exchange-rates.controller';
 import { CurrenciesModule } from '../currencies/currencies.module';
 import { ExchangeRatesProviderClient } from './providers/exchange-rates.provider';
-import { ExchangeRatesCache } from './cache/exchange-rates.cache';
+import { ExchangeRateSnapshot } from './entities/exchange-rate-snapshot.entity';
 
 type JwtExpiryValue = `${number}${'s' | 'm' | 'h' | 'd'}`;
 
@@ -16,6 +18,8 @@ type JwtExpiryValue = `${number}${'s' | 'm' | 'h' | 'd'}`;
     ConfigModule,
     HttpModule,
     CurrenciesModule,
+    TypeOrmModule.forFeature([ExchangeRateSnapshot]),
+    CacheModule.register(),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
@@ -42,7 +46,6 @@ type JwtExpiryValue = `${number}${'s' | 'm' | 'h' | 'd'}`;
   providers: [
     ExchangeRatesService,
     ExchangeRatesProviderClient,
-    ExchangeRatesCache,
   ],
   exports: [ExchangeRatesService],
 })

@@ -30,7 +30,10 @@ export class AuthUserResponseDto {
    * Always present — empty string when both fields are null.
    * Frontend should use this field for all display purposes.
    */
-  @ApiProperty({ example: 'John Doe', description: 'Computed full name (firstName + lastName trimmed)' })
+  @ApiProperty({
+    example: 'John Doe',
+    description: 'Computed full name (firstName + lastName trimmed)',
+  })
   name: string;
 
   @ApiProperty({ example: 'USER', enum: UserRole })
@@ -80,7 +83,10 @@ export class SignupUserResponseDto {
    * Provided for frontend convenience so consumers do not need to
    * concatenate the individual fields themselves.
    */
-  @ApiProperty({ example: 'John Doe', description: 'Computed full name (firstName + lastName)' })
+  @ApiProperty({
+    example: 'John Doe',
+    description: 'Computed full name (firstName + lastName)',
+  })
   name: string;
 
   @ApiPropertyOptional({ example: '+2348012345678', nullable: true })

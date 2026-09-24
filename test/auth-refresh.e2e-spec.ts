@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
+import {
+  INestApplication,
+  ValidationPipe,
+  VersioningType,
+} from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from './../src/app.module';
 
@@ -78,7 +82,10 @@ describe('Auth Refresh Validation (e2e)', () => {
   });
 
   it('POST /v1/auth/refresh with empty body returns 400', () => {
-    return request(app.getHttpServer()).post('/v1/auth/refresh').send({}).expect(400);
+    return request(app.getHttpServer())
+      .post('/v1/auth/refresh')
+      .send({})
+      .expect(400);
   });
 
   it('POST /v1/auth/refresh with empty refreshToken returns 400', () => {

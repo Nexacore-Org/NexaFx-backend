@@ -1,19 +1,25 @@
 import { Module } from '@nestjs/common';
+import { I18nModule, AcceptLanguageResolver } from 'nestjs-i18n';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { BullModule } from '@nestjs/bullmq';
+import { ScheduleModule } from '@nestjs/schedule';
+import { join } from 'path';
 import { AppController } from './app.controller';
-import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CurrenciesModule } from './currencies/currencies.module';
 import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
 import { CommonModule } from './common/common.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { RolesGuard } from './common/guards/roles.guard';
 import { PlanThrottlerGuard } from './common/guards/plan-throttler.guard';
+import { ImpersonationRestrictionGuard } from './common/guards/impersonation-restriction.guard';
 import { HealthModule } from './health/health.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { GdprModule } from './modules/gdpr/gdpr.module';
 import { TransactionsModule } from './transactions/transaction.module';
 import { BeneficiariesModule } from './beneficiaries/beneficiaries.module';
 import { KycModule } from './kyc/kyc.module';
@@ -21,16 +27,17 @@ import { ScheduledJobsModule } from './scheduled-jobs/scheduled-jobs.module';
 import { ReceiptsModule } from './receipts/receipts.module';
 import { FeesModule } from './fees/fees.module';
 import { PushNotificationsModule } from './push-notifications/push-notifications.module';
+import { QrModule } from './qr/qr.module';
 import { FirebaseModule } from './firebase/firebase.module';
 import { AdminModule } from './admin/admin.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { DaoModule } from './dao/dao.module';
-import { ScheduleModule } from '@nestjs/schedule';
 import { GraphQLApiModule } from './graphql/graphql.module';
 import { SuperAdminModule } from './super-admin/super-admin.module';
 import { GatewaysModule } from './gateways/gateways.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { WalletsModule } from './wallets/wallets.module';
+import { EscrowModule } from './escrow/escrow.module';
 import { RateAlertsModule } from './rate-alerts/rate-alerts.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
@@ -57,17 +64,52 @@ import { PortfolioModule } from './portfolio/portfolio.module';
             : false,
         autoLoadEntities: true,
       }),
-      inject: [ConfigService],
+    }),
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => ({
+        connection: {
+          url:
+            configService.get<string>('REDIS_URL') || 'redis://localhost:6379',
+        },
+      }),
     }),
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
+      inject: [ConfigService],
       useFactory: (configService: ConfigService) => [
         {
-          ttl: (configService.get<number>('THROTTLE_TTL') ?? 60) * 1000,
+          ttl: configService.get<number>('THROTTLE_TTL') ?? 60000,
           limit: configService.get<number>('THROTTLE_LIMIT') ?? 100,
         },
       ],
-      inject: [ConfigService],
+    }),
+    ZeroDowntimeDeploymentModule,
+    RateAlertsEnhancementModule,
+    WebhookVerificationSdkModule,
+    PlatformHealthRunbookModule,
+    RegulatoryReportingModule,
+    MultiSignatureWalletsModule,
+    DashboardPreferencesModule,
+    FraudRiskScoringModule,
+    DataResidencyModule,
+    MerchantIntegrationModule,
+    ProgrammablePaymentRulesModule,
+    GraphqlSubscriptionsModule,
+    LoadTestingModule,
+    AiKycDocVerificationModule,
+    UnifiedActivityFeedModule,
+    MobileSdkGuideModule,
+    OwaspZapDastModule,
+    I18nModule.forRootAsync({
+      useFactory: () => ({
+        fallbackLanguage: 'en',
+        loaderOptions: {
+          path: join(__dirname, '/i18n/'),
+          watch: true,
+        },
+      }),
+      resolvers: [AcceptLanguageResolver],
     }),
     CommonModule,
     AuthModule,
@@ -79,6 +121,9 @@ import { PortfolioModule } from './portfolio/portfolio.module';
     NotificationsModule,
     FirebaseModule,
     TransactionsModule,
+    TransactionsV2Module,
+    FiatV2Module,
+    BatchesV2Module,
     ReferralsModule,
     BeneficiariesModule,
     KycModule,
@@ -86,10 +131,12 @@ import { PortfolioModule } from './portfolio/portfolio.module';
     ReceiptsModule,
     FeesModule,
     PushNotificationsModule,
+    QrModule,
     // Rate alerts: user-configured exchange rate notifications
     RateAlertsModule,
     AdminModule,
     SuperAdminModule,
+    EscrowModule,
     // DAO module provides Stellar Soroban contract interaction for reward distribution
     DaoModule,
     GraphQLApiModule,
@@ -101,10 +148,13 @@ import { PortfolioModule } from './portfolio/portfolio.module';
   ],
   controllers: [AppController],
   providers: [
-    AppService,
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
     },
     {
       provide: APP_GUARD,

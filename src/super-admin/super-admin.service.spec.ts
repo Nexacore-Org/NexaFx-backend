@@ -133,7 +133,9 @@ describe('SuperAdminService', () => {
           useValue: {
             createWallet: jest.fn(),
             getWalletsByUserId: jest.fn(),
-            seedPrimaryWalletFromUserCredentials: jest.fn().mockResolvedValue(undefined),
+            seedPrimaryWalletFromUserCredentials: jest
+              .fn()
+              .mockResolvedValue(undefined),
           },
         },
       ],

@@ -7,6 +7,8 @@ import {
   IsOptional,
   Matches,
   Length,
+  IsBoolean,
+  Equals,
 } from 'class-validator';
 
 export class SignupDto {
@@ -69,4 +71,12 @@ export class SignupDto {
     message: 'Referral code must be 8 alphanumeric characters',
   })
   referralCode?: string;
+
+  @ApiProperty({
+    example: true,
+    description: 'GDPR consent acknowledgment',
+  })
+  @IsBoolean()
+  @Equals(true, { message: 'You must consent to the privacy policy (GDPR)' })
+  consentGdpr: boolean;
 }

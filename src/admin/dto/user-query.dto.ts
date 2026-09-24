@@ -24,6 +24,11 @@ export class UserQueryDto extends PaginationDto {
   role?: UserRole;
 
   @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  isActive?: boolean;
+
+  @IsOptional()
   @IsDateString()
   startDate?: string;
 

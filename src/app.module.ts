@@ -86,7 +86,7 @@ import { EmbeddedModule } from './modules/embedded/embedded.module';
 import { SigningModule } from './modules/signing/signing.module';
 import { StatusModule } from './modules/status/status.module';
 import { SavingsRecommendationsModule } from './modules/savings-recommendations/savings-recommendations.module';
-import { TrainingModule } from './modules/training/training.module';
+import { StaffTrainingModule } from './modules/training/training.module';
 import { BankAccountsModule } from './modules/bank-accounts/bank-accounts.module';
 import { ColdStorageModule } from './modules/cold-storage/cold-storage.module';
 import { SandboxModule } from './modules/sandbox/sandbox.module';
@@ -235,7 +235,7 @@ import { AnnouncementsModule } from './modules/announcements/announcements.modul
     SigningModule,
     StatusModule,
     SavingsRecommendationsModule,
-    TrainingModule,
+    StaffTrainingModule,
     BankAccountsModule,
     ColdStorageModule,
     SandboxModule,

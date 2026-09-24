@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/database/seed.ts",
+    "src/database/seeders/**",
+    "src/analytics/**",
+    "src/splits/**",
+    "src/**/*.spec.ts"
+  ]
+}

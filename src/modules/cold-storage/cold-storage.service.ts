@@ -1,11 +1,20 @@
-import { Injectable, Logger, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Not } from 'typeorm';
 import { ColdStorageAccount } from './entities/cold-storage-account.entity';
-import { ColdStorageWithdrawal, ColdStorageWithdrawalStatus } from './entities/cold-storage-withdrawal.entity';
+import {
+  ColdStorageWithdrawal,
+  ColdStorageWithdrawalStatus,
+} from './entities/cold-storage-withdrawal.entity';
 import { StellarService } from '../blockchain/stellar.service';
 import { WalletsService } from '../wallets/wallets.service';
-import { UsersService from '../users/users.service';
+import { UsersService } from '../users/users.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
 @Injectable()
@@ -23,26 +32,36 @@ export class ColdStorageService {
     private readonly auditLogsService: AuditLogsService,
   ) {}
 
-  async setup(userId: string, currency: string, stellarPublicKey: string): Promise<ColdStorageAccount> {
+  async setup(
+    userId: string,
+    currency: string,
+    stellarPublicKey: string,
+  ): Promise<ColdStorageAccount> {
     const user = await this.usersService.findOne(userId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
     if (user.kycTier !== 'ENHANCED') {
-      throw new ForbiddenException('Enhanced KYC verification is required to set up a cold storage account');
+      throw new ForbiddenException(
+        'Enhanced KYC verification is required to set up a cold storage account',
+      );
     }
 
     const validKeyPattern = /^G[A-Z0-9]{55}$/;
     if (!validKeyPattern.test(stellarPublicKey)) {
-      throw new BadRequestException('Invalid Stellar public key format. Must start with G and be 56 characters.');
+      throw new BadRequestException(
+        'Invalid Stellar public key format. Must start with G and be 56 characters.',
+      );
     }
 
     const existingAccount = await this.coldStorageAccountRepo.findOne({
       where: { userId, currency },
     });
     if (existingAccount) {
-      throw new BadRequestException('A cold storage account for this currency already exists');
+      throw new BadRequestException(
+        'A cold storage account for this currency already exists',
+      );
     }
 
     const account = this.coldStorageAccountRepo.create({
@@ -66,11 +85,17 @@ export class ColdStorageService {
       },
     });
 
-    this.logger.log(`Cold storage account created for user ${userId}, currency ${currency}`);
+    this.logger.log(
+      `Cold storage account created for user ${userId}, currency ${currency}`,
+    );
     return savedAccount;
   }
 
-  async deposit(userId: string, currency: string, amount: string): Promise<ColdStorageAccount> {
+  async deposit(
+    userId: string,
+    currency: string,
+    amount: string,
+  ): Promise<ColdStorageAccount> {
     const account = await this.coldStorageAccountRepo.findOne({
       where: { userId, currency },
     });
@@ -91,7 +116,10 @@ export class ColdStorageService {
       throw new BadRequestException('Minimum deposit amount is 1000');
     }
 
-    const hotWalletBalance = await this.walletsService.getBalance(userId, currency);
+    const hotWalletBalance = await this.walletsService.getBalance(
+      userId,
+      currency,
+    );
     if (parseFloat(hotWalletBalance) < depositAmount) {
       throw new BadRequestException('Insufficient hot wallet balance');
     }
@@ -117,11 +145,16 @@ export class ColdStorageService {
       },
     });
 
-    this.logger.log(`Deposit of ${amount} ${currency} to cold storage for user ${userId}`);
+    this.logger.log(
+      `Deposit of ${amount} ${currency} to cold storage for user ${userId}`,
+    );
     return account;
   }
 
-  async requestWithdrawal(userId: string, amount: string): Promise<ColdStorageWithdrawal> {
+  async requestWithdrawal(
+    userId: string,
+    amount: string,
+  ): Promise<ColdStorageWithdrawal> {
     const account = await this.coldStorageAccountRepo.findOne({
       where: { userId },
     });
@@ -134,14 +167,17 @@ export class ColdStorageService {
       throw new BadRequestException('Invalid withdrawal amount');
     }
 
-    const availableBalance = parseFloat(account.balance) - parseFloat(account.pendingWithdrawals);
+    const availableBalance =
+      parseFloat(account.balance) - parseFloat(account.pendingWithdrawals);
     if (withdrawalAmount > availableBalance) {
       throw new BadRequestException(
         `Insufficient available balance. Available: ${availableBalance}, Requested: ${withdrawalAmount}`,
       );
     }
 
-    const newPendingWithdrawals = (parseFloat(account.pendingWithdrawals) + withdrawalAmount).toFixed(8);
+    const newPendingWithdrawals = (
+      parseFloat(account.pendingWithdrawals) + withdrawalAmount
+    ).toFixed(8);
     account.pendingWithdrawals = newPendingWithdrawals;
     await this.coldStorageAccountRepo.save(account);
 
@@ -152,7 +188,8 @@ export class ColdStorageService {
       status: ColdStorageWithdrawalStatus.PENDING_APPROVAL,
     });
 
-    const savedWithdrawal = await this.coldStorageWithdrawalRepo.save(withdrawal);
+    const savedWithdrawal =
+      await this.coldStorageWithdrawalRepo.save(withdrawal);
 
     await this.auditLogsService.log({
       userId,
@@ -164,11 +201,16 @@ export class ColdStorageService {
       },
     });
 
-    this.logger.log(`Withdrawal request of ${amount} from cold storage for user ${userId}`);
+    this.logger.log(
+      `Withdrawal request of ${amount} from cold storage for user ${userId}`,
+    );
     return savedWithdrawal;
   }
 
-  async approveWithdrawal(withdrawalId: string, adminId: string): Promise<ColdStorageWithdrawal> {
+  async approveWithdrawal(
+    withdrawalId: string,
+    adminId: string,
+  ): Promise<ColdStorageWithdrawal> {
     const withdrawal = await this.coldStorageWithdrawalRepo.findOne({
       where: { id: withdrawalId },
     });
@@ -190,13 +232,19 @@ export class ColdStorageService {
     withdrawal.approvedAt = now;
     withdrawal.readyAt = readyAt;
 
-    const savedWithdrawal = await this.coldStorageWithdrawalRepo.save(withdrawal);
+    const savedWithdrawal =
+      await this.coldStorageWithdrawalRepo.save(withdrawal);
 
-    this.logger.log(`Withdrawal ${withdrawalId} approved by admin ${adminId}, ready at ${readyAt.toISOString()}`);
+    this.logger.log(
+      `Withdrawal ${withdrawalId} approved by admin ${adminId}, ready at ${readyAt.toISOString()}`,
+    );
     return savedWithdrawal;
   }
 
-  async confirmWithdrawal(userId: string, withdrawalId: string): Promise<ColdStorageWithdrawal> {
+  async confirmWithdrawal(
+    userId: string,
+    withdrawalId: string,
+  ): Promise<ColdStorageWithdrawal> {
     const withdrawal = await this.coldStorageWithdrawalRepo.findOne({
       where: { id: withdrawalId, userId },
       relations: ['coldStorageAccount'],
@@ -223,17 +271,22 @@ export class ColdStorageService {
       account.currency,
     );
 
-    const newBalance = (parseFloat(account.balance) - parseFloat(withdrawal.amount)).toFixed(8);
+    const newBalance = (
+      parseFloat(account.balance) - parseFloat(withdrawal.amount)
+    ).toFixed(8);
     account.balance = newBalance;
     await this.coldStorageAccountRepo.save(account);
 
-    const newPending = (parseFloat(account.pendingWithdrawals) - parseFloat(withdrawal.amount)).toFixed(8);
+    const newPending = (
+      parseFloat(account.pendingWithdrawals) - parseFloat(withdrawal.amount)
+    ).toFixed(8);
     account.pendingWithdrawals = newPending;
     await this.coldStorageAccountRepo.save(account);
 
     withdrawal.status = ColdStorageWithdrawalStatus.COMPLETED;
     withdrawal.completedAt = new Date();
-    const savedWithdrawal = await this.coldStorageWithdrawalRepo.save(withdrawal);
+    const savedWithdrawal =
+      await this.coldStorageWithdrawalRepo.save(withdrawal);
 
     await this.auditLogsService.log({
       userId,
@@ -245,7 +298,9 @@ export class ColdStorageService {
       },
     });
 
-    this.logger.log(`Withdrawal ${withdrawalId} confirmed and completed for user ${userId}`);
+    this.logger.log(
+      `Withdrawal ${withdrawalId} confirmed and completed for user ${userId}`,
+    );
     return savedWithdrawal;
   }
 

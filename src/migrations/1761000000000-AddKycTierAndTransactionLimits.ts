@@ -1,6 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddKycTierAndTransactionLimits1761000000000 implements MigrationInterface {
 /**
  * Adds the kycTier column to users and creates the transaction_limits table.
  *
@@ -10,9 +9,7 @@ export class AddKycTierAndTransactionLimits1761000000000 implements MigrationInt
  * - Both up() and down() are wrapped in explicit transactions so a partial
  *   failure leaves the schema unchanged.
  */
-export class AddKycTierAndTransactionLimits1761000000000
-  implements MigrationInterface
-{
+export class AddKycTierAndTransactionLimits1761000000000 implements MigrationInterface {
   name = 'AddKycTierAndTransactionLimits1761000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

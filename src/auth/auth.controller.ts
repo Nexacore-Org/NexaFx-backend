@@ -35,6 +35,7 @@ import { VerifyLoginOtpResponseDto } from './dto/signup-response.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { UnlinkOauthDto } from './dto/unlink-oauth.dto';
 import { SetPasswordDto } from './dto/set-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { Throttle } from '@nestjs/throttler';
 
 @ApiTags('Authentication')

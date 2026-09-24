@@ -1,0 +1,29 @@
+Add E2E test coverage for src/merchant-integration — no test/e2e/*.e2e-spec.ts exists for this domain
+Repo Avatar
+Nexacore-Org/NexaFx-backend
+Summary
+src/merchant-integration/ has a real controller and service implementing the merchant-facing payment-acceptance integration, but there is no corresponding file under test/e2e/ (the repo's existing E2E suite covers only app, auth, auth-refresh, admin, escrow, kyc, ledger, transactions, and stellar-concurrency — confirmed by listing test/ and test/e2e/). Unit tests, where they exist for this module, mock the database and guards; nothing currently exercises the real HTTP request → guard → controller → service → database round trip for this domain.
+
+Why This Matters
+E2E tests are what catch wiring bugs that unit tests structurally cannot: a missing guard, a module that isn't actually imported into AppModule, a DTO validation pipe that isn't applied, or a route that returns the wrong status code — all things that only surface when a real HTTP request goes through the whole stack.
+
+Observed route handlers in this controller (from static inspection — verify the actual final route paths, which depend on any global prefix/versioning applied in main.ts):
+
+POST /v2/merchant-integration/checkout-sessions
+GET /v2/merchant-integration/checkout-sessions/:id
+What Needs to Be Done
+Create test/e2e/merchant-integration.e2e-spec.ts following the existing pattern in test/e2e/ (bootstrap the app via the existing test/helpers/app.helper.ts, use test/helpers/db.helper.ts for setup/teardown, and test/mocks/factories.ts for fixture creation where applicable).
+Cover at minimum: an authenticated happy-path request for each primary endpoint, an unauthenticated request being rejected (401/403 as appropriate), and one validation-failure case (400) per write endpoint.
+Mock only true external boundaries (Stellar Horizon, Mailgun, Firebase, third-party APIs) — the database and the app's own guards/interceptors should run for real, per the existing E2E convention in this repo.
+Add the new spec file to whatever CI job runs npm run test:e2e (confirm it is picked up automatically by test/jest-e2e.json's glob, or update it if not).
+Key Files
+src/merchant-integration/merchant-integration.controller.ts
+New: test/e2e/merchant-integration.e2e-spec.ts
+Acceptance Criteria
+ npm run test:e2e -- merchant-integration passes
+ At least one authenticated happy-path test per primary endpoint
+ At least one unauthenticated/unauthorized rejection test
+ At least one validation-failure (400) test for a write endpoint, if one exists
+ No real external network calls (Stellar, Mailgun, Firebase, etc.) are made during the test run
+Constraints
+Use the existing test/helpers/ and test/mocks/ utilities rather than inventing a new test-setup pattern

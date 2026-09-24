@@ -13,7 +13,10 @@ import {
   TestFraudPatternDto,
   UpdateFraudPatternDto,
 } from './dto/fraud-pattern.dto';
+import { Roles } from '../../auth/decorators/roles.decorator';
+import { UserRole } from '../../users/user.entity';
 
+@Roles(UserRole.ADMIN)
 @Controller('admin/fraud-patterns')
 export class FraudPatternsController {
   constructor(private readonly fraudPatternsService: FraudPatternsService) {}
@@ -40,6 +43,9 @@ export class FraudPatternsController {
 
   @Post('test')
   test(@Body() dto: TestFraudPatternDto) {
-    return this.fraudPatternsService.test(dto.patternId, dto.transactionScenario);
+    return this.fraudPatternsService.test(
+      dto.patternId,
+      dto.transactionScenario,
+    );
   }
 }

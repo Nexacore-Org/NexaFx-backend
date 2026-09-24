@@ -75,6 +75,7 @@ import { UnifiedActivityFeedModule } from './unified-activity-feed/unified-activ
 import { OwaspZapDastModule } from './owasp-zap-dast/owasp-zap-dast.module';
 import { StellarSep24AnchorModule } from './stellar-sep24-anchor/stellar-sep24-anchor.module';
 import { FraudModule } from './modules/fraud/fraud.module';
+import { FraudPatternsModule } from './modules/fraud-patterns/fraud-patterns.module';
 import { FiatModule } from './modules/fiat/fiat.module';
 import { HealthReportModule } from './modules/health-report/health-report.module';
 import { SimulatorModule } from './modules/simulator/simulator.module';
@@ -224,6 +225,7 @@ import { AnnouncementsModule } from './modules/announcements/announcements.modul
     VaultsModule,
     StellarSep24AnchorModule,
     FraudModule,
+    FraudPatternsModule,
     FiatModule,
     HealthReportModule,
     SimulatorModule,

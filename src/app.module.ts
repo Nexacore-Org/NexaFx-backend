@@ -109,6 +109,7 @@ import { DonationsModule } from './donations/donations.module';
 import { WidgetsModule } from './widgets/widgets.module';
 import { TestnetFaucetModule } from './modules/testnet-faucet/testnet-faucet.module';
 import { AnnouncementsModule } from './modules/announcements/announcements.module';
+import { HelpCentreModule } from './modules/help-centre/help-centre.module';
 
 @Module({
   imports: [
@@ -259,6 +260,7 @@ import { AnnouncementsModule } from './modules/announcements/announcements.modul
     WidgetsModule,
     TestnetFaucetModule,
     AnnouncementsModule,
+    HelpCentreModule,
   ],
   controllers: [AppController],
   providers: [

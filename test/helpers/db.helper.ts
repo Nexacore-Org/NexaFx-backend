@@ -7,13 +7,11 @@ import * as bcrypt from 'bcrypt';
  */
 export async function truncateAll(dataSource: DataSource): Promise<void> {
   const entities = dataSource.entityMetadatas;
-  
+
   for (const entity of entities) {
     try {
       const repository = dataSource.getRepository(entity.name);
-      await repository.query(
-        `TRUNCATE TABLE "${entity.tableName}" CASCADE;`,
-      );
+      await repository.query(`TRUNCATE TABLE "${entity.tableName}" CASCADE;`);
     } catch (error) {
       // Ignore tables that might not exist or can't be truncated
       console.warn(`Failed to truncate ${entity.tableName}:`, error.message);
@@ -22,7 +20,8 @@ export async function truncateAll(dataSource: DataSource): Promise<void> {
 }
 
 /**
- * Seed a test user in the database
+ * Seed a test user directly in the "users" table.
+ * Bypasses the auth flow entirely — used when a spec needs a raw user row.
  */
 export async function seedTestUser(
   dataSource: DataSource,
@@ -31,60 +30,58 @@ export async function seedTestUser(
     password?: string;
     firstName?: string;
     lastName?: string;
+    role?: string;
     isVerified?: boolean;
     isActive?: boolean;
-    kycStatus?: string;
   },
 ): Promise<any> {
   const email = options?.email || 'test@example.com';
   const rawPassword = options?.password || 'TestPassword123!';
   const firstName = options?.firstName || 'Test';
   const lastName = options?.lastName || 'User';
+  const role = options?.role || 'USER';
   const isVerified = options?.isVerified ?? true;
   const isActive = options?.isActive ?? true;
 
-  // Hash password using bcrypt (same logic as auth service)
   const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
-  // Insert user into users table
   const result = await dataSource.query(
     `
-    INSERT INTO "user" (
-      email, 
-      password, 
-      first_name, 
-      last_name, 
-      is_verified, 
-      is_active,
-      created_at,
-      updated_at
+    INSERT INTO "users" (
+      email,
+      password,
+      "firstName",
+      "lastName",
+      role,
+      "isVerified",
+      "isActive",
+      "walletPublicKey",
+      "walletSecretKeyEncrypted",
+      "referralCode"
     )
-    VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     RETURNING *
     `,
-    [email, hashedPassword, firstName, lastName, isVerified, isActive],
+    [
+      email,
+      hashedPassword,
+      firstName,
+      lastName,
+      role,
+      isVerified,
+      isActive,
+      'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY2F3D',
+      'encrypted-test-secret',
+      generateReferralCode(),
+    ],
   );
 
-  const user = result[0];
-
-  // If specified, set KYC status
-  if (options?.kycStatus) {
-    await dataSource.query(
-      `
-      UPDATE "user" 
-      SET kyc_status = $1 
-      WHERE id = $2
-      `,
-      [options.kycStatus, user.id],
-    );
-    user.kycStatus = options.kycStatus;
-  }
-
-  return user;
+  return result[0];
 }
 
 /**
- * Seed an admin user
+ * Seed an admin user directly in the "users" table.
+ * Returns the row with the plaintext password for login flows.
  */
 export async function seedAdminUser(
   dataSource: DataSource,
@@ -93,57 +90,13 @@ export async function seedAdminUser(
     password?: string;
   },
 ): Promise<any> {
-  const email = options?.email || 'admin@example.com';
-  const rawPassword = options?.password || 'AdminPassword123!';
-
-  const hashedPassword = await bcrypt.hash(rawPassword, 10);
-
-  const result = await dataSource.query(
-    `
-    INSERT INTO "user" (
-      email, 
-      password, 
-      first_name, 
-      last_name, 
-      is_verified, 
-      is_active,
-      role,
-      created_at,
-      updated_at
-    )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
-    RETURNING *
-    `,
-    [email, hashedPassword, 'Admin', 'User', true, true, 'ADMIN'],
-  );
-
-  return result[0];
-}
-
-/**
- * Create a KYC application for a user
- */
-export async function createKycApplication(
-  dataSource: DataSource,
-  userId: string,
-  status: string = 'PENDING',
-): Promise<any> {
-  const result = await dataSource.query(
-    `
-    INSERT INTO "kyc_application" (
-      user_id,
-      status,
-      tier,
-      created_at,
-      updated_at
-    )
-    VALUES ($1, $2, $3, NOW(), NOW())
-    RETURNING *
-    `,
-    [userId, status, 'STANDARD'],
-  );
-
-  return result[0];
+  return seedTestUser(dataSource, {
+    email: options?.email || 'admin@example.com',
+    password: options?.password || 'AdminPassword123!',
+    firstName: 'Admin',
+    lastName: 'User',
+    role: 'ADMIN',
+  });
 }
 
 /**
@@ -157,35 +110,34 @@ export async function getLatestOtp(
   try {
     const result = await dataSource.query(
       `
-      SELECT code 
-      FROM "otp" 
-      WHERE email = $1 
-      ORDER BY created_at DESC 
+      SELECT code
+      FROM "otp"
+      WHERE email = $1
+      ORDER BY "createdAt" DESC
       LIMIT 1
       `,
       [email],
     );
     return result[0]?.code || null;
-  } catch (error) {
+  } catch {
     return null;
   }
 }
 
 /**
- * Clear all data and run migrations
- * Called once before all tests in a suite
+ * Truncate all tables.
+ * Called once before all tests in a suite.
  */
-export async function setupTestDatabase(
-  dataSource: DataSource,
-): Promise<void> {
-  // Run pending migrations
-  try {
-    await dataSource.runMigrations();
-  } catch (error) {
-    // Migrations might already be run
-    console.warn('Migrations already run or skipped:', error.message);
-  }
-
-  // Truncate all tables
+export async function setupTestDatabase(dataSource: DataSource): Promise<void> {
   await truncateAll(dataSource);
+}
+
+/** Random 8-char uppercase referral code; unique per seed call. */
+function generateReferralCode(): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 8; i += 1) {
+    code += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  return code;
 }

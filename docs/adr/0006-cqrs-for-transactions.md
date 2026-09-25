@@ -1,7 +1,7 @@
 # ADR 0006: CQRS for Transactions Module
 
 ## Status
-Accepted
+Superseded
 
 ## Context
 The transactions module is the core of our currency exchange platform. It needs to:
@@ -32,3 +32,23 @@ We will implement **CQRS** for the transactions module.
 ### Neutral
 - NestJS has good support for CQRS via @nestjs/cqrs package
 - Good fit for financial applications where audit trails are critical
+
+## Reality
+This decision was **not implemented**. The transactions module was built as a
+conventional NestJS service/controller/repository stack instead of CQRS. A
+full-text search of `src/` finds no `CommandBus`, `QueryBus`, `@CommandHandler`,
+`@QueryHandler`, or any `@nestjs/cqrs` import; `src/transactions/` is a plain
+service layer.
+
+We chose the conventional approach because:
+- The module is large and already has many dependent features (fees, ledger,
+  rate-alerts, KYC limits, path-payment routing) built directly against
+  `TransactionsService`; a CQRS migration would have touched all of them.
+- The read/write scaling and event-sourcing benefits CQRS offers were not
+  needed at the current scale, so the added complexity was not justified.
+- A partial migration (some writes through a bus, others not) would be worse
+  than a consistent service layer, so the pattern was dropped entirely rather
+  than adopted piecemeal.
+
+This ADR is therefore marked **Superseded**. If CQRS is revisited later, it
+should be a new ADR that supersedes this one and covers the full migration.

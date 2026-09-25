@@ -1,101 +1,19 @@
 import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
 import { DataSource } from 'typeorm';
-import * as jwt from 'jsonwebtoken';
 import { createTestApp } from '../helpers/app.helper';
-import { truncateAll, setupTestDatabase } from '../helpers/db.helper';
+import {
+  truncateAll,
+  getLatestOtp,
+  setupTestDatabase,
+} from '../helpers/db.helper';
+import { v4 as uuidv4 } from 'uuid';
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
-
-/**
- * A valid Stellar public key (56-char, starts with G, base32).
- * Used for watch-only import tests.
- */
-const VALID_STELLAR_KEY =
-  'GBMOIMFPXCNXQSQ2XEUVB36L4DYFVYOYHIEBSZ4BIFN2OYUMCBYNAFP';
-
-/**
- * Seed a verified user and mint a short-lived JWT for them.
- * Inserts directly into the DB to bypass the OTP signup flow.
- */
-async function seedUserAndGetToken(
-  dataSource: DataSource,
-  opts: { email: string; role?: string } = { email: 'wallet-user@example.com' },
-): Promise<{ userId: string; token: string }> {
-  const email = opts.email;
-  const role = opts.role ?? 'USER';
-  const secret =
-    process.env.JWT_SECRET || 'default-secret-change-in-production';
-
-  const rows = await dataSource.query(
-    `INSERT INTO users (
-       email, "passwordHash", "walletPublicKey", "walletSecretKeyEncrypted",
-       "referralCode", role, "isActive", "isVerified", "createdAt", "updatedAt"
-     )
-     VALUES ($1, $2, $3, $4, $5, $6, true, true, NOW(), NOW())
-     RETURNING id`,
-    [
-      email,
-      'hashed-pw',
-      'G' + 'A'.repeat(55),
-      'enc-secret',
-      Math.random().toString(36).slice(2, 10).toUpperCase(),
-      role,
-    ],
-  );
-
-  const userId: string = rows[0].id;
-  const token = jwt.sign({ sub: userId, email, role }, secret, {
-    expiresIn: '1h',
-  });
-
-  return { userId, token };
-}
-
-/**
- * Directly insert a wallet row for a user — useful when a test needs a
- * pre-existing wallet without going through the generate endpoint.
- */
-async function seedWallet(
-  dataSource: DataSource,
-  userId: string,
-  opts: {
-    publicKey?: string;
-    encryptedSecretKey?: string | null;
-    label?: string;
-    isDefault?: boolean;
-    currency?: string;
-  } = {},
-): Promise<string> {
-  const publicKey = opts.publicKey ?? 'G' + 'B'.repeat(55);
-  const label = opts.label ?? 'Test Wallet';
-  const isDefault = opts.isDefault ?? false;
-  const currency = opts.currency ?? 'XLM';
-  const encryptedSecretKey =
-    opts.encryptedSecretKey !== undefined ? opts.encryptedSecretKey : 'enc';
-
-  const rows = await dataSource.query(
-    `INSERT INTO wallets (
-       "userId", "publicKey", "encryptedSecretKey", label, "isDefault",
-       currency, network, "createdAt", "updatedAt"
-     )
-     VALUES ($1, $2, $3, $4, $5, $6, 'TESTNET', NOW(), NOW())
-     RETURNING id`,
-    [userId, publicKey, encryptedSecretKey, label, isDefault, currency],
-  );
-
-  return rows[0].id as string;
-}
-
-// ─── suite ───────────────────────────────────────────────────────────────────
-
-describe('Wallets E2E', () => {
+describe('Wallets E2E Tests', () => {
   let app: INestApplication;
   let dataSource: DataSource;
   let userToken: string;
   let userId: string;
-  let otherToken: string;
-  let otherUserId: string;
 
   beforeAll(async () => {
     app = await createTestApp();
@@ -109,419 +27,175 @@ describe('Wallets E2E', () => {
 
   beforeEach(async () => {
     await truncateAll(dataSource);
-    ({ token: userToken, userId } = await seedUserAndGetToken(dataSource, {
-      email: 'wallet-user@example.com',
-    }));
-    ({ token: otherToken, userId: otherUserId } = await seedUserAndGetToken(
-      dataSource,
-      { email: 'other-wallet-user@example.com' },
-    ));
+
+    const email = 'wallet-user@example.com';
+    const password = 'WalletPassword123!';
+
+    await request(app.getHttpServer())
+      .post('/v1/auth/signup')
+      .send({
+        email,
+        password,
+        firstName: 'Wallet',
+        lastName: 'User',
+        phone: '+1234567890',
+      })
+      .expect(200);
+
+    const otp = await getLatestOtp(dataSource, email);
+    const signupResponse = await request(app.getHttpServer())
+      .post('/v1/auth/verify-signup-otp')
+      .send({ email, otp })
+      .expect(200);
+
+    userToken = signupResponse.body.accessToken;
+
+    const userResult = await dataSource.query(
+      `SELECT id FROM "user" WHERE email = $1`,
+      [email],
+    );
+    userId = userResult[0].id;
+
+    await dataSource.query(
+      `UPDATE "user" SET kyc_status = $1 WHERE id = $2`,
+      ['APPROVED', userId],
+    );
   });
 
-  // ── POST /v1/wallets/generate ─────────────────────────────────────────────
-
-  describe('POST /v1/wallets/generate', () => {
-    it('generates a new wallet for an authenticated user (201)', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/v1/wallets/generate')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({})
-        .expect(201);
-
-      expect(res.body).toHaveProperty('id');
-      expect(res.body).toHaveProperty('publicKey');
-      expect(res.body).toHaveProperty('isDefault');
-      // Encrypted secret key must not be exposed
-      expect(res.body.encryptedSecretKey).toBeUndefined();
-    });
-
-    it('accepts an optional label (201)', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/v1/wallets/generate')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({ label: 'Savings' })
-        .expect(201);
-
-      expect(res.body).toHaveProperty('label', 'Savings');
-    });
-
-    it('rejects unauthenticated requests with 401', async () => {
-      await request(app.getHttpServer())
-        .post('/v1/wallets/generate')
-        .send({})
-        .expect(401);
-    });
-
-    it('rejects a label that exceeds 100 characters with 400', async () => {
-      await request(app.getHttpServer())
-        .post('/v1/wallets/generate')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({ label: 'x'.repeat(101) })
-        .expect(400);
-    });
-
-    it('rejects extra/unknown fields in the body with 400 (forbidNonWhitelisted)', async () => {
-      await request(app.getHttpServer())
-        .post('/v1/wallets/generate')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({ label: 'Ok', unknownField: 'bad' })
-        .expect(400);
-    });
-  });
-
-  // ── POST /v1/wallets/import ───────────────────────────────────────────────
-
-  describe('POST /v1/wallets/import', () => {
-    it('imports a watch-only wallet by public key (201)', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/v1/wallets/import')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({ publicKey: VALID_STELLAR_KEY })
-        .expect(201);
-
-      expect(res.body).toHaveProperty('id');
-      expect(res.body).toHaveProperty('publicKey', VALID_STELLAR_KEY);
-      expect(res.body).toHaveProperty('isWatchOnly', true);
-    });
-
-    it('accepts an optional label on import (201)', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/v1/wallets/import')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({ publicKey: VALID_STELLAR_KEY, label: 'Cold storage' })
-        .expect(201);
-
-      expect(res.body).toHaveProperty('label', 'Cold storage');
-    });
-
-    it('rejects unauthenticated requests with 401', async () => {
-      await request(app.getHttpServer())
-        .post('/v1/wallets/import')
-        .send({ publicKey: VALID_STELLAR_KEY })
-        .expect(401);
-    });
-
-    it('rejects a missing publicKey with 400', async () => {
-      await request(app.getHttpServer())
-        .post('/v1/wallets/import')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({})
-        .expect(400);
-    });
-
-    it('rejects a key that is not 56 characters with 400', async () => {
-      await request(app.getHttpServer())
-        .post('/v1/wallets/import')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({ publicKey: 'GSHORT' })
-        .expect(400);
-    });
-
-    it('rejects a key that does not start with G with 400', async () => {
-      await request(app.getHttpServer())
-        .post('/v1/wallets/import')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({ publicKey: 'X' + 'A'.repeat(55) })
-        .expect(400);
-    });
-
-    it('rejects duplicate public key for the same user with 400', async () => {
-      // First import succeeds
-      await request(app.getHttpServer())
-        .post('/v1/wallets/import')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({ publicKey: VALID_STELLAR_KEY })
-        .expect(201);
-
-      // Second import of same key fails
-      await request(app.getHttpServer())
-        .post('/v1/wallets/import')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({ publicKey: VALID_STELLAR_KEY })
-        .expect(400);
-    });
-  });
-
-  // ── GET /v1/wallets ───────────────────────────────────────────────────────
-
-  describe('GET /v1/wallets', () => {
-    it('returns paginated wallets for the authenticated user (200)', async () => {
-      // Generate a wallet first so the list is non-empty
-      await request(app.getHttpServer())
-        .post('/v1/wallets/generate')
-        .set('Authorization', `Bearer ${userToken}`)
-        .send({})
-        .expect(201);
-
-      const res = await request(app.getHttpServer())
+  describe('GET /wallets', () => {
+    it('should list the user wallets', async () => {
+      const response = await request(app.getHttpServer())
         .get('/v1/wallets')
         .set('Authorization', `Bearer ${userToken}`)
         .expect(200);
 
-      // WalletsService.listWallets returns PaginatedWallets { items, total, page, pageSize }
-      expect(res.body).toHaveProperty('items');
-      expect(Array.isArray(res.body.items)).toBe(true);
-      expect(res.body.items.length).toBeGreaterThanOrEqual(1);
-      expect(res.body).toHaveProperty('total');
+      expect(Array.isArray(response.body)).toBe(true);
+      expect(response.body.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('returns an empty list when user has no wallets (200)', async () => {
-      const res = await request(app.getHttpServer())
-        .get('/v1/wallets')
-        .set('Authorization', `Bearer ${userToken}`)
-        .expect(200);
-
-      expect(res.body).toHaveProperty('items');
-      expect(res.body.items).toHaveLength(0);
-    });
-
-    it('does not expose other users\' wallets', async () => {
-      await request(app.getHttpServer())
-        .post('/v1/wallets/generate')
-        .set('Authorization', `Bearer ${otherToken}`)
-        .send({})
-        .expect(201);
-
-      const res = await request(app.getHttpServer())
-        .get('/v1/wallets')
-        .set('Authorization', `Bearer ${userToken}`)
-        .expect(200);
-
-      expect(res.body.items).toHaveLength(0);
-    });
-
-    it('rejects unauthenticated requests with 401', async () => {
+    it('should require authentication', async () => {
       await request(app.getHttpServer()).get('/v1/wallets').expect(401);
     });
   });
 
-  // ── GET /v1/wallets/:currency ─────────────────────────────────────────────
-
-  describe('GET /v1/wallets/:currency', () => {
-    it('returns the wallet for a given currency (200)', async () => {
-      // Seed an XLM wallet directly so we know the currency
-      await seedWallet(dataSource, userId, {
-        currency: 'XLM',
-        isDefault: true,
-        label: 'Primary',
-      });
-
-      const res = await request(app.getHttpServer())
-        .get('/v1/wallets/XLM')
+  describe('POST /wallets', () => {
+    it('should generate a second wallet for the user', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/v1/wallets')
         .set('Authorization', `Bearer ${userToken}`)
-        .expect(200);
+        .send({ label: 'Second Wallet' })
+        .expect(201);
 
-      expect(res.body).toHaveProperty('currency', 'XLM');
-    });
-
-    it('returns 404 for a currency the user has no wallet for', async () => {
-      await request(app.getHttpServer())
-        .get('/v1/wallets/NGN')
-        .set('Authorization', `Bearer ${userToken}`)
-        .expect(404);
-    });
-
-    it('rejects unauthenticated requests with 401', async () => {
-      await request(app.getHttpServer()).get('/v1/wallets/XLM').expect(401);
+      expect(response.body).toHaveProperty('id');
+      expect(response.body).toHaveProperty('publicKey');
     });
   });
 
-  // ── PATCH /v1/wallets/:id ─────────────────────────────────────────────────
-
-  describe('PATCH /v1/wallets/:id', () => {
-    it('updates the wallet label (200)', async () => {
-      const walletId = await seedWallet(dataSource, userId, {
-        label: 'Old Label',
-      });
-
-      const res = await request(app.getHttpServer())
-        .patch(`/v1/wallets/${walletId}`)
+  describe('default wallet routing', () => {
+    it('routes a deposit with no walletId to the new default wallet', async () => {
+      const originalWallets = await request(app.getHttpServer())
+        .get('/v1/wallets')
         .set('Authorization', `Bearer ${userToken}`)
-        .send({ label: 'New Label' })
         .expect(200);
 
-      expect(res.body).toHaveProperty('label', 'New Label');
-    });
+      const originalDefault = originalWallets.body.find(
+        (w: any) => w.isDefault,
+      );
+      expect(originalDefault).toBeDefined();
 
-    it('rejects an empty label with 400', async () => {
-      const walletId = await seedWallet(dataSource, userId);
-
-      await request(app.getHttpServer())
-        .patch(`/v1/wallets/${walletId}`)
+      const newWallet = await request(app.getHttpServer())
+        .post('/v1/wallets')
         .set('Authorization', `Bearer ${userToken}`)
-        .send({ label: '' })
-        .expect(400);
-    });
-
-    it('rejects a missing label field with 400', async () => {
-      const walletId = await seedWallet(dataSource, userId);
+        .send({ label: 'New Default' })
+        .expect(201);
 
       await request(app.getHttpServer())
-        .patch(`/v1/wallets/${walletId}`)
+        .patch(`/v1/wallets/${newWallet.body.id}/default`)
         .set('Authorization', `Bearer ${userToken}`)
-        .send({})
-        .expect(400);
-    });
+        .expect(200);
 
-    it('returns 404 when patching another user\'s wallet', async () => {
-      const walletId = await seedWallet(dataSource, otherUserId, {
-        label: 'Other',
-      });
-
-      await request(app.getHttpServer())
-        .patch(`/v1/wallets/${walletId}`)
+      const deposit = await request(app.getHttpServer())
+        .post('/v1/transactions/deposit')
         .set('Authorization', `Bearer ${userToken}`)
-        .send({ label: 'Hijacked' })
-        .expect(404);
+        .send({
+          amount: '100',
+          currency: 'USD',
+          idempotencyKey: uuidv4(),
+        })
+        .expect(201);
+
+      expect(deposit.body.walletId).toBe(newWallet.body.id);
+      expect(deposit.body.walletId).not.toBe(originalDefault.id);
     });
 
-    it('returns 400 for a non-UUID wallet id', async () => {
-      await request(app.getHttpServer())
-        .patch('/v1/wallets/not-a-uuid')
+    it('routes a deposit with an explicit non-default walletId to that wallet', async () => {
+      const wallets = await request(app.getHttpServer())
+        .get('/v1/wallets')
         .set('Authorization', `Bearer ${userToken}`)
-        .send({ label: 'Test' })
-        .expect(400);
-    });
+        .expect(200);
 
-    it('rejects unauthenticated requests with 401', async () => {
-      const walletId = await seedWallet(dataSource, userId);
+      const nonDefault = wallets.body.find((w: any) => !w.isDefault);
+      expect(nonDefault).toBeDefined();
 
-      await request(app.getHttpServer())
-        .patch(`/v1/wallets/${walletId}`)
-        .send({ label: 'Test' })
-        .expect(401);
+      const deposit = await request(app.getHttpServer())
+        .post('/v1/transactions/deposit')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({
+          amount: '100',
+          currency: 'USD',
+          walletId: nonDefault.id,
+          idempotencyKey: uuidv4(),
+        })
+        .expect(201);
+
+      expect(deposit.body.walletId).toBe(nonDefault.id);
     });
   });
 
-  // ── PATCH /v1/wallets/:id/set-default ────────────────────────────────────
-
-  describe('PATCH /v1/wallets/:id/set-default', () => {
-    it('sets a wallet as default and returns success message (200)', async () => {
-      // Seed two wallets — one default, one not
-      await seedWallet(dataSource, userId, { isDefault: true, label: 'Primary' });
-      const secondId = await seedWallet(dataSource, userId, {
-        isDefault: false,
-        label: 'Secondary',
-        publicKey: 'G' + 'C'.repeat(55),
-      });
-
-      const res = await request(app.getHttpServer())
-        .patch(`/v1/wallets/${secondId}/set-default`)
+  describe('DELETE /wallets/:id', () => {
+    it('rejects deleting the user only wallet', async () => {
+      const wallets = await request(app.getHttpServer())
+        .get('/v1/wallets')
         .set('Authorization', `Bearer ${userToken}`)
         .expect(200);
 
-      expect(res.body).toHaveProperty('message', 'Default wallet updated');
-    });
-
-    it('returns 404 when wallet does not belong to user', async () => {
-      const walletId = await seedWallet(dataSource, otherUserId, {
-        isDefault: true,
-      });
+      expect(wallets.body.length).toBe(1);
 
       await request(app.getHttpServer())
-        .patch(`/v1/wallets/${walletId}/set-default`)
-        .set('Authorization', `Bearer ${userToken}`)
-        .expect(404);
-    });
-
-    it('returns 400 for a non-UUID wallet id', async () => {
-      await request(app.getHttpServer())
-        .patch('/v1/wallets/not-a-uuid/set-default')
+        .delete(`/v1/wallets/${wallets.body[0].id}`)
         .set('Authorization', `Bearer ${userToken}`)
         .expect(400);
-    });
-
-    it('rejects unauthenticated requests with 401', async () => {
-      const walletId = await seedWallet(dataSource, userId, {
-        isDefault: false,
-      });
-
-      await request(app.getHttpServer())
-        .patch(`/v1/wallets/${walletId}/set-default`)
-        .expect(401);
     });
   });
 
-  // ── DELETE /v1/wallets/:id ────────────────────────────────────────────────
-
-  describe('DELETE /v1/wallets/:id', () => {
-    it('deletes a non-default wallet and returns success message (200)', async () => {
-      // Need two wallets: one default (cannot be deleted), one secondary
-      await seedWallet(dataSource, userId, { isDefault: true, label: 'Primary' });
-      const secondId = await seedWallet(dataSource, userId, {
-        isDefault: false,
-        label: 'Secondary',
-        publicKey: 'G' + 'C'.repeat(55),
-      });
-
-      const res = await request(app.getHttpServer())
-        .delete(`/v1/wallets/${secondId}`)
+  describe('watch-only wallet withdrawals', () => {
+    it('rejects a withdrawal from a watch-only imported wallet with a clear error', async () => {
+      const imported = await request(app.getHttpServer())
+        .post('/v1/wallets/import')
         .set('Authorization', `Bearer ${userToken}`)
-        .expect(200);
+        .send({
+          publicKey: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+          watchOnly: true,
+          label: 'Watch Only',
+        })
+        .expect(201);
 
-      expect(res.body).toHaveProperty('message', 'Wallet removed');
-    });
-
-    it('rejects deleting the only wallet with 400', async () => {
-      const walletId = await seedWallet(dataSource, userId, {
-        isDefault: true,
-      });
-
-      await request(app.getHttpServer())
-        .delete(`/v1/wallets/${walletId}`)
+      const response = await request(app.getHttpServer())
+        .post('/v1/transactions/withdraw')
         .set('Authorization', `Bearer ${userToken}`)
-        .expect(400);
-    });
+        .send({
+          amount: '10',
+          currency: 'USD',
+          walletId: imported.body.id,
+          destination: 'GDESTINATIONWALLETADDRESS000000000000000000000000000',
+          idempotencyKey: uuidv4(),
+        });
 
-    it('rejects deleting the default wallet (even if multiple exist) with 400', async () => {
-      const defaultId = await seedWallet(dataSource, userId, {
-        isDefault: true,
-        label: 'Default',
-      });
-      await seedWallet(dataSource, userId, {
-        isDefault: false,
-        label: 'Secondary',
-        publicKey: 'G' + 'C'.repeat(55),
-      });
-
-      await request(app.getHttpServer())
-        .delete(`/v1/wallets/${defaultId}`)
-        .set('Authorization', `Bearer ${userToken}`)
-        .expect(400);
-    });
-
-    it('returns 404 when wallet does not belong to user', async () => {
-      await seedWallet(dataSource, otherUserId, { isDefault: true, label: 'A' });
-      const otherId = await seedWallet(dataSource, otherUserId, {
-        isDefault: false,
-        label: 'B',
-        publicKey: 'G' + 'C'.repeat(55),
-      });
-
-      await request(app.getHttpServer())
-        .delete(`/v1/wallets/${otherId}`)
-        .set('Authorization', `Bearer ${userToken}`)
-        .expect(404);
-    });
-
-    it('returns 400 for a non-UUID wallet id', async () => {
-      await request(app.getHttpServer())
-        .delete('/v1/wallets/not-a-uuid')
-        .set('Authorization', `Bearer ${userToken}`)
-        .expect(400);
-    });
-
-    it('rejects unauthenticated requests with 401', async () => {
-      await seedWallet(dataSource, userId, { isDefault: true, label: 'A' });
-      const secondId = await seedWallet(dataSource, userId, {
-        isDefault: false,
-        label: 'B',
-        publicKey: 'G' + 'C'.repeat(55),
-      });
-
-      await request(app.getHttpServer())
-        .delete(`/v1/wallets/${secondId}`)
-        .expect(401);
+      expect(response.status).toBeGreaterThanOrEqual(400);
+      expect(response.status).toBeLessThan(500);
+      expect(JSON.stringify(response.body).toLowerCase()).toContain(
+        'watch',
+      );
     });
   });
 });

@@ -1,8 +1,8 @@
 name: CI Pipeline (v2)
 
 # ---------------------------------------------------------------------------
-# Runs on every PR targeting the v2 branch.
-# Includes the migration rollback validation step that must pass before merge.
+# Sole CI pipeline for the v2 branch. Runs on every push/PR targeting v2.
+# All verification steps are blocking — no `|| true` masking is permitted.
 # ---------------------------------------------------------------------------
 on:
   push:
@@ -58,10 +58,10 @@ jobs:
         run: npm ci
 
       - name: Lint
-        run: npm run lint || true
+        run: npm run lint
 
       - name: Type check
-        run: npx tsc --noEmit || true
+        run: npx tsc --noEmit
 
       - name: Run unit tests
         env:
@@ -82,7 +82,7 @@ jobs:
         run: npm run test -- --forceExit
 
       - name: Build
-        run: npm run build || true
+        run: npm run build
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -141,7 +141,7 @@ jobs:
         env:
           NODE_ENV: test
           DATABASE_URL: 'postgresql://postgres:password@localhost:5432/nexafx_test'
-        run: npm run typeorm:migration:run || true
+        run: npm run typeorm:migration:run
 
       - name: Run E2E tests
         env:

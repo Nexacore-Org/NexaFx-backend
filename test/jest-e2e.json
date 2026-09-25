@@ -12,9 +12,8 @@
   "testTimeout": 300000,
   "moduleNameMapper": {
     "^src/(.*)$": "<rootDir>/../src/$1",
-    "^archiver$": "<rootDir>/mocks/archiver.ts",
+    "^archiver$": "<rootDir>/mocks/archiver.mock.ts",
     "^uuid$": "<rootDir>/mocks/uuid.ts"
-    "^archiver$": "<rootDir>/mocks/archiver.mock.ts"
   },
   "setupFilesAfterEnv": ["<rootDir>/setup.e2e.ts"],
   "testPathIgnorePatterns": ["/node_modules/", "/dist/"]

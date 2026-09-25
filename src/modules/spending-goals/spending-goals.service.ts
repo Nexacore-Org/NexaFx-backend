@@ -31,7 +31,8 @@ export class SpendingGoalsService {
       currency: string;
     },
   ): Promise<SpendingGoal> {
-    const goal = this.goalRepo.create({ userId, ...dto });
+    // userId is applied last so a request body cannot reassign ownership.
+    const goal = this.goalRepo.create({ ...dto, userId });
     return this.goalRepo.save(goal);
   }
 
@@ -58,7 +59,20 @@ export class SpendingGoalsService {
     >,
   ): Promise<SpendingGoal> {
     const goal = await this.findByIdAndUser(id, userId);
-    Object.assign(goal, dto);
+    // Only copy editable fields; the body is not validated, so id/userId must
+    // never be taken from it.
+    const editable = [
+      'name',
+      'targetAmount',
+      'currency',
+      'categoryId',
+      'isActive',
+    ] as const;
+    for (const key of editable) {
+      if (dto[key] !== undefined) {
+        (goal as any)[key] = dto[key];
+      }
+    }
     return this.goalRepo.save(goal);
   }
 
@@ -172,13 +186,13 @@ export class SpendingGoalsService {
       .createQueryBuilder()
       .select('COALESCE(SUM(t.amount), 0)', 'spent')
       .from('transactions', 't')
-      .where('t.user_id = :userId', { userId })
-      .andWhere('t.created_at >= :from', { from })
-      .andWhere('t.created_at <= :to', { to })
+      .where('t."userId" = :userId', { userId })
+      .andWhere('t."createdAt" >= :from', { from })
+      .andWhere('t."createdAt" <= :to', { to })
       .andWhere("t.type IN ('DEBIT', 'PAYMENT')");
 
     if (categoryId) {
-      qb.andWhere('t.category_id = :categoryId', { categoryId });
+      qb.andWhere('t."categoryId" = :categoryId', { categoryId });
     }
 
     const result = await qb.getRawOne<{ spent: string }>();

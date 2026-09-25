@@ -42,6 +42,7 @@ import { RateAlertsModule } from './rate-alerts/rate-alerts.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
 import { PortfolioModule } from './portfolio/portfolio.module';
+import { CustomReportsModule } from './custom-reports/custom-reports.module';
 
 @Module({
   imports: [
@@ -145,6 +146,7 @@ import { PortfolioModule } from './portfolio/portfolio.module';
     LedgerModule,
     UsersModule,
     PortfolioModule,
+    CustomReportsModule,
   ],
   controllers: [AppController],
   providers: [

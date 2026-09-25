@@ -24,6 +24,7 @@ import { join } from 'path';
 import * as compression from 'compression';
 import { v4 as uuidv4 } from 'uuid';
 import { Request, Response, NextFunction } from 'express';
+import { runWithRequestId } from './common/context/request-context';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -35,7 +36,9 @@ async function bootstrap() {
     const requestId = (req.headers['x-request-id'] as string) || uuidv4();
     req.headers['x-request-id'] = requestId;
     res.setHeader('X-Request-ID', requestId);
-    next();
+    // Bind the request ID to the async context so it survives async
+    // boundaries and is available to loggers, filters and queue producers.
+    runWithRequestId(requestId, () => next());
   });
 
   app.use(helmet());

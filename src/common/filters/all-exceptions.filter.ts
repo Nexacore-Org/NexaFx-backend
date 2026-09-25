@@ -1,47 +1,47 @@
 import {
-  ExceptionFilter,
-  Catch,
   ArgumentsHost,
+  Catch,
+  ExceptionFilter,
   HttpException,
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
+import { getRequestId } from '../context/request-context';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
-  private readonly logger = new Logger('AllExceptionsFilter');
+  private readonly logger = new Logger(AllExceptionsFilter.name);
 
-  catch(exception: unknown, host: ArgumentsHost) {
+  catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest();
+    const request = ctx.getRequest<Request>();
+
+    const requestId =
+      getRequestId() ?? (request.headers['x-request-id'] as string) ?? '-';
 
     const status =
       exception instanceof HttpException
         ? exception.getStatus()
-        : (exception as any)?.status || HttpStatus.INTERNAL_SERVER_ERROR;
+        : HttpStatus.INTERNAL_SERVER_ERROR;
 
     const message =
       exception instanceof HttpException
-        ? exception.message
-        : (exception as any)?.message || 'Internal server error';
-
-    const errorResponse = {
-      success: false,
-      statusCode: status,
-      timestamp: new Date().toISOString(),
-      path: request.url,
-      method: request.method,
-      message,
-      error: HttpStatus[status],
-    };
+        ? exception.getResponse()
+        : 'Internal server error';
 
     this.logger.error(
-      `Unhandled Exception: ${request.method} ${request.url} - Status: ${status}`,
-      exception instanceof Error ? exception.stack : String(exception),
+      `[${requestId}] ${request.method} ${request.url} - ${status}`,
+      exception instanceof Error ? exception.stack : undefined,
     );
 
-    response.status(status).json(errorResponse);
+    response.status(status).json({
+      statusCode: status,
+      message,
+      requestId,
+      timestamp: new Date().toISOString(),
+      path: request.url,
+    });
   }
 }

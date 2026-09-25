@@ -17,13 +17,16 @@ export class LoggingInterceptor implements NestInterceptor {
     const { method, url, body } = request;
     const userAgent = request.get('user-agent') || '';
     const startTime = Date.now();
+    const requestId = request.headers['x-request-id'] || 'unknown';
 
     this.logger.log(
-      `Incoming Request: ${method} ${url} - User Agent: ${userAgent}`,
+      `[${requestId}] Incoming Request: ${method} ${url} - User Agent: ${userAgent}`,
     );
 
     if (body && Object.keys(body).length > 0) {
-      this.logger.debug(`Request Body: ${JSON.stringify(body)}`);
+      this.logger.debug(
+        `[${requestId}] Request Body: ${JSON.stringify(body)}`,
+      );
     }
 
     return next.handle().pipe(
@@ -31,13 +34,13 @@ export class LoggingInterceptor implements NestInterceptor {
         next: (data) => {
           const responseTime = Date.now() - startTime;
           this.logger.log(
-            `Outgoing Response: ${method} ${url} - ${responseTime}ms`,
+            `[${requestId}] Outgoing Response: ${method} ${url} - ${responseTime}ms`,
           );
         },
         error: (error) => {
           const responseTime = Date.now() - startTime;
           this.logger.error(
-            `Error Response: ${method} ${url} - ${responseTime}ms - ${error.message}`,
+            `[${requestId}] Error Response: ${method} ${url} - ${responseTime}ms - ${error.message}`,
           );
         },
       }),

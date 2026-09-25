@@ -13,7 +13,7 @@ import { ExchangeRatesModule } from '../exchange-rates/exchange-rates.module';
     TypeOrmModule.forFeature([Currency, CurrencyPair]),
     forwardRef(() => ExchangeRatesModule),
   ],
-  controllers: [CurrenciesController, CurrencyPairController],
+  controllers: [CurrencyPairController, CurrenciesController],
   providers: [CurrenciesService, CurrencyPairService],
   exports: [CurrenciesService, CurrencyPairService],
 })

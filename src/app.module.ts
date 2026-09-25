@@ -43,6 +43,7 @@ import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
 import { PortfolioModule } from './portfolio/portfolio.module';
 import { FinancialHealthModule } from './financial-health/financial-health.module';
+import { CustomReportsModule } from './custom-reports/custom-reports.module';
 
 @Module({
   imports: [
@@ -147,6 +148,7 @@ import { FinancialHealthModule } from './financial-health/financial-health.modul
     UsersModule,
     PortfolioModule,
     FinancialHealthModule,
+    CustomReportsModule,
   ],
   controllers: [AppController],
   providers: [

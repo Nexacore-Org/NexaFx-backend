@@ -1,4 +1,10 @@
-import { Injectable, ForbiddenException, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  ForbiddenException,
+  BadRequestException,
+  NotFoundException,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import Stripe from 'stripe';
@@ -6,7 +12,11 @@ import { ConfigService } from '@nestjs/config';
 import { VirtualCard, CardStatus } from './entities/virtual-card.entity';
 import { User } from '../users/user.entity';
 import { KycRecord, KycStatus } from '../kyc/entities/kyc.entity';
-import { Transaction, TransactionType, TransactionStatus } from '../transactions/entities/transaction.entity';
+import {
+  Transaction,
+  TransactionType,
+  TransactionStatus,
+} from '../transactions/entities/transaction.entity';
 import { UsersService } from '../users/users.service';
 import { UpdateCardControlsDto } from './dto/update-card-controls.dto';
 
@@ -27,9 +37,12 @@ export class CardsService {
     private configService: ConfigService,
     private usersService: UsersService,
   ) {
-    this.stripe = new Stripe(this.configService.get<string>('STRIPE_SECRET_KEY') || '', {
-      apiVersion: '2025-02-24.acacia' as any,
-    });
+    this.stripe = new Stripe(
+      this.configService.get<string>('STRIPE_SECRET_KEY') || '',
+      {
+        apiVersion: '2025-02-24.acacia' as any,
+      },
+    );
   }
 
   private async checkUserKycApproved(userId: string): Promise<void> {
@@ -53,6 +66,22 @@ export class CardsService {
       throw new ForbiddenException('KYC must be approved to create a card');
     }
 
+    const dobSource = kycRecord.dateOfBirth;
+    const dob =
+      dobSource instanceof Date
+        ? {
+            day: dobSource.getDate(),
+            month: dobSource.getMonth() + 1,
+            year: dobSource.getFullYear(),
+          }
+        : (() => {
+            const [year, month, day] = String(dobSource)
+              .slice(0, 10)
+              .split('-')
+              .map(Number);
+            return { day, month, year };
+          })();
+
     const cardholder = await this.stripe.issuing.cardholders.create({
       type: 'individual',
       name: kycRecord.fullName,
@@ -61,11 +90,7 @@ export class CardsService {
       individual: {
         first_name: user.firstName || '',
         last_name: user.lastName || '',
-        dob: {
-          day: kycRecord.dateOfBirth.getDate(),
-          month: kycRecord.dateOfBirth.getMonth() + 1,
-          year: kycRecord.dateOfBirth.getFullYear(),
-        },
+        dob,
       },
       status: 'active',
       billing: {
@@ -136,7 +161,10 @@ export class CardsService {
     return card;
   }
 
-  async revealCard(cardId: string, userId: string): Promise<{ ephemeralKey: string }> {
+  async revealCard(
+    cardId: string,
+    userId: string,
+  ): Promise<{ ephemeralKey: string }> {
     const card = await this.getCardById(cardId, userId);
 
     const ephemeralKey = await this.stripe.ephemeralKeys.create(
@@ -221,22 +249,25 @@ export class CardsService {
     return this.virtualCardRepository.save(card);
   }
 
-  async getCardTransactions(cardId: string, userId: string): Promise<Transaction[]> {
+  async getCardTransactions(
+    cardId: string,
+    userId: string,
+  ): Promise<Transaction[]> {
     const card = await this.getCardById(cardId, userId);
-    return this.transactionRepository.find({
-      where: {
-        userId,
-        metadata: { cardId: card.id },
-      },
-      order: { createdAt: 'DESC' },
-    });
+    return this.transactionRepository
+      .createQueryBuilder('transaction')
+      .where('transaction.userId = :userId', { userId })
+      .andWhere('transaction.metadata @> :metadata', {
+        metadata: JSON.stringify({ cardId: card.id }),
+      })
+      .orderBy('transaction.createdAt', 'DESC')
+      .getMany();
   }
 
-  async handleStripeWebhook(
-    body: Buffer,
-    signature: string,
-  ): Promise<void> {
-    const webhookSecret = this.configService.get<string>('STRIPE_CARDS_WEBHOOK_SECRET');
+  async handleStripeWebhook(body: Buffer, signature: string): Promise<void> {
+    const webhookSecret = this.configService.get<string>(
+      'STRIPE_CARDS_WEBHOOK_SECRET',
+    );
     if (!webhookSecret) {
       throw new BadRequestException('Webhook secret not configured');
     }
@@ -254,12 +285,12 @@ export class CardsService {
 
     switch (event.type) {
       case 'issuing_authorization.request': {
-        const authorization = event.data.object as Stripe.Issuing.Authorization;
+        const authorization = event.data.object;
         await this.handleAuthorizationRequest(authorization);
         break;
       }
       case 'issuing_transaction.created': {
-        const transaction = event.data.object as Stripe.Issuing.Transaction;
+        const transaction = event.data.object;
         await this.handleTransactionCreated(transaction);
         break;
       }
@@ -280,7 +311,9 @@ export class CardsService {
       return;
     }
 
-    const user = await this.userRepository.findOne({ where: { id: card.userId } });
+    const user = await this.userRepository.findOne({
+      where: { id: card.userId },
+    });
     if (!user) {
       await this.stripe.issuing.authorizations.decline(authorization.id);
       return;

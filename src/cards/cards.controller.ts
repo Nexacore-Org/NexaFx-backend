@@ -25,16 +25,19 @@ export class CardsController {
 
   @Post()
   @UseGuards(JwtAuthGuard)
-  async createCard(@Request() req, @Body() dto: CreateCardDto): Promise<CardResponseDto> {
-    const card = await this.cardsService.createCard(req.user.id);
+  async createCard(
+    @Request() req,
+    @Body() dto: CreateCardDto,
+  ): Promise<CardResponseDto> {
+    const card = await this.cardsService.createCard(req.user.userId);
     return plainToClass(CardResponseDto, card);
   }
 
   @Get()
   @UseGuards(JwtAuthGuard)
   async getCards(@Request() req): Promise<CardResponseDto[]> {
-    const cards = await this.cardsService.getCards(req.user.id);
-    return cards.map(card => plainToClass(CardResponseDto, card));
+    const cards = await this.cardsService.getCards(req.user.userId);
+    return cards.map((card) => plainToClass(CardResponseDto, card));
   }
 
   @Get(':id/reveal')
@@ -43,7 +46,7 @@ export class CardsController {
     @Request() req,
     @Param('id') id: string,
   ): Promise<{ ephemeralKey: string }> {
-    return this.cardsService.revealCard(id, req.user.id);
+    return this.cardsService.revealCard(id, req.user.userId);
   }
 
   @Patch(':id/freeze')
@@ -52,7 +55,7 @@ export class CardsController {
     @Request() req,
     @Param('id') id: string,
   ): Promise<CardResponseDto> {
-    const card = await this.cardsService.freezeCard(id, req.user.id);
+    const card = await this.cardsService.freezeCard(id, req.user.userId);
     return plainToClass(CardResponseDto, card);
   }
 
@@ -62,17 +65,14 @@ export class CardsController {
     @Request() req,
     @Param('id') id: string,
   ): Promise<CardResponseDto> {
-    const card = await this.cardsService.unfreezeCard(id, req.user.id);
+    const card = await this.cardsService.unfreezeCard(id, req.user.userId);
     return plainToClass(CardResponseDto, card);
   }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard)
-  async cancelCard(
-    @Request() req,
-    @Param('id') id: string,
-  ): Promise<void> {
-    await this.cardsService.cancelCard(id, req.user.id);
+  async cancelCard(@Request() req, @Param('id') id: string): Promise<void> {
+    await this.cardsService.cancelCard(id, req.user.userId);
   }
 
   @Patch(':id/controls')
@@ -82,17 +82,18 @@ export class CardsController {
     @Param('id') id: string,
     @Body() dto: UpdateCardControlsDto,
   ): Promise<CardResponseDto> {
-    const card = await this.cardsService.updateCardControls(id, req.user.id, dto);
+    const card = await this.cardsService.updateCardControls(
+      id,
+      req.user.userId,
+      dto,
+    );
     return plainToClass(CardResponseDto, card);
   }
 
   @Get(':id/transactions')
   @UseGuards(JwtAuthGuard)
-  async getCardTransactions(
-    @Request() req,
-    @Param('id') id: string,
-  ) {
-    return this.cardsService.getCardTransactions(id, req.user.id);
+  async getCardTransactions(@Request() req, @Param('id') id: string) {
+    return this.cardsService.getCardTransactions(id, req.user.userId);
   }
 
   @Public()
@@ -101,6 +102,9 @@ export class CardsController {
     @Headers('stripe-signature') signature: string,
     @Request() req: RawBodyRequest<Request>,
   ): Promise<void> {
-    await this.cardsService.handleStripeWebhook(req.rawBody as Buffer, signature);
+    await this.cardsService.handleStripeWebhook(
+      req.rawBody as Buffer,
+      signature,
+    );
   }
 }

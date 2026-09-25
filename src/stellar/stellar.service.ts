@@ -38,8 +38,8 @@ export class StellarService {
     const publicKey = keypair.publicKey();
     const mutex = this.getWalletMutex(publicKey);
 
-    return mutex.runExclusive(async () => {
-      try {
+    try {
+      return await mutex.runExclusive(async () => {
         // 1. Always fetch fresh sequence number from Horizon inside the mutex
         const account = await this.server.loadAccount(publicKey);
 
@@ -60,24 +60,23 @@ export class StellarService {
         transaction.sign(keypair);
         const result = await this.server.submitTransaction(transaction);
         return result;
-      } catch (err: any) {
-        const resultCode = err?.response?.data?.extras?.result_codes?.transaction;
+      });
+    } catch (err: any) {
+      const resultCode = err?.response?.data?.extras?.result_codes?.transaction;
 
-        if (resultCode === 'tx_bad_seq') {
-          if (retryCount < maxRetries) {
-            this.logger.warn(
-              `[tx_bad_seq] detected for wallet ${publicKey}. Retry attempt ${retryCount + 1}/${maxRetries} after 1s delay.`,
-            );
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-            
-            // Release lock before retrying to prevent deadlock
-            return this.buildAndSubmit(sourceSecret, operations, retryCount + 1, maxRetries);
-          }
-        }
+      if (resultCode === 'tx_bad_seq' && retryCount < maxRetries) {
+        this.logger.warn(
+          `[tx_bad_seq] detected for wallet ${publicKey}. Retry attempt ${retryCount + 1}/${maxRetries} after 1s delay.`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 1000));
 
-        this.logger.error(`Stellar transaction failed for ${publicKey}: ${err.message}`, err.stack);
-        throw err;
+        // Retry outside runExclusive: async-mutex is not re-entrant, so
+        // re-acquiring the same wallet mutex from inside it would deadlock.
+        return this.buildAndSubmit(sourceSecret, operations, retryCount + 1, maxRetries);
       }
-    });
+
+      this.logger.error(`Stellar transaction failed for ${publicKey}: ${err.message}`, err.stack);
+      throw err;
+    }
   }
 }

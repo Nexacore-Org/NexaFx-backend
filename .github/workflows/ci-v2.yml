@@ -162,6 +162,25 @@ jobs:
           FRONTEND_URL: 'http://localhost:3001'
         run: npm run test:e2e -- --forceExit
 
+      - name: Run compression regression check
+        env:
+          NODE_ENV: test
+          DATABASE_URL: 'postgresql://postgres:password@localhost:5432/nexafx_test'
+          REDIS_URL: 'redis://localhost:6379'
+          JWT_SECRET: ${{ secrets.JWT_SECRET || 'test_jwt_secret_must_be_32_chars_long' }}
+          OTP_SECRET: 'dummy_otp_secret_32_chars_long_123'
+          REFRESH_TOKEN_SECRET: 'dummy_refresh_token_secret_32_chars'
+          STELLAR_NETWORK: 'TESTNET'
+          STELLAR_HORIZON_URL: 'https://horizon-testnet.stellar.org'
+          STELLAR_BASE_FEE: '100'
+          STELLAR_HOT_WALLET_SECRET: 'SC_DUMMY_SECRET'
+          WALLET_ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
+          MAILGUN_API_KEY: 'dummy_mailgun_key'
+          MAILGUN_DOMAIN: 'test.nexafx.com'
+          MAILGUN_FROM_EMAIL: 'test@nexafx.com'
+          FRONTEND_URL: 'http://localhost:3001'
+        run: npx jest --config test/jest-e2e.json test/e2e/compression.e2e-spec.ts --forceExit
+
   # ---------------------------------------------------------------------------
   # Migration rollback validation job — runs AFTER unit tests pass.
   # Uses Docker-in-Docker (dind) so the validation script can launch containers.

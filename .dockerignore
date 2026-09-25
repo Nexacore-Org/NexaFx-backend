@@ -1,0 +1,44 @@
+# Dependencies
+node_modules
+
+# Version control
+.git
+.gitignore
+
+# Tests and coverage
+test
+tests
+coverage
+*.spec.ts
+*.test.ts
+
+# Build artifacts and caches
+dist
+build
+.cache
+*.tsbuildinfo
+
+# Local environment / secrets
+.env
+.env.*
+*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS noise
+.vscode
+.idea
+.DS_Store
+
+# CI and docs
+.github
+docs
+*.md
+
+# Docker files themselves
+Dockerfile
+Dockerfile.*
+docker-compose*.yml
+.dockerignore

@@ -1,13 +1,24 @@
 name: Security Checks
 
+# NOTE: The TruffleHog secret-scanning job below is the single, consolidated
+# secret-scanning workflow for this repository (issue #1034). It replaces the
+# former `.github/workflows/secrets-scan.yml`, which was removed to avoid two
+# divergent TruffleHog configurations. This workflow is configured as a
+# REQUIRED status check on the `v2` branch (the active development and default
+# branch). Configure it under Settings > Branches > Branch protection rules for
+# `v2` and require the "TruffleHog Secrets Scan" check.
+
 on:
   pull_request:
     branches:
+      - v2
       - main
   push:
     branches:
+      - v2
       - main
   schedule:
+    # Weekly full-history scan (Mondays 03:00 UTC).
     - cron: '0 3 * * 1'
   workflow_dispatch:
 
@@ -27,6 +38,9 @@ jobs:
       - name: Scan for leaked secrets
         uses: trufflesecurity/trufflehog@main
         with:
+          # Stricter verbosity: report verified AND unknown findings.
+          # Do NOT downgrade to --only-verified (misses higher-confidence
+          # but unverified findings).
           extra_args: --results=verified,unknown --exclude-paths=.trufflehog-ignore
 
   npm-audit:
@@ -50,7 +64,7 @@ jobs:
 
   codeql:
     name: CodeQL SAST
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/v2'
     runs-on: ubuntu-latest
     permissions:
       actions: read

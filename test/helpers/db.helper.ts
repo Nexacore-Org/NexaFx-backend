@@ -101,6 +101,26 @@ export async function seedAdminUser(
 }
 
 /**
+ * Seed a super-admin user directly in the "users" table.
+ * Returns the row with the plaintext password for login flows.
+ */
+export async function seedSuperAdminUser(
+  dataSource: DataSource,
+  options?: {
+    email?: string;
+    password?: string;
+  },
+): Promise<any> {
+  return seedTestUser(dataSource, {
+    email: options?.email || 'superadmin@example.com',
+    password: options?.password || 'SuperAdminPassword123!',
+    firstName: 'Super',
+    lastName: 'Admin',
+    role: 'SUPER_ADMIN',
+  });
+}
+
+/**
  * Get stored OTP for testing (if available in DB)
  * Used to verify OTP-based flows without email access
  */

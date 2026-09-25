@@ -42,6 +42,7 @@ import { RateAlertsModule } from './rate-alerts/rate-alerts.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { UsersModule } from './users/users.module';
 import { PortfolioModule } from './portfolio/portfolio.module';
+import { FinancialHealthModule } from './financial-health/financial-health.module';
 import { CustomReportsModule } from './custom-reports/custom-reports.module';
 
 @Module({
@@ -146,6 +147,7 @@ import { CustomReportsModule } from './custom-reports/custom-reports.module';
     LedgerModule,
     UsersModule,
     PortfolioModule,
+    FinancialHealthModule,
     CustomReportsModule,
   ],
   controllers: [AppController],

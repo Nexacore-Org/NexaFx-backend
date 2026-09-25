@@ -1,7 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import { FinancialHealthService } from './financial-health.service';
+import {
+  FINANCIAL_HEALTH_NOTIFIER,
+  FinancialHealthService,
+} from './financial-health.service';
 import {
   FinancialHealthScore,
   HealthGrade,
@@ -42,7 +45,7 @@ describe('FinancialHealthService', () => {
           useValue: mockDataSource,
         },
         {
-          provide: Object,
+          provide: FINANCIAL_HEALTH_NOTIFIER,
           useValue: mockNotificationService,
         },
       ],

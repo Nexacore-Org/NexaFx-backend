@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { FinancialHealthController } from './financial-health.controller';
 import { FinancialHealthService } from './financial-health.service';
@@ -98,6 +99,13 @@ describe('FinancialHealthController', () => {
       const result = await controller.getHistory(mockReq, 4);
 
       expect(result).toEqual([]);
+    });
+
+    it('should reject non-positive weeks with BadRequestException', async () => {
+      await expect(controller.getHistory(mockReq, 0)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(mockService.getHistory).not.toHaveBeenCalled();
     });
   });
 });

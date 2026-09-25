@@ -1,9 +1,19 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { FinancialHealthScore, HealthGrade } from './entities/financial-health-score.entity';
 import Decimal from 'decimal.js';
+
+/**
+ * Injection token for the notifier used to announce score changes.
+ * Optional: when nothing is bound, score changes are simply not announced.
+ */
+export const FINANCIAL_HEALTH_NOTIFIER = 'FINANCIAL_HEALTH_NOTIFIER';
+
+export interface FinancialHealthNotifier {
+  send(userId: string, type: string, payload: Record<string, any>): Promise<unknown>;
+}
 
 @Injectable()
 export class FinancialHealthService {
@@ -13,7 +23,9 @@ export class FinancialHealthService {
     @InjectRepository(FinancialHealthScore)
     private readonly scoreRepo: Repository<FinancialHealthScore>,
     private readonly dataSource: DataSource,
-    private readonly notificationService: any, // Injected notification infrastructure
+    @Optional()
+    @Inject(FINANCIAL_HEALTH_NOTIFIER)
+    private readonly notificationService?: FinancialHealthNotifier,
   ) {}
 
   async getLatestScore(userId: string): Promise<FinancialHealthScore | null> {
@@ -128,6 +140,10 @@ export class FinancialHealthService {
     const saved = await this.scoreRepo.save(healthScore);
 
     // Trigger proactive alert dispatches when score shifts break the 10-point threshold boundary
+    if (!this.notificationService) {
+      return saved;
+    }
+
     if (delta > 10) {
       await this.notificationService.send(userId, 'CONGRATULATIONS_FINANCIAL_HEALTH_IMPROVED', { score: totalScore });
     } else if (delta < -10) {

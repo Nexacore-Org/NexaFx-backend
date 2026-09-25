@@ -171,6 +171,8 @@ export class CreateMessaging1762000000000 implements MigrationInterface {
 
   async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.dropTable('broadcasts');
+    await queryRunner.dropIndex('messages', 'IDX_messages_recipient_read');
+    await queryRunner.dropIndex('messages', 'IDX_messages_conversation_created');
     await queryRunner.dropTable('messages');
   }
 }

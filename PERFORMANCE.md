@@ -1,47 +1,53 @@
 # Performance Benchmarks
 
-This file outlines the response time benchmarks for core NexaFX API endpoints. All tests were executed under a simulated load of 100 concurrent connections.
+This document previously contained a hand-maintained, one-time snapshot of autocannon
+latency numbers and a GZIP compression status table. Those numbers were never re-run
+and one of the compression claims (`/v1/transactions`) was explicitly marked
+`Verified: false`, which made the document misleading. The stale snapshot has been
+removed in favour of an automated check that runs on every PR.
 
-## GZIP Compression Status
-- **GZIP Enabled**: Yes
-- **Verification status**:
-  - `/v1/health` (under 1KB threshold): Not compressed (Verified: true)
-  - `/v1/exchange-rates?from=USD&to=NGN` (under 1KB threshold): Not compressed (Verified: true)
-  - `/v1/transactions` (over 1KB threshold, user1 transactions): Compressed with GZIP (Verified: false)
+## Automated GZIP Compression Check
 
-## Autocannon Results
+Compression behaviour is now asserted automatically by an end-to-end test that
+exercises the real HTTP response pipeline (Supertest against the Nest app):
 
-### 1. Health Endpoint (`/v1/health`)
-- **Connections**: 100
-- **p50 Latency**: 11 ms
-- **p90 Latency**: 14 ms
-- **p99 Latency**: 18 ms
-- **Average Latency**: 15.33 ms
-- **Req/Sec**: 6291.82
-- **Throughput**: 7.13 MB/sec
-- **Target**: < 20ms p99 (Status: PASSED)
+- `test/e2e/compression.e2e-spec.ts`
 
-### 2. Exchange Rates Endpoint (`/v1/exchange-rates?from=USD&to=NGN`)
-- **Connections**: 100
-- **p50 Latency**: 14 ms
-- **p90 Latency**: 16 ms
-- **p99 Latency**: 28 ms
-- **Average Latency**: 14.95 ms
-- **Req/Sec**: 6479.46
-- **Throughput**: 7.49 MB/sec
-- **Target**: < 100ms p99 (Status: PASSED)
+It verifies the documented `compression({ threshold: 1024 })` behaviour:
 
-### 3. Transactions Endpoint (`/v1/transactions`)
-- **Connections**: 100
-- **p50 Latency**: 49 ms
-- **p90 Latency**: 59 ms
-- **p99 Latency**: 91 ms
-- **Average Latency**: 51.83 ms
-- **Req/Sec**: 1906.55
-- **Throughput**: 2.08 MB/sec
-- **Target**: < 200ms p99 (Status: PASSED)
+- A response body **over** the 1024-byte threshold is served with
+  `Content-Encoding: gzip`.
+- A response body **under** the 1024-byte threshold is served **without**
+  `Content-Encoding: gzip`.
+
+This test is wired into CI (`.github/workflows/ci-v2.yml`) and runs on every PR, so a
+regression in the compression middleware (or a proxy/CDN stripping the header) is
+caught automatically instead of relying on a document nobody re-runs.
+
+## Reproducing a Fresh Benchmark On Demand
+
+Latency benchmarks are intentionally **not** committed as static numbers. To produce a
+fresh benchmark locally, run autocannon against a running instance of the API:
+
+```bash
+# Start the API (adjust to your local setup)
+npm run start:dev
+
+# Health endpoint
+npx autocannon -c 100 -d 10 http://localhost:3000/v1/health
+
+# Exchange rates endpoint
+npx autocannon -c 100 -d 10 "http://localhost:3000/v1/exchange-rates?from=USD&to=NGN"
+
+# Transactions endpoint (requires an authenticated session)
+npx autocannon -c 100 -d 10 -H "Authorization: Bearer <token>" http://localhost:3000/v1/transactions
+```
+
+Record the results in the PR description or an external dashboard rather than
+committing them here, so this file never drifts out of date again.
 
 ## Verification
 - Missing indexes created via TypeORM migration.
 - N+1 queries resolved.
 - Redis caching for expensive aggregates enabled.
+- GZIP compression asserted automatically in CI (see above).

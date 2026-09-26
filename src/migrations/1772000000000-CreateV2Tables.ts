@@ -1,80 +1,65 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class CreateV2Tables1772000000000 implements MigrationInterface {
-  async up(queryRunner: QueryRunner): Promise<void> {
-    // 1. Create activity_feed_items table
-    await queryRunner.query(`
-      CREATE TABLE IF NOT EXISTS "activity_feed_items" (
-        "id" UUID NOT NULL DEFAULT uuid_generate_v4(),
-        "userId" UUID NOT NULL,
-        "type" varchar(50) NOT NULL,
-        "referenceId" varchar(255) NULL,
-        "referenceType" varchar(255) NULL,
-        "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
-        CONSTRAINT "PK_activity_feed_items" PRIMARY KEY ("id")
-      );
-    `);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_activity_feed_items_userId" ON "activity_feed_items" ("userId");`);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_activity_feed_items_type" ON "activity_feed_items" ("type");`);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_activity_feed_items_createdAt" ON "activity_feed_items" ("createdAt");`);
+  name = 'CreateV2Tables1772000000000';
 
-    // 2. Create sms_provider_routes table
+  public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TABLE IF NOT EXISTS "sms_provider_routes" (
-        "id" UUID NOT NULL DEFAULT uuid_generate_v4(),
-        "countryCode" varchar(10) NOT NULL,
-        "providerName" varchar(100) NOT NULL,
-        "priority" integer NOT NULL DEFAULT 0,
-        "isActive" boolean NOT NULL DEFAULT true,
-        "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
-        "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
-        CONSTRAINT "PK_sms_provider_routes" PRIMARY KEY ("id")
-      );
+      CREATE TABLE IF NOT EXISTS "v2_organizations" (
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
+        "name" character varying NOT NULL,
+        "slug" character varying NOT NULL,
+        "created_at" TIMESTAMP NOT NULL DEFAULT now(),
+        "updated_at" TIMESTAMP NOT NULL DEFAULT now(),
+        CONSTRAINT "PK_v2_organizations" PRIMARY KEY ("id"),
+        CONSTRAINT "UQ_v2_organizations_slug" UNIQUE ("slug")
+      )
     `);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_sms_provider_routes_countryCode" ON "sms_provider_routes" ("countryCode");`);
 
-    // 3. Create payment_rules table
     await queryRunner.query(`
-      CREATE TABLE IF NOT EXISTS "payment_rules" (
-        "id" UUID NOT NULL DEFAULT uuid_generate_v4(),
-        "userId" UUID NOT NULL,
-        "name" varchar(100) NOT NULL,
-        "triggerType" varchar(50) NOT NULL,
-        "triggerCondition" jsonb NOT NULL,
-        "actionType" varchar(50) NOT NULL,
-        "actionParameters" jsonb NOT NULL,
-        "isActive" boolean NOT NULL DEFAULT true,
-        "lastEvaluatedAt" TIMESTAMP WITH TIME ZONE NULL,
-        "lastTriggeredAt" TIMESTAMP WITH TIME ZONE NULL,
-        "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
-        "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
-        CONSTRAINT "PK_payment_rules" PRIMARY KEY ("id")
-      );
+      CREATE TABLE IF NOT EXISTS "v2_projects" (
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
+        "organization_id" uuid NOT NULL,
+        "name" character varying NOT NULL,
+        "status" character varying NOT NULL DEFAULT 'active',
+        "created_at" TIMESTAMP NOT NULL DEFAULT now(),
+        "updated_at" TIMESTAMP NOT NULL DEFAULT now(),
+        CONSTRAINT "PK_v2_projects" PRIMARY KEY ("id"),
+        CONSTRAINT "FK_v2_projects_organization" FOREIGN KEY ("organization_id")
+          REFERENCES "v2_organizations"("id") ON DELETE CASCADE
+      )
     `);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_payment_rules_userId" ON "payment_rules" ("userId");`);
 
-    // 4. Create kyc_doc_verification_results table
     await queryRunner.query(`
-      CREATE TABLE IF NOT EXISTS "kyc_doc_verification_results" (
-        "id" UUID NOT NULL DEFAULT uuid_generate_v4(),
-        "kycApplicationId" UUID NOT NULL,
-        "documentType" varchar(100) NOT NULL,
-        "confidenceScore" numeric(5,2) NOT NULL,
-        "faceMatchScore" numeric(5,2) NOT NULL,
-        "decision" varchar(50) NOT NULL,
-        "reason" text NULL,
-        "extractedFields" jsonb NULL,
-        "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
-        CONSTRAINT "PK_kyc_doc_verification_results" PRIMARY KEY ("id"),
-        CONSTRAINT "UQ_kyc_doc_verification_results_kycApplicationId" UNIQUE ("kycApplicationId")
-      );
+      CREATE TABLE IF NOT EXISTS "v2_project_members" (
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
+        "project_id" uuid NOT NULL,
+        "user_id" uuid NOT NULL,
+        "role" character varying NOT NULL DEFAULT 'member',
+        "created_at" TIMESTAMP NOT NULL DEFAULT now(),
+        CONSTRAINT "PK_v2_project_members" PRIMARY KEY ("id"),
+        CONSTRAINT "FK_v2_project_members_project" FOREIGN KEY ("project_id")
+          REFERENCES "v2_projects"("id") ON DELETE CASCADE
+      )
+    `);
+
+    await queryRunner.query(`
+      CREATE INDEX IF NOT EXISTS "IDX_v2_projects_organization_id"
+        ON "v2_projects" ("organization_id")
+    `);
+
+    await queryRunner.query(`
+      CREATE INDEX IF NOT EXISTS "IDX_v2_project_members_project_id"
+        ON "v2_project_members" ("project_id")
     `);
   }
 
-  async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP TABLE IF EXISTS "kyc_doc_verification_results";`);
-    await queryRunner.query(`DROP TABLE IF EXISTS "payment_rules";`);
-    await queryRunner.query(`DROP TABLE IF EXISTS "sms_provider_routes";`);
-    await queryRunner.query(`DROP TABLE IF EXISTS "activity_feed_items";`);
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_v2_project_members_project_id"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_v2_projects_organization_id"`);
+
+    await queryRunner.query(`DROP TABLE IF EXISTS "v2_project_members"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "v2_projects"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "v2_organizations"`);
   }
 }

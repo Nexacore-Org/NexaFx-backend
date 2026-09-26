@@ -37,6 +37,11 @@ export class AddWebhookSchemaVersion1770000000000 implements MigrationInterface 
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {
+    const rows = (await queryRunner.query(
+      `SELECT to_regclass('public.webhook_endpoints') IS NOT NULL AS present`,
+    )) as Array<{ present: boolean }>;
+    if (!rows[0]?.present) return;
+
     await queryRunner.query(`
       ALTER TABLE IF EXISTS "webhook_endpoints"
         DROP COLUMN IF EXISTS "preferredSchemaVersion";

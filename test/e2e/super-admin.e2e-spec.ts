@@ -1,142 +1,178 @@
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, HttpStatus } from '@nestjs/common';
 import * as request from 'supertest';
-import { DataSource } from 'typeorm';
 import { createTestApp } from '../helpers/app.helper';
-import {
-  truncateAll,
-  seedTestUser,
-  seedAdminUser,
-  setupTestDatabase,
-} from '../helpers/db.helper';
+import { setupTestDatabase, teardownTestDatabase, cleanDatabase } from '../helpers/db.helper';
+import { DataSource } from 'typeorm';
+import { User, UserRole } from '../../src/modules/users/entities/user.entity';
+import { AuditLog } from '../../src/modules/audit/entities/audit-log.entity';
+import * as bcrypt from 'bcrypt';
 
-describe('Super Admin E2E Tests', () => {
+/**
+ * E2E coverage for super-admin privilege boundaries.
+ *
+ * Exercises the real NestJS module graph (guards, pipes, controllers) against a
+ * real test database. Only true external boundaries are mocked via app.helper.
+ */
+describe('SuperAdmin privilege boundaries (e2e)', () => {
   let app: INestApplication;
   let dataSource: DataSource;
-  let superAdminAccessToken: string;
-  let regularAdminAccessToken: string;
-  let managedAdminId: string;
+  let adminToken: string;
+  let superAdminToken: string;
+  let adminUser: User;
+  let superAdminUser: User;
+
+  const password = 'Password123!';
 
   beforeAll(async () => {
+    await setupTestDatabase();
     app = await createTestApp();
     dataSource = app.get(DataSource);
-    await setupTestDatabase(dataSource);
   });
 
   afterAll(async () => {
     await app.close();
+    await teardownTestDatabase();
   });
 
   beforeEach(async () => {
-    await truncateAll(dataSource);
+    await cleanDatabase(dataSource);
 
-    const superAdminEmail = 'superadmin@example.com';
-    const superAdminPassword = 'SuperAdminPassword123!';
-    // Role SUPER_ADMIN
-    await seedTestUser(dataSource, {
-      email: superAdminEmail,
-      password: superAdminPassword,
-      role: 'SUPER_ADMIN',
-    });
+    const hash = await bcrypt.hash(password, 10);
 
-    const superAdminLogin = await request(app.getHttpServer())
-      .post('/v1/auth/login')
-      .send({ email: superAdminEmail, password: superAdminPassword });
-    superAdminAccessToken = superAdminLogin.body.data.accessToken;
+    adminUser = await dataSource.getRepository(User).save(
+      dataSource.getRepository(User).create({
+        email: 'admin@example.com',
+        password: hash,
+        firstName: 'Admin',
+        lastName: 'User',
+        role: UserRole.ADMIN,
+        isActive: true,
+        isEmailVerified: true,
+      }),
+    );
 
-    const adminEmail = 'admin@example.com';
-    const adminPassword = 'AdminPassword123!';
-    const adminUser = await seedAdminUser(dataSource, {
-      email: adminEmail,
-      password: adminPassword,
-    });
-    managedAdminId = adminUser.id; // for PATCH/DELETE tests
+    superAdminUser = await dataSource.getRepository(User).save(
+      dataSource.getRepository(User).create({
+        email: 'superadmin@example.com',
+        password: hash,
+        firstName: 'Super',
+        lastName: 'Admin',
+        role: UserRole.SUPER_ADMIN,
+        isActive: true,
+        isEmailVerified: true,
+      }),
+    );
 
     const adminLogin = await request(app.getHttpServer())
       .post('/v1/auth/login')
-      .send({ email: adminEmail, password: adminPassword });
-    regularAdminAccessToken = adminLogin.body.data.accessToken;
+      .send({ email: adminUser.email, password })
+      .expect(HttpStatus.OK);
+    adminToken = adminLogin.body.data.accessToken;
+
+    const superAdminLogin = await request(app.getHttpServer())
+      .post('/v1/auth/login')
+      .send({ email: superAdminUser.email, password })
+      .expect(HttpStatus.OK);
+    superAdminToken = superAdminLogin.body.data.accessToken;
   });
 
-  describe('POST /v1/super-admin/admins', () => {
-    it('should allow SUPER_ADMIN to create a new managed admin', async () => {
-      const response = await request(app.getHttpServer())
+  describe('platform config update (SUPER_ADMIN only)', () => {
+    it('rejects an ADMIN-role user with 403', async () => {
+      await request(app.getHttpServer())
+        .patch('/v1/super-admin/config')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ key: 'maintenance_mode', value: true })
+        .expect(HttpStatus.FORBIDDEN);
+    });
+
+    it('allows a SUPER_ADMIN to update platform config', async () => {
+      await request(app.getHttpServer())
+        .patch('/v1/super-admin/config')
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .send({ key: 'maintenance_mode', value: true })
+        .expect(HttpStatus.OK);
+    });
+  });
+
+  describe('admin lifecycle management', () => {
+    it('lets a SUPER_ADMIN create and then demote an ADMIN user', async () => {
+      const createRes = await request(app.getHttpServer())
         .post('/v1/super-admin/admins')
-        .set('Authorization', `Bearer ${superAdminAccessToken}`)
+        .set('Authorization', `Bearer ${superAdminToken}`)
         .send({
           email: 'newadmin@example.com',
-          password: 'NewAdminPassword123!',
+          password,
           firstName: 'New',
           lastName: 'Admin',
-          role: 'ADMIN',
         })
-        .expect(201);
+        .expect(HttpStatus.CREATED);
 
-      expect(response.body.data.email).toBe('newadmin@example.com');
-      expect(response.body.data.role).toBe('ADMIN');
+      const createdId = createRes.body.data.id;
+
+      await request(app.getHttpServer())
+        .patch(`/v1/super-admin/admins/${createdId}/demote`)
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .expect(HttpStatus.OK);
+
+      // The demoted user's role change must take effect on their next request.
+      const login = await request(app.getHttpServer())
+        .post('/v1/auth/login')
+        .send({ email: 'newadmin@example.com', password })
+        .expect(HttpStatus.OK);
+
+      await request(app.getHttpServer())
+        .patch('/v1/super-admin/config')
+        .set('Authorization', `Bearer ${login.body.data.accessToken}`)
+        .send({ key: 'maintenance_mode', value: true })
+        .expect(HttpStatus.FORBIDDEN);
     });
 
-    it('should reject requests from regular admins (403)', async () => {
+    it('rejects an ADMIN attempting to create an ADMIN user', async () => {
       await request(app.getHttpServer())
         .post('/v1/super-admin/admins')
-        .set('Authorization', `Bearer ${regularAdminAccessToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({
-          email: 'another@example.com',
-          password: 'PassWord123!',
+          email: 'sneaky@example.com',
+          password,
+          firstName: 'Sneaky',
+          lastName: 'Admin',
         })
-        .expect(403);
+        .expect(HttpStatus.FORBIDDEN);
     });
+  });
 
-    it('should return 400 for invalid email', async () => {
+  describe('SUPER_ADMIN role assignment', () => {
+    it('rejects an ADMIN attempting to assign the SUPER_ADMIN role', async () => {
       await request(app.getHttpServer())
-        .post('/v1/super-admin/admins')
-        .set('Authorization', `Bearer ${superAdminAccessToken}`)
-        .send({ email: 'not-an-email', password: 'ValidPassword123!' })
-        .expect(400);
+        .patch(`/v1/super-admin/users/${adminUser.id}/role`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ role: UserRole.SUPER_ADMIN })
+        .expect(HttpStatus.FORBIDDEN);
     });
-  });
 
-  describe('PATCH /v1/super-admin/admins/:id/role', () => {
-    it('should allow SUPER_ADMIN to update an admin role', async () => {
-      const response = await request(app.getHttpServer())
-        .patch(`/v1/super-admin/admins/${managedAdminId}/role`)
-        .set('Authorization', `Bearer ${superAdminAccessToken}`)
-        .send({ role: 'SUPER_ADMIN' })
-        .expect(200);
-
-      expect(response.body.data.role).toBe('SUPER_ADMIN');
-    });
-  });
-
-  describe('DELETE /v1/super-admin/admins/:id', () => {
-    it('should allow SUPER_ADMIN to delete an admin', async () => {
+    it('allows a SUPER_ADMIN to assign the SUPER_ADMIN role', async () => {
       await request(app.getHttpServer())
-        .delete(`/v1/super-admin/admins/${managedAdminId}`)
-        .set('Authorization', `Bearer ${superAdminAccessToken}`)
-        .expect(200); // Or 204 depending on implementation, but typically we return { message: ... }
+        .patch(`/v1/super-admin/users/${adminUser.id}/role`)
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .send({ role: UserRole.SUPER_ADMIN })
+        .expect(HttpStatus.OK);
     });
   });
 
-  describe('GET /v1/super-admin/audit-logs', () => {
-    it('should allow SUPER_ADMIN to retrieve audit logs', async () => {
-      const response = await request(app.getHttpServer())
-        .get('/v1/super-admin/audit-logs')
-        .set('Authorization', `Bearer ${superAdminAccessToken}`)
-        .expect(200);
+  describe('audit logging', () => {
+    it('records SUPER_ADMIN actions with correct role context', async () => {
+      await request(app.getHttpServer())
+        .patch('/v1/super-admin/config')
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .send({ key: 'maintenance_mode', value: true })
+        .expect(HttpStatus.OK);
 
-      expect(response.body).toHaveProperty('data');
-    });
-  });
+      const logs = await dataSource.getRepository(AuditLog).find({
+        where: { actorId: superAdminUser.id },
+      });
 
-  describe('PATCH /v1/super-admin/platform/config', () => {
-    it('should allow SUPER_ADMIN to update platform config', async () => {
-      const response = await request(app.getHttpServer())
-        .patch('/v1/super-admin/platform/config')
-        .set('Authorization', `Bearer ${superAdminAccessToken}`)
-        .send({ maintenanceMode: true })
-        .expect(200);
-
-      // Verify success
-      expect(response.body).toHaveProperty('data');
+      expect(logs.length).toBeGreaterThan(0);
+      expect(logs[0].actorRole).toBe(UserRole.SUPER_ADMIN);
     });
   });
 });

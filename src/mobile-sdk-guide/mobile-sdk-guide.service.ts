@@ -1,45 +1,71 @@
-import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { MobileSdkGuide } from './entities/mobile-sdk-guide.entity';
+import { QueryMobileSdkGuideDto } from './dto/query-mobile-sdk-guide.dto';
 
-export interface MobileManifestResponse {
-  baseUrl: string;
-  apiVersion: string;
-  minSupportedVersion: string;
-  updateRequired: boolean;
+export interface SdkBootstrapResponse {
+  platform: string;
+  sdkVersion: string;
+  minAppVersion: string;
+  supportedEndpoints: string[];
+  authFlow: Record<string, unknown>;
 }
 
 @Injectable()
 export class MobileSdkGuideService {
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    @InjectRepository(MobileSdkGuide)
+    private readonly guideRepository: Repository<MobileSdkGuide>,
+  ) {}
 
-  getManifest(clientVersion?: string): MobileManifestResponse {
-    const apiVersion = 'v2';
-    const minSupportedVersion = this.configService.get<string>('MOBILE_MIN_SUPPORTED_VERSION', '1.0.0');
-    const baseUrl = this.configService.get<string>('API_BASE_URL', 'https://api.nexafx.com');
+  async getBootstrapConfig(
+    query: QueryMobileSdkGuideDto,
+  ): Promise<SdkBootstrapResponse> {
+    const platform = query.platform ?? 'ios';
+    const guide = await this.guideRepository.findOne({
+      where: { platform, isActive: true },
+    });
 
-    let updateRequired = false;
-    if (clientVersion) {
-      updateRequired = this.isVersionOutdated(clientVersion, minSupportedVersion);
+    if (!guide) {
+      throw new NotFoundException(
+        `No active SDK guide configuration found for platform '${platform}'`,
+      );
     }
 
-    return {
-      baseUrl,
-      apiVersion,
-      minSupportedVersion,
-      updateRequired,
-    };
+    return this.toBootstrapResponse(guide);
   }
 
-  private isVersionOutdated(current: string, minimum: string): boolean {
-    const currParts = current.split('.').map(Number);
-    const minParts = minimum.split('.').map(Number);
+  async getVersionInfo(platform: string): Promise<SdkBootstrapResponse> {
+    const guide = await this.guideRepository.findOne({
+      where: { platform, isActive: true },
+    });
 
-    for (let i = 0; i < 3; i++) {
-      const c = currParts[i] || 0;
-      const m = minParts[i] || 0;
-      if (c < m) return true;
-      if (c > m) return false;
+    if (!guide) {
+      throw new NotFoundException(
+        `No active SDK guide configuration found for platform '${platform}'`,
+      );
     }
-    return false;
+
+    return this.toBootstrapResponse(guide);
+  }
+
+  async listSupportedPlatforms(): Promise<string[]> {
+    const guides = await this.guideRepository.find({
+      where: { isActive: true },
+      select: ['platform'],
+    });
+
+    return guides.map((guide) => guide.platform);
+  }
+
+  private toBootstrapResponse(guide: MobileSdkGuide): SdkBootstrapResponse {
+    return {
+      platform: guide.platform,
+      sdkVersion: guide.sdkVersion,
+      minAppVersion: guide.minAppVersion,
+      supportedEndpoints: guide.supportedEndpoints ?? [],
+      authFlow: guide.authFlow ?? {},
+    };
   }
 }

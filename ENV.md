@@ -6,12 +6,12 @@ All environment variables required for the NexaFX authentication system.
 
 ### Database Configuration
 ```env
-DB_HOST=localhost
-DB_PORT=5432
-DB_USERNAME=postgres
-DB_PASSWORD=postgres
-DB_NAME=nexafx
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/nexafx
 ```
+
+**Important**:
+- The application connects via a single `DATABASE_URL` connection string
+- Format: `postgresql://USER:PASSWORD@HOST:PORT/DATABASE`
 
 ### Application
 ```env
@@ -50,6 +50,17 @@ REFRESH_TOKEN_EXPIRES_DAYS=30
 - `REFRESH_TOKEN_SECRET` is required for HMAC-based token hashing
 - `REFRESH_TOKEN_EXPIRES_DAYS` must be between 1-90 (default: 30)
 
+### Queue Dashboard Configuration
+```env
+QUEUE_DASHBOARD_USER=admin
+QUEUE_DASHBOARD_PASSWORD=change-me-in-production
+```
+
+**Important**:
+- The Bull Board queue dashboard is protected by HTTP Basic Auth
+- Both `QUEUE_DASHBOARD_USER` and `QUEUE_DASHBOARD_PASSWORD` must be set to enable the dashboard
+- If either is unset, the dashboard is disabled entirely (fail-closed)
+
 ## Production Requirements
 
 In production (`NODE_ENV=production`), the following variables **MUST** be set or the application will fail to start:
@@ -68,11 +79,7 @@ All secrets should be:
 Create a `.env` file in the root directory:
 
 ```env
-DB_HOST=localhost
-DB_PORT=5432
-DB_USERNAME=postgres
-DB_PASSWORD=postgres
-DB_NAME=nexafx
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/nexafx
 
 NODE_ENV=development
 PORT=3000
@@ -85,4 +92,7 @@ OTP_EXPIRES_MINUTES=10
 
 REFRESH_TOKEN_SECRET=your-super-secret-refresh-token-hmac-key-change-in-production-min-32-chars
 REFRESH_TOKEN_EXPIRES_DAYS=30
+
+QUEUE_DASHBOARD_USER=admin
+QUEUE_DASHBOARD_PASSWORD=change-me-in-production
 ```

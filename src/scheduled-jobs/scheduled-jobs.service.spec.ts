@@ -58,7 +58,7 @@ describe('ScheduledJobsService', () => {
 
   const mockRedisService = {
     del: jest.fn(),
-  }
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({

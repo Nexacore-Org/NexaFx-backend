@@ -91,7 +91,10 @@ describe('MailService', () => {
       await service.sendNow(job);
 
       expect(Mailgun).toHaveBeenCalledTimes(1);
-      expect(mockClient).toHaveBeenCalledWith({ username: 'api', key: 'key-123' });
+      expect(mockClient).toHaveBeenCalledWith({
+        username: 'api',
+        key: 'key-123',
+      });
       expect(mockCreate).toHaveBeenCalledWith('mg.nexafx.com', {
         from: 'NexaFX Team <no-reply@nexafx.com>',
         to: ['alice@example.com'],

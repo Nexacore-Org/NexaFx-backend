@@ -42,7 +42,7 @@ describe('QueuesModule', () => {
 
     const mockConsumer: MiddlewareConsumer = {
       apply: applyMock,
-    } as unknown as MiddlewareConsumer;
+    };
 
     queuesModule.configure(mockConsumer);
 

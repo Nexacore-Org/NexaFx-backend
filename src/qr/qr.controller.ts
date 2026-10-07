@@ -12,7 +12,15 @@ export class QrController {
   }
 
   @Post('dynamic')
-  async getDynamicQr(@Body() body: { merchantId: string; amount: number; reference: string; currency?: string }) {
+  async getDynamicQr(
+    @Body()
+    body: {
+      merchantId: string;
+      amount: number;
+      reference: string;
+      currency?: string;
+    },
+  ) {
     const qrCode = await this.qrService.generateDynamicQr(body);
     return { qrCode, type: 'DYNAMIC' };
   }

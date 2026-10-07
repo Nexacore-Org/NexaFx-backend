@@ -1,0 +1,66 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+type User {
+  id: ID!
+  email: String!
+  firstName: String
+  lastName: String
+  phone: String
+  walletPublicKey: String!
+  isVerified: Boolean!
+  isSuspended: Boolean!
+  isTwoFactorEnabled: Boolean!
+  role: String!
+  referralCode: String!
+  createdAt: String!
+  updatedAt: String!
+}
+
+type Transaction {
+  id: ID!
+  userId: String!
+  type: String!
+  amount: String!
+  currency: String!
+  rate: String
+  status: String!
+  txHash: String
+  failureReason: String
+  feeAmount: String
+  feeCurrency: String
+  toCurrency: String
+  toAmount: String
+  createdAt: String!
+  updatedAt: String!
+}
+
+type PaginatedTransactions {
+  transactions: [Transaction!]!
+  total: Int!
+}
+
+type ExchangeRate {
+  from: String!
+  to: String!
+  rate: Float!
+  timestamp: String
+}
+
+type Currency {
+  id: ID!
+  code: String!
+  name: String!
+  symbol: String
+  decimals: Int!
+  isBase: Boolean!
+  isActive: Boolean!
+}
+
+type Query {
+  me: User!
+  transactions(limit: Int, offset: Int, status: String): PaginatedTransactions!
+  exchangeRate(from: String!, to: String!): ExchangeRate!
+  currencies: [Currency!]!
+}

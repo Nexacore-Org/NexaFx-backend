@@ -2,7 +2,10 @@ import { Request, Response, NextFunction } from 'express';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 
-interface JwtPayload { sub: string; role: string; }
+interface JwtPayload {
+  sub: string;
+  role: string;
+}
 const ADMIN_ROLES = new Set(['ADMIN', 'SUPER_ADMIN']);
 
 function timingSafeEqual(a: string, b: string): boolean {
@@ -16,7 +19,9 @@ function timingSafeEqual(a: string, b: string): boolean {
   return mismatch === 0;
 }
 
-function parseBasicAuth(header: string | undefined): { user: string; password: string } | null {
+function parseBasicAuth(
+  header: string | undefined,
+): { user: string; password: string } | null {
   if (!header?.startsWith('Basic ')) {
     return null;
   }
@@ -26,7 +31,10 @@ function parseBasicAuth(header: string | undefined): { user: string; password: s
     if (separator === -1) {
       return null;
     }
-    return { user: decoded.slice(0, separator), password: decoded.slice(separator + 1) };
+    return {
+      user: decoded.slice(0, separator),
+      password: decoded.slice(separator + 1),
+    };
   } catch {
     return null;
   }
@@ -38,7 +46,9 @@ export function createAdminQueueAuthMiddleware(
 ) {
   return async (req: Request, res: Response, next: NextFunction) => {
     const dashboardUser = configService.get<string>('QUEUE_DASHBOARD_USER');
-    const dashboardPassword = configService.get<string>('QUEUE_DASHBOARD_PASSWORD');
+    const dashboardPassword = configService.get<string>(
+      'QUEUE_DASHBOARD_PASSWORD',
+    );
 
     if (dashboardUser && dashboardPassword) {
       const credentials = parseBasicAuth(req.headers.authorization);
@@ -48,7 +58,9 @@ export function createAdminQueueAuthMiddleware(
         !timingSafeEqual(credentials.password, dashboardPassword)
       ) {
         res.setHeader('WWW-Authenticate', 'Basic realm="Queue Dashboard"');
-        res.status(401).json({ message: 'Queue dashboard authentication required' });
+        res
+          .status(401)
+          .json({ message: 'Queue dashboard authentication required' });
         return;
       }
       next();
@@ -57,15 +69,20 @@ export function createAdminQueueAuthMiddleware(
 
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) {
-      res.status(401).json({ message: 'Missing or invalid authorization header' });
+      res
+        .status(401)
+        .json({ message: 'Missing or invalid authorization header' });
       return;
     }
 
     const token = authHeader.slice(7);
-    const secret = configService.get<string>('JWT_SECRET') ?? 'dev-access-secret';
+    const secret =
+      configService.get<string>('JWT_SECRET') ?? 'dev-access-secret';
 
     try {
-      const payload = await jwtService.verifyAsync<JwtPayload>(token, { secret });
+      const payload = await jwtService.verifyAsync<JwtPayload>(token, {
+        secret,
+      });
       if (!ADMIN_ROLES.has(payload.role)) {
         res.status(403).json({ message: 'Insufficient permissions' });
         return;

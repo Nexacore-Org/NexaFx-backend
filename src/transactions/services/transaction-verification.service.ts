@@ -21,9 +21,7 @@ export class TransactionVerificationService {
    */
   private isRunning = false;
 
-  constructor(
-    private readonly transactionsService: TransactionsService,
-  ) {}
+  constructor(private readonly transactionsService: TransactionsService) {}
 
   /**
    * Automatically verifies pending transactions every 5 minutes.

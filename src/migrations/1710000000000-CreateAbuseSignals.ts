@@ -6,7 +6,13 @@ export class CreateAbuseSignals1710000000000 implements MigrationInterface {
       new Table({
         name: 'abuse_signals',
         columns: [
-          { name: 'id', type: 'uuid', isPrimary: true, generationStrategy: 'uuid', default: 'uuid_generate_v4()' },
+          {
+            name: 'id',
+            type: 'uuid',
+            isPrimary: true,
+            generationStrategy: 'uuid',
+            default: 'uuid_generate_v4()',
+          },
           { name: 'userId', type: 'varchar', isNullable: false },
           { name: 'signalType', type: 'varchar', isNullable: false },
           { name: 'score', type: 'float', isNullable: false },

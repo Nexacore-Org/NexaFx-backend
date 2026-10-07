@@ -41,10 +41,18 @@ export class CreateConversionQuotes1767000000000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query('DROP INDEX IF EXISTS "IDX_conversion_quotes_expiresAt"');
-    await queryRunner.query('DROP INDEX IF EXISTS "IDX_conversion_quotes_status"');
-    await queryRunner.query('DROP INDEX IF EXISTS "IDX_conversion_quotes_userId"');
+    await queryRunner.query(
+      'DROP INDEX IF EXISTS "IDX_conversion_quotes_expiresAt"',
+    );
+    await queryRunner.query(
+      'DROP INDEX IF EXISTS "IDX_conversion_quotes_status"',
+    );
+    await queryRunner.query(
+      'DROP INDEX IF EXISTS "IDX_conversion_quotes_userId"',
+    );
     await queryRunner.query('DROP TABLE IF EXISTS "conversion_quotes"');
-    await queryRunner.query('DROP TYPE IF EXISTS "public"."conversion_quotes_status_enum"');
+    await queryRunner.query(
+      'DROP TYPE IF EXISTS "public"."conversion_quotes_status_enum"',
+    );
   }
 }

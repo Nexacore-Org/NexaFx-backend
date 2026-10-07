@@ -93,9 +93,9 @@ describe('WebhookService', () => {
     it('should leave preferredSchemaVersion to the column default', async () => {
       await service.createEndpoint('user1', 'https://test.com', ['*']);
 
-      expect(
-        endpointRepo.create.mock.calls[0][0],
-      ).not.toHaveProperty('preferredSchemaVersion');
+      expect(endpointRepo.create.mock.calls[0][0]).not.toHaveProperty(
+        'preferredSchemaVersion',
+      );
     });
 
     it('should accept an explicit supported schema version', async () => {

@@ -8,7 +8,11 @@ import { WalletsService } from '../wallets/wallets.service';
 import { StellarService } from '../blockchain/stellar/stellar.service';
 import { EncryptionService } from '../common/services/encryption.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 
 describe('EscrowService', () => {
   let service: EscrowService;
@@ -135,7 +139,7 @@ describe('EscrowService', () => {
         title: 'Test escrow',
         description: 'Test escrow description',
         releaseCondition: 'Complete work',
-      } as any);
+      });
 
       expect(result).toEqual(mockEscrow);
       expect(stellarService.generateWallet).not.toHaveBeenCalled();
@@ -151,14 +155,21 @@ describe('EscrowService', () => {
       dataSource.transaction.mockImplementation(async (_options, fn?) => {
         const callback = typeof _options === 'function' ? _options : fn;
         return callback({
-          findOne: jest.fn().mockResolvedValue({ ...mockEscrow, status: EscrowStatus.PENDING }),
-          save: jest.fn().mockImplementation((entity) => Promise.resolve(entity)),
+          findOne: jest
+            .fn()
+            .mockResolvedValue({ ...mockEscrow, status: EscrowStatus.PENDING }),
+          save: jest
+            .fn()
+            .mockImplementation((entity) => Promise.resolve(entity)),
         } as any);
       });
 
       usersService.findById.mockResolvedValue({ balances: { XLM: 20 } } as any);
-      walletsService.resolveWalletForTransaction.mockResolvedValue({ publicKey: 'user-pub', encryptedSecretKey: 'encrypted-key' } as any);
-      stellarService.generateWallet.mockResolvedValue(keypair as any);
+      walletsService.resolveWalletForTransaction.mockResolvedValue({
+        publicKey: 'user-pub',
+        encryptedSecretKey: 'encrypted-key',
+      } as any);
+      stellarService.generateWallet.mockResolvedValue(keypair);
       encryptionService.encrypt.mockReturnValue('encrypted-secret');
       encryptionService.decrypt.mockReturnValue('user-secret');
       stellarService.sendPayment.mockResolvedValue(transactionResult);
@@ -179,14 +190,22 @@ describe('EscrowService', () => {
         } as any);
       });
 
-      await expect(service.fundEscrow('sender-id', 'bad-id')).rejects.toThrow(NotFoundException);
+      await expect(service.fundEscrow('sender-id', 'bad-id')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
   describe('disputeEscrow', () => {
     it('blocks auto-release when disputed', async () => {
-      escrowRepository.findOne.mockResolvedValue({ ...mockEscrow, status: EscrowStatus.FUNDED } as any);
-      escrowRepository.save.mockResolvedValue({ ...mockEscrow, status: EscrowStatus.DISPUTED } as any);
+      escrowRepository.findOne.mockResolvedValue({
+        ...mockEscrow,
+        status: EscrowStatus.FUNDED,
+      });
+      escrowRepository.save.mockResolvedValue({
+        ...mockEscrow,
+        status: EscrowStatus.DISPUTED,
+      });
 
       const result = await service.disputeEscrow('sender-id', 'escrow-id');
 
@@ -194,9 +213,14 @@ describe('EscrowService', () => {
     });
 
     it('throws if escrow not funded', async () => {
-      escrowRepository.findOne.mockResolvedValue({ ...mockEscrow, status: EscrowStatus.PENDING } as any);
+      escrowRepository.findOne.mockResolvedValue({
+        ...mockEscrow,
+        status: EscrowStatus.PENDING,
+      });
 
-      await expect(service.disputeEscrow('sender-id', 'escrow-id')).rejects.toThrow(BadRequestException);
+      await expect(
+        service.disputeEscrow('sender-id', 'escrow-id'),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -208,7 +232,7 @@ describe('EscrowService', () => {
         stellarEscrowPublicKey: 'escrow-pub',
         stellarEscrowSecretEncrypted: 'encrypted-escrow-secret',
         senderId: 'sender-id',
-      } as any);
+      });
 
       dataSource.transaction.mockImplementation(async (_options, fn?) => {
         const callback = typeof _options === 'function' ? _options : fn;
@@ -221,17 +245,29 @@ describe('EscrowService', () => {
             senderId: 'sender-id',
             recipientId: 'recipient-id',
           }),
-          save: jest.fn().mockImplementation((entity) => Promise.resolve(entity)),
+          save: jest
+            .fn()
+            .mockImplementation((entity) => Promise.resolve(entity)),
         } as any);
       });
 
-      walletsService.resolveWalletForTransaction.mockResolvedValue({ publicKey: 'sender-pub', encryptedSecretKey: 'encrypted-key' } as any);
+      walletsService.resolveWalletForTransaction.mockResolvedValue({
+        publicKey: 'sender-pub',
+        encryptedSecretKey: 'encrypted-key',
+      } as any);
       encryptionService.decrypt.mockReturnValue('escrow-secret');
-      usersService.findById.mockResolvedValue({ id: 'sender-id', balances: { XLM: 0 } } as any);
+      usersService.findById.mockResolvedValue({
+        id: 'sender-id',
+        balances: { XLM: 0 },
+      } as any);
       usersService.updateByUserId.mockResolvedValue(undefined);
-      stellarService.sendPayment.mockResolvedValue({ hash: 'refund-tx' } as any);
+      stellarService.sendPayment.mockResolvedValue({
+        hash: 'refund-tx',
+      });
 
-      const result = await service.resolveEscrow('escrow-id', { outcome: 'refund' } as any);
+      const result = await service.resolveEscrow('escrow-id', {
+        outcome: 'refund',
+      } as any);
 
       expect(result.status).toBe(EscrowStatus.REFUNDED);
       expect(result.refundTxHash).toBe('refund-tx');
@@ -240,7 +276,10 @@ describe('EscrowService', () => {
 
   describe('getEscrowSecret', () => {
     it('never stores plaintext secret', async () => {
-      const escrow = { ...mockEscrow, stellarEscrowSecretEncrypted: 'encrypted' } as any;
+      const escrow = {
+        ...mockEscrow,
+        stellarEscrowSecretEncrypted: 'encrypted',
+      } as any;
       encryptionService.decrypt.mockReturnValue('secret');
 
       const secret = await (service as any).getEscrowSecret(escrow);

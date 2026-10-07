@@ -52,13 +52,11 @@ describe('VaultsService', () => {
                 getRepository: (entity) => {
                   if (entity === SavingsVault) {
                     return {
-                      findOne: jest
-                        .fn()
-                        .mockResolvedValue({
-                          id: 'vaultId',
-                          status: VaultStatus.ACTIVE,
-                          currentBalance: '0',
-                        }),
+                      findOne: jest.fn().mockResolvedValue({
+                        id: 'vaultId',
+                        status: VaultStatus.ACTIVE,
+                        currentBalance: '0',
+                      }),
                       save: jest.fn(),
                     };
                   }

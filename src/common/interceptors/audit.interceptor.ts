@@ -19,7 +19,10 @@ export class AuditInterceptor implements NestInterceptor {
     private readonly usersService: UsersService,
   ) {}
 
-  async intercept(context: ExecutionContext, next: CallHandler): Promise<Observable<any>> {
+  async intercept(
+    context: ExecutionContext,
+    next: CallHandler,
+  ): Promise<Observable<any>> {
     const request = context.switchToHttp().getRequest();
     const action = this.reflector.get<string>(
       AUDIT_ACTION_KEY,
@@ -52,7 +55,15 @@ export class AuditInterceptor implements NestInterceptor {
     const sanitizeBody = (body: any): any => {
       if (!body) return body;
       const sanitized = { ...body };
-      const sensitiveFields = ['password', 'token', 'secret', 'privateKey', 'pin', 'totpCode', 'otp'];
+      const sensitiveFields = [
+        'password',
+        'token',
+        'secret',
+        'privateKey',
+        'pin',
+        'totpCode',
+        'otp',
+      ];
       sensitiveFields.forEach((field) => {
         if (sanitized[field]) {
           sanitized[field] = '[REDACTED]';
@@ -67,16 +78,28 @@ export class AuditInterceptor implements NestInterceptor {
           let finalAction = action;
           // Resolve dynamic action name for KYC review
           if (action === 'kyc.review') {
-            const decision = request.body?.status || request.body?.decision || response?.status;
-            if (decision === 'approved' || decision === 'APPROVED' || decision === 'APPROVE') {
+            const decision =
+              request.body?.status ||
+              request.body?.decision ||
+              response?.status;
+            if (
+              decision === 'approved' ||
+              decision === 'APPROVED' ||
+              decision === 'APPROVE'
+            ) {
               finalAction = 'kyc.approved';
-            } else if (decision === 'rejected' || decision === 'REJECTED' || decision === 'REJECT') {
+            } else if (
+              decision === 'rejected' ||
+              decision === 'REJECTED' ||
+              decision === 'REJECT'
+            ) {
               finalAction = 'kyc.rejected';
             }
           }
 
           // Resolve resourceId
-          let resourceId = response?.id || response?.user?.id || request.params?.id || null;
+          const resourceId =
+            response?.id || response?.user?.id || request.params?.id || null;
 
           const metadata: Record<string, any> = {
             method: request.method,
@@ -90,15 +113,17 @@ export class AuditInterceptor implements NestInterceptor {
           }
 
           // Asynchronously write audit log (without blocking request execution)
-          this.auditLogsService.log(
-            actorId,
-            finalAction,
-            resourceType,
-            resourceId,
-            'SUCCESS',
-            metadata,
-            request,
-          ).catch(() => {});
+          this.auditLogsService
+            .log(
+              actorId,
+              finalAction,
+              resourceType,
+              resourceId,
+              'SUCCESS',
+              metadata,
+              request,
+            )
+            .catch(() => {});
         },
         error: async (err) => {
           const metadata: Record<string, any> = {
@@ -115,15 +140,17 @@ export class AuditInterceptor implements NestInterceptor {
 
           const resourceId = request.params?.id || null;
 
-          this.auditLogsService.log(
-            actorId,
-            action,
-            resourceType,
-            resourceId,
-            'FAILURE',
-            metadata,
-            request,
-          ).catch(() => {});
+          this.auditLogsService
+            .log(
+              actorId,
+              action,
+              resourceType,
+              resourceId,
+              'FAILURE',
+              metadata,
+              request,
+            )
+            .catch(() => {});
         },
       }),
     );

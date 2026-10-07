@@ -25,7 +25,9 @@ export class LoanRepayment {
   @Column({ type: 'uuid' })
   loanId: string;
 
-  @ManyToOne(() => LoanApplication, (l) => l.repayments, { onDelete: 'CASCADE' })
+  @ManyToOne(() => LoanApplication, (l) => l.repayments, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'loanId' })
   loan: LoanApplication;
 
@@ -47,7 +49,11 @@ export class LoanRepayment {
   @Column({ type: 'decimal', precision: 20, scale: 8, default: '0.00000000' })
   paidAmount: string;
 
-  @Column({ type: 'enum', enum: RepaymentStatus, default: RepaymentStatus.SCHEDULED })
+  @Column({
+    type: 'enum',
+    enum: RepaymentStatus,
+    default: RepaymentStatus.SCHEDULED,
+  })
   status: RepaymentStatus;
 
   @Column({ type: 'timestamp with time zone', nullable: true })

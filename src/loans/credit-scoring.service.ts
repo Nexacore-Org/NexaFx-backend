@@ -7,7 +7,10 @@ import {
   LoanApplication,
   LoanStatus,
 } from './entities/loan-application.entity';
-import { ComplianceFlag } from './entities/compliance-flag.entity';
+import {
+  ComplianceFlag,
+  ComplianceFlagStatus,
+} from '../modules/compliance/entities/compliance-flag.entity';
 
 @Injectable()
 export class CreditScoringService {
@@ -49,7 +52,11 @@ export class CreditScoringService {
 
     // Compliance flags in last 6 months
     const openFlagsCount = await this.complianceFlagRepo.count({
-      where: { userId, isResolved: false, createdAt: MoreThan(sixMonthsAgo) },
+      where: {
+        userId,
+        status: ComplianceFlagStatus.OPEN,
+        createdAt: MoreThan(sixMonthsAgo),
+      },
     });
 
     // +20: no compliance flags in last 6 months

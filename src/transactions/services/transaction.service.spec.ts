@@ -163,7 +163,7 @@ describe('TransactionsService fee integration behavior', () => {
   const mockRedisService = {
     del: jest.fn(),
     delete: jest.fn(),
-  }
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();

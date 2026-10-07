@@ -1,10 +1,7 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import {
-  Transaction,
-  TransactionType,
-} from '../entities/transaction.entity';
+import { Transaction, TransactionType } from '../entities/transaction.entity';
 import { FeesService, CalculatedFee } from '../../fees/fees.service';
 import { FeeTransactionType } from '../../fees/entities/fee-config.entity';
 import { ExchangeRatesService } from '../../exchange-rates/exchange-rates.service';
@@ -126,9 +123,10 @@ export class FeeEstimatorService {
         platformFee: {
           amount: platformFee.feeAmount.toFixed(8),
           currency: fromCurrency,
-          percent: platformFee.feeType === 'PERCENTAGE'
-            ? this.getFeePercentage(platformFee)
-            : undefined,
+          percent:
+            platformFee.feeType === 'PERCENTAGE'
+              ? this.getFeePercentage(platformFee)
+              : undefined,
         },
         networkFee: {
           amount: networkFeeDecimal.toFixed(8),
@@ -244,13 +242,13 @@ export class FeeEstimatorService {
     }>,
   ): Promise<BatchEstimateResult> {
     if (transactions.length > 20) {
-      throw new BadRequestException('Batch estimate is limited to 20 transactions');
+      throw new BadRequestException(
+        'Batch estimate is limited to 20 transactions',
+      );
     }
 
     const estimates = await Promise.all(
-      transactions.map((tx) =>
-        this.estimateTransaction(userId, tx),
-      ),
+      transactions.map((tx) => this.estimateTransaction(userId, tx)),
     );
 
     const totalFees = estimates.reduce(
@@ -273,8 +271,7 @@ export class FeeEstimatorService {
       'estimate',
       `${userId}:${this.hashParams(params)}`,
     );
-    const cached =
-      await this.redisService.getJson<FeeEstimateResult>(cacheKey);
+    const cached = await this.redisService.getJson<FeeEstimateResult>(cacheKey);
 
     if (!cached) {
       return { drifted: false, currentEstimate: null };
@@ -294,7 +291,11 @@ export class FeeEstimatorService {
       return { drifted: false, currentEstimate };
     }
 
-    const driftPercent = newTotal.minus(oldTotal).abs().div(oldTotal).times(100);
+    const driftPercent = newTotal
+      .minus(oldTotal)
+      .abs()
+      .div(oldTotal)
+      .times(100);
 
     return {
       drifted: driftPercent.greaterThan(2),

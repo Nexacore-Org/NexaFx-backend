@@ -40,7 +40,7 @@ export class VaultTransaction {
   @Column({ type: 'decimal', precision: 20, scale: 8 })
   balanceAfter: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   note: string | null;
 
   @CreateDateColumn({ type: 'timestamp with time zone' })

@@ -33,7 +33,7 @@ describe('MicroSavingsController', () => {
       saveAmount: 1,
       maxDailyContribution: 10,
     };
-    await controller.create(req, dto as any);
+    await controller.create(req, dto);
     expect(service.createRule).toHaveBeenCalledWith('user-42', dto);
   });
 

@@ -12,7 +12,7 @@ export class LocalStorageService implements StorageService {
 
   async upload(file: Express.Multer.File, pathParam: string): Promise<string> {
     const env = process.env.NODE_ENV || 'development';
-    
+
     // Prevent path traversal in the directory path
     const targetDir = path.resolve(this.uploadsBase, env, pathParam);
     if (!targetDir.startsWith(this.uploadsBase)) {
@@ -32,7 +32,10 @@ export class LocalStorageService implements StorageService {
     // Save buffer
     fs.writeFileSync(fullPath, file.buffer);
 
-    const relativeKey = `${env}/${pathParam}/${safeFilename}`.replace(/\\/g, '/');
+    const relativeKey = `${env}/${pathParam}/${safeFilename}`.replace(
+      /\\/g,
+      '/',
+    );
     this.logger.log(`Uploaded file to local storage: ${relativeKey}`);
 
     return relativeKey;
@@ -42,10 +45,10 @@ export class LocalStorageService implements StorageService {
     // Basic sanitization
     const sanitizedKey = key.replace(/\.\./g, '');
     const expires = Math.floor(Date.now() / 1000) + expiresInSeconds;
-    
+
     const port = process.env.PORT || '3000';
     const baseUrl = process.env.BACKEND_URL || `http://localhost:${port}`;
-    
+
     const secret = process.env.JWT_SECRET || 'local-secret';
     const hmac = crypto.createHmac('sha256', secret);
     hmac.update(`${sanitizedKey}:${expires}`);

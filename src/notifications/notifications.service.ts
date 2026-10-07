@@ -5,10 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Repository, In } from 'typeorm';
-import {
-  Notification,
-  NotificationType,
-} from './entities/notification.entity';
+import { Notification, NotificationType } from './entities/notification.entity';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { resolveDeepLink } from './deep-links.registry';
 import { InjectRepository } from '@nestjs/typeorm';

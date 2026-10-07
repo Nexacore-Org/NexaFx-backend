@@ -34,11 +34,19 @@ export class AddPerformanceIndexes1762000000000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_kyc_records_user_status"`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_audit_logs_user_created_action"`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_rate_alerts_active_triggered"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_kyc_records_user_status"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_audit_logs_user_created_action"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_rate_alerts_active_triggered"`,
+    );
     await queryRunner.query(`DROP INDEX IF EXISTS "IDX_transactions_txHash"`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_transactions_userId_createdAt"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_transactions_userId_createdAt"`,
+    );
     await queryRunner.query(`DROP INDEX IF EXISTS "IDX_users_createdAt"`);
   }
 }

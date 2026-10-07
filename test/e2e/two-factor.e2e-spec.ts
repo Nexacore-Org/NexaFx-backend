@@ -100,7 +100,9 @@ describe('Two-Factor Authentication (e2e)', () => {
     const token = body.accessToken ?? body.token ?? body.access_token;
 
     expect(token).toBeDefined();
-    expect(body.requiresTwoFactor ?? body.requires2FA ?? body.partialAuth).toBeTruthy();
+    expect(
+      body.requiresTwoFactor ?? body.requires2FA ?? body.partialAuth,
+    ).toBeTruthy();
 
     // A PARTIAL_AUTH token must not grant access to unrelated authenticated endpoints.
     await request(app.getHttpServer())

@@ -2,7 +2,10 @@ import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { FinancialHealthScore, HealthGrade } from './entities/financial-health-score.entity';
+import {
+  FinancialHealthScore,
+  HealthGrade,
+} from './entities/financial-health-score.entity';
 import Decimal from 'decimal.js';
 
 /**
@@ -12,7 +15,11 @@ import Decimal from 'decimal.js';
 export const FINANCIAL_HEALTH_NOTIFIER = 'FINANCIAL_HEALTH_NOTIFIER';
 
 export interface FinancialHealthNotifier {
-  send(userId: string, type: string, payload: Record<string, any>): Promise<unknown>;
+  send(
+    userId: string,
+    type: string,
+    payload: Record<string, any>,
+  ): Promise<unknown>;
 }
 
 @Injectable()
@@ -35,8 +42,12 @@ export class FinancialHealthService {
     });
   }
 
-  async getHistory(userId: string, weeks = 12): Promise<FinancialHealthScore[]> {
-    return this.scoreRepo.createQueryBuilder('score')
+  async getHistory(
+    userId: string,
+    weeks = 12,
+  ): Promise<FinancialHealthScore[]> {
+    return this.scoreRepo
+      .createQueryBuilder('score')
       .where('score.userId = :userId', { userId })
       .orderBy('score.calculatedAt', 'DESC')
       .take(weeks)
@@ -46,7 +57,10 @@ export class FinancialHealthService {
   /**
    * Applies conditional 0.5% dynamic reduction to base interest parameters for high scorers
    */
-  async qualifyLoanRateAdjustment(userId: string, baseRate: number): Promise<number> {
+  async qualifyLoanRateAdjustment(
+    userId: string,
+    baseRate: number,
+  ): Promise<number> {
     const latest = await this.getLatestScore(userId);
     if (latest && latest.score >= 80) {
       return new Decimal(baseRate).minus('0.005').toNumber(); // Reduce by 0.5%
@@ -60,8 +74,10 @@ export class FinancialHealthService {
    */
   @Cron('0 1 * * 1')
   async runWeeklyEvaluationCron(): Promise<void> {
-    this.logger.log('Starting weekly Financial Health Evaluation pipeline loop...');
-    
+    this.logger.log(
+      'Starting weekly Financial Health Evaluation pipeline loop...',
+    );
+
     // Process only active transacting users to keep resources highly optimized
     const activeUsers = await this.dataSource.query(`
       SELECT DISTINCT "userId" FROM transactions WHERE "status" = 'COMPLETED'
@@ -71,7 +87,10 @@ export class FinancialHealthService {
       try {
         await this.calculateAndSaveScore(row.userId);
       } catch (err) {
-        this.logger.error(`Failed to evaluate score metrics for user ${row.userId}:`, err);
+        this.logger.error(
+          `Failed to evaluate score metrics for user ${row.userId}:`,
+          err,
+        );
       }
     }
   }
@@ -82,21 +101,45 @@ export class FinancialHealthService {
     const prevScoreVal = previous ? previous.score : 0;
 
     // High-precision signal mapping using Decimal.js
-    const savingsRateScore = Math.min(20, new Decimal(mockTelemetry.savingsRate).mul(20).toNumber());
+    const savingsRateScore = Math.min(
+      20,
+      new Decimal(mockTelemetry.savingsRate).mul(20).toNumber(),
+    );
     const spendingConsistencyScore = mockTelemetry.lowSpendingVariance ? 15 : 5;
-    
+
     // Loan tracking logic: 20 base max; subtract 5 per missed window
-    const loanRepaymentScore = Math.max(0, 20 - (mockTelemetry.missedPayments * 5));
-    
+    const loanRepaymentScore = Math.max(
+      0,
+      20 - mockTelemetry.missedPayments * 5,
+    );
+
     const diversificationScore = mockTelemetry.currencyCount >= 3 ? 15 : 5;
-    const transactionFrequencyScore = (mockTelemetry.txCountMonthly >= 5 && mockTelemetry.txCountMonthly <= 30) ? 10 : 4;
-    
-    const kycTierScore = mockTelemetry.kycTier === 'ENHANCED' ? 10 : (mockTelemetry.kycTier === 'STANDARD' ? 6 : 3);
-    const accountAgeScore = mockTelemetry.accountAgeMonths >= 6 ? 10 : (mockTelemetry.accountAgeMonths >= 3 ? 6 : 3);
+    const transactionFrequencyScore =
+      mockTelemetry.txCountMonthly >= 5 && mockTelemetry.txCountMonthly <= 30
+        ? 10
+        : 4;
+
+    const kycTierScore =
+      mockTelemetry.kycTier === 'ENHANCED'
+        ? 10
+        : mockTelemetry.kycTier === 'STANDARD'
+          ? 6
+          : 3;
+    const accountAgeScore =
+      mockTelemetry.accountAgeMonths >= 6
+        ? 10
+        : mockTelemetry.accountAgeMonths >= 3
+          ? 6
+          : 3;
 
     const totalScore = Math.round(
-      savingsRateScore + spendingConsistencyScore + loanRepaymentScore + 
-      diversificationScore + transactionFrequencyScore + kycTierScore + accountAgeScore
+      savingsRateScore +
+        spendingConsistencyScore +
+        loanRepaymentScore +
+        diversificationScore +
+        transactionFrequencyScore +
+        kycTierScore +
+        accountAgeScore,
     );
 
     let grade = HealthGrade.POOR;
@@ -106,16 +149,36 @@ export class FinancialHealthService {
 
     // Collect targeted recommendations by ranking components with the largest room for improvement
     const potentialTips = [
-      { key: 'savings', score: savingsRateScore, max: 20, text: 'Increase your monthly deposits into vaults or staking to boost your savings rate.' },
-      { key: 'loans', score: loanRepaymentScore, max: 20, text: 'Ensure all loan obligations are settled on schedule to rebuild your repayment index.' },
-      { key: 'diversify', score: diversificationScore, max: 15, text: 'Hold balances across 3 or more asset types to increase portfolio resilience.' },
-      { key: 'spending', score: spendingConsistencyScore, max: 15, text: 'Stabilize your weekly outflow margins to establish reliable credit habits.' }
+      {
+        key: 'savings',
+        score: savingsRateScore,
+        max: 20,
+        text: 'Increase your monthly deposits into vaults or staking to boost your savings rate.',
+      },
+      {
+        key: 'loans',
+        score: loanRepaymentScore,
+        max: 20,
+        text: 'Ensure all loan obligations are settled on schedule to rebuild your repayment index.',
+      },
+      {
+        key: 'diversify',
+        score: diversificationScore,
+        max: 15,
+        text: 'Hold balances across 3 or more asset types to increase portfolio resilience.',
+      },
+      {
+        key: 'spending',
+        score: spendingConsistencyScore,
+        max: 15,
+        text: 'Stabilize your weekly outflow margins to establish reliable credit habits.',
+      },
     ];
 
     const tips = potentialTips
-      .sort((a, b) => (a.score / a.max) - (b.score / b.max))
+      .sort((a, b) => a.score / a.max - b.score / b.max)
       .slice(0, 3)
-      .map(t => t.text);
+      .map((t) => t.text);
 
     const delta = totalScore - prevScoreVal;
 
@@ -130,11 +193,11 @@ export class FinancialHealthService {
         diversificationScore,
         transactionFrequencyScore,
         kycTierScore,
-        accountAgeScore
+        accountAgeScore,
       },
       tips,
       previousScore: prevScoreVal,
-      scoreDelta: delta
+      scoreDelta: delta,
     });
 
     const saved = await this.scoreRepo.save(healthScore);
@@ -145,9 +208,17 @@ export class FinancialHealthService {
     }
 
     if (delta > 10) {
-      await this.notificationService.send(userId, 'CONGRATULATIONS_FINANCIAL_HEALTH_IMPROVED', { score: totalScore });
+      await this.notificationService.send(
+        userId,
+        'CONGRATULATIONS_FINANCIAL_HEALTH_IMPROVED',
+        { score: totalScore },
+      );
     } else if (delta < -10) {
-      await this.notificationService.send(userId, 'FINANCIAL_HEALTH_DROP_ADVICE', { tips });
+      await this.notificationService.send(
+        userId,
+        'FINANCIAL_HEALTH_DROP_ADVICE',
+        { tips },
+      );
     }
 
     return saved;
@@ -162,7 +233,7 @@ export class FinancialHealthService {
       currencyCount: 3,
       txCountMonthly: 12,
       kycTier: 'STANDARD',
-      accountAgeMonths: 7
+      accountAgeMonths: 7,
     };
   }
 }

@@ -10,7 +10,7 @@ import { FlagsService } from '../../modules/flags/flags.service';
 export function FeatureFlagGuard(flagKey: string) {
   @Injectable()
   class MixinFeatureFlagGuard implements CanActivate {
-    constructor(private readonly flagsService: FlagsService) {}
+    constructor(readonly flagsService: FlagsService) {}
 
     async canActivate(context: ExecutionContext): Promise<boolean> {
       const request = context.switchToHttp().getRequest();

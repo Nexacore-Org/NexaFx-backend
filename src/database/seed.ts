@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { config } from 'dotenv';
 import { runAllSeeders } from './seeders';
-import { dataSource } from './data-source';
+import { AppDataSource as dataSource } from './data-source';
 
 config();
 

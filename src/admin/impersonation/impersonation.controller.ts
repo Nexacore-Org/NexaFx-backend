@@ -38,7 +38,9 @@ export class ImpersonationController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @Post('impersonate/:userId')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Start impersonating a user (Admin/Super-Admin only)' })
+  @ApiOperation({
+    summary: 'Start impersonating a user (Admin/Super-Admin only)',
+  })
   @ApiResponse({
     status: 200,
     description: 'Impersonation token generated successfully',
@@ -49,7 +51,11 @@ export class ImpersonationController {
     @Param('userId', ParseUUIDPipe) userId: string,
     @Req() req: any,
   ): Promise<ImpersonationResponseDto> {
-    return this.impersonationService.startImpersonation(admin.userId, userId, req);
+    return this.impersonationService.startImpersonation(
+      admin.userId,
+      userId,
+      req,
+    );
   }
 
   @Post('impersonate/end')
@@ -67,12 +73,19 @@ export class ImpersonationController {
     const targetUserId = user.userId;
     const jti = user.jti || '';
     const adminId = user.impersonatedBy || '';
-    return this.impersonationService.endImpersonation(targetUserId, jti, adminId, req);
+    return this.impersonationService.endImpersonation(
+      targetUserId,
+      jti,
+      adminId,
+      req,
+    );
   }
 
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @Get('impersonation/active')
-  @ApiOperation({ summary: 'List active impersonation sessions created by the admin' })
+  @ApiOperation({
+    summary: 'List active impersonation sessions created by the admin',
+  })
   @ApiResponse({
     status: 200,
     description: 'Active impersonation sessions retrieved successfully',

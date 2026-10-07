@@ -74,7 +74,9 @@ describe('QueuesDashboardService', () => {
     });
     expect(report.recentFailedJobs).toHaveLength(1);
     expect(report.recentFailedJobs![0].id).toBe('job-101');
-    expect(report.recentFailedJobs![0].failedReason).toBe('SMTP connection timeout');
+    expect(report.recentFailedJobs![0].failedReason).toBe(
+      'SMTP connection timeout',
+    );
   });
 
   it('should throw NotFoundException when requesting state for an unregistered queue', async () => {
@@ -110,7 +112,11 @@ describe('QueuesDashboardService', () => {
     const queue = createMockQueue('transactions');
     service.registerQueue('transactions', queue);
 
-    const cleaned = await service.cleanQueue('transactions', 3600000, 'completed');
+    const cleaned = await service.cleanQueue(
+      'transactions',
+      3600000,
+      'completed',
+    );
     expect(cleaned).toEqual(['job-1', 'job-2']);
     expect(queue.clean).toHaveBeenCalledWith(3600000, 1000, 'completed');
   });

@@ -8,10 +8,20 @@ import {
   UseGuards,
   BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiProperty } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiResponse,
+  ApiProperty,
+} from '@nestjs/swagger';
 import { IsEnum, IsNotEmpty, IsNumber, Min } from 'class-validator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { CurrentUser, CurrentUserPayload } from '../auth/decorators/current-user.decorator';
+import {
+  CurrentUser,
+  CurrentUserPayload,
+} from '../auth/decorators/current-user.decorator';
 import { TaxService } from './tax.service';
 import { TaxExportJurisdiction } from './entities/tax-export-job.entity';
 
@@ -21,7 +31,11 @@ export class CreateTaxExportDto {
   @Min(1970)
   year: number;
 
-  @ApiProperty({ enum: TaxExportJurisdiction, example: TaxExportJurisdiction.US, description: 'Jurisdiction' })
+  @ApiProperty({
+    enum: TaxExportJurisdiction,
+    example: TaxExportJurisdiction.US,
+    description: 'Jurisdiction',
+  })
   @IsEnum(TaxExportJurisdiction)
   @IsNotEmpty()
   jurisdiction: TaxExportJurisdiction;
@@ -71,7 +85,12 @@ export class TaxController {
       throw new BadRequestException('Invalid limit parameter');
     }
 
-    return this.taxService.getEvents(user.userId, parsedPage, parsedLimit, currency);
+    return this.taxService.getEvents(
+      user.userId,
+      parsedPage,
+      parsedLimit,
+      currency,
+    );
   }
 
   @Post('export')
@@ -81,13 +100,20 @@ export class TaxController {
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: CreateTaxExportDto,
   ) {
-    return this.taxService.enqueueExportJob(user.userId, dto.year, dto.jurisdiction);
+    return this.taxService.enqueueExportJob(
+      user.userId,
+      dto.year,
+      dto.jurisdiction,
+    );
   }
 
   @Get('export/status')
   @ApiOperation({ summary: 'Get CSV export job status by query parameter' })
   @ApiQuery({ name: 'jobId', required: true, type: String })
-  @ApiResponse({ status: 200, description: 'Export job status retrieved successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Export job status retrieved successfully',
+  })
   async getExportStatusQuery(
     @CurrentUser() user: CurrentUserPayload,
     @Query('jobId') jobId: string,
@@ -100,7 +126,10 @@ export class TaxController {
 
   @Get('export/status/:jobId')
   @ApiOperation({ summary: 'Get CSV export job status by path parameter' })
-  @ApiResponse({ status: 200, description: 'Export job status retrieved successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Export job status retrieved successfully',
+  })
   async getExportStatusParam(
     @CurrentUser() user: CurrentUserPayload,
     @Param('jobId') jobId: string,

@@ -1,7 +1,10 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { PortfolioSnapshot, HoldingSnapshot } from './entities/portfolio-snapshot.entity';
+import {
+  PortfolioSnapshot,
+  HoldingSnapshot,
+} from './entities/portfolio-snapshot.entity';
 import { WalletsService } from '../wallets/wallets.service';
 import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
 
@@ -29,7 +32,11 @@ export class PortfolioService {
    * Persists a snapshot row so historical trends can be queried later.
    */
   async computeAndSnapshot(userId: string): Promise<PortfolioValuation> {
-    const wallets = await this.walletsService.listWallets(userId);
+    const { items: wallets } = await this.walletsService.listWallets(
+      userId,
+      1,
+      50,
+    );
 
     // Accumulate per-currency totals across all wallets
     const currencyTotals: Record<string, number> = {};
@@ -43,16 +50,25 @@ export class PortfolioService {
 
     // Convert each holding to USD using the exchange-rate service
     let totalValueUsd = 0;
-    const holdingsRaw: Array<{ currency: string; amount: number; usdValue: number }> = [];
+    const holdingsRaw: Array<{
+      currency: string;
+      amount: number;
+      usdValue: number;
+    }> = [];
 
     for (const [currency, amount] of Object.entries(currencyTotals)) {
       let usdValue = 0;
       try {
-        const rateResult = await this.exchangeRatesService.getRate(currency, 'USD');
+        const rateResult = await this.exchangeRatesService.getRate(
+          currency,
+          'USD',
+        );
         usdValue = amount * rateResult.rate;
       } catch {
         // If rate unavailable, treat contribution as 0 but still record the holding
-        this.logger.warn(`Exchange rate unavailable for ${currency}->USD; holding recorded with 0 USD value`);
+        this.logger.warn(
+          `Exchange rate unavailable for ${currency}->USD; holding recorded with 0 USD value`,
+        );
       }
       totalValueUsd += usdValue;
       holdingsRaw.push({ currency, amount, usdValue });
@@ -61,7 +77,10 @@ export class PortfolioService {
     // Compute percentage share per holding
     const holdings: HoldingSnapshot[] = holdingsRaw.map((h) => ({
       ...h,
-      percent: totalValueUsd > 0 ? Number(((h.usdValue / totalValueUsd) * 100).toFixed(4)) : 0,
+      percent:
+        totalValueUsd > 0
+          ? Number(((h.usdValue / totalValueUsd) * 100).toFixed(4))
+          : 0,
     }));
 
     const snapshot = await this.snapshotRepo.save(

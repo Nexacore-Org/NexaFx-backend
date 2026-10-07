@@ -29,13 +29,18 @@ export class S3StorageService implements StorageService {
 
   async upload(file: Express.Multer.File, pathParam: string): Promise<string> {
     const env = process.env.NODE_ENV || 'development';
-    
+
     // Secure naming
     const fileExt = path.extname(file.originalname).toLowerCase();
     const safeFilename = `${uuidv4()}${fileExt}`;
-    const relativeKey = `${env}/${pathParam}/${safeFilename}`.replace(/\\/g, '/');
+    const relativeKey = `${env}/${pathParam}/${safeFilename}`.replace(
+      /\\/g,
+      '/',
+    );
 
-    this.logger.log(`Uploading to S3 bucket ${this.bucketName}: ${relativeKey}`);
+    this.logger.log(
+      `Uploading to S3 bucket ${this.bucketName}: ${relativeKey}`,
+    );
 
     await this.s3Client.send(
       new PutObjectCommand({
@@ -55,7 +60,9 @@ export class S3StorageService implements StorageService {
       Key: key,
     });
 
-    return getSignedUrl(this.s3Client, command, { expiresIn: expiresInSeconds });
+    return getSignedUrl(this.s3Client, command, {
+      expiresIn: expiresInSeconds,
+    });
   }
 
   async delete(key: string): Promise<void> {

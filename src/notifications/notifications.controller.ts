@@ -27,12 +27,31 @@ export class NotificationsController {
   @Get()
   @ApiOperation({
     summary: 'Get notifications for authenticated user',
-    description: 'Retrieves a paginated list of notifications, newest first, with optional filter by read status',
+    description:
+      'Retrieves a paginated list of notifications, newest first, with optional filter by read status',
   })
-  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 10)' })
-  @ApiQuery({ name: 'isRead', required: false, type: Boolean, description: 'Filter by read/unread status' })
-  @ApiResponse({ status: 200, description: 'Notifications retrieved successfully' })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 10)',
+  })
+  @ApiQuery({
+    name: 'isRead',
+    required: false,
+    type: Boolean,
+    description: 'Filter by read/unread status',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Notifications retrieved successfully',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getNotifications(
     @Request() req: { user: { userId: string } },
@@ -58,7 +77,8 @@ export class NotificationsController {
   @Patch('read-all')
   @ApiOperation({
     summary: 'Mark all unread notifications as read',
-    description: 'Marks all unread notifications for the authenticated user as read',
+    description:
+      'Marks all unread notifications for the authenticated user as read',
   })
   @ApiResponse({ status: 200, description: 'All notifications marked as read' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -84,9 +104,13 @@ export class NotificationsController {
   @Get('unread-count')
   @ApiOperation({
     summary: 'Get unread notification count',
-    description: 'Returns the count of unread notifications for the authenticated user',
+    description:
+      'Returns the count of unread notifications for the authenticated user',
   })
-  @ApiResponse({ status: 200, description: 'Unread count retrieved successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Unread count retrieved successfully',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getUnreadCount(@Request() req: { user: { userId: string } }) {
     return this.notificationsService.getUnreadCount(req.user.userId);

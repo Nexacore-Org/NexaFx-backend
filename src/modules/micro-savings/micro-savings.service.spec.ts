@@ -3,7 +3,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import Decimal from 'decimal.js';
 import { MicroSavingsService } from './micro-savings.service';
-import { MicroSavingsRule, MicroSavingsTriggerType } from './entities/micro-savings-rule.entity';
+import {
+  MicroSavingsRule,
+  MicroSavingsTriggerType,
+} from './entities/micro-savings-rule.entity';
 import { MicroSavingsContribution } from './entities/micro-savings-contribution.entity';
 import { VaultsService } from '../../vaults/vaults.service';
 import { UsersService } from '../../users/users.service';
@@ -19,21 +22,22 @@ describe('MicroSavingsService', () => {
   const userId = 'user-1';
   const vaultId = 'vault-1';
 
-  const activeRule = (overrides: Partial<MicroSavingsRule> = {}): MicroSavingsRule =>
-    ({
-      id: 'rule-1',
-      userId,
-      targetVaultId: vaultId,
-      isActive: true,
-      triggerType: MicroSavingsTriggerType.PER_TRANSACTION,
-      saveAmount: '1.00000000',
-      perTransactionConfig: { minTransactionAmount: 5, savePercent: 10 },
-      balanceThresholdConfig: null,
-      maxDailyContribution: '50.00000000',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      ...overrides,
-    }) as MicroSavingsRule;
+  const activeRule = (
+    overrides: Partial<MicroSavingsRule> = {},
+  ): MicroSavingsRule => ({
+    id: 'rule-1',
+    userId,
+    targetVaultId: vaultId,
+    isActive: true,
+    triggerType: MicroSavingsTriggerType.PER_TRANSACTION,
+    saveAmount: '1.00000000',
+    perTransactionConfig: { minTransactionAmount: 5, savePercent: 10 },
+    balanceThresholdConfig: null,
+    maxDailyContribution: '50.00000000',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  });
 
   beforeEach(async () => {
     ruleRepo = {
@@ -65,7 +69,10 @@ describe('MicroSavingsService', () => {
       providers: [
         MicroSavingsService,
         { provide: getRepositoryToken(MicroSavingsRule), useValue: ruleRepo },
-        { provide: getRepositoryToken(MicroSavingsContribution), useValue: contributionRepo },
+        {
+          provide: getRepositoryToken(MicroSavingsContribution),
+          useValue: contributionRepo,
+        },
         { provide: VaultsService, useValue: vaultsService },
         { provide: UsersService, useValue: usersService },
       ],
@@ -132,7 +139,9 @@ describe('MicroSavingsService', () => {
 
     it('skips when transaction is below minTransactionAmount', async () => {
       ruleRepo.find.mockResolvedValue([
-        activeRule({ perTransactionConfig: { minTransactionAmount: 100, savePercent: 10 } }),
+        activeRule({
+          perTransactionConfig: { minTransactionAmount: 100, savePercent: 10 },
+        }),
       ]);
 
       await service.evaluatePerTransaction(userId, 'tx-1', 20, 'USD');
@@ -198,13 +207,22 @@ describe('MicroSavingsService', () => {
       };
       contributionRepo.findAndCount.mockResolvedValue([[priorContribution], 1]);
 
-      const updated = await service.updateRule(userId, rule.id, { isActive: false });
+      const updated = await service.updateRule(userId, rule.id, {
+        isActive: false,
+      });
       expect(updated.isActive).toBe(false);
-      expect(ruleRepo.save).toHaveBeenCalledWith(expect.objectContaining({ isActive: false }));
+      expect(ruleRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ isActive: false }),
+      );
 
       // After deactivation, evaluate only queries isActive: true → empty
       ruleRepo.find.mockResolvedValue([]);
-      await service.evaluatePerTransaction(userId, 'tx-after-deactivate', 80, 'USD');
+      await service.evaluatePerTransaction(
+        userId,
+        'tx-after-deactivate',
+        80,
+        'USD',
+      );
       expect(vaultsService.deposit).not.toHaveBeenCalled();
 
       // History still returns previously recorded contributions
@@ -218,9 +236,9 @@ describe('MicroSavingsService', () => {
 
     it('throws NotFoundException for unknown rule', async () => {
       ruleRepo.findOne.mockResolvedValue(null);
-      await expect(service.updateRule(userId, 'missing', { isActive: false })).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.updateRule(userId, 'missing', { isActive: false }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -233,7 +251,9 @@ describe('MicroSavingsService', () => {
 
     it('throws when rule is missing', async () => {
       ruleRepo.findOne.mockResolvedValue(null);
-      await expect(service.deleteRule(userId, 'x')).rejects.toThrow(NotFoundException);
+      await expect(service.deleteRule(userId, 'x')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 

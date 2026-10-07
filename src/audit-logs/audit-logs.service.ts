@@ -32,13 +32,15 @@ export class AuditLogsService {
     private readonly exportJobRepository: AuditLogExportJobRepository,
     private readonly scheduleRepository: AuditLogScheduleRepository,
     private readonly configService: ConfigService,
-  ) { }
+  ) {}
 
   async createLog(createAuditLogDto: CreateAuditLogDto): Promise<void> {
     try {
       const actorId = createAuditLogDto.actorId || createAuditLogDto.userId;
-      const resourceType = createAuditLogDto.resourceType || createAuditLogDto.entity;
-      const resourceId = createAuditLogDto.resourceId || createAuditLogDto.entityId;
+      const resourceType =
+        createAuditLogDto.resourceType || createAuditLogDto.entity;
+      const resourceId =
+        createAuditLogDto.resourceId || createAuditLogDto.entityId;
 
       await this.auditLogsRepository.createAuditLog({
         ...createAuditLogDto,
@@ -46,7 +48,7 @@ export class AuditLogsService {
         resourceType,
         resourceId,
         status: createAuditLogDto.status || 'SUCCESS',
-      } as any);
+      });
     } catch (error: any) {
       this.logger.error(
         `Failed to create audit log: ${error.message}`,

@@ -56,7 +56,10 @@ describe('GdprController', () => {
   });
 
   it('getExportStatus delegates', async () => {
-    service.getExportStatus.mockResolvedValue({ status: 'completed', jobId: 'j1' });
+    service.getExportStatus.mockResolvedValue({
+      status: 'completed',
+      jobId: 'j1',
+    });
     const req = { user: { userId: 'u1' } } as any;
     await expect(controller.getExportStatus(req)).resolves.toEqual({
       status: 'completed',
@@ -84,6 +87,10 @@ describe('GdprController', () => {
       get: jest.fn().mockReturnValue('TestAgent'),
     } as any;
     await controller.updateConsent(req, { consentGdpr: true });
-    expect(service.updateConsent).toHaveBeenCalledWith('u1', '9.9.9.9', 'TestAgent');
+    expect(service.updateConsent).toHaveBeenCalledWith(
+      'u1',
+      '9.9.9.9',
+      'TestAgent',
+    );
   });
 });

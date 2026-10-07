@@ -214,9 +214,7 @@ export class UsersController {
   @Version('2')
   @Get('me')
   @ApiOperation({ summary: 'Get current user profile (v2)' })
-  async getProfileV2(
-    @Request() req: { user: { userId: string } },
-  ) {
+  async getProfileV2(@Request() req: { user: { userId: string } }) {
     const profile = await this.usersService.getProfile(req.user.userId);
     return {
       ...profile,
@@ -232,7 +230,10 @@ export class UsersController {
     @Request() req: { user: { userId: string } },
     @Body() updateProfileDto: UpdateProfileDto,
   ) {
-    const profile = await this.usersService.updateProfile(req.user.userId, updateProfileDto);
+    const profile = await this.usersService.updateProfile(
+      req.user.userId,
+      updateProfileDto,
+    );
     return {
       ...profile,
       isRtl: profile.preferredLanguage === 'ar',
@@ -282,7 +283,10 @@ export class UsersController {
     @Request() req: { user: { userId: string } },
     @Body() dto: UpdateNotificationPreferencesDto,
   ) {
-    return this.usersService.updateNotificationPreferences(req.user.userId, dto);
+    return this.usersService.updateNotificationPreferences(
+      req.user.userId,
+      dto,
+    );
   }
 
   @Patch('me/fcm-token')
@@ -412,4 +416,3 @@ export class UsersV2Controller {
     return profile;
   }
 }
-

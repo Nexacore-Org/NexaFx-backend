@@ -43,10 +43,7 @@ type JwtExpiryValue = `${number}${'s' | 'm' | 'h' | 'd'}`;
     }),
   ],
   controllers: [ExchangeRatesController],
-  providers: [
-    ExchangeRatesService,
-    ExchangeRatesProviderClient,
-  ],
+  providers: [ExchangeRatesService, ExchangeRatesProviderClient],
   exports: [ExchangeRatesService],
 })
 export class ExchangeRatesModule {}

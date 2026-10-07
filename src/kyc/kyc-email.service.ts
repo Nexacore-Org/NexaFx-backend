@@ -29,14 +29,36 @@ export class KycEmailService {
       const user = await this.userRepository.findOne({ where: { email: to } });
       const lang = user?.preferredLanguage || 'en';
 
-      const subject = this.i18nService.translate('emails.APPROVAL_SUBJECT', { lang });
-      const text = this.i18nService.translate('emails.APPROVAL_TEXT', { lang, args: { userName } });
-      const htmlTitle = this.i18nService.translate('emails.APPROVAL_HTML_TITLE', { lang });
-      const htmlBody = this.i18nService.translate('emails.APPROVAL_HTML_BODY', { lang, args: { userName } });
-      const htmlBadge = this.i18nService.translate('emails.APPROVAL_HTML_BADGE', { lang });
-      const htmlFooter = this.i18nService.translate('emails.FOOTER', { lang, args: { year: new Date().getFullYear() } });
+      const subject = this.i18nService.translate('emails.APPROVAL_SUBJECT', {
+        lang,
+      });
+      const text = this.i18nService.translate('emails.APPROVAL_TEXT', {
+        lang,
+        args: { userName },
+      });
+      const htmlTitle = this.i18nService.translate(
+        'emails.APPROVAL_HTML_TITLE',
+        { lang },
+      );
+      const htmlBody = this.i18nService.translate('emails.APPROVAL_HTML_BODY', {
+        lang,
+        args: { userName },
+      });
+      const htmlBadge = this.i18nService.translate(
+        'emails.APPROVAL_HTML_BADGE',
+        { lang },
+      );
+      const htmlFooter = this.i18nService.translate('emails.FOOTER', {
+        lang,
+        args: { year: new Date().getFullYear() },
+      });
 
-      const html = this.buildTranslatedApprovalHtml(htmlTitle, htmlBody, htmlBadge, htmlFooter);
+      const html = this.buildTranslatedApprovalHtml(
+        htmlTitle,
+        htmlBody,
+        htmlBadge,
+        htmlFooter,
+      );
 
       await this.sendEmail(to, subject, html, text);
       this.logger.log(`KYC approval email sent to ${to}`);
@@ -69,8 +91,14 @@ export class KycEmailService {
         : this.i18nService.translate('emails.REJECT_SUBJECT', { lang });
 
       const text = canResubmit
-        ? this.i18nService.translate('emails.RESUBMIT_TEXT', { lang, args: { userName, reason } })
-        : this.i18nService.translate('emails.REJECT_TEXT', { lang, args: { userName, reason } });
+        ? this.i18nService.translate('emails.RESUBMIT_TEXT', {
+            lang,
+            args: { userName, reason },
+          })
+        : this.i18nService.translate('emails.REJECT_TEXT', {
+            lang,
+            args: { userName, reason },
+          });
 
       const statusBadge = canResubmit
         ? this.i18nService.translate('emails.RESUBMIT_BADGE', { lang })
@@ -80,9 +108,16 @@ export class KycEmailService {
         ? this.i18nService.translate('emails.RESUBMIT_ACTION', { lang })
         : this.i18nService.translate('emails.REJECT_ACTION', { lang });
 
-      const introText = this.i18nService.translate('emails.REJECT_INTRO', { lang });
-      const reasonLabel = this.i18nService.translate('emails.REJECT_REASON', { lang });
-      const htmlFooter = this.i18nService.translate('emails.FOOTER', { lang, args: { year: new Date().getFullYear() } });
+      const introText = this.i18nService.translate('emails.REJECT_INTRO', {
+        lang,
+      });
+      const reasonLabel = this.i18nService.translate('emails.REJECT_REASON', {
+        lang,
+      });
+      const htmlFooter = this.i18nService.translate('emails.FOOTER', {
+        lang,
+        args: { year: new Date().getFullYear() },
+      });
 
       const html = this.buildTranslatedRejectionHtml(
         statusBadge,

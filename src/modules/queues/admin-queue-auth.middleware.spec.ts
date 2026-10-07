@@ -29,7 +29,8 @@ describe('AdminQueueAuthMiddleware', () => {
   });
 
   it('should accept request and call next() when valid credentials provided in Basic Auth header', () => {
-    const validHeader = 'Basic ' + Buffer.from('admin:supersecret123').toString('base64');
+    const validHeader =
+      'Basic ' + Buffer.from('admin:supersecret123').toString('base64');
     mockReq = {
       headers: {
         authorization: validHeader,
@@ -92,8 +93,11 @@ describe('AdminQueueAuthMiddleware', () => {
       get: jest.fn(() => null),
     } as unknown as ConfigService;
 
-    const unconfiguredMiddleware = new AdminQueueAuthMiddleware(emptyConfigService);
-    const validHeader = 'Basic ' + Buffer.from('admin:supersecret123').toString('base64');
+    const unconfiguredMiddleware = new AdminQueueAuthMiddleware(
+      emptyConfigService,
+    );
+    const validHeader =
+      'Basic ' + Buffer.from('admin:supersecret123').toString('base64');
     mockReq = {
       headers: {
         authorization: validHeader,
@@ -101,7 +105,11 @@ describe('AdminQueueAuthMiddleware', () => {
     };
 
     expect(() => {
-      unconfiguredMiddleware.use(mockReq as Request, mockRes as Response, nextFn);
+      unconfiguredMiddleware.use(
+        mockReq as Request,
+        mockRes as Response,
+        nextFn,
+      );
     }).toThrow(UnauthorizedException);
 
     expect(nextFn).not.toHaveBeenCalled();

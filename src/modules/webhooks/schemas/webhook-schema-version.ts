@@ -119,7 +119,9 @@ export function buildSchemaHeaders(
 
   if (info.sunsetOn) {
     // RFC 8594 requires an HTTP-date, not an ISO-8601 date.
-    headers['Sunset'] = new Date(`${info.sunsetOn}T00:00:00.000Z`).toUTCString();
+    headers['Sunset'] = new Date(
+      `${info.sunsetOn}T00:00:00.000Z`,
+    ).toUTCString();
   }
 
   return headers;

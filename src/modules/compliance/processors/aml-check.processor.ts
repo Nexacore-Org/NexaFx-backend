@@ -23,7 +23,9 @@ export class AmlCheckProcessor extends WorkerHost {
 
   async process(job: Job<{ transactionId: string }>): Promise<void> {
     const { transactionId } = job.data;
-    const tx = await this.transactionRepo.findOne({ where: { id: transactionId } });
+    const tx = await this.transactionRepo.findOne({
+      where: { id: transactionId },
+    });
     if (!tx) {
       this.logger.warn(`Transaction ${transactionId} not found`);
       return;
@@ -31,7 +33,9 @@ export class AmlCheckProcessor extends WorkerHost {
     const violatedRule = await this.amlService.evaluate(tx);
     if (violatedRule) {
       await this.flagService.createFlag(tx, violatedRule);
-      this.logger.log(`Created flag for transaction ${transactionId} (rule: ${violatedRule})`);
+      this.logger.log(
+        `Created flag for transaction ${transactionId} (rule: ${violatedRule})`,
+      );
     } else {
       this.logger.log(`Transaction ${transactionId} passed AML checks`);
     }

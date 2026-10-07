@@ -1,7 +1,11 @@
 import { INestApplication, HttpStatus } from '@nestjs/common';
 import * as request from 'supertest';
 import { createTestApp } from '../helpers/app.helper';
-import { setupTestDatabase, teardownTestDatabase, cleanDatabase } from '../helpers/db.helper';
+import {
+  setupTestDatabase,
+  teardownTestDatabase,
+  cleanDatabase,
+} from '../helpers/db.helper';
 import { DataSource } from 'typeorm';
 import { User, UserRole } from '../../src/modules/users/entities/user.entity';
 import { AuditLog } from '../../src/modules/audit/entities/audit-log.entity';

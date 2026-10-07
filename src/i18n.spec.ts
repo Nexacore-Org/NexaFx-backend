@@ -62,7 +62,7 @@ describe('I18n Integration', () => {
     it.each(Object.entries(EXPECTED_TRANSLATIONS))(
       'should translate "%s" correctly',
       async (lang, expected) => {
-        const text = await i18nService.translate(LOGIN_OTP_SENT_KEY, { lang });
+        const text = i18nService.translate(LOGIN_OTP_SENT_KEY, { lang });
         expect(text).toBe(expected);
       },
     );
@@ -70,19 +70,23 @@ describe('I18n Integration', () => {
 
   describe('fallback behaviour', () => {
     it('should silently fall back to the default language for a missing key', async () => {
-      const text = await i18nService.translate('errors.NON_EXISTENT_KEY', { lang: 'fr' });
+      const text = i18nService.translate('errors.NON_EXISTENT_KEY', {
+        lang: 'fr',
+      });
       expect(text).toBeDefined();
       expect(typeof text).toBe('string');
       expect(text.length).toBeGreaterThan(0);
     });
 
     it('should fall back to the default language for an unsupported locale', async () => {
-      const text = await i18nService.translate(LOGIN_OTP_SENT_KEY, { lang: 'zz' });
+      const text = i18nService.translate(LOGIN_OTP_SENT_KEY, {
+        lang: 'zz',
+      });
       expect(text).toBe(EXPECTED_TRANSLATIONS[FALLBACK_LANGUAGE]);
     });
 
     it('should not throw when translating with no lang option provided', async () => {
-      await expect(i18nService.translate(LOGIN_OTP_SENT_KEY)).resolves.toBeDefined();
+      expect(i18nService.translate(LOGIN_OTP_SENT_KEY)).toBeDefined();
     });
   });
 
@@ -92,7 +96,7 @@ describe('I18n Integration', () => {
   //   auth.WELCOME_USER: "Welcome, {name}!"
   describe.skip('interpolation', () => {
     it('should interpolate args into the translated string', async () => {
-      const text = await i18nService.translate('auth.WELCOME_USER', {
+      const text = i18nService.translate('auth.WELCOME_USER', {
         lang: 'en',
         args: { name: 'Jane' },
       });

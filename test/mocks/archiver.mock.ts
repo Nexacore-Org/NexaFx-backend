@@ -1,1 +1,3 @@
-export default function archiver() { return { append: () => {}, finalize: () => {}, pipe: () => {} }; }
+export default function archiver() {
+  return { append: () => {}, finalize: () => {}, pipe: () => {} };
+}

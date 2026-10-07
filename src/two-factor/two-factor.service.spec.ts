@@ -90,7 +90,9 @@ describe('TwoFactorService', () => {
         base32: 'PLAINSECRET',
         otpauth_url: 'otpauth://totp/NexaFX:alice',
       });
-      (qrcode.toDataURL as jest.Mock).mockResolvedValue('data:image/png;base64,xx');
+      (qrcode.toDataURL as jest.Mock).mockResolvedValue(
+        'data:image/png;base64,xx',
+      );
     });
 
     it('generates, encrypts and stores a secret without enabling 2FA', async () => {
@@ -108,7 +110,9 @@ describe('TwoFactorService', () => {
         twoFactorSecret: 'enc-secret',
         isTwoFactorEnabled: false,
       });
-      expect(qrcode.toDataURL).toHaveBeenCalledWith('otpauth://totp/NexaFX:alice');
+      expect(qrcode.toDataURL).toHaveBeenCalledWith(
+        'otpauth://totp/NexaFX:alice',
+      );
       expect(result).toEqual({
         otpauthUrl: 'otpauth://totp/NexaFX:alice',
         qrCodeDataUrl: 'data:image/png;base64,xx',
@@ -144,7 +148,10 @@ describe('TwoFactorService', () => {
       usersService.findById.mockResolvedValue(setupUser);
       totpVerify.mockReturnValue(true);
 
-      const { backupCodes } = await service.confirmTwoFactor('user-1', '123456');
+      const { backupCodes } = await service.confirmTwoFactor(
+        'user-1',
+        '123456',
+      );
 
       expect(encryptionService.decrypt).toHaveBeenCalledWith('enc-secret');
       expect(totpVerify).toHaveBeenCalledWith({
@@ -164,7 +171,9 @@ describe('TwoFactorService', () => {
         expect(c).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{10}$/),
       );
 
-      backupCodes.forEach((c) => expect(bcryptHash).toHaveBeenCalledWith(c, 12));
+      backupCodes.forEach((c) =>
+        expect(bcryptHash).toHaveBeenCalledWith(c, 12),
+      );
       const saved = repo.save.mock.calls[0][0];
       expect(saved).toHaveLength(8);
       saved.forEach((e: any, i: number) =>
@@ -180,7 +189,10 @@ describe('TwoFactorService', () => {
       usersService.findById.mockResolvedValue(setupUser);
       totpVerify.mockReturnValue(true);
 
-      const { backupCodes } = await service.confirmTwoFactor('user-1', '123456');
+      const { backupCodes } = await service.confirmTwoFactor(
+        'user-1',
+        '123456',
+      );
 
       const saved = JSON.stringify(repo.save.mock.calls[0][0]);
       backupCodes.forEach((c) =>
@@ -265,14 +277,18 @@ describe('TwoFactorService', () => {
       usersService.findById.mockResolvedValue(enabledUser);
       totpVerify.mockReturnValue(true);
 
-      await expect(service.verifyTotpCode('user-1', '123456')).resolves.toBe(true);
+      await expect(service.verifyTotpCode('user-1', '123456')).resolves.toBe(
+        true,
+      );
     });
 
     it('returns false for an invalid code', async () => {
       usersService.findById.mockResolvedValue(enabledUser);
       totpVerify.mockReturnValue(false);
 
-      await expect(service.verifyTotpCode('user-1', '000000')).resolves.toBe(false);
+      await expect(service.verifyTotpCode('user-1', '000000')).resolves.toBe(
+        false,
+      );
     });
 
     it('tolerates exactly one step of clock drift (window: 1)', async () => {

@@ -34,8 +34,12 @@ export class PortfolioController {
    */
   @Post('value')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Compute current portfolio value and save snapshot' })
-  @ApiOkResponse({ description: 'Live portfolio valuation with per-asset breakdown' })
+  @ApiOperation({
+    summary: 'Compute current portfolio value and save snapshot',
+  })
+  @ApiOkResponse({
+    description: 'Live portfolio valuation with per-asset breakdown',
+  })
   async computeValue(@Request() req) {
     return this.portfolioService.computeAndSnapshot(req.user.id.toString());
   }
@@ -55,8 +59,14 @@ export class PortfolioController {
    * snapshots; capped at 90 per request.
    */
   @Get('history')
-  @ApiOperation({ summary: 'Fetch portfolio snapshot history (up to 90 entries)' })
-  @ApiQuery({ name: 'limit', required: false, description: 'Number of snapshots (default 30, max 90)' })
+  @ApiOperation({
+    summary: 'Fetch portfolio snapshot history (up to 90 entries)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Number of snapshots (default 30, max 90)',
+  })
   async history(
     @Request() req,
     @Query('limit', new DefaultValuePipe(30), ParseIntPipe) limit: number,

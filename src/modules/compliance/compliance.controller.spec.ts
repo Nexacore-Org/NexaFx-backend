@@ -50,7 +50,7 @@ describe('ComplianceController', () => {
   describe('listFlags', () => {
     it('should call flagService.findFlags', async () => {
       const query = {};
-      await controller.listFlags(query as any);
+      await controller.listFlags(query);
       expect(mockFlagService.findFlags).toHaveBeenCalledWith(query);
     });
   });
@@ -99,7 +99,7 @@ describe('ComplianceController', () => {
   describe('updateConfig', () => {
     it('should call configService.updateConfig', async () => {
       const dto = {};
-      await controller.updateConfig(dto as any);
+      await controller.updateConfig(dto);
       expect(mockConfigService.updateConfig).toHaveBeenCalledWith(dto);
     });
   });

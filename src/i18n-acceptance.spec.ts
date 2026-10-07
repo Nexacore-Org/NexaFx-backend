@@ -1,5 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe, VersioningType, ExecutionContext } from '@nestjs/common';
+import {
+  INestApplication,
+  ValidationPipe,
+  VersioningType,
+  ExecutionContext,
+} from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import * as request from 'supertest';
 import { I18nModule, AcceptLanguageResolver, I18nService } from 'nestjs-i18n';
@@ -236,7 +241,8 @@ describe('I18n Acceptance Criteria', () => {
       failedLoginAttempts: 0,
       isDeleted: false,
       lockedUntil: null,
-      walletPublicKey: 'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOUJ3UHMNGUAO7UP',
+      walletPublicKey:
+        'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOUJ3UHMNGUAO7UP',
       walletSecretKeyEncrypted: 'encrypted',
       password: null,
       passwordHash: undefined,
@@ -431,7 +437,7 @@ describe('I18n Acceptance Criteria', () => {
       const mockUserRepository = {
         findOne: jest.fn().mockResolvedValue({
           preferredLanguage: 'fr',
-        } as User),
+        }),
       } as unknown as Repository<User>;
 
       const configService = { get: jest.fn().mockReturnValue('false') } as any;
@@ -445,7 +451,10 @@ describe('I18n Acceptance Criteria', () => {
         .spyOn(kycEmailService as any, 'sendEmail')
         .mockResolvedValue(undefined);
 
-      await kycEmailService.sendApprovalEmail('fr-user@example.com', 'Jean Dupont');
+      await kycEmailService.sendApprovalEmail(
+        'fr-user@example.com',
+        'Jean Dupont',
+      );
 
       expect(mockUserRepository.findOne).toHaveBeenCalledWith({
         where: { email: 'fr-user@example.com' },
@@ -466,7 +475,7 @@ describe('I18n Acceptance Criteria', () => {
       const mockUserRepository = {
         findOne: jest.fn().mockResolvedValue({
           preferredLanguage: 'en',
-        } as User),
+        }),
       } as unknown as Repository<User>;
 
       const configService = { get: jest.fn().mockReturnValue('false') } as any;
@@ -480,7 +489,10 @@ describe('I18n Acceptance Criteria', () => {
         .spyOn(kycEmailService as any, 'sendEmail')
         .mockResolvedValue(undefined);
 
-      await kycEmailService.sendApprovalEmail('en-user@example.com', 'John Doe');
+      await kycEmailService.sendApprovalEmail(
+        'en-user@example.com',
+        'John Doe',
+      );
 
       expect(mockUserRepository.findOne).toHaveBeenCalledWith({
         where: { email: 'en-user@example.com' },
@@ -501,7 +513,7 @@ describe('I18n Acceptance Criteria', () => {
       const mockUserRepository = {
         findOne: jest.fn().mockResolvedValue({
           preferredLanguage: 'ar',
-        } as User),
+        }),
       } as unknown as Repository<User>;
 
       const configService = { get: jest.fn().mockReturnValue('false') } as any;
@@ -526,7 +538,9 @@ describe('I18n Acceptance Criteria', () => {
       expect(to).toBe('ar-user@example.com');
       expect(subject).toBe('تمت الموافقة على طلب التحقق الخاص بك (KYC)');
       expect(text).toContain('أحمد');
-      expect(text).toContain('لقد تمت الموافقة على طلب التحقق من الهوية الخاص بك');
+      expect(text).toContain(
+        'لقد تمت الموافقة على طلب التحقق من الهوية الخاص بك',
+      );
       expect(html).toContain('تمت الموافقة على التحقق من الهوية ✅');
       expect(html).toContain('أحمد');
       expect(html).toContain('حسابك الآن موثق بالكامل');
@@ -536,7 +550,7 @@ describe('I18n Acceptance Criteria', () => {
       const mockUserRepository = {
         findOne: jest.fn().mockResolvedValue({
           preferredLanguage: 'fr',
-        } as User),
+        }),
       } as unknown as Repository<User>;
 
       const configService = { get: jest.fn().mockReturnValue('false') } as any;
@@ -602,11 +616,13 @@ describe('I18n Acceptance Criteria', () => {
       };
 
       mockManager = {
-        findOne: jest.fn().mockImplementation(async (entity: any, options: any) => {
-          if (entity === KycRecord) return mockKycRecord;
-          if (entity === User) return mockUser;
-          return null;
-        }),
+        findOne: jest
+          .fn()
+          .mockImplementation(async (entity: any, options: any) => {
+            if (entity === KycRecord) return mockKycRecord;
+            if (entity === User) return mockUser;
+            return null;
+          }),
         save: jest.fn().mockResolvedValue(undefined),
       };
 
@@ -630,7 +646,10 @@ describe('I18n Acceptance Criteria', () => {
 
       sendToTokensSpy = jest.spyOn(mockFirebaseService, 'sendToTokens');
       dispatchSpy = jest.spyOn(mockWebhookService, 'dispatch');
-      sendRejectionEmailSpy = jest.spyOn(mockKycEmailService, 'sendRejectionEmail');
+      sendRejectionEmailSpy = jest.spyOn(
+        mockKycEmailService,
+        'sendRejectionEmail',
+      );
 
       const moduleRef = await Test.createTestingModule({
         providers: [
@@ -650,7 +669,12 @@ describe('I18n Acceptance Criteria', () => {
     });
 
     it('successfully rejects KYC, updates state, and dispatches notifications/emails/webhooks', async () => {
-      const result = await kycService.rejectKyc('kyc-789', 'admin-1', 'ID document is invalid', false);
+      const result = await kycService.rejectKyc(
+        'kyc-789',
+        'admin-1',
+        'ID document is invalid',
+        false,
+      );
 
       expect(result.message).toBe('KYC rejected successfully');
 
@@ -664,7 +688,10 @@ describe('I18n Acceptance Criteria', () => {
 
       expect(mockManager.save).toHaveBeenCalledWith(mockKycRecord);
       expect(mockManager.save).toHaveBeenCalledWith(mockUser);
-      expect(mockManager.save).toHaveBeenCalledWith(Notification, expect.any(Object));
+      expect(mockManager.save).toHaveBeenCalledWith(
+        Notification,
+        expect.any(Object),
+      );
 
       expect(sendRejectionEmailSpy).toHaveBeenCalledWith(
         'test@example.com',
@@ -681,11 +708,20 @@ describe('I18n Acceptance Criteria', () => {
         expect.any(Object),
       );
 
-      expect(dispatchSpy).toHaveBeenCalledWith('kyc.rejected', mockKycRecord, 'user-456');
+      expect(dispatchSpy).toHaveBeenCalledWith(
+        'kyc.rejected',
+        mockKycRecord,
+        'user-456',
+      );
     });
 
     it('successfully requests resubmission for KYC, updates status to RESUBMISSION_REQUIRED', async () => {
-      const result = await kycService.rejectKyc('kyc-789', 'admin-1', 'ID document blurry', true);
+      const result = await kycService.rejectKyc(
+        'kyc-789',
+        'admin-1',
+        'ID document blurry',
+        true,
+      );
 
       expect(result.message).toBe('KYC resubmission requested successfully');
       expect(mockKycRecord.status).toBe(KycStatus.RESUBMISSION_REQUIRED);
@@ -704,7 +740,11 @@ describe('I18n Acceptance Criteria', () => {
         { entity: 'KYC', kycStatus: 'resubmission_required' },
         expect.any(Object),
       );
-      expect(dispatchSpy).toHaveBeenCalledWith('kyc.resubmission_required', mockKycRecord, 'user-456');
+      expect(dispatchSpy).toHaveBeenCalledWith(
+        'kyc.resubmission_required',
+        mockKycRecord,
+        'user-456',
+      );
     });
   });
 });

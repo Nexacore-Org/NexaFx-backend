@@ -13,7 +13,10 @@ export class RedisHealthIndicator {
   private readonly timeoutMs: number;
 
   constructor() {
-    this.timeoutMs = parseInt(process.env.HEALTH_REDIS_TIMEOUT_MS ?? '3000', 10);
+    this.timeoutMs = parseInt(
+      process.env.HEALTH_REDIS_TIMEOUT_MS ?? '3000',
+      10,
+    );
   }
 
   /**
@@ -48,7 +51,10 @@ export class RedisHealthIndicator {
         client.connect(),
         new Promise<never>((_, reject) =>
           setTimeout(
-            () => reject(new Error(`Redis PING timed out after ${this.timeoutMs}ms`)),
+            () =>
+              reject(
+                new Error(`Redis PING timed out after ${this.timeoutMs}ms`),
+              ),
             this.timeoutMs,
           ),
         ),
@@ -58,7 +64,10 @@ export class RedisHealthIndicator {
         client.ping(),
         new Promise<never>((_, reject) =>
           setTimeout(
-            () => reject(new Error(`Redis PING timed out after ${this.timeoutMs}ms`)),
+            () =>
+              reject(
+                new Error(`Redis PING timed out after ${this.timeoutMs}ms`),
+              ),
             this.timeoutMs,
           ),
         ),

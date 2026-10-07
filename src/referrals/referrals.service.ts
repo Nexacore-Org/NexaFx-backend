@@ -180,14 +180,16 @@ export class ReferralsService {
 
     const saved = await this.referralsRepository.save(referral);
 
-    await this.activityFeedService.append(
-      referral.referrerId,
-      ActivityFeedType.REFERRAL_REWARD,
-      saved.id,
-      'Referral',
-    ).catch((err) =>
-      this.logger.error(`Failed to append referral activity: ${err.message}`),
-    );
+    await this.activityFeedService
+      .append(
+        referral.referrerId,
+        ActivityFeedType.REFERRAL_REWARD,
+        saved.id,
+        'Referral',
+      )
+      .catch((err) =>
+        this.logger.error(`Failed to append referral activity: ${err.message}`),
+      );
 
     await this.notificationsService.dispatch(
       referral.referrerId,

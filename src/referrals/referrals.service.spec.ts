@@ -78,7 +78,9 @@ describe('ReferralsService', () => {
 
   describe('createPendingReferral', () => {
     it('should reject a self-referral', async () => {
-      await expect(service.createPendingReferral('user1', 'user1')).rejects.toThrow(
+      await expect(
+        service.createPendingReferral('user1', 'user1'),
+      ).rejects.toThrow(
         new BadRequestException('Users cannot refer themselves'),
       );
     });
@@ -98,7 +100,9 @@ describe('ReferralsService', () => {
         { status: 'rewarded', rewardAmount: '10' },
         { status: 'rewarded', rewardAmount: '15' },
       ];
-      (service as any).usersRepository.findOne.mockResolvedValue({ referralCode: 'test-code' });
+      (service as any).usersRepository.findOne.mockResolvedValue({
+        referralCode: 'test-code',
+      });
       (service as any).referralsRepository.find.mockResolvedValue(referrals);
 
       const stats = await service.getReferralStats('user1');

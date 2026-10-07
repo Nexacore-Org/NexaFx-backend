@@ -122,11 +122,19 @@ export class CreateTaxTables1766000000000 implements MigrationInterface {
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     // Drop indexes
-    await queryRunner.query('DROP INDEX IF EXISTS "IDX_tax_export_jobs_user_created"');
-    await queryRunner.query('DROP INDEX IF EXISTS "IDX_tax_events_user_currency"');
+    await queryRunner.query(
+      'DROP INDEX IF EXISTS "IDX_tax_export_jobs_user_created"',
+    );
+    await queryRunner.query(
+      'DROP INDEX IF EXISTS "IDX_tax_events_user_currency"',
+    );
     await queryRunner.query('DROP INDEX IF EXISTS "IDX_tax_events_user_year"');
-    await queryRunner.query('DROP INDEX IF EXISTS "IDX_cost_basis_lots_matching"');
-    await queryRunner.query('DROP INDEX IF EXISTS "IDX_cost_basis_lots_user_currency"');
+    await queryRunner.query(
+      'DROP INDEX IF EXISTS "IDX_cost_basis_lots_matching"',
+    );
+    await queryRunner.query(
+      'DROP INDEX IF EXISTS "IDX_cost_basis_lots_user_currency"',
+    );
 
     // Drop tables
     await queryRunner.query('DROP TABLE IF EXISTS "tax_export_jobs"');
@@ -135,8 +143,14 @@ export class CreateTaxTables1766000000000 implements MigrationInterface {
     await queryRunner.query('DROP TABLE IF EXISTS "price_snapshots"');
 
     // Drop enum types
-    await queryRunner.query('DROP TYPE IF EXISTS "public"."tax_export_jobs_status_enum"');
-    await queryRunner.query('DROP TYPE IF EXISTS "public"."tax_export_jobs_jurisdiction_enum"');
-    await queryRunner.query('DROP TYPE IF EXISTS "public"."tax_events_eventtype_enum"');
+    await queryRunner.query(
+      'DROP TYPE IF EXISTS "public"."tax_export_jobs_status_enum"',
+    );
+    await queryRunner.query(
+      'DROP TYPE IF EXISTS "public"."tax_export_jobs_jurisdiction_enum"',
+    );
+    await queryRunner.query(
+      'DROP TYPE IF EXISTS "public"."tax_events_eventtype_enum"',
+    );
   }
 }

@@ -40,13 +40,17 @@ export class KycScreening {
   @Column({ type: 'date', nullable: true })
   dateOfBirth: Date | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   nationality: string | null;
 
   @Column({ type: 'int', default: 0 })
   score: number;
 
-  @Column({ type: 'enum', enum: ScreeningStatus, default: ScreeningStatus.CLEAR })
+  @Column({
+    type: 'enum',
+    enum: ScreeningStatus,
+    default: ScreeningStatus.CLEAR,
+  })
   status: ScreeningStatus;
 
   @Column({ type: 'enum', enum: ScreeningProvider })
@@ -58,7 +62,7 @@ export class KycScreening {
   @Column({ type: 'uuid', nullable: true })
   overriddenBy: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   overrideReason: string | null;
 
   @Column({ type: 'timestamp', nullable: true })

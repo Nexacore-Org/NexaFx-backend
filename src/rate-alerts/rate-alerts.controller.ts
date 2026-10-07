@@ -57,7 +57,9 @@ export class RateAlertsController {
 
   @Patch(':id/reset')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Reset (re-activate) one of my triggered rate alerts' })
+  @ApiOperation({
+    summary: 'Reset (re-activate) one of my triggered rate alerts',
+  })
   @ApiResponse({
     status: 200,
     description: 'Rate alert reset successfully',

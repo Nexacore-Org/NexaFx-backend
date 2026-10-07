@@ -27,10 +27,14 @@ export class ActiveImpersonationSessionDto {
   @ApiProperty({ description: 'ID of the admin who started the session' })
   adminId: string;
 
-  @ApiProperty({ description: 'ISO-8601 timestamp when the session was started' })
+  @ApiProperty({
+    description: 'ISO-8601 timestamp when the session was started',
+  })
   startedAt: string;
 
-  @ApiProperty({ description: 'ISO-8601 timestamp when the session will expire' })
+  @ApiProperty({
+    description: 'ISO-8601 timestamp when the session will expire',
+  })
   expiresAt: string;
 
   @ApiProperty({ description: 'Redis key backing this session' })

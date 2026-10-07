@@ -13,7 +13,10 @@ import type { CurrentUserPayload } from './current-user.decorator';
  *   async myMethod(@CurrentAdmin() admin: { userId: string }) { ... }
  */
 export const CurrentAdmin = createParamDecorator(
-  (_data: unknown, ctx: ExecutionContext): { userId: string; email?: string } => {
+  (
+    _data: unknown,
+    ctx: ExecutionContext,
+  ): { userId: string; email?: string } => {
     const request = ctx
       .switchToHttp()
       .getRequest<Request & { user: CurrentUserPayload }>();

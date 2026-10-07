@@ -53,7 +53,8 @@ export class WebhookController {
 
   @Patch(':id')
   @ApiOperation({
-    summary: 'Update an endpoint, including its preferred payload schema version',
+    summary:
+      'Update an endpoint, including its preferred payload schema version',
   })
   async update(
     @Request() req,

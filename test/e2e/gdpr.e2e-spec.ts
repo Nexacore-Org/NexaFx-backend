@@ -52,9 +52,17 @@ describe('GDPR export and erasure flow (e2e)', () => {
 
   afterAll(async () => {
     if (dataSource) {
-      await dataSource.query('DELETE FROM erasure_audit_logs WHERE user_id = $1', [userId]);
-      await dataSource.query('DELETE FROM data_export_requests WHERE user_id = $1', [userId]);
-      await dataSource.query('DELETE FROM transactions WHERE user_id = $1', [userId]);
+      await dataSource.query(
+        'DELETE FROM erasure_audit_logs WHERE user_id = $1',
+        [userId],
+      );
+      await dataSource.query(
+        'DELETE FROM data_export_requests WHERE user_id = $1',
+        [userId],
+      );
+      await dataSource.query('DELETE FROM transactions WHERE user_id = $1', [
+        userId,
+      ]);
       await dataSource.query('DELETE FROM users WHERE id = $1', [userId]);
     }
     if (app) {
@@ -139,9 +147,11 @@ describe('GDPR export and erasure flow (e2e)', () => {
         [userId],
       );
       expect(logs.length).toBeGreaterThan(0);
-      expect(logs.some((log: any) => log.status === 'success' || log.status === 'completed')).toBe(
-        true,
-      );
+      expect(
+        logs.some(
+          (log: any) => log.status === 'success' || log.status === 'completed',
+        ),
+      ).toBe(true);
     });
 
     it('records an erasure-audit-log entry for a failed erasure attempt', async () => {

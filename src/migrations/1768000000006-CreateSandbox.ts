@@ -41,15 +41,27 @@ export class CreateSandbox1768000000006 implements MigrationInterface {
       )
     `);
 
-    await queryRunner.query(`CREATE INDEX "IDX_sandbox_accounts_userId" ON "sandbox_accounts" ("userId")`);
-    await queryRunner.query(`CREATE INDEX "IDX_sandbox_events_sandboxAccountId" ON "sandbox_events" ("sandboxAccountId")`);
-    await queryRunner.query(`CREATE INDEX "IDX_sandbox_request_logs_sandboxAccountId" ON "sandbox_request_logs" ("sandboxAccountId")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_sandbox_accounts_userId" ON "sandbox_accounts" ("userId")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_sandbox_events_sandboxAccountId" ON "sandbox_events" ("sandboxAccountId")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_sandbox_request_logs_sandboxAccountId" ON "sandbox_request_logs" ("sandboxAccountId")`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_sandbox_request_logs_sandboxAccountId"`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_sandbox_events_sandboxAccountId"`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_sandbox_accounts_userId"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_sandbox_request_logs_sandboxAccountId"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_sandbox_events_sandboxAccountId"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_sandbox_accounts_userId"`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS "sandbox_request_logs"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "sandbox_events"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "sandbox_accounts"`);

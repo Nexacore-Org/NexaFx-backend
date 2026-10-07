@@ -67,10 +67,10 @@ describe('Transactions E2E Tests', () => {
     );
     kycApprovedUserId = kycUserResult[0].id;
 
-    await dataSource.query(
-      `UPDATE "user" SET kyc_status = $1 WHERE id = $2`,
-      ['APPROVED', kycApprovedUserId],
-    );
+    await dataSource.query(`UPDATE "user" SET kyc_status = $1 WHERE id = $2`, [
+      'APPROVED',
+      kycApprovedUserId,
+    ]);
 
     // Setup non-KYC user
     const nonKycEmail = 'non-kyc@example.com';
@@ -331,9 +331,7 @@ describe('Transactions E2E Tests', () => {
     });
 
     it('should require authentication', async () => {
-      await request(app.getHttpServer())
-        .get('/v1/transactions')
-        .expect(401);
+      await request(app.getHttpServer()).get('/v1/transactions').expect(401);
     });
 
     it('should only show user own transactions', async () => {

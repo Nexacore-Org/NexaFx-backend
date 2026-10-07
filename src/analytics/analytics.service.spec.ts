@@ -4,8 +4,15 @@ import { DataSource } from 'typeorm';
 import { AnalyticsService } from './analytics.service';
 import { TransactionCategory } from './entities/transaction-category.entity';
 import { BalanceSnapshot } from './entities/balance-snapshot.entity';
-import { ReportExportJob, ExportJobStatus, ExportFormat } from './entities/report-export-job.entity';
-import { Transaction, TransactionType } from '../../transactions/entities/transaction.entity';
+import {
+  ReportExportJob,
+  ExportJobStatus,
+  ExportFormat,
+} from './entities/report-export-job.entity';
+import {
+  Transaction,
+  TransactionType,
+} from '../../transactions/entities/transaction.entity';
 import Decimal from 'decimal.js';
 
 describe('AnalyticsService', () => {
@@ -88,8 +95,20 @@ describe('AnalyticsService', () => {
         groupBy: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue([
-          { categoryId: 'cat-1', categoryName: 'Food', color: '#EF4444', totalAmount: '150.00000000', transactionCount: 3 },
-          { categoryId: 'cat-2', categoryName: 'Transport', color: '#3B82F6', totalAmount: '50.00000000', transactionCount: 1 },
+          {
+            categoryId: 'cat-1',
+            categoryName: 'Food',
+            color: '#EF4444',
+            totalAmount: '150.00000000',
+            transactionCount: 3,
+          },
+          {
+            categoryId: 'cat-2',
+            categoryName: 'Transport',
+            color: '#3B82F6',
+            totalAmount: '50.00000000',
+            transactionCount: 1,
+          },
         ]),
       };
 
@@ -99,8 +118,16 @@ describe('AnalyticsService', () => {
         groupBy: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue([
-          { date: '2024-01-15', totalAmount: '100.00000000', transactionCount: 2 },
-          { date: '2024-01-20', totalAmount: '100.00000000', transactionCount: 2 },
+          {
+            date: '2024-01-15',
+            totalAmount: '100.00000000',
+            transactionCount: 2,
+          },
+          {
+            date: '2024-01-20',
+            totalAmount: '100.00000000',
+            transactionCount: 2,
+          },
         ]),
       };
 
@@ -129,7 +156,13 @@ describe('AnalyticsService', () => {
         groupBy: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue([
-          { categoryId: 'cat-1', categoryName: 'Food', color: '#EF4444', totalAmount: '150.00000000', transactionCount: 3 },
+          {
+            categoryId: 'cat-1',
+            categoryName: 'Food',
+            color: '#EF4444',
+            totalAmount: '150.00000000',
+            transactionCount: 3,
+          },
         ]),
       };
 
@@ -139,7 +172,11 @@ describe('AnalyticsService', () => {
         groupBy: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue([
-          { date: '2024-01-15', totalAmount: '150.00000000', transactionCount: 3 },
+          {
+            date: '2024-01-15',
+            totalAmount: '150.00000000',
+            transactionCount: 3,
+          },
         ]),
       };
 
@@ -149,10 +186,24 @@ describe('AnalyticsService', () => {
 
       const result = await service.getSpendingSummary(userId, query);
 
-      const categoryWhereCall = categoryQueryBuilder.where.mock.calls.find((call) => call[0].includes('userId'));
-      const dailyWhereCall = dailyQueryBuilder.where.mock.calls.find((call) => call[0].includes('userId'));
-      expect(categoryWhereCall[1]).toEqual({ userId, startDate: new Date('2024-01-01'), endDate: new Date('2024-01-31'), status: 'SUCCESS' });
-      expect(dailyWhereCall[1]).toEqual({ userId, startDate: new Date('2024-01-01'), endDate: new Date('2024-01-31'), status: 'SUCCESS' });
+      const categoryWhereCall = categoryQueryBuilder.where.mock.calls.find(
+        (call) => call[0].includes('userId'),
+      );
+      const dailyWhereCall = dailyQueryBuilder.where.mock.calls.find((call) =>
+        call[0].includes('userId'),
+      );
+      expect(categoryWhereCall[1]).toEqual({
+        userId,
+        startDate: new Date('2024-01-01'),
+        endDate: new Date('2024-01-31'),
+        status: 'SUCCESS',
+      });
+      expect(dailyWhereCall[1]).toEqual({
+        userId,
+        startDate: new Date('2024-01-01'),
+        endDate: new Date('2024-01-31'),
+        status: 'SUCCESS',
+      });
       expect(result.totalAmount).toBe('150.00000000');
     });
 
@@ -184,10 +235,14 @@ describe('AnalyticsService', () => {
 
       const now = new Date();
       const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      const categoryWhereCall = categoryQueryBuilder.where.mock.calls.find((call) => call[0].includes('userId'));
+      const categoryWhereCall = categoryQueryBuilder.where.mock.calls.find(
+        (call) => call[0].includes('userId'),
+      );
       expect(categoryWhereCall[1].startDate).toBeInstanceOf(Date);
       expect(categoryWhereCall[1].endDate).toBeInstanceOf(Date);
-      expect(categoryWhereCall[1].startDate.getTime()).toBeLessThanOrEqual(thirtyDaysAgo.getTime() + 1000);
+      expect(categoryWhereCall[1].startDate.getTime()).toBeLessThanOrEqual(
+        thirtyDaysAgo.getTime() + 1000,
+      );
     });
 
     it('should handle uncategorised transactions', async () => {
@@ -200,7 +255,13 @@ describe('AnalyticsService', () => {
         groupBy: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue([
-          { categoryId: '', categoryName: 'Uncategorised', color: null, totalAmount: '200.00000000', transactionCount: 5 },
+          {
+            categoryId: '',
+            categoryName: 'Uncategorised',
+            color: null,
+            totalAmount: '200.00000000',
+            transactionCount: 5,
+          },
         ]),
       };
 
@@ -231,8 +292,19 @@ describe('AnalyticsService', () => {
       const dto = { name: 'Groceries', color: 'GREEN' as any };
 
       mockCategoryRepository.findOne.mockResolvedValue(null);
-      mockCategoryRepository.create.mockReturnValue({ id: 'cat-1', userId, name: 'Groceries', color: '#22C55E' } as any);
-      mockCategoryRepository.save.mockResolvedValue({ id: 'cat-1', userId, name: 'Groceries', color: '#22C55E', createdAt: new Date() } as any);
+      mockCategoryRepository.create.mockReturnValue({
+        id: 'cat-1',
+        userId,
+        name: 'Groceries',
+        color: '#22C55E',
+      } as any);
+      mockCategoryRepository.save.mockResolvedValue({
+        id: 'cat-1',
+        userId,
+        name: 'Groceries',
+        color: '#22C55E',
+        createdAt: new Date(),
+      } as any);
 
       const result = await service.createCategory(userId, dto);
 
@@ -250,8 +322,19 @@ describe('AnalyticsService', () => {
       const dto = { name: 'Groceries' };
 
       mockCategoryRepository.findOne.mockResolvedValue(null);
-      mockCategoryRepository.create.mockReturnValue({ id: 'cat-1', userId, name: 'Groceries', color: '#6B7280' } as any);
-      mockCategoryRepository.save.mockResolvedValue({ id: 'cat-1', userId, name: 'Groceries', color: '#6B7280', createdAt: new Date() } as any);
+      mockCategoryRepository.create.mockReturnValue({
+        id: 'cat-1',
+        userId,
+        name: 'Groceries',
+        color: '#6B7280',
+      } as any);
+      mockCategoryRepository.save.mockResolvedValue({
+        id: 'cat-1',
+        userId,
+        name: 'Groceries',
+        color: '#6B7280',
+        createdAt: new Date(),
+      } as any);
 
       const result = await service.createCategory(userId, dto);
 
@@ -267,10 +350,18 @@ describe('AnalyticsService', () => {
       const userId = 'user-1';
       const dto = { name: 'Groceries' };
 
-      mockCategoryRepository.findOne.mockResolvedValue({ id: 'cat-1', userId, name: 'Groceries' } as any);
+      mockCategoryRepository.findOne.mockResolvedValue({
+        id: 'cat-1',
+        userId,
+        name: 'Groceries',
+      } as any);
 
-      await expect(service.createCategory(userId, dto)).rejects.toThrow(ConflictException);
-      await expect(service.createCategory(userId, dto)).rejects.toThrow("Category with name 'Groceries' already exists");
+      await expect(service.createCategory(userId, dto)).rejects.toThrow(
+        ConflictException,
+      );
+      await expect(service.createCategory(userId, dto)).rejects.toThrow(
+        "Category with name 'Groceries' already exists",
+      );
       expect(mockCategoryRepository.create).not.toHaveBeenCalled();
       expect(mockCategoryRepository.save).not.toHaveBeenCalled();
     });
@@ -301,17 +392,30 @@ describe('AnalyticsService', () => {
       const userId = 'user-1';
       const dto = { transactionId: 'tx-1', categoryId: 'cat-1' };
 
-      mockTransactionRepository.findOne.mockResolvedValue({ id: 'tx-1', userId, metadata: {} } as any);
-      mockCategoryRepository.findOne.mockResolvedValue({ id: 'cat-1', userId } as any);
-      mockTransactionRepository.save.mockResolvedValue({ id: 'tx-1', userId, metadata: { categoryId: 'cat-1' } as any);
+      mockTransactionRepository.findOne.mockResolvedValue({
+        id: 'tx-1',
+        userId,
+        metadata: {},
+      } as any);
+      mockCategoryRepository.findOne.mockResolvedValue({
+        id: 'cat-1',
+        userId,
+      } as any);
+      mockTransactionRepository.save.mockResolvedValue({
+        id: 'tx-1',
+        userId,
+        metadata: { categoryId: 'cat-1' },
+      } as any);
 
       const result = await service.assignCategory(userId, dto);
 
       expect(result.metadata.categoryId).toBe('cat-1');
-      expect(mockTransactionRepository.save).toHaveBeenCalledWith(expect.objectContaining({
-        id: 'tx-1',
-        metadata: { categoryId: 'cat-1' },
-      }));
+      expect(mockTransactionRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'tx-1',
+          metadata: { categoryId: 'cat-1' },
+        }),
+      );
     });
 
     it('should reject assignment to a nonexistent transaction', async () => {
@@ -320,8 +424,12 @@ describe('AnalyticsService', () => {
 
       mockTransactionRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.assignCategory(userId, dto)).rejects.toThrow(NotFoundException);
-      await expect(service.assignCategory(userId, dto)).rejects.toThrow('Transaction nonexistent-tx not found');
+      await expect(service.assignCategory(userId, dto)).rejects.toThrow(
+        NotFoundException,
+      );
+      await expect(service.assignCategory(userId, dto)).rejects.toThrow(
+        'Transaction nonexistent-tx not found',
+      );
       expect(mockCategoryRepository.findOne).not.toHaveBeenCalled();
     });
 
@@ -329,32 +437,56 @@ describe('AnalyticsService', () => {
       const userId = 'user-1';
       const dto = { transactionId: 'tx-1', categoryId: 'cat-1' };
 
-      mockTransactionRepository.findOne.mockResolvedValue({ id: 'tx-1', userId: 'user-2' } as any);
+      mockTransactionRepository.findOne.mockResolvedValue({
+        id: 'tx-1',
+        userId: 'user-2',
+      } as any);
 
-      await expect(service.assignCategory(userId, dto)).rejects.toThrow(BadRequestException);
-      await expect(service.assignCategory(userId, dto)).rejects.toThrow('Transaction does not belong to the current user');
+      await expect(service.assignCategory(userId, dto)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.assignCategory(userId, dto)).rejects.toThrow(
+        'Transaction does not belong to the current user',
+      );
     });
 
     it('should reject assignment to a nonexistent category', async () => {
       const userId = 'user-1';
       const dto = { transactionId: 'tx-1', categoryId: 'nonexistent-cat' };
 
-      mockTransactionRepository.findOne.mockResolvedValue({ id: 'tx-1', userId } as any);
+      mockTransactionRepository.findOne.mockResolvedValue({
+        id: 'tx-1',
+        userId,
+      } as any);
       mockCategoryRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.assignCategory(userId, dto)).rejects.toThrow(NotFoundException);
-      await expect(service.assignCategory(userId, dto)).rejects.toThrow('Category nonexistent-cat not found');
+      await expect(service.assignCategory(userId, dto)).rejects.toThrow(
+        NotFoundException,
+      );
+      await expect(service.assignCategory(userId, dto)).rejects.toThrow(
+        'Category nonexistent-cat not found',
+      );
     });
 
     it('should reject assignment when category belongs to another user', async () => {
       const userId = 'user-1';
       const dto = { transactionId: 'tx-1', categoryId: 'cat-1' };
 
-      mockTransactionRepository.findOne.mockResolvedValue({ id: 'tx-1', userId } as any);
-      mockCategoryRepository.findOne.mockResolvedValue({ id: 'cat-1', userId: 'user-2' } as any);
+      mockTransactionRepository.findOne.mockResolvedValue({
+        id: 'tx-1',
+        userId,
+      } as any);
+      mockCategoryRepository.findOne.mockResolvedValue({
+        id: 'cat-1',
+        userId: 'user-2',
+      } as any);
 
-      await expect(service.assignCategory(userId, dto)).rejects.toThrow(BadRequestException);
-      await expect(service.assignCategory(userId, dto)).rejects.toThrow('Category does not belong to the current user');
+      await expect(service.assignCategory(userId, dto)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.assignCategory(userId, dto)).rejects.toThrow(
+        'Category does not belong to the current user',
+      );
     });
   });
 
@@ -362,8 +494,18 @@ describe('AnalyticsService', () => {
     it('should create an export job with default format', async () => {
       const userId = 'user-1';
 
-      mockExportJobRepository.create.mockReturnValue({ userId, format: ExportFormat.CSV, status: ExportJobStatus.PENDING } as any);
-      mockExportJobRepository.save.mockResolvedValue({ id: 'job-1', userId, format: ExportFormat.CSV, status: ExportJobStatus.PENDING, createdAt: new Date() } as any);
+      mockExportJobRepository.create.mockReturnValue({
+        userId,
+        format: ExportFormat.CSV,
+        status: ExportJobStatus.PENDING,
+      } as any);
+      mockExportJobRepository.save.mockResolvedValue({
+        id: 'job-1',
+        userId,
+        format: ExportFormat.CSV,
+        status: ExportJobStatus.PENDING,
+        createdAt: new Date(),
+      } as any);
 
       const result = await service.createExportJob(userId, ExportFormat.CSV);
 
@@ -374,8 +516,18 @@ describe('AnalyticsService', () => {
     it('should create an export job with specified format', async () => {
       const userId = 'user-1';
 
-      mockExportJobRepository.create.mockReturnValue({ userId, format: ExportFormat.PDF, status: ExportJobStatus.PENDING } as any);
-      mockExportJobRepository.save.mockResolvedValue({ id: 'job-1', userId, format: ExportFormat.PDF, status: ExportJobStatus.PENDING, createdAt: new Date() } as any);
+      mockExportJobRepository.create.mockReturnValue({
+        userId,
+        format: ExportFormat.PDF,
+        status: ExportJobStatus.PENDING,
+      } as any);
+      mockExportJobRepository.save.mockResolvedValue({
+        id: 'job-1',
+        userId,
+        format: ExportFormat.PDF,
+        status: ExportJobStatus.PENDING,
+        createdAt: new Date(),
+      } as any);
 
       const result = await service.createExportJob(userId, ExportFormat.PDF);
 
@@ -387,8 +539,20 @@ describe('AnalyticsService', () => {
     it('should return up to 90 snapshots ordered by date desc', async () => {
       const userId = 'user-1';
       const snapshots = [
-        { id: 'snap-1', userId, balance: '1000.00000000', currency: 'USD', snapshotDate: new Date('2024-01-31') },
-        { id: 'snap-2', userId, balance: '950.00000000', currency: 'USD', snapshotDate: new Date('2024-01-30') },
+        {
+          id: 'snap-1',
+          userId,
+          balance: '1000.00000000',
+          currency: 'USD',
+          snapshotDate: new Date('2024-01-31'),
+        },
+        {
+          id: 'snap-2',
+          userId,
+          balance: '950.00000000',
+          currency: 'USD',
+          snapshotDate: new Date('2024-01-30'),
+        },
       ];
 
       mockBalanceSnapshotRepository.find.mockResolvedValue(snapshots);
@@ -407,12 +571,25 @@ describe('AnalyticsService', () => {
   describe('recordBalanceSnapshot', () => {
     it('should record a balance snapshot', async () => {
       const userId = 'user-1';
-      const snapshot = { id: 'snap-1', userId, balance: '1000.00000000', currency: 'USD', snapshotDate: new Date() };
+      const snapshot = {
+        id: 'snap-1',
+        userId,
+        balance: '1000.00000000',
+        currency: 'USD',
+        snapshotDate: new Date(),
+      };
 
       mockBalanceSnapshotRepository.create.mockReturnValue(snapshot as any);
-      mockBalanceSnapshotRepository.save.mockResolvedValue({ ...snapshot, createdAt: new Date() } as any);
+      mockBalanceSnapshotRepository.save.mockResolvedValue({
+        ...snapshot,
+        createdAt: new Date(),
+      } as any);
 
-      const result = await service.recordBalanceSnapshot(userId, '1000.00000000', 'USD');
+      const result = await service.recordBalanceSnapshot(
+        userId,
+        '1000.00000000',
+        'USD',
+      );
 
       expect(mockBalanceSnapshotRepository.create).toHaveBeenCalledWith({
         userId,

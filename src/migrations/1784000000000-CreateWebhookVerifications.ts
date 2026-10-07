@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class CreateWebhookVerifications1784000000000
-  implements MigrationInterface
-{
+export class CreateWebhookVerifications1784000000000 implements MigrationInterface {
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "webhook_verifications" (

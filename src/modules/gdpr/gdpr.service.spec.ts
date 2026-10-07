@@ -32,7 +32,9 @@ describe('GdprService', () => {
 
   const mockRepo = () => ({
     create: jest.fn().mockImplementation((dto) => dto),
-    save: jest.fn().mockImplementation((e) => Promise.resolve({ id: 'id-1', ...e })),
+    save: jest
+      .fn()
+      .mockImplementation((e) => Promise.resolve({ id: 'id-1', ...e })),
     findOne: jest.fn(),
     find: jest.fn().mockResolvedValue([]),
     count: jest.fn().mockResolvedValue(0),
@@ -81,17 +83,35 @@ describe('GdprService', () => {
         { provide: getRepositoryToken(User), useValue: userRepo },
         { provide: getRepositoryToken(Transaction), useValue: txRepo },
         { provide: getRepositoryToken(KycRecord), useValue: kycRepo },
-        { provide: getRepositoryToken(Notification), useValue: notificationRepo },
+        {
+          provide: getRepositoryToken(Notification),
+          useValue: notificationRepo,
+        },
         { provide: getRepositoryToken(RateAlert), useValue: rateAlertRepo },
-        { provide: getRepositoryToken(WebhookEndpoint), useValue: webhookEndpointRepo },
-        { provide: getRepositoryToken(WebhookDelivery), useValue: webhookDeliveryRepo },
+        {
+          provide: getRepositoryToken(WebhookEndpoint),
+          useValue: webhookEndpointRepo,
+        },
+        {
+          provide: getRepositoryToken(WebhookDelivery),
+          useValue: webhookDeliveryRepo,
+        },
         { provide: getRepositoryToken(AuditLog), useValue: auditLogRepo },
-        { provide: getRepositoryToken(RefreshToken), useValue: refreshTokenRepo },
-        { provide: getRepositoryToken(ErasureAuditLog), useValue: erasureAuditRepo },
+        {
+          provide: getRepositoryToken(RefreshToken),
+          useValue: refreshTokenRepo,
+        },
+        {
+          provide: getRepositoryToken(ErasureAuditLog),
+          useValue: erasureAuditRepo,
+        },
         { provide: getRepositoryToken(Expense), useValue: expenseRepo },
         { provide: STORAGE_SERVICE_TOKEN, useValue: storageService },
         { provide: 'BullQueue_gdpr-export', useValue: exportQueue },
-        { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('1.0.0') } },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn().mockReturnValue('1.0.0') },
+        },
       ],
     }).compile();
 
@@ -115,7 +135,7 @@ describe('GdprService', () => {
         }),
       );
       expect(consentRepo.save).toHaveBeenCalled();
-      const createdAt = (consentRepo.create.mock.calls[0][0] as any).consentedAt as Date;
+      const createdAt = consentRepo.create.mock.calls[0][0].consentedAt as Date;
       expect(createdAt.getTime()).toBeGreaterThanOrEqual(before);
       expect(createdAt.getTime()).toBeLessThanOrEqual(after);
     });
@@ -214,7 +234,9 @@ describe('GdprService', () => {
       expect(exportQueue.add).toHaveBeenCalledWith(
         'export',
         { userId: 'user-1', email: 'a@b.com' },
-        expect.objectContaining({ jobId: expect.stringContaining('export-user-1') }),
+        expect.objectContaining({
+          jobId: expect.stringContaining('export-user-1'),
+        }),
       );
     });
 

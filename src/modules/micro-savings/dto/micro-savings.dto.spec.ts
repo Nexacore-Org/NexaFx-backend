@@ -1,6 +1,9 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { CreateMicroSavingsRuleDto, UpdateMicroSavingsRuleDto } from './micro-savings.dto';
+import {
+  CreateMicroSavingsRuleDto,
+  UpdateMicroSavingsRuleDto,
+} from './micro-savings.dto';
 import { MicroSavingsTriggerType } from '../entities/micro-savings-rule.entity';
 
 describe('micro-savings.dto validation', () => {
@@ -36,7 +39,9 @@ describe('micro-savings.dto validation', () => {
       maxDailyContribution: -1,
     });
     const errors = await validate(dto);
-    expect(errors.some((e) => e.property === 'maxDailyContribution')).toBe(true);
+    expect(errors.some((e) => e.property === 'maxDailyContribution')).toBe(
+      true,
+    );
   });
 
   it('rejects negative minTransactionAmount in nested config', async () => {
@@ -60,7 +65,9 @@ describe('micro-savings.dto validation', () => {
   });
 
   it('UpdateMicroSavingsRuleDto rejects negative saveAmount', async () => {
-    const dto = plainToInstance(UpdateMicroSavingsRuleDto, { saveAmount: -0.01 });
+    const dto = plainToInstance(UpdateMicroSavingsRuleDto, {
+      saveAmount: -0.01,
+    });
     const errors = await validate(dto);
     expect(errors.some((e) => e.property === 'saveAmount')).toBe(true);
   });

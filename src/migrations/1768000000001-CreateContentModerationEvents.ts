@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class CreateContentModerationEvents1768000000001
-  implements MigrationInterface
-{
+export class CreateContentModerationEvents1768000000001 implements MigrationInterface {
   name = 'CreateContentModerationEvents1768000000001';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -51,9 +49,7 @@ export class CreateContentModerationEvents1768000000001
     await queryRunner.query(
       `DROP INDEX IF EXISTS "IDX_content_moderation_events_userId"`,
     );
-    await queryRunner.query(
-      `DROP TABLE IF EXISTS "content_moderation_events"`,
-    );
+    await queryRunner.query(`DROP TABLE IF EXISTS "content_moderation_events"`);
     await queryRunner.query(
       `DROP TYPE IF EXISTS "public"."content_moderation_events_action_enum"`,
     );

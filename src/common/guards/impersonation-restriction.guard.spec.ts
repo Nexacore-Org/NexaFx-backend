@@ -1,7 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { Reflector } from '@nestjs/core';
 import { ExecutionContext, ForbiddenException } from '@nestjs/common';
-import { ImpersonationRestrictionGuard, BLOCK_IMPERSONATION_KEY } from './impersonation-restriction.guard';
+import {
+  ImpersonationRestrictionGuard,
+  BLOCK_IMPERSONATION_KEY,
+} from './impersonation-restriction.guard';
 
 describe('ImpersonationRestrictionGuard', () => {
   let guard: ImpersonationRestrictionGuard;
@@ -19,7 +22,9 @@ describe('ImpersonationRestrictionGuard', () => {
       ],
     }).compile();
 
-    guard = module.get<ImpersonationRestrictionGuard>(ImpersonationRestrictionGuard);
+    guard = module.get<ImpersonationRestrictionGuard>(
+      ImpersonationRestrictionGuard,
+    );
     reflector = module.get<Reflector>(Reflector);
     jest.clearAllMocks();
   });
@@ -31,7 +36,11 @@ describe('ImpersonationRestrictionGuard', () => {
   }): ExecutionContext {
     const request = {
       user: opts.isImpersonation
-        ? { userId: 'user-123', isImpersonation: true, impersonatedBy: 'admin-123' }
+        ? {
+            userId: 'user-123',
+            isImpersonation: true,
+            impersonatedBy: 'admin-123',
+          }
         : { userId: 'admin-123', isImpersonation: false },
       method: opts.method,
       url: opts.url,
@@ -48,28 +57,47 @@ describe('ImpersonationRestrictionGuard', () => {
   }
 
   it('allows normal non-impersonated users to access any endpoint', () => {
-    const ctx = createMockContext({ isImpersonation: false, method: 'GET', url: '/admin/metrics' });
+    const ctx = createMockContext({
+      isImpersonation: false,
+      method: 'GET',
+      url: '/admin/metrics',
+    });
     expect(guard.canActivate(ctx)).toBe(true);
   });
 
   it('blocks handlers decorated with @BlockDuringImpersonation() during impersonation', () => {
     mockReflector.getAllAndOverride.mockReturnValueOnce(true); // block handler
-    const ctx = createMockContext({ isImpersonation: true, method: 'GET', url: '/profile' });
+    const ctx = createMockContext({
+      isImpersonation: true,
+      method: 'GET',
+      url: '/profile',
+    });
 
     expect(() => guard.canActivate(ctx)).toThrow(ForbiddenException);
-    expect(reflector.getAllAndOverride).toHaveBeenCalledWith(BLOCK_IMPERSONATION_KEY, expect.any(Array));
+    expect(reflector.getAllAndOverride).toHaveBeenCalledWith(
+      BLOCK_IMPERSONATION_KEY,
+      expect.any(Array),
+    );
   });
 
   it('blocks admin endpoints during impersonation', () => {
     mockReflector.getAllAndOverride.mockReturnValueOnce(false);
-    const ctx = createMockContext({ isImpersonation: true, method: 'GET', url: '/admin/metrics' });
+    const ctx = createMockContext({
+      isImpersonation: true,
+      method: 'GET',
+      url: '/admin/metrics',
+    });
 
     expect(() => guard.canActivate(ctx)).toThrow(ForbiddenException);
   });
 
   it('allows end impersonation endpoint even under /admin prefix', () => {
     mockReflector.getAllAndOverride.mockReturnValueOnce(false);
-    const ctx = createMockContext({ isImpersonation: true, method: 'POST', url: '/admin/impersonate/end' });
+    const ctx = createMockContext({
+      isImpersonation: true,
+      method: 'POST',
+      url: '/admin/impersonate/end',
+    });
 
     expect(guard.canActivate(ctx)).toBe(true);
   });
@@ -87,7 +115,11 @@ describe('ImpersonationRestrictionGuard', () => {
     ];
 
     for (const route of routes) {
-      const ctx = createMockContext({ isImpersonation: true, method: 'POST', url: route });
+      const ctx = createMockContext({
+        isImpersonation: true,
+        method: 'POST',
+        url: route,
+      });
       expect(() => guard.canActivate(ctx)).toThrow(ForbiddenException);
     }
   });
@@ -103,14 +135,22 @@ describe('ImpersonationRestrictionGuard', () => {
     ];
 
     for (const route of routes) {
-      const ctx = createMockContext({ isImpersonation: true, method: 'POST', url: route });
+      const ctx = createMockContext({
+        isImpersonation: true,
+        method: 'POST',
+        url: route,
+      });
       expect(() => guard.canActivate(ctx)).toThrow(ForbiddenException);
     }
   });
 
   it('allows GET /two-factor/status during impersonation', () => {
     mockReflector.getAllAndOverride.mockReturnValueOnce(false);
-    const ctx = createMockContext({ isImpersonation: true, method: 'GET', url: '/two-factor/status' });
+    const ctx = createMockContext({
+      isImpersonation: true,
+      method: 'GET',
+      url: '/two-factor/status',
+    });
 
     expect(guard.canActivate(ctx)).toBe(true);
   });

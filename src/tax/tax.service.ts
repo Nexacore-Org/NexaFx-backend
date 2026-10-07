@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -8,8 +13,16 @@ import Decimal from 'decimal.js';
 import { CostBasisLot } from './entities/cost-basis-lot.entity';
 import { TaxEvent, TaxEventType } from './entities/tax-event.entity';
 import { PriceSnapshot } from './entities/price-snapshot.entity';
-import { TaxExportJob, TaxExportJurisdiction, TaxExportStatus } from './entities/tax-export-job.entity';
-import { Transaction, TransactionType, TransactionStatus } from '../transactions/entities/transaction.entity';
+import {
+  TaxExportJob,
+  TaxExportJurisdiction,
+  TaxExportStatus,
+} from './entities/tax-export-job.entity';
+import {
+  Transaction,
+  TransactionType,
+  TransactionStatus,
+} from '../transactions/entities/transaction.entity';
 import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
 import { TAX_QUEUE } from '../modules/queues/queue.constants';
 
@@ -47,7 +60,9 @@ export class TaxService {
     }
 
     if (transaction.status !== TransactionStatus.SUCCESS) {
-      this.logger.debug(`Skipping tax processing for transaction ${transactionId} since status is ${transaction.status}`);
+      this.logger.debug(
+        `Skipping tax processing for transaction ${transactionId} since status is ${transaction.status}`,
+      );
       return;
     }
 
@@ -56,7 +71,9 @@ export class TaxService {
       where: { transactionId },
     });
     if (alreadyProcessed) {
-      this.logger.debug(`Transaction ${transactionId} has already been processed for tax.`);
+      this.logger.debug(
+        `Transaction ${transactionId} has already been processed for tax.`,
+      );
       return;
     }
 
@@ -68,7 +85,9 @@ export class TaxService {
 
     // 2. Perform logic based on transaction type
     if (transaction.type === TransactionType.DEPOSIT) {
-      const rateUsd = new Decimal(await this.getUsdRate(transaction.currency, transaction.id));
+      const rateUsd = new Decimal(
+        await this.getUsdRate(transaction.currency, transaction.id),
+      );
       const qty = new Decimal(transaction.amount);
       const costBasisUsd = qty.mul(rateUsd);
 
@@ -101,13 +120,25 @@ export class TaxService {
       });
       await this.taxEventRepository.save(event);
 
-      this.logger.log(`Processed DEPOSIT tax event for transaction ${transaction.id}`);
+      this.logger.log(
+        `Processed DEPOSIT tax event for transaction ${transaction.id}`,
+      );
     } else if (transaction.type === TransactionType.WITHDRAW) {
-      const rateUsd = new Decimal(await this.getUsdRate(transaction.currency, transaction.id));
+      const rateUsd = new Decimal(
+        await this.getUsdRate(transaction.currency, transaction.id),
+      );
       const qty = new Decimal(transaction.amount);
 
-      await this.processDisposal(userId, transaction, transaction.currency, qty, rateUsd);
-      this.logger.log(`Processed WITHDRAW tax event for transaction ${transaction.id}`);
+      await this.processDisposal(
+        userId,
+        transaction,
+        transaction.currency,
+        qty,
+        rateUsd,
+      );
+      this.logger.log(
+        `Processed WITHDRAW tax event for transaction ${transaction.id}`,
+      );
     } else if (transaction.type === TransactionType.SWAP) {
       // SWAP represents disposal of source currency and acquisition of destination currency
       const sourceCurrency = transaction.currency;
@@ -116,15 +147,27 @@ export class TaxService {
       const destQty = new Decimal(transaction.toAmount || '0');
 
       if (!destCurrency || destQty.isZero()) {
-        this.logger.warn(`Swap transaction ${transaction.id} missing destination details.`);
+        this.logger.warn(
+          `Swap transaction ${transaction.id} missing destination details.`,
+        );
         return;
       }
 
-      const sourceRateUsd = new Decimal(await this.getUsdRate(sourceCurrency, transaction.id));
-      const destRateUsd = new Decimal(await this.getUsdRate(destCurrency, transaction.id));
+      const sourceRateUsd = new Decimal(
+        await this.getUsdRate(sourceCurrency, transaction.id),
+      );
+      const destRateUsd = new Decimal(
+        await this.getUsdRate(destCurrency, transaction.id),
+      );
 
       // Process disposal of source currency
-      await this.processDisposal(userId, transaction, sourceCurrency, sourceQty, sourceRateUsd);
+      await this.processDisposal(
+        userId,
+        transaction,
+        sourceCurrency,
+        sourceQty,
+        sourceRateUsd,
+      );
 
       // Process acquisition of destination currency
       const destCostBasisUsd = destQty.mul(destRateUsd);
@@ -155,7 +198,9 @@ export class TaxService {
       });
       await this.taxEventRepository.save(event);
 
-      this.logger.log(`Processed SWAP tax events for transaction ${transaction.id}`);
+      this.logger.log(
+        `Processed SWAP tax events for transaction ${transaction.id}`,
+      );
     }
   }
 
@@ -183,7 +228,9 @@ export class TaxService {
           const rate = await this.exchangeRatesService.getRate(currency, 'USD');
           priceUsd = rate.rate.toString();
         } catch (err: any) {
-          this.logger.error(`Failed to fetch exchange rate snapshot for ${currency} at completion: ${err.message}`);
+          this.logger.error(
+            `Failed to fetch exchange rate snapshot for ${currency} at completion: ${err.message}`,
+          );
           throw err;
         }
       }
@@ -200,7 +247,10 @@ export class TaxService {
   /**
    * Helper to retrieve USD rate from price snapshots
    */
-  private async getUsdRate(currency: string, transactionId: string): Promise<string> {
+  private async getUsdRate(
+    currency: string,
+    transactionId: string,
+  ): Promise<string> {
     const uc = currency.toUpperCase();
     if (uc === 'USD' || uc === 'USDC') {
       return '1.00000000';
@@ -253,12 +303,13 @@ export class TaxService {
       const lotTotalQty = new Decimal(lot.quantity);
       const lotCostBasisUsd = new Decimal(lot.costBasisUsd);
       const costBasisUsd = matchQty.mul(lotCostBasisUsd.div(lotTotalQty));
-      
+
       const proceedsUsd = matchQty.mul(disposalPriceUsd);
       const gainLossUsd = proceedsUsd.minus(costBasisUsd);
 
       const holdingPeriodDays = Math.ceil(
-        (transaction.createdAt.getTime() - lot.acquiredAt.getTime()) / (1000 * 60 * 60 * 24),
+        (transaction.createdAt.getTime() - lot.acquiredAt.getTime()) /
+          (1000 * 60 * 60 * 24),
       );
 
       const taxEvent = this.taxEventRepository.create({
@@ -443,14 +494,19 @@ export class TaxService {
         order: { createdAt: 'ASC' },
       });
 
-      const csvContent = await this.generateCsvContent(events, job.jurisdiction);
+      const csvContent = await this.generateCsvContent(
+        events,
+        job.jurisdiction,
+      );
 
       await this.taxExportJobRepository.update(jobId, {
         status: TaxExportStatus.COMPLETED,
         csv: csvContent,
       });
     } catch (err: any) {
-      this.logger.error(`Failed to process export job ${jobId}: ${err.message}`);
+      this.logger.error(
+        `Failed to process export job ${jobId}: ${err.message}`,
+      );
       await this.taxExportJobRepository.update(jobId, {
         status: TaxExportStatus.FAILED,
         errorMessage: err.message,
@@ -461,15 +517,23 @@ export class TaxService {
   /**
    * Helper to generate CSV content for a list of tax events and jurisdiction
    */
-  private async generateCsvContent(events: TaxEvent[], jurisdiction: TaxExportJurisdiction): Promise<string> {
+  private async generateCsvContent(
+    events: TaxEvent[],
+    jurisdiction: TaxExportJurisdiction,
+  ): Promise<string> {
     if (jurisdiction === TaxExportJurisdiction.US) {
       // US/IRS 8949: Description,Date Acquired,Date Sold,Proceeds,Cost Basis,Gain/Loss
-      let csv = 'Description,Date Acquired,Date Sold,Proceeds,Cost Basis,Gain/Loss\n';
+      let csv =
+        'Description,Date Acquired,Date Sold,Proceeds,Cost Basis,Gain/Loss\n';
       for (const event of events) {
         if (event.eventType !== TaxEventType.DISPOSAL) continue;
 
-        const dateAcquired = event.acquiredAt ? event.acquiredAt.toISOString().split('T')[0] : 'Various';
-        const dateSold = event.transaction.createdAt.toISOString().split('T')[0];
+        const dateAcquired = event.acquiredAt
+          ? event.acquiredAt.toISOString().split('T')[0]
+          : 'Various';
+        const dateSold = event.transaction.createdAt
+          .toISOString()
+          .split('T')[0];
         const desc = `Disposal of ${event.quantity} ${event.currency}`;
 
         csv += `"${desc}","${dateAcquired}","${dateSold}",${parseFloat(event.proceedsUsd || '0').toFixed(2)},${parseFloat(event.costBasisUsd || '0').toFixed(2)},${parseFloat(event.gainLossUsd || '0').toFixed(2)}\n`;
@@ -477,7 +541,8 @@ export class TaxService {
       return csv;
     } else if (jurisdiction === TaxExportJurisdiction.UK) {
       // UK/HMRC: Date,Description,Proceeds (GBP),Allowable Costs (GBP),Gain/Loss (GBP)
-      let csv = 'Date,Description,Proceeds (GBP),Allowable Costs (GBP),Gain/Loss (GBP)\n';
+      let csv =
+        'Date,Description,Proceeds (GBP),Allowable Costs (GBP),Gain/Loss (GBP)\n';
       for (const event of events) {
         if (event.eventType !== TaxEventType.DISPOSAL) continue;
 
@@ -485,14 +550,22 @@ export class TaxService {
         const gbpUsdSnapshot = await this.priceSnapshotRepository.findOne({
           where: { transactionId: event.transactionId, currency: 'GBP' },
         });
-        const rateGbpUsd = new Decimal(gbpUsdSnapshot?.priceUsd || '1.25000000');
+        const rateGbpUsd = new Decimal(
+          gbpUsdSnapshot?.priceUsd || '1.25000000',
+        );
 
-        const dateSold = event.transaction.createdAt.toISOString().split('T')[0];
+        const dateSold = event.transaction.createdAt
+          .toISOString()
+          .split('T')[0];
         const desc = `Disposal of ${event.quantity} ${event.currency}`;
 
         // Convert USD amounts to GBP by dividing by stored GBP/USD rate
-        const proceedsGbp = new Decimal(event.proceedsUsd || '0').div(rateGbpUsd);
-        const costBasisGbp = new Decimal(event.costBasisUsd || '0').div(rateGbpUsd);
+        const proceedsGbp = new Decimal(event.proceedsUsd || '0').div(
+          rateGbpUsd,
+        );
+        const costBasisGbp = new Decimal(event.costBasisUsd || '0').div(
+          rateGbpUsd,
+        );
         const gainLossGbp = proceedsGbp.minus(costBasisGbp);
 
         csv += `"${dateSold}","${desc}",${proceedsGbp.toFixed(2)},${costBasisGbp.toFixed(2)},${gainLossGbp.toFixed(2)}\n`;
@@ -500,11 +573,14 @@ export class TaxService {
       return csv;
     } else {
       // GENERIC: Date,Description,Proceeds (USD),Cost Basis (USD),Gain/Loss (USD)
-      let csv = 'Date,Description,Proceeds (USD),Cost Basis (USD),Gain/Loss (USD)\n';
+      let csv =
+        'Date,Description,Proceeds (USD),Cost Basis (USD),Gain/Loss (USD)\n';
       for (const event of events) {
         if (event.eventType !== TaxEventType.DISPOSAL) continue;
 
-        const dateSold = event.transaction.createdAt.toISOString().split('T')[0];
+        const dateSold = event.transaction.createdAt
+          .toISOString()
+          .split('T')[0];
         const desc = `Disposal of ${event.quantity} ${event.currency}`;
 
         csv += `"${dateSold}","${desc}",${parseFloat(event.proceedsUsd || '0').toFixed(2)},${parseFloat(event.costBasisUsd || '0').toFixed(2)},${parseFloat(event.gainLossUsd || '0').toFixed(2)}\n`;

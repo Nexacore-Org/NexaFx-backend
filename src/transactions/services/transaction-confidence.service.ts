@@ -67,9 +67,7 @@ export class TransactionConfidenceService {
     private readonly usersService: UsersService,
   ) {}
 
-  async score(
-    transaction: Partial<Transaction>,
-  ): Promise<ConfidenceResult> {
+  async score(transaction: Partial<Transaction>): Promise<ConfidenceResult> {
     const cacheKey = this.redisService.key(
       'confidence',
       `score:${transaction.id ?? 'pending'}`,
@@ -110,10 +108,13 @@ export class TransactionConfidenceService {
 
     const score = Math.max(0, Math.min(100, baseScore));
     const label = this.getConfidenceLabel(score);
-    const expectedCompletionSeconds =
-      this.getExpectedCompletionSeconds(score, networkStatus);
-    const expectedCompletionLabel =
-      this.formatExpectedCompletion(expectedCompletionSeconds);
+    const expectedCompletionSeconds = this.getExpectedCompletionSeconds(
+      score,
+      networkStatus,
+    );
+    const expectedCompletionLabel = this.formatExpectedCompletion(
+      expectedCompletionSeconds,
+    );
 
     const result: ConfidenceResult = {
       score,
@@ -143,7 +144,8 @@ export class TransactionConfidenceService {
       const capacityUsage = parseFloat(feeStats.ledger_capacity_usage ?? '0');
 
       const ledgerCloseTimeMs = capacityUsage > 0.8 ? 8500 : 5500;
-      const queuedTransactions = capacityUsage > 0.95 ? 150 : (capacityUsage > 0.8 ? 50 : 0);
+      const queuedTransactions =
+        capacityUsage > 0.95 ? 150 : capacityUsage > 0.8 ? 50 : 0;
 
       let networkStatus: 'HEALTHY' | 'DEGRADED' | 'CONGESTED' = 'HEALTHY';
       if (capacityUsage > 0.95) {
@@ -190,9 +192,7 @@ export class TransactionConfidenceService {
     }
   }
 
-  async getCompletionStats(
-    userId: string,
-  ): Promise<UserCompletionStats> {
+  async getCompletionStats(userId: string): Promise<UserCompletionStats> {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -259,9 +259,7 @@ export class TransactionConfidenceService {
       const wallets = await this.walletsService.findAllByUser(
         transaction.userId,
       );
-      const wallet = wallets.find(
-        (w) => w.currency === transaction.currency,
-      );
+      const wallet = wallets.find((w) => w.currency === transaction.currency);
 
       if (wallet) {
         const walletBalance = parseFloat(wallet.balance);

@@ -29,7 +29,7 @@ export class CreateSupportTickets1706000000000 implements MigrationInterface {
             name: 'ticketNumber',
             type: 'varchar',
             isUnique: true,
-            default: `\'TKT-\' || lpad(nextval(\'ticket_number_seq\')::text, 5, \'0\')`,
+            default: `'TKT-' || lpad(nextval('ticket_number_seq')::text, 5, '0')`,
           },
           {
             name: 'userId',
@@ -209,13 +209,21 @@ export class CreateSupportTickets1706000000000 implements MigrationInterface {
   public async down(queryRunner: QueryRunner): Promise<void> {
     // Drop ticket_messages table and its enums
     await queryRunner.dropTable('ticket_messages');
-    await queryRunner.query('DROP TYPE IF EXISTS "ticket_messages_authorrole_enum"');
+    await queryRunner.query(
+      'DROP TYPE IF EXISTS "ticket_messages_authorrole_enum"',
+    );
 
     // Drop support_tickets table and its enums
     await queryRunner.dropTable('support_tickets');
-    await queryRunner.query('DROP TYPE IF EXISTS "support_tickets_category_enum"');
-    await queryRunner.query('DROP TYPE IF EXISTS "support_tickets_priority_enum"');
-    await queryRunner.query('DROP TYPE IF EXISTS "support_tickets_status_enum"');
+    await queryRunner.query(
+      'DROP TYPE IF EXISTS "support_tickets_category_enum"',
+    );
+    await queryRunner.query(
+      'DROP TYPE IF EXISTS "support_tickets_priority_enum"',
+    );
+    await queryRunner.query(
+      'DROP TYPE IF EXISTS "support_tickets_status_enum"',
+    );
 
     // Drop ticket number sequence
     await queryRunner.query('DROP SEQUENCE IF EXISTS ticket_number_seq');

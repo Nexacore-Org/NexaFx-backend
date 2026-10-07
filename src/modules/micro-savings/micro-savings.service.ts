@@ -1,11 +1,22 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThanOrEqual } from 'typeorm';
-import { MicroSavingsRule, MicroSavingsTriggerType } from './entities/micro-savings-rule.entity';
+import {
+  MicroSavingsRule,
+  MicroSavingsTriggerType,
+} from './entities/micro-savings-rule.entity';
 import { MicroSavingsContribution } from './entities/micro-savings-contribution.entity';
 import { VaultsService } from '../../vaults/vaults.service';
 import { UsersService } from '../../users/users.service';
-import { CreateMicroSavingsRuleDto, UpdateMicroSavingsRuleDto } from './dto/micro-savings.dto';
+import {
+  CreateMicroSavingsRuleDto,
+  UpdateMicroSavingsRuleDto,
+} from './dto/micro-savings.dto';
 
 @Injectable()
 export class MicroSavingsService {
@@ -20,7 +31,10 @@ export class MicroSavingsService {
     private readonly usersService: UsersService,
   ) {}
 
-  async createRule(userId: string, dto: CreateMicroSavingsRuleDto): Promise<MicroSavingsRule> {
+  async createRule(
+    userId: string,
+    dto: CreateMicroSavingsRuleDto,
+  ): Promise<MicroSavingsRule> {
     const rule = this.ruleRepo.create({
       userId,
       targetVaultId: dto.targetVaultId,
@@ -33,30 +47,48 @@ export class MicroSavingsService {
     return this.ruleRepo.save(rule);
   }
 
-  async listActiveRules(userId: string): Promise<(MicroSavingsRule & { todayContribution: number })[]> {
-    const rules = await this.ruleRepo.find({ where: { userId, isActive: true }, order: { createdAt: 'DESC' } });
+  async listActiveRules(
+    userId: string,
+  ): Promise<(MicroSavingsRule & { todayContribution: number })[]> {
+    const rules = await this.ruleRepo.find({
+      where: { userId, isActive: true },
+      order: { createdAt: 'DESC' },
+    });
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    return Promise.all(rules.map(async (rule) => {
-      const todayTotal = await this.contributionRepo
-        .createQueryBuilder('c')
-        .select('COALESCE(SUM(c.amount), 0)', 'total')
-        .where('c.ruleId = :ruleId', { ruleId: rule.id })
-        .andWhere('c.createdAt >= :today', { today })
-        .getRawOne<{ total: string }>();
-      return { ...rule, todayContribution: parseFloat(todayTotal?.total ?? '0') };
-    }));
+    return Promise.all(
+      rules.map(async (rule) => {
+        const todayTotal = await this.contributionRepo
+          .createQueryBuilder('c')
+          .select('COALESCE(SUM(c.amount), 0)', 'total')
+          .where('c.ruleId = :ruleId', { ruleId: rule.id })
+          .andWhere('c.createdAt >= :today', { today })
+          .getRawOne<{ total: string }>();
+        return {
+          ...rule,
+          todayContribution: parseFloat(todayTotal?.total ?? '0'),
+        };
+      }),
+    );
   }
 
-  async updateRule(userId: string, ruleId: string, dto: UpdateMicroSavingsRuleDto): Promise<MicroSavingsRule> {
+  async updateRule(
+    userId: string,
+    ruleId: string,
+    dto: UpdateMicroSavingsRuleDto,
+  ): Promise<MicroSavingsRule> {
     const rule = await this.ruleRepo.findOne({ where: { id: ruleId, userId } });
     if (!rule) throw new NotFoundException('Micro-savings rule not found');
     if (dto.targetVaultId) rule.targetVaultId = dto.targetVaultId;
-    if (dto.saveAmount !== undefined) rule.saveAmount = dto.saveAmount.toString();
-    if (dto.perTransactionConfig !== undefined) rule.perTransactionConfig = dto.perTransactionConfig;
-    if (dto.balanceThresholdConfig !== undefined) rule.balanceThresholdConfig = dto.balanceThresholdConfig;
-    if (dto.maxDailyContribution !== undefined) rule.maxDailyContribution = dto.maxDailyContribution.toString();
+    if (dto.saveAmount !== undefined)
+      rule.saveAmount = dto.saveAmount.toString();
+    if (dto.perTransactionConfig !== undefined)
+      rule.perTransactionConfig = dto.perTransactionConfig;
+    if (dto.balanceThresholdConfig !== undefined)
+      rule.balanceThresholdConfig = dto.balanceThresholdConfig;
+    if (dto.maxDailyContribution !== undefined)
+      rule.maxDailyContribution = dto.maxDailyContribution.toString();
     if (dto.isActive !== undefined) rule.isActive = dto.isActive;
     return this.ruleRepo.save(rule);
   }
@@ -67,7 +99,11 @@ export class MicroSavingsService {
     await this.ruleRepo.remove(rule);
   }
 
-  async getHistory(userId: string, page = 1, limit = 50): Promise<{ contributions: MicroSavingsContribution[]; total: number }> {
+  async getHistory(
+    userId: string,
+    page = 1,
+    limit = 50,
+  ): Promise<{ contributions: MicroSavingsContribution[]; total: number }> {
     const [contributions, total] = await this.contributionRepo.findAndCount({
       where: { userId },
       order: { createdAt: 'DESC' },
@@ -89,15 +125,28 @@ export class MicroSavingsService {
     return parseFloat(result?.total ?? '0');
   }
 
-  async evaluatePerTransaction(userId: string, transactionId: string, transactionAmount: number, currency: string): Promise<void> {
+  async evaluatePerTransaction(
+    userId: string,
+    transactionId: string,
+    transactionAmount: number,
+    currency: string,
+  ): Promise<void> {
     const rules = await this.ruleRepo.find({
-      where: { userId, isActive: true, triggerType: MicroSavingsTriggerType.PER_TRANSACTION },
+      where: {
+        userId,
+        isActive: true,
+        triggerType: MicroSavingsTriggerType.PER_TRANSACTION,
+      },
     });
 
     for (const rule of rules) {
       try {
         const cfg = rule.perTransactionConfig ?? {};
-        if (cfg.minTransactionAmount && transactionAmount < cfg.minTransactionAmount) continue;
+        if (
+          cfg.minTransactionAmount &&
+          transactionAmount < cfg.minTransactionAmount
+        )
+          continue;
 
         let saveAmount = parseFloat(rule.saveAmount);
         if (cfg.savePercent && cfg.savePercent > 0) {
@@ -111,16 +160,30 @@ export class MicroSavingsService {
         saveAmount = Math.min(saveAmount, remaining);
         if (saveAmount <= 0) continue;
 
-        await this.depositToVault(rule, saveAmount, 'PER_TRANSACTION', transactionId);
+        await this.depositToVault(
+          rule,
+          saveAmount,
+          'PER_TRANSACTION',
+          transactionId,
+        );
       } catch (err) {
-        this.logger.error(`Per-transaction micro-savings failed for rule ${rule.id}: ${err instanceof Error ? err.message : String(err)}`);
+        this.logger.error(
+          `Per-transaction micro-savings failed for rule ${rule.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
   }
 
-  async evaluateBalanceThreshold(userId: string, currency: string): Promise<void> {
+  async evaluateBalanceThreshold(
+    userId: string,
+    currency: string,
+  ): Promise<void> {
     const rules = await this.ruleRepo.find({
-      where: { userId, isActive: true, triggerType: MicroSavingsTriggerType.BALANCE_THRESHOLD },
+      where: {
+        userId,
+        isActive: true,
+        triggerType: MicroSavingsTriggerType.BALANCE_THRESHOLD,
+      },
     });
 
     const user = await this.usersService.findById(userId);
@@ -149,14 +212,23 @@ export class MicroSavingsService {
 
         await this.depositToVault(rule, saveAmount, 'BALANCE_THRESHOLD', null);
       } catch (err) {
-        this.logger.error(`Balance-threshold micro-savings failed for rule ${rule.id}: ${err instanceof Error ? err.message : String(err)}`);
+        this.logger.error(
+          `Balance-threshold micro-savings failed for rule ${rule.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
   }
 
-  async evaluateSpendingGoalHit(userId: string, spendingGoalId: string): Promise<void> {
+  async evaluateSpendingGoalHit(
+    userId: string,
+    spendingGoalId: string,
+  ): Promise<void> {
     const rules = await this.ruleRepo.find({
-      where: { userId, isActive: true, triggerType: MicroSavingsTriggerType.SPENDING_GOAL_HIT },
+      where: {
+        userId,
+        isActive: true,
+        triggerType: MicroSavingsTriggerType.SPENDING_GOAL_HIT,
+      },
     });
 
     for (const rule of rules) {
@@ -168,9 +240,17 @@ export class MicroSavingsService {
         const amount = Math.min(saveAmount, remaining);
         if (amount <= 0) continue;
 
-        await this.depositToVault(rule, amount, 'SPENDING_GOAL_HIT', null, spendingGoalId);
+        await this.depositToVault(
+          rule,
+          amount,
+          'SPENDING_GOAL_HIT',
+          null,
+          spendingGoalId,
+        );
       } catch (err) {
-        this.logger.error(`Spending-goal-hit micro-savings failed for rule ${rule.id}: ${err instanceof Error ? err.message : String(err)}`);
+        this.logger.error(
+          `Spending-goal-hit micro-savings failed for rule ${rule.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
   }

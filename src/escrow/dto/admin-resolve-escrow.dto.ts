@@ -7,7 +7,10 @@ export class AdminResolveEscrowDto {
   @IsEnum(['release', 'refund'] as const)
   outcome: 'release' | 'refund';
 
-  @ApiProperty({ required: false, example: 'Admin review resolved in favor of the sender' })
+  @ApiProperty({
+    required: false,
+    example: 'Admin review resolved in favor of the sender',
+  })
   @IsOptional()
   @IsString()
   reason?: string;

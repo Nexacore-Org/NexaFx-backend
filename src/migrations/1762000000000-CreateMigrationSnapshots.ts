@@ -7,9 +7,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * This migration is wrapped in an explicit transaction so it can be safely
  * reverted if any step fails.
  */
-export class CreateMigrationSnapshots1762000000000
-  implements MigrationInterface
-{
+export class CreateMigrationSnapshots1762000000000 implements MigrationInterface {
   name = 'CreateMigrationSnapshots1762000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

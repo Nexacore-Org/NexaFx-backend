@@ -12,10 +12,6 @@ export interface CurrentUserPayload {
   jti?: string;
 }
 
-
-
-
-
 export const CurrentUser = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): CurrentUserPayload => {
     const request = ctx

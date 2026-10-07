@@ -60,7 +60,9 @@ export class SanctionsController {
   @Patch('admin/sanctions/screenings/:id/override')
   @UseGuards(RolesGuard)
   @Roles(UserRole.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Override a WARNING/BLOCKED screening result (Super Admin)' })
+  @ApiOperation({
+    summary: 'Override a WARNING/BLOCKED screening result (Super Admin)',
+  })
   @ApiParam({ name: 'id', type: String })
   async overrideScreening(
     @Param('id') id: string,
@@ -82,7 +84,9 @@ export class SanctionsController {
   @Post('admin/sanctions/sync-ofac')
   @UseGuards(RolesGuard)
   @Roles(UserRole.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Trigger a manual OFAC SDN list sync (Super Admin)' })
+  @ApiOperation({
+    summary: 'Trigger a manual OFAC SDN list sync (Super Admin)',
+  })
   async syncOfac() {
     const count = await this.sanctionsService.syncOfacList();
     return { synced: count };

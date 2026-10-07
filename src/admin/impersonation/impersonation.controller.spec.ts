@@ -68,7 +68,10 @@ describe('Impersonation (Controller & Service)', () => {
     canActivate: (context: ExecutionContext) => {
       const req = context.switchToHttp().getRequest();
       const user = req.user;
-      return user && (user.role === UserRole.ADMIN || user.role === UserRole.SUPER_ADMIN);
+      return (
+        user &&
+        (user.role === UserRole.ADMIN || user.role === UserRole.SUPER_ADMIN)
+      );
     },
   };
 
@@ -90,7 +93,8 @@ describe('Impersonation (Controller & Service)', () => {
       .useValue(mockRolesGuard)
       .compile();
 
-    impersonationService = moduleRef.get<ImpersonationService>(ImpersonationService);
+    impersonationService =
+      moduleRef.get<ImpersonationService>(ImpersonationService);
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(new ValidationPipe());
     await app.init();
@@ -116,7 +120,10 @@ describe('Impersonation (Controller & Service)', () => {
         role: UserRole.USER,
       });
 
-      const res = await impersonationService.startImpersonation('admin-123', 'user-456');
+      const res = await impersonationService.startImpersonation(
+        'admin-123',
+        'user-456',
+      );
       expect(res).toHaveProperty('impersonationToken', 'mock-jwt-token');
       expect(res).toHaveProperty('expiresAt');
       expect(mockRedisService.set).toHaveBeenCalledTimes(2); // session + admin index pointer
@@ -170,17 +177,19 @@ describe('Impersonation (Controller & Service)', () => {
 
     it('POST /admin/impersonate/end invalidates Redis entries and logs event', async () => {
       // Setup req.user to act as impersonated user for this test
-      jest.spyOn(mockJwtAuthGuard, 'canActivate').mockImplementationOnce((context: ExecutionContext) => {
-        const req = context.switchToHttp().getRequest();
-        req.user = {
-          userId: 'user-456',
-          jti: 'session-jti-uuid',
-          role: UserRole.USER,
-          isImpersonation: true,
-          impersonatedBy: 'admin-123',
-        };
-        return true;
-      });
+      jest
+        .spyOn(mockJwtAuthGuard, 'canActivate')
+        .mockImplementationOnce((context: ExecutionContext) => {
+          const req = context.switchToHttp().getRequest();
+          req.user = {
+            userId: 'user-456',
+            jti: 'session-jti-uuid',
+            role: UserRole.USER,
+            isImpersonation: true,
+            impersonatedBy: 'admin-123',
+          };
+          return true;
+        });
 
       await request(app.getHttpServer())
         .post('/admin/impersonate/end')
@@ -189,8 +198,12 @@ describe('Impersonation (Controller & Service)', () => {
           expect(res.body.message).toBe('Impersonation session ended');
         });
 
-      expect(mockRedisService.del).toHaveBeenCalledWith('nexafx:impersonation:user-456:session-jti-uuid');
-      expect(mockRedisService.del).toHaveBeenCalledWith('nexafx:impersonation:admin:admin-123:session-jti-uuid');
+      expect(mockRedisService.del).toHaveBeenCalledWith(
+        'nexafx:impersonation:user-456:session-jti-uuid',
+      );
+      expect(mockRedisService.del).toHaveBeenCalledWith(
+        'nexafx:impersonation:admin:admin-123:session-jti-uuid',
+      );
       expect(mockAuditLogsService.log).toHaveBeenCalledWith(
         'admin-123',
         'admin.impersonation.ended',

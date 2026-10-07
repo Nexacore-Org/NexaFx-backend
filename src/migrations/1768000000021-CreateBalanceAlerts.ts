@@ -16,7 +16,9 @@ export class CreateBalanceAlerts1768000000021 implements MigrationInterface {
         "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_balance_alerts_walletId" ON "balance_alerts" ("walletId")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_balance_alerts_walletId" ON "balance_alerts" ("walletId")`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

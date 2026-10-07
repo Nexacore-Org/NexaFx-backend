@@ -63,7 +63,7 @@ describe('MigrationSnapshot entity', () => {
 
     it('should allow setting status to each valid value', () => {
       for (const status of Object.values(SnapshotStatus)) {
-        snapshot.status = status as SnapshotStatus;
+        snapshot.status = status;
         expect(snapshot.status).toBe(status);
       }
     });

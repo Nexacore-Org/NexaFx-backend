@@ -58,10 +58,10 @@ describe('Admin E2E Tests', () => {
     adminAccessToken = adminResponse.body.accessToken;
 
     // Update user to have ADMIN role
-    await dataSource.query(
-      `UPDATE "user" SET role = $1 WHERE email = $2`,
-      ['ADMIN', adminEmail],
-    );
+    await dataSource.query(`UPDATE "user" SET role = $1 WHERE email = $2`, [
+      'ADMIN',
+      adminEmail,
+    ]);
 
     // Setup regular user
     const userEmail = 'user@example.com';
@@ -111,9 +111,7 @@ describe('Admin E2E Tests', () => {
     });
 
     it('should return 401 without authentication', async () => {
-      await request(app.getHttpServer())
-        .get('/v1/admin/metrics')
-        .expect(401);
+      await request(app.getHttpServer()).get('/v1/admin/metrics').expect(401);
     });
 
     it('should support date range filtering', async () => {
@@ -148,9 +146,7 @@ describe('Admin E2E Tests', () => {
     });
 
     it('should return 401 without authentication', async () => {
-      await request(app.getHttpServer())
-        .get('/v1/admin/users')
-        .expect(401);
+      await request(app.getHttpServer()).get('/v1/admin/users').expect(401);
     });
 
     it('should support pagination', async () => {
@@ -262,7 +258,9 @@ describe('Admin E2E Tests', () => {
         return;
       }
 
-      const userId = listResponse.body.data.find(u => u.email !== 'admin@example.com')?.id;
+      const userId = listResponse.body.data.find(
+        (u) => u.email !== 'admin@example.com',
+      )?.id;
       if (!userId) return;
 
       const response = await request(app.getHttpServer())
@@ -316,15 +314,11 @@ describe('Admin E2E Tests', () => {
 
   describe('Access Control', () => {
     it('should deny access to /admin/metrics without authorization', async () => {
-      await request(app.getHttpServer())
-        .get('/v1/admin/metrics')
-        .expect(401);
+      await request(app.getHttpServer()).get('/v1/admin/metrics').expect(401);
     });
 
     it('should deny access to /admin/users without authorization', async () => {
-      await request(app.getHttpServer())
-        .get('/v1/admin/users')
-        .expect(401);
+      await request(app.getHttpServer()).get('/v1/admin/users').expect(401);
     });
 
     it('should deny non-admin access with 403', async () => {

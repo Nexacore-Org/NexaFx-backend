@@ -70,7 +70,13 @@ describe('Financial Health E2E Tests', () => {
       [
         ownerId,
         score,
-        score >= 80 ? 'EXCELLENT' : score >= 60 ? 'GOOD' : score >= 40 ? 'FAIR' : 'POOR',
+        score >= 80
+          ? 'EXCELLENT'
+          : score >= 60
+            ? 'GOOD'
+            : score >= 40
+              ? 'FAIR'
+              : 'POOR',
         JSON.stringify({
           savingsRateScore: 3,
           spendingConsistencyScore: 15,

@@ -5,7 +5,9 @@ import { Keypair, Operation } from '@stellar/stellar-sdk';
 describe('Stellar Concurrency Test (#783)', () => {
   let stellarService: StellarService;
   // Test hot wallet secret with funded testnet balance
-  const testSecret = process.env.TEST_HOT_WALLET_SECRET || 'SA72YVHVNXY4PFTZOTD35G6ZUTYZ5V2HHT6H5D26ZZRYH4VQQY3L34H6';
+  const testSecret =
+    process.env.TEST_HOT_WALLET_SECRET ||
+    'SA72YVHVNXY4PFTZOTD35G6ZUTYZ5V2HHT6H5D26ZZRYH4VQQY3L34H6';
   const testKeypair = Keypair.fromSecret(testSecret);
 
   beforeAll(async () => {
@@ -32,7 +34,7 @@ describe('Stellar Concurrency Test (#783)', () => {
 
     const results = await Promise.allSettled(txPromises);
     const rejected = results.filter((r) => r.status === 'rejected');
-    
+
     // Ensure all 20 succeeded
     expect(rejected.length).toBe(0);
   }, 60000);

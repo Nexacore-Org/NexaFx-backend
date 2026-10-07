@@ -29,7 +29,9 @@ describe('KycController', () => {
   });
 
   beforeEach(() => {
-    applySpy = jest.fn().mockResolvedValue({ message: 'ok', status: 'pending' });
+    applySpy = jest
+      .fn()
+      .mockResolvedValue({ message: 'ok', status: 'pending' });
     getKycStatusSpy = jest.fn().mockResolvedValue({
       currentTier: UserKycTier.BASIC,
       application: null,
@@ -48,7 +50,9 @@ describe('KycController', () => {
     };
 
     const files = {
-      governmentIdFront: [buildMulterFile('governmentIdFront', 'front.jpg', 'image/jpeg')],
+      governmentIdFront: [
+        buildMulterFile('governmentIdFront', 'front.jpg', 'image/jpeg'),
+      ],
       selfie: [buildMulterFile('selfie', 'selfie.jpg', 'image/jpeg')],
     };
 
@@ -82,6 +86,10 @@ describe('KycController', () => {
     expect(getKycStatusSpy).toHaveBeenCalledWith('user-123');
     expect(result.currentTier).toBe(UserKycTier.BASIC);
     expect(result.nextTier).toBe(UserKycTier.STANDARD);
-    expect(result.requiredDocuments).toEqual(['governmentIdFront', 'governmentIdBack', 'selfie']);
+    expect(result.requiredDocuments).toEqual([
+      'governmentIdFront',
+      'governmentIdBack',
+      'selfie',
+    ]);
   });
 });

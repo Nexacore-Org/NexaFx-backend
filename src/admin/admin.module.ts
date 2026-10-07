@@ -21,7 +21,15 @@ import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Transaction, DataRequest, KycRecord, RateAlert, AuditLog, MigrationSnapshot]),
+    TypeOrmModule.forFeature([
+      User,
+      Transaction,
+      DataRequest,
+      KycRecord,
+      RateAlert,
+      AuditLog,
+      MigrationSnapshot,
+    ]),
     AuditLogsModule,
     ReportsModule,
     TransactionLimitsModule,

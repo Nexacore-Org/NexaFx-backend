@@ -1,4 +1,5 @@
 import { INestApplication } from '@nestjs/common';
+import * as compression from 'compression';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as request from 'supertest';
 import { AppModule } from '../../src/app.module';
@@ -26,8 +27,7 @@ describe('Response compression (e2e)', () => {
 
     // Mirror the production compression middleware so the test exercises the
     // same threshold behaviour as the running application.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const compression = require('compression');
+
     app.use(compression({ threshold: 1024 }));
 
     await app.init();

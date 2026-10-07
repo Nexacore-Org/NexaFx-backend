@@ -8,7 +8,9 @@ export const createMockRepository = <T = any>(
   findOneBy: jest.fn().mockResolvedValue(null),
   create: jest.fn().mockImplementation((entity) => entity),
   save: jest.fn().mockImplementation((entity) => Promise.resolve(entity)),
-  update: jest.fn().mockResolvedValue({ affected: 1, raw: [], generatedMaps: [] }),
+  update: jest
+    .fn()
+    .mockResolvedValue({ affected: 1, raw: [], generatedMaps: [] }),
   delete: jest.fn().mockResolvedValue({ affected: 1, raw: [] }),
   count: jest.fn().mockResolvedValue(0),
   createQueryBuilder: jest.fn(() => ({

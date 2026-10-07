@@ -1,4 +1,3 @@
-
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -53,7 +52,7 @@ export class ReportExportJob {
   @Column({ type: 'varchar', length: 255, nullable: true })
   filename: string | null;
 
-  @Column({ name: 'file_url', length: 500, nullable: true })
+  @Column({ type: 'varchar', name: 'file_url', length: 500, nullable: true })
   fileUrl: string | null;
 
   @Column({ name: 's3_url', type: 'varchar', length: 512, nullable: true })

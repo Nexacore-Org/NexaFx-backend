@@ -143,7 +143,7 @@ describe('NotificationsService', () => {
           push: false,
           types: { TRANSACTION: true, KYC: true, RATE_ALERT: true },
         },
-      } as any);
+      });
 
       await service.dispatch(
         'user-123',
@@ -159,7 +159,10 @@ describe('NotificationsService', () => {
   describe('markAsRead', () => {
     it('should mark notification as read', async () => {
       notificationRepo.findOne.mockResolvedValue(mockNotification);
-      notificationRepo.save.mockResolvedValue({ ...mockNotification, isRead: true });
+      notificationRepo.save.mockResolvedValue({
+        ...mockNotification,
+        isRead: true,
+      });
 
       const result = await service.markAsRead('user-123', 'notif-123');
       expect(result.isRead).toBe(true);
@@ -168,9 +171,9 @@ describe('NotificationsService', () => {
     it('should throw NotFoundException if notification does not exist', async () => {
       notificationRepo.findOne.mockResolvedValue(null);
 
-      await expect(
-        service.markAsRead('user-123', 'bad-id'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.markAsRead('user-123', 'bad-id')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

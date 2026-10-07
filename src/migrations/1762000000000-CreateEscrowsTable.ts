@@ -61,12 +61,21 @@ export class CreateEscrowsTable1762000000000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query('ALTER TABLE "escrows" DROP CONSTRAINT IF EXISTS "FK_escrows_recipient_users"');
-    await queryRunner.query('ALTER TABLE "escrows" DROP CONSTRAINT IF EXISTS "FK_escrows_sender_users"');
-    await queryRunner.query('DROP INDEX IF EXISTS "IDX_escrows_status_autoReleaseAt"');
-    await queryRunner.query('DROP INDEX IF EXISTS "IDX_escrows_sender_recipient"');
+    await queryRunner.query(
+      'ALTER TABLE "escrows" DROP CONSTRAINT IF EXISTS "FK_escrows_recipient_users"',
+    );
+    await queryRunner.query(
+      'ALTER TABLE "escrows" DROP CONSTRAINT IF EXISTS "FK_escrows_sender_users"',
+    );
+    await queryRunner.query(
+      'DROP INDEX IF EXISTS "IDX_escrows_status_autoReleaseAt"',
+    );
+    await queryRunner.query(
+      'DROP INDEX IF EXISTS "IDX_escrows_sender_recipient"',
+    );
     await queryRunner.query('DROP TABLE IF EXISTS "escrows"');
-    await queryRunner.query('DROP TYPE IF EXISTS "public"."escrows_status_enum"');
+    await queryRunner.query(
+      'DROP TYPE IF EXISTS "public"."escrows_status_enum"',
+    );
   }
 }
-

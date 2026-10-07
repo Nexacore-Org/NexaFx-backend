@@ -1,10 +1,26 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { IntelligentSmsRoutingService } from './intelligent-sms-routing.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/user.entity';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+} from '@nestjs/swagger';
 
 @ApiTags('Intelligent SMS Routing')
 @ApiBearerAuth('access-token')
@@ -15,7 +31,9 @@ export class IntelligentSmsRoutingController {
   constructor(private readonly service: IntelligentSmsRoutingService) {}
 
   @Post('routes')
-  @ApiOperation({ summary: 'Create a new SMS provider routing rule (Admin only)' })
+  @ApiOperation({
+    summary: 'Create a new SMS provider routing rule (Admin only)',
+  })
   @ApiResponse({ status: 201, description: 'SMS route created successfully' })
   async createRoute(@Body() body: any) {
     return this.service.createRoute(body);
@@ -28,7 +46,9 @@ export class IntelligentSmsRoutingController {
   }
 
   @Patch('routes/:id')
-  @ApiOperation({ summary: 'Update an existing SMS provider routing rule (Admin only)' })
+  @ApiOperation({
+    summary: 'Update an existing SMS provider routing rule (Admin only)',
+  })
   async updateRoute(@Param('id') id: string, @Body() body: any) {
     return this.service.updateRoute(id, body);
   }

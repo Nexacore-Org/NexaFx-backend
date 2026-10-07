@@ -65,3 +65,9 @@ coverage/
 .codex/
 .worktrees/
 pnpm-lock.yaml
+
+# Local database data, scratch files and agent tool state
+.pgdata/
+.tmp-*
+.freebuff/
+.kilo/

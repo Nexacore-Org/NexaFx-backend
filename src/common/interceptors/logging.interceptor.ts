@@ -24,9 +24,7 @@ export class LoggingInterceptor implements NestInterceptor {
     );
 
     if (body && Object.keys(body).length > 0) {
-      this.logger.debug(
-        `[${requestId}] Request Body: ${JSON.stringify(body)}`,
-      );
+      this.logger.debug(`[${requestId}] Request Body: ${JSON.stringify(body)}`);
     }
 
     return next.handle().pipe(

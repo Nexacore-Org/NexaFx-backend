@@ -6,11 +6,7 @@ import { RateComparisonController } from './rate-comparison.controller';
 import { ExchangeRatesModule } from './exchange-rates.module';
 
 @Module({
-  imports: [
-    HttpModule,
-    CacheModule.register(),
-    ExchangeRatesModule,
-  ],
+  imports: [HttpModule, CacheModule.register(), ExchangeRatesModule],
   controllers: [RateComparisonController],
   providers: [RateComparisonService],
   exports: [RateComparisonService],

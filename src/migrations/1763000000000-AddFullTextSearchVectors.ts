@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddFullTextSearchVectors1763000000000
-  implements MigrationInterface
-{
+export class AddFullTextSearchVectors1763000000000 implements MigrationInterface {
   name = 'AddFullTextSearchVectors1763000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -107,19 +105,43 @@ export class AddFullTextSearchVectors1763000000000
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query('DROP TRIGGER IF EXISTS "trg_support_tickets_search_vector" ON "support_tickets"');
-    await queryRunner.query('DROP TRIGGER IF EXISTS "trg_transactions_search_vector" ON "transactions"');
-    await queryRunner.query('DROP TRIGGER IF EXISTS "trg_notifications_search_vector" ON "notifications"');
+    await queryRunner.query(
+      'DROP TRIGGER IF EXISTS "trg_support_tickets_search_vector" ON "support_tickets"',
+    );
+    await queryRunner.query(
+      'DROP TRIGGER IF EXISTS "trg_transactions_search_vector" ON "transactions"',
+    );
+    await queryRunner.query(
+      'DROP TRIGGER IF EXISTS "trg_notifications_search_vector" ON "notifications"',
+    );
     await queryRunner.query('DROP FUNCTION IF EXISTS update_search_vector()');
-    await queryRunner.query('DROP FUNCTION IF EXISTS update_transaction_search_vector()');
-    await queryRunner.query('DROP FUNCTION IF EXISTS update_notification_search_vector()');
-    await queryRunner.query('DROP INDEX IF EXISTS "GIN_transactions_searchVector"');
-    await queryRunner.query('DROP INDEX IF EXISTS "GIN_notifications_searchVector"');
-    await queryRunner.query('DROP INDEX IF EXISTS "GIN_support_tickets_searchVector"');
-    await queryRunner.query('ALTER TABLE "transactions" DROP COLUMN IF EXISTS "searchVector"');
-    await queryRunner.query('ALTER TABLE "transactions" DROP COLUMN IF EXISTS "counterpartyMemo"');
-    await queryRunner.query('ALTER TABLE "transactions" DROP COLUMN IF EXISTS "reference"');
-    await queryRunner.query('ALTER TABLE "notifications" DROP COLUMN IF EXISTS "searchVector"');
+    await queryRunner.query(
+      'DROP FUNCTION IF EXISTS update_transaction_search_vector()',
+    );
+    await queryRunner.query(
+      'DROP FUNCTION IF EXISTS update_notification_search_vector()',
+    );
+    await queryRunner.query(
+      'DROP INDEX IF EXISTS "GIN_transactions_searchVector"',
+    );
+    await queryRunner.query(
+      'DROP INDEX IF EXISTS "GIN_notifications_searchVector"',
+    );
+    await queryRunner.query(
+      'DROP INDEX IF EXISTS "GIN_support_tickets_searchVector"',
+    );
+    await queryRunner.query(
+      'ALTER TABLE "transactions" DROP COLUMN IF EXISTS "searchVector"',
+    );
+    await queryRunner.query(
+      'ALTER TABLE "transactions" DROP COLUMN IF EXISTS "counterpartyMemo"',
+    );
+    await queryRunner.query(
+      'ALTER TABLE "transactions" DROP COLUMN IF EXISTS "reference"',
+    );
+    await queryRunner.query(
+      'ALTER TABLE "notifications" DROP COLUMN IF EXISTS "searchVector"',
+    );
     await queryRunner.query('DROP TABLE IF EXISTS "support_tickets"');
   }
 }

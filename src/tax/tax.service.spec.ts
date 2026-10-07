@@ -5,8 +5,16 @@ import { TaxService } from './tax.service';
 import { CostBasisLot } from './entities/cost-basis-lot.entity';
 import { TaxEvent, TaxEventType } from './entities/tax-event.entity';
 import { PriceSnapshot } from './entities/price-snapshot.entity';
-import { TaxExportJob, TaxExportJurisdiction, TaxExportStatus } from './entities/tax-export-job.entity';
-import { Transaction, TransactionType, TransactionStatus } from '../transactions/entities/transaction.entity';
+import {
+  TaxExportJob,
+  TaxExportJurisdiction,
+  TaxExportStatus,
+} from './entities/tax-export-job.entity';
+import {
+  Transaction,
+  TransactionType,
+  TransactionStatus,
+} from '../transactions/entities/transaction.entity';
 import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
 import { TAX_QUEUE } from '../modules/queues/queue.constants';
 import { getQueueToken } from '@nestjs/bullmq';
@@ -24,24 +32,33 @@ describe('TaxService', () => {
   const mockCostBasisLotRepository = {
     create: jest.fn((dto) => dto),
     save: jest.fn(async (lot) => {
-      const saved = { id: lot.id || `lot-${Math.random()}`, ...lot } as CostBasisLot;
+      const saved = {
+        id: lot.id || `lot-${Math.random()}`,
+        ...lot,
+      } as CostBasisLot;
       const idx = costBasisLots.findIndex((l) => l.id === saved.id);
       if (idx >= 0) costBasisLots[idx] = saved;
       else costBasisLots.push(saved);
       return saved;
     }),
     find: jest.fn(async ({ where, order }) => {
-      let filtered = costBasisLots.filter(
+      const filtered = costBasisLots.filter(
         (l) => l.userId === where.userId && l.currency === where.currency,
       );
       if (order?.acquiredAt === 'ASC') {
-        filtered.sort((a, b) => a.acquiredAt.getTime() - b.acquiredAt.getTime());
+        filtered.sort(
+          (a, b) => a.acquiredAt.getTime() - b.acquiredAt.getTime(),
+        );
       }
       return filtered;
     }),
     findOne: jest.fn(async ({ where }) => {
       if (where.sourceTransactionId) {
-        return costBasisLots.find((l) => l.sourceTransactionId === where.sourceTransactionId) || null;
+        return (
+          costBasisLots.find(
+            (l) => l.sourceTransactionId === where.sourceTransactionId,
+          ) || null
+        );
       }
       return null;
     }),
@@ -50,15 +67,21 @@ describe('TaxService', () => {
   const mockTaxEventRepository = {
     create: jest.fn((dto) => dto),
     save: jest.fn(async (evt) => {
-      const saved = { id: evt.id || `evt-${Math.random()}`, createdAt: evt.createdAt || new Date(), ...evt } as TaxEvent;
+      const saved = {
+        id: evt.id || `evt-${Math.random()}`,
+        createdAt: evt.createdAt || new Date(),
+        ...evt,
+      } as TaxEvent;
       taxEvents.push(saved);
       return saved;
     }),
     find: jest.fn(async ({ where, order, relations }) => {
       let filtered = taxEvents.filter((e) => {
         if (where.userId !== e.userId) return false;
-        if (where.taxYear !== undefined && e.taxYear !== where.taxYear) return false;
-        if (where.eventType !== undefined && e.eventType !== where.eventType) return false;
+        if (where.taxYear !== undefined && e.taxYear !== where.taxYear)
+          return false;
+        if (where.eventType !== undefined && e.eventType !== where.eventType)
+          return false;
         return true;
       });
       if (order?.createdAt === 'ASC') {
@@ -86,7 +109,9 @@ describe('TaxService', () => {
     }),
     findOne: jest.fn(async ({ where }) => {
       if (where.transactionId) {
-        return taxEvents.find((e) => e.transactionId === where.transactionId) || null;
+        return (
+          taxEvents.find((e) => e.transactionId === where.transactionId) || null
+        );
       }
       return null;
     }),
@@ -95,26 +120,41 @@ describe('TaxService', () => {
   const mockPriceSnapshotRepository = {
     create: jest.fn((dto) => dto),
     save: jest.fn(async (snap) => {
-      const saved = { id: snap.id || `snap-${Math.random()}`, ...snap } as PriceSnapshot;
+      const saved = {
+        id: snap.id || `snap-${Math.random()}`,
+        ...snap,
+      } as PriceSnapshot;
       priceSnapshots.push(saved);
       return saved;
     }),
     findOne: jest.fn(async ({ where }) => {
-      return priceSnapshots.find(
-        (s) => s.transactionId === where.transactionId && s.currency === where.currency,
-      ) || null;
+      return (
+        priceSnapshots.find(
+          (s) =>
+            s.transactionId === where.transactionId &&
+            s.currency === where.currency,
+        ) || null
+      );
     }),
   };
 
   const mockTaxExportJobRepository = {
     create: jest.fn((dto) => dto),
     save: jest.fn(async (job) => {
-      const saved = { id: job.id || `job-${Math.random()}`, status: job.status || TaxExportStatus.PENDING, ...job } as TaxExportJob;
+      const saved = {
+        id: job.id || `job-${Math.random()}`,
+        status: job.status || TaxExportStatus.PENDING,
+        ...job,
+      } as TaxExportJob;
       taxExportJobs.push(saved);
       return saved;
     }),
     findOne: jest.fn(async ({ where }) => {
-      return taxExportJobs.find((j) => j.id === where.id && j.userId === where.userId) || null;
+      return (
+        taxExportJobs.find(
+          (j) => j.id === where.id && j.userId === where.userId,
+        ) || null
+      );
     }),
     update: jest.fn(async (id, updateDto) => {
       const job = taxExportJobs.find((j) => j.id === id);
@@ -153,11 +193,26 @@ describe('TaxService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TaxService,
-        { provide: getRepositoryToken(CostBasisLot), useValue: mockCostBasisLotRepository },
-        { provide: getRepositoryToken(TaxEvent), useValue: mockTaxEventRepository },
-        { provide: getRepositoryToken(PriceSnapshot), useValue: mockPriceSnapshotRepository },
-        { provide: getRepositoryToken(TaxExportJob), useValue: mockTaxExportJobRepository },
-        { provide: getRepositoryToken(Transaction), useValue: mockTransactionRepository },
+        {
+          provide: getRepositoryToken(CostBasisLot),
+          useValue: mockCostBasisLotRepository,
+        },
+        {
+          provide: getRepositoryToken(TaxEvent),
+          useValue: mockTaxEventRepository,
+        },
+        {
+          provide: getRepositoryToken(PriceSnapshot),
+          useValue: mockPriceSnapshotRepository,
+        },
+        {
+          provide: getRepositoryToken(TaxExportJob),
+          useValue: mockTaxExportJobRepository,
+        },
+        {
+          provide: getRepositoryToken(Transaction),
+          useValue: mockTransactionRepository,
+        },
         { provide: ExchangeRatesService, useValue: mockExchangeRatesService },
         { provide: getQueueToken(TAX_QUEUE), useValue: mockTaxQueue },
       ],
@@ -245,7 +300,9 @@ describe('TaxService', () => {
       // Proceeds: 40 * $2.50 = $100.00
       // Cost basis: 40 * $1.50 = $60.00
       // Net gain: $40.00
-      const disposalEvent = taxEvents.find((e) => e.eventType === TaxEventType.DISPOSAL);
+      const disposalEvent = taxEvents.find(
+        (e) => e.eventType === TaxEventType.DISPOSAL,
+      );
       expect(disposalEvent).toBeDefined();
       expect(disposalEvent).toMatchObject({
         quantity: '40.00000000',
@@ -306,7 +363,9 @@ describe('TaxService', () => {
       expect(costBasisLots[1].remainingQuantity).toBe('5.00000000');
 
       // Expect two disposal events
-      const disposals = taxEvents.filter((e) => e.eventType === TaxEventType.DISPOSAL);
+      const disposals = taxEvents.filter(
+        (e) => e.eventType === TaxEventType.DISPOSAL,
+      );
       expect(disposals).toHaveLength(2);
 
       // Event 1 (consuming lot 1):
@@ -417,7 +476,9 @@ describe('TaxService', () => {
       await service.processTransaction('tx-1');
 
       // Price snapshot table should store $5.00
-      const snapshot = priceSnapshots.find((s) => s.transactionId === 'tx-1' && s.currency === 'XLM');
+      const snapshot = priceSnapshots.find(
+        (s) => s.transactionId === 'tx-1' && s.currency === 'XLM',
+      );
       expect(snapshot).toBeDefined();
       expect(snapshot?.priceUsd).toBe('5');
 
@@ -444,19 +505,29 @@ describe('TaxService', () => {
       transactions.push(tx);
 
       // Force mockExchangeRatesService.getRate to throw an error
-      mockExchangeRatesService.getRate.mockRejectedValueOnce(new Error('Rate service offline'));
+      mockExchangeRatesService.getRate.mockRejectedValueOnce(
+        new Error('Rate service offline'),
+      );
 
       // Expect processTransaction to reject and propagate the error
-      await expect(service.processTransaction('tx-err')).rejects.toThrow('Rate service offline');
+      await expect(service.processTransaction('tx-err')).rejects.toThrow(
+        'Rate service offline',
+      );
     });
   });
 
   describe('Asynchronous Tax Processing non-blocking behavior', () => {
     it('should enqueue the export job and return status immediately', async () => {
-      const result = await service.enqueueExportJob('user-1', 2026, TaxExportJurisdiction.US);
+      const result = await service.enqueueExportJob(
+        'user-1',
+        2026,
+        TaxExportJurisdiction.US,
+      );
       expect(result).toHaveProperty('jobId');
       expect(result.status).toBe(TaxExportStatus.PENDING);
-      expect(mockTaxQueue.add).toHaveBeenCalledWith('export-tax-csv', { jobId: result.jobId });
+      expect(mockTaxQueue.add).toHaveBeenCalledWith('export-tax-csv', {
+        jobId: result.jobId,
+      });
     });
   });
 
@@ -509,7 +580,7 @@ describe('TaxService', () => {
         createdAt: new Date('2026-01-01T12:00:00Z'),
       } as Transaction;
       transactions.push(txAcq);
-      mockExchangeRatesService.getRate.mockResolvedValueOnce({ rate: 5.00 });
+      mockExchangeRatesService.getRate.mockResolvedValueOnce({ rate: 5.0 });
       await service.processTransaction('tx-acq-csv');
 
       const txDisp = {
@@ -522,7 +593,7 @@ describe('TaxService', () => {
         createdAt: new Date('2026-06-01T12:00:00Z'),
       } as Transaction;
       transactions.push(txDisp);
-      mockExchangeRatesService.getRate.mockResolvedValueOnce({ rate: 15.00 }); // XLM is $15
+      mockExchangeRatesService.getRate.mockResolvedValueOnce({ rate: 15.0 }); // XLM is $15
 
       // Setup price snapshot for GBP fallback (e.g. GBP/USD is 1.25)
       const snapGbp = {
@@ -541,19 +612,29 @@ describe('TaxService', () => {
       });
 
       // Generate US CSV
-      const usCsv = await (service as any).generateCsvContent(events, TaxExportJurisdiction.US);
+      const usCsv = await (service as any).generateCsvContent(
+        events,
+        TaxExportJurisdiction.US,
+      );
       console.log('--- BEGIN US CSV ---');
       console.log(usCsv);
       console.log('--- END US CSV ---');
 
       // Generate UK CSV
-      const ukCsv = await (service as any).generateCsvContent(events, TaxExportJurisdiction.UK);
+      const ukCsv = await (service as any).generateCsvContent(
+        events,
+        TaxExportJurisdiction.UK,
+      );
       console.log('--- BEGIN UK CSV ---');
       console.log(ukCsv);
       console.log('--- END UK CSV ---');
 
-      expect(usCsv).toContain('Description,Date Acquired,Date Sold,Proceeds,Cost Basis,Gain/Loss');
-      expect(ukCsv).toContain('Date,Description,Proceeds (GBP),Allowable Costs (GBP),Gain/Loss (GBP)');
+      expect(usCsv).toContain(
+        'Description,Date Acquired,Date Sold,Proceeds,Cost Basis,Gain/Loss',
+      );
+      expect(ukCsv).toContain(
+        'Date,Description,Proceeds (GBP),Allowable Costs (GBP),Gain/Loss (GBP)',
+      );
     });
   });
 });

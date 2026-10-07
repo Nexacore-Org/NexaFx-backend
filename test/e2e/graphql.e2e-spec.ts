@@ -16,9 +16,7 @@ describe('GraphQL (e2e)', () => {
   let httpServer: any;
 
   const gql = (query: string, variables?: Record<string, any>) =>
-    request(httpServer)
-      .post('/graphql')
-      .send({ query, variables });
+    request(httpServer).post('/graphql').send({ query, variables });
 
   beforeAll(async () => {
     app = await createTestApp();
@@ -141,7 +139,7 @@ describe('GraphQL (e2e)', () => {
   });
 
   describe('transactions query scoping', () => {
-    it('returns only the requesting user\'s own transactions', async () => {
+    it("returns only the requesting user's own transactions", async () => {
       const owner = await seedTestUser(dataSource, {
         email: 'gql-owner@example.com',
       });

@@ -375,7 +375,9 @@ export class ScheduledJobsService {
     );
 
     try {
-      const count = await (this.analyticsService as any).recordBalanceSnapshotsForAllUsers();
+      const count = await (
+        this.analyticsService as any
+      ).recordBalanceSnapshotsForAllUsers();
       this.logger.log(
         `[Scheduled Job] Balance snapshots recorded for ${count} users`,
       );
@@ -480,9 +482,13 @@ export class ScheduledJobsService {
     await this.transactionRepository.save(transaction);
     await this.redisService.del('admin_stats');
 
-    this.taxQueue.add('process-transaction', { transactionId: transaction.id }).catch((e) =>
-      this.logger.error(`Failed to enqueue tax processing for reconciled transaction ${transaction.id}: ${e.message}`)
-    );
+    this.taxQueue
+      .add('process-transaction', { transactionId: transaction.id })
+      .catch((e) =>
+        this.logger.error(
+          `Failed to enqueue tax processing for reconciled transaction ${transaction.id}: ${e.message}`,
+        ),
+      );
 
     // Update user balance for deposits
     if (transaction.type === TransactionType.DEPOSIT) {
@@ -510,7 +516,6 @@ export class ScheduledJobsService {
         transaction.type === TransactionType.DEPOSIT
           ? `Your deposit of ${transaction.amount} ${transaction.currency} has been confirmed`
           : `Your withdrawal of ${transaction.amount} ${transaction.currency} has been confirmed`;
-
 
       await this.notificationsService.dispatch(
         transaction.userId,
@@ -862,7 +867,7 @@ export class ScheduledJobsService {
       this.logger.error(
         '[Scheduled Job] Re-screening failed:',
         error instanceof Error ? error.message : String(error),
-        );
+      );
     }
   }
 
@@ -961,10 +966,7 @@ export class ScheduledJobsService {
       await this.vaultsService.processMaturity();
       this.logger.log('[Scheduled Job] Vault maturity check completed');
     } catch (error) {
-      this.logger.error(
-        '[Scheduled Job] Vault maturity check failed:',
-        error,
-      );
+      this.logger.error('[Scheduled Job] Vault maturity check failed:', error);
     }
   }
 
@@ -975,10 +977,7 @@ export class ScheduledJobsService {
       await this.vaultsService.processAutoDeposits();
       this.logger.log('[Scheduled Job] Vault auto-deposits completed');
     } catch (error) {
-      this.logger.error(
-        '[Scheduled Job] Vault auto-deposits failed:',
-        error,
-      );
+      this.logger.error('[Scheduled Job] Vault auto-deposits failed:', error);
     }
   }
 }

@@ -32,13 +32,19 @@ export class ExportProcessor extends WorkerHost {
     private readonly configService: ConfigService,
     @InjectRepository(User) private userRepository: Repository<User>,
     @InjectRepository(Wallet) private walletRepository: Repository<Wallet>,
-    @InjectRepository(Transaction) private transactionRepository: Repository<Transaction>,
-    @InjectRepository(LedgerEntry) private ledgerRepository: Repository<LedgerEntry>,
-    @InjectRepository(Notification) private notificationRepository: Repository<Notification>,
+    @InjectRepository(Transaction)
+    private transactionRepository: Repository<Transaction>,
+    @InjectRepository(LedgerEntry)
+    private ledgerRepository: Repository<LedgerEntry>,
+    @InjectRepository(Notification)
+    private notificationRepository: Repository<Notification>,
     @InjectRepository(KycRecord) private kycRepository: Repository<KycRecord>,
-    @InjectRepository(AuditLog) private auditLogRepository: Repository<AuditLog>,
-    @InjectRepository(Referral) private referralRepository: Repository<Referral>,
-    @InjectRepository(RateAlert) private rateAlertRepository: Repository<RateAlert>,
+    @InjectRepository(AuditLog)
+    private auditLogRepository: Repository<AuditLog>,
+    @InjectRepository(Referral)
+    private referralRepository: Repository<Referral>,
+    @InjectRepository(RateAlert)
+    private rateAlertRepository: Repository<RateAlert>,
   ) {
     super();
     this.s3Client = new S3Client({
@@ -46,15 +52,16 @@ export class ExportProcessor extends WorkerHost {
     });
   }
 
-  async process(job: Job<{ userId: string, email: string }>): Promise<void> {
+  async process(job: Job<{ userId: string; email: string }>): Promise<void> {
     const { userId, email } = job.data;
     this.logger.log(`Processing GDPR export for user ${userId}`);
 
     try {
       const data = await this.collectData(userId);
       const zipStream = this.createZipStream(data);
-      
-      const bucket = this.configService.get<string>('AWS_S3_BUCKET') || 'nexafx-exports';
+
+      const bucket =
+        this.configService.get<string>('AWS_S3_BUCKET') || 'nexafx-exports';
       const key = `exports/nexafx-export-${userId}-${Date.now()}.zip`;
 
       // Upload to S3
@@ -69,10 +76,12 @@ export class ExportProcessor extends WorkerHost {
       });
 
       await upload.done();
-      
+
       // Generate signed URL (48 hours expiry)
       const command = new GetObjectCommand({ Bucket: bucket, Key: key });
-      const signedUrl = await getSignedUrl(this.s3Client, command, { expiresIn: 48 * 3600 });
+      const signedUrl = await getSignedUrl(this.s3Client, command, {
+        expiresIn: 48 * 3600,
+      });
 
       // Send email
       await this.sendEmail(email, signedUrl);
@@ -84,36 +93,39 @@ export class ExportProcessor extends WorkerHost {
   }
 
   private async collectData(userId: string) {
-    const [
-      user,
-      wallets,
-      transactions,
-    ] = await Promise.all([
+    const [user, wallets, transactions] = await Promise.all([
       this.userRepository.findOne({ where: { id: userId } }),
       this.walletRepository.find({ where: { userId } }),
       this.transactionRepository.find({ where: { userId } }),
     ]);
 
-    const transactionIds = transactions.map(t => t.id);
-    const ledgerEntries = transactionIds.length > 0
-      ? await this.ledgerRepository.find({ where: { transactionId: (await import('typeorm')).In(transactionIds) } })
-      : [];
+    const transactionIds = transactions.map((t) => t.id);
+    const ledgerEntries =
+      transactionIds.length > 0
+        ? await this.ledgerRepository.find({
+            where: {
+              transactionId: (await import('typeorm')).In(transactionIds),
+            },
+          })
+        : [];
 
-    const [
-      notifications,
-      kycRecords,
-      auditLogs,
-      referrals,
-      rateAlerts
-    ] = await Promise.all([
-      this.notificationRepository.find({ where: { userId } }),
-      this.kycRepository.find({ where: { userId } }),
-      this.auditLogRepository.find({ where: { userId } }),
-      this.referralRepository.find({ where: [{ referrerId: userId }, { refereeId: userId }] }),
-      this.rateAlertRepository.find({ where: { userId } }),
-    ]);
+    const [notifications, kycRecords, auditLogs, referrals, rateAlerts] =
+      await Promise.all([
+        this.notificationRepository.find({ where: { userId } }),
+        this.kycRepository.find({ where: { userId } }),
+        this.auditLogRepository.find({ where: { userId } }),
+        this.referralRepository.find({
+          where: [{ referrerId: userId }, { refereeId: userId }],
+        }),
+        this.rateAlertRepository.find({ where: { userId } }),
+      ]);
 
-    const { password, twoFactorSecret, walletSecretKeyEncrypted, ...safeProfile } = user as any;
+    const {
+      password,
+      twoFactorSecret,
+      walletSecretKeyEncrypted,
+      ...safeProfile
+    } = user as any;
 
     return {
       profile: [safeProfile],
@@ -137,7 +149,9 @@ export class ExportProcessor extends WorkerHost {
     for (const [key, records] of Object.entries(data)) {
       const recordsArray = records as any[];
       if (recordsArray && recordsArray.length > 0) {
-        archive.append(JSON.stringify(recordsArray, null, 2), { name: `${key}.json` });
+        archive.append(JSON.stringify(recordsArray, null, 2), {
+          name: `${key}.json`,
+        });
         archive.append(this.convertToCSV(recordsArray), { name: `${key}.csv` });
       }
     }
@@ -148,19 +162,21 @@ export class ExportProcessor extends WorkerHost {
 
   private convertToCSV(data: any[]): string {
     if (!data || data.length === 0) return '';
-    const headers = Object.keys(data[0]).filter(key => {
+    const headers = Object.keys(data[0]).filter((key) => {
       const val = data[0][key];
       return val !== null && typeof val !== 'object';
     });
-    const rows = data.map(item =>
-      headers.map(header => {
-        const value = item[header];
-        if (value === null || value === undefined) return '';
-        const str = String(value);
-        return str.includes(',') || str.includes('"') || str.includes('\n')
-          ? `"${str.replace(/"/g, '""')}"`
-          : str;
-      }).join(',')
+    const rows = data.map((item) =>
+      headers
+        .map((header) => {
+          const value = item[header];
+          if (value === null || value === undefined) return '';
+          const str = String(value);
+          return str.includes(',') || str.includes('"') || str.includes('\n')
+            ? `"${str.replace(/"/g, '""')}"`
+            : str;
+        })
+        .join(','),
     );
     return [headers.join(','), ...rows].join('\n');
   }
@@ -168,7 +184,9 @@ export class ExportProcessor extends WorkerHost {
   private async sendEmail(to: string, link: string) {
     const apiKey = this.configService.get<string>('MAILGUN_API_KEY');
     const domain = this.configService.get<string>('MAILGUN_DOMAIN');
-    const fromEmail = this.configService.get<string>('MAILGUN_FROM_EMAIL') || 'no-reply@nexafx.com';
+    const fromEmail =
+      this.configService.get<string>('MAILGUN_FROM_EMAIL') ||
+      'no-reply@nexafx.com';
 
     if (!apiKey || !domain) {
       this.logger.warn('Mailgun config missing, cannot send export email');

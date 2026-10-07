@@ -22,7 +22,9 @@ interface ConnectedUser {
   },
 })
 @UseGuards(WsJwtGuard)
-export class MessagingGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
+export class MessagingGateway
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server: Server;
 
@@ -38,8 +40,13 @@ export class MessagingGateway implements OnGatewayInit, OnGatewayConnection, OnG
     const userId = payload?.userId;
     if (userId) {
       client.join(`user:${userId}`);
-      this.connectedUsers.set(userId, { socketId: client.id, lastSeen: new Date() });
-      this.logger.debug(`User ${userId} connected to messaging (socket: ${client.id})`);
+      this.connectedUsers.set(userId, {
+        socketId: client.id,
+        lastSeen: new Date(),
+      });
+      this.logger.debug(
+        `User ${userId} connected to messaging (socket: ${client.id})`,
+      );
     }
   }
 

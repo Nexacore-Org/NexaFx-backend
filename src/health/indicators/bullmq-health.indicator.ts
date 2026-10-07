@@ -30,8 +30,7 @@ export class BullMQHealthIndicator {
   }
 
   async isHealthy(): Promise<BullMQHealthResult> {
-    const redisUrl =
-      process.env.BULLMQ_REDIS_URL ?? process.env.REDIS_URL;
+    const redisUrl = process.env.BULLMQ_REDIS_URL ?? process.env.REDIS_URL;
 
     if (!redisUrl) {
       return {
@@ -94,9 +93,7 @@ export class BullMQHealthIndicator {
 
       return { status: 'up', responseTimeMs };
     } catch (error: any) {
-      this.logger.error(
-        `BullMQ health check failed: ${error.message}`,
-      );
+      this.logger.error(`BullMQ health check failed: ${error.message}`);
       return {
         status: 'down',
         message: error.message,

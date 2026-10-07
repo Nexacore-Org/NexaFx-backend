@@ -50,7 +50,7 @@ describe('CreateCategoryDto', () => {
   it('should fail validation when color is not a valid enum value', async () => {
     const dto = new CreateCategoryDto();
     dto.name = 'Groceries';
-    dto.color = 'INVALID_COLOR' as TransactionCategoryColor;
+    dto.color = 'INVALID_COLOR';
     const errors = await validate(dto);
     expect(errors.length).toBeGreaterThan(0);
   });

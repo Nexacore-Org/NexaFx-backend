@@ -14,7 +14,6 @@ import { User, UserKycTier } from '../users/user.entity';
 import {
   Notification,
   NotificationType,
-
 } from '../notifications/entities/notification.entity';
 import { FirebaseService } from '../firebase/firebase.service';
 import { WebhookService } from '../webhooks/services/webhook.service';
@@ -475,7 +474,12 @@ export class KycService {
         );
 
       this.activityFeedService
-        .append(kyc.userId, ActivityFeedType.KYC_DECISION, kyc.id, 'KYCApplication')
+        .append(
+          kyc.userId,
+          ActivityFeedType.KYC_DECISION,
+          kyc.id,
+          'KYCApplication',
+        )
         .catch((err: Error) =>
           this.logger.error(`Failed to append KYC activity: ${err.message}`),
         );
@@ -548,8 +552,8 @@ export class KycService {
         this.firebaseService
           .sendToTokens(
             user.fcmTokens,
-            notificationPayload.title!,
-            notificationPayload.message!,
+            notificationPayload.title,
+            notificationPayload.message,
             { entity: 'KYC', kycStatus: newStatus.toLowerCase() },
             {
               notificationId: notificationPayload.id ?? '',
@@ -577,7 +581,12 @@ export class KycService {
         );
 
       this.activityFeedService
-        .append(kyc.userId, ActivityFeedType.KYC_DECISION, kyc.id, 'KYCApplication')
+        .append(
+          kyc.userId,
+          ActivityFeedType.KYC_DECISION,
+          kyc.id,
+          'KYCApplication',
+        )
         .catch((err: Error) =>
           this.logger.error(`Failed to append KYC activity: ${err.message}`),
         );

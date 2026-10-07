@@ -1,4 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "files": ["src/main.ts", "src/app.module.ts"]
-}

@@ -13,7 +13,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
 
-
 // ---------------------------------------------------------------------------
 // Helpers extracted from validate-migrations.ts (mirrored here for unit testing)
 // ---------------------------------------------------------------------------
@@ -110,28 +109,20 @@ describe('migration validation logic', () => {
   // -------------------------------------------------------------------------
   describe('countMigrationFilesInDir', () => {
     it('should return 0 for a non-existent directory', () => {
-      const count = countMigrationFilesInDir(
-        '/non/existent/path/migrations',
-      );
+      const count = countMigrationFilesInDir('/non/existent/path/migrations');
       expect(count).toBe(0);
     });
 
     it('should count only .ts files that are not spec files', () => {
       // Point at the real src/migrations directory
-      const migrationsDir = path.resolve(
-        __dirname,
-        '../../migrations',
-      );
+      const migrationsDir = path.resolve(__dirname, '../../migrations');
       const count = countMigrationFilesInDir(migrationsDir);
       // We have at least 3 migration files (1760, 1761, 1762)
       expect(count).toBeGreaterThanOrEqual(3);
     });
 
     it('should not count .spec.ts files as migrations', () => {
-      const migrationsDir = path.resolve(
-        __dirname,
-        '../../migrations',
-      );
+      const migrationsDir = path.resolve(__dirname, '../../migrations');
       if (fs.existsSync(migrationsDir)) {
         const count = countMigrationFilesInDir(migrationsDir);
         const specFiles = fs

@@ -7,7 +7,8 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { User, UserKycTier } from '../../users/user.entity';
+import { User } from '../../users/user.entity';
+import { UserKycTier } from '../../users/enums/user-kyc-tier.enum';
 
 export enum KycStatus {
   PENDING = 'PENDING',
@@ -45,7 +46,7 @@ export class KYCApplication {
   @Column({ type: 'jsonb', default: {} })
   documents: Record<string, { s3Key: string; mimeType: string }>;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   rejectionReason: string | null;
 
   @Column({ type: 'uuid', nullable: true })

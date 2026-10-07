@@ -17,7 +17,10 @@ describe('MailProcessor', () => {
     mailService = { sendNow: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [MailProcessor, { provide: MailService, useValue: mailService }],
+      providers: [
+        MailProcessor,
+        { provide: MailService, useValue: mailService },
+      ],
     }).compile();
 
     processor = module.get(MailProcessor);

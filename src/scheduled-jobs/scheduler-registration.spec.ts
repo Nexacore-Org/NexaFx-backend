@@ -60,7 +60,7 @@ describe('Scheduler registration', () => {
 
   const mockRedisService = {
     del: jest.fn(),
-  }
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();

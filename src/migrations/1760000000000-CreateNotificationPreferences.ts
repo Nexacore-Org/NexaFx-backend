@@ -9,9 +9,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * NOTE: The early-return guard (hasTable check) runs OUTSIDE the transaction
  * because it is a read-only introspection query that does not mutate state.
  */
-export class CreateNotificationPreferences1760000000000
-  implements MigrationInterface
-{
+export class CreateNotificationPreferences1760000000000 implements MigrationInterface {
   name = 'CreateNotificationPreferences1760000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

@@ -9,7 +9,12 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
-import { Proposal, ProposalStatus, ProposalType, VoteWeightSource } from '../entities/proposal.entity';
+import {
+  Proposal,
+  ProposalStatus,
+  ProposalType,
+  VoteWeightSource,
+} from '../entities/proposal.entity';
 import { Vote, VoteChoice } from '../entities/vote.entity';
 import { User, UserRole } from '../../users/user.entity';
 import { CreateProposalDto } from '../dto/create-proposal.dto';
@@ -49,16 +54,24 @@ export class ProposalService {
     user: User,
     createProposalDto: CreateProposalDto,
   ): Promise<Proposal> {
-    const isContractUpgrade = createProposalDto.proposalType === ProposalType.CONTRACT_UPGRADE;
+    const isContractUpgrade =
+      createProposalDto.proposalType === ProposalType.CONTRACT_UPGRADE;
 
     if (isContractUpgrade) {
       if (user.role !== UserRole.SUPER_ADMIN) {
-        throw new ForbiddenException('Only SUPER_ADMIN can create CONTRACT_UPGRADE proposals');
+        throw new ForbiddenException(
+          'Only SUPER_ADMIN can create CONTRACT_UPGRADE proposals',
+        );
       }
       if (!createProposalDto.upgradeConfig?.auditReportUrl) {
-        throw new BadRequestException('auditReportUrl is required for CONTRACT_UPGRADE proposals');
+        throw new BadRequestException(
+          'auditReportUrl is required for CONTRACT_UPGRADE proposals',
+        );
       }
-    } else if (user.role !== UserRole.ADMIN && user.role !== UserRole.SUPER_ADMIN) {
+    } else if (
+      user.role !== UserRole.ADMIN &&
+      user.role !== UserRole.SUPER_ADMIN
+    ) {
       throw new ForbiddenException('Only ADMIN can create proposals');
     }
 
@@ -67,13 +80,17 @@ export class ProposalService {
     const now = new Date();
 
     if (votingStartAt < now) {
-      throw new BadRequestException('votingStartAt must be now or in the future');
+      throw new BadRequestException(
+        'votingStartAt must be now or in the future',
+      );
     }
     if (votingEndAt <= votingStartAt) {
       throw new BadRequestException('votingEndAt must be after votingStartAt');
     }
 
-    const passThreshold = isContractUpgrade ? 75 : createProposalDto.passThresholdPercent;
+    const passThreshold = isContractUpgrade
+      ? 75
+      : createProposalDto.passThresholdPercent;
 
     const proposal = this.proposalRepo.create({
       title: createProposalDto.title,
@@ -86,9 +103,13 @@ export class ProposalService {
       passThresholdPercent: passThreshold,
       stellarContractId: createProposalDto.stellarContractId ?? null,
       proposalType: createProposalDto.proposalType ?? ProposalType.STANDARD,
-      upgradeConfig: isContractUpgrade ? (createProposalDto.upgradeConfig ?? null) : null,
+      upgradeConfig: isContractUpgrade
+        ? (createProposalDto.upgradeConfig ?? null)
+        : null,
       requiredStakeTier: isContractUpgrade ? 'PLATINUM' : null,
-      voteWeightSource: isContractUpgrade ? VoteWeightSource.STAKING_BALANCE : null,
+      voteWeightSource: isContractUpgrade
+        ? VoteWeightSource.STAKING_BALANCE
+        : null,
     });
 
     return this.proposalRepo.save(proposal);
@@ -136,7 +157,9 @@ export class ProposalService {
     if (proposal.proposalType === ProposalType.CONTRACT_UPGRADE) {
       const stakeTier = (voter as any).stakeTier;
       if (stakeTier !== 'PLATINUM') {
-        throw new ForbiddenException('Only PLATINUM stakers can vote on contract upgrade proposals');
+        throw new ForbiddenException(
+          'Only PLATINUM stakers can vote on contract upgrade proposals',
+        );
       }
     }
 

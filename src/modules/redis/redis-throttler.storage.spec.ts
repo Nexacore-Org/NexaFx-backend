@@ -14,12 +14,20 @@ describe('RedisThrottlerStorage', () => {
     mockClient.ttl.mockResolvedValue(60);
     mockClient.incr.mockResolvedValue(1);
 
-    const record = await storage.increment('ip-127.0.0.1', 60000, 10, 0, 'default');
+    const record = await storage.increment(
+      'ip-127.0.0.1',
+      60000,
+      10,
+      0,
+      'default',
+    );
 
     expect(record.totalHits).toBe(1);
     expect(record.isBlocked).toBe(false);
     expect(record.timeToExpire).toBe(60);
-    expect(mockClient.incr).toHaveBeenCalledWith('test-throttler:default:ip-127.0.0.1');
+    expect(mockClient.incr).toHaveBeenCalledWith(
+      'test-throttler:default:ip-127.0.0.1',
+    );
     expect(mockClient.expire).toHaveBeenCalledWith(
       'test-throttler:default:ip-127.0.0.1',
       60,
@@ -30,7 +38,13 @@ describe('RedisThrottlerStorage', () => {
     mockClient.ttl.mockResolvedValue(45);
     mockClient.incr.mockResolvedValue(5);
 
-    const record = await storage.increment('ip-127.0.0.1', 60000, 10, 0, 'default');
+    const record = await storage.increment(
+      'ip-127.0.0.1',
+      60000,
+      10,
+      0,
+      'default',
+    );
 
     expect(record.totalHits).toBe(5);
     expect(record.isBlocked).toBe(false);
@@ -82,7 +96,13 @@ describe('RedisThrottlerStorage', () => {
   it('should fallback gracefully when Redis client is not provided', async () => {
     const fallbackStorage = new RedisThrottlerStorage(null);
 
-    const record = await fallbackStorage.increment('ip-127.0.0.1', 60000, 10, 0, 'default');
+    const record = await fallbackStorage.increment(
+      'ip-127.0.0.1',
+      60000,
+      10,
+      0,
+      'default',
+    );
 
     expect(record.totalHits).toBe(1);
     expect(record.isBlocked).toBe(false);

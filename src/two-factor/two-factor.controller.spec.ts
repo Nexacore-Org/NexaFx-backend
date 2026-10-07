@@ -129,7 +129,9 @@ describe('TwoFactorController', () => {
       twoFactorService.consumeBackupCode.mockResolvedValue(undefined);
 
       await expect(controller.recover(dto)).resolves.toBe(token);
-      expect(authService.getUserIdFromPartialAuth).toHaveBeenCalledWith('partial');
+      expect(authService.getUserIdFromPartialAuth).toHaveBeenCalledWith(
+        'partial',
+      );
       expect(twoFactorService.consumeBackupCode).toHaveBeenCalledWith(
         'user-1',
         'ABCDEFGHJK',

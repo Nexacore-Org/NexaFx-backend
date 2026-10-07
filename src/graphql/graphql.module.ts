@@ -3,7 +3,8 @@ import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { join } from 'path';
-import depthLimit from 'graphql-depth-limit';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import depthLimit = require('graphql-depth-limit');
 import {
   createComplexityRule,
   fieldExtensionsEstimator,
@@ -30,14 +31,14 @@ import { CurrenciesModule } from '../currencies/currencies.module';
           playground: !isProduction,
           introspection: !isProduction,
           validationRules: [
-            depthLimit(5) as any,
+            depthLimit(5),
             createComplexityRule({
               estimators: [
                 fieldExtensionsEstimator(),
                 simpleEstimator({ defaultComplexity: 1 }),
               ],
               maximumComplexity: 50,
-            }) as any,
+            }),
           ],
           context: ({ req }: { req: Express.Request }) => ({ req }),
         };
@@ -52,4 +53,3 @@ import { CurrenciesModule } from '../currencies/currencies.module';
   providers: [UserResolver, TransactionResolver, ExchangeRateResolver],
 })
 export class GraphQLApiModule {}
-

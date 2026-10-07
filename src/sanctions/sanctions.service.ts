@@ -59,9 +59,8 @@ export class SanctionsService {
       }
     }
 
-    const topScore = matches.length > 0
-      ? Math.max(...matches.map((m) => m.score))
-      : 0;
+    const topScore =
+      matches.length > 0 ? Math.max(...matches.map((m) => m.score)) : 0;
 
     const status = this.resolveStatus(topScore);
 
@@ -168,7 +167,9 @@ export class SanctionsService {
       }
     }
 
-    this.logger.log(`Re-screening complete: ${processed} processed, ${failed} failed`);
+    this.logger.log(
+      `Re-screening complete: ${processed} processed, ${failed} failed`,
+    );
     return { processed, failed };
   }
 

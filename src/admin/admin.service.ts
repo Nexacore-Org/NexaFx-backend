@@ -751,7 +751,9 @@ export class AdminService {
       .select('transaction.currency', 'currency')
       .addSelect('SUM(CAST(transaction.amount AS DECIMAL))', 'volume')
       .where('transaction.createdAt >= :date30DaysAgo', { date30DaysAgo })
-      .andWhere('transaction.status = :status', { status: TransactionStatus.SUCCESS })
+      .andWhere('transaction.status = :status', {
+        status: TransactionStatus.SUCCESS,
+      })
       .groupBy('transaction.currency')
       .getRawMany();
 
@@ -794,11 +796,17 @@ export class AdminService {
     } as any);
   }
 
-  async streamAuditLogsCsv(response: Response, query: { from?: string; to?: string }) {
+  async streamAuditLogsCsv(
+    response: Response,
+    query: { from?: string; to?: string },
+  ) {
     const { from, to } = query;
 
     response.setHeader('Content-Type', 'text/csv');
-    response.setHeader('Content-Disposition', 'attachment; filename="audit-logs.csv"');
+    response.setHeader(
+      'Content-Disposition',
+      'attachment; filename="audit-logs.csv"',
+    );
 
     const csvStream = csv.format({ headers: true });
     csvStream.pipe(response);
@@ -808,7 +816,9 @@ export class AdminService {
       .orderBy('audit_log.createdAt', 'ASC');
 
     if (from) {
-      queryBuilder.andWhere('audit_log.createdAt >= :from', { from: new Date(from) });
+      queryBuilder.andWhere('audit_log.createdAt >= :from', {
+        from: new Date(from),
+      });
     }
     if (to) {
       queryBuilder.andWhere('audit_log.createdAt <= :to', { to: new Date(to) });
@@ -818,7 +828,9 @@ export class AdminService {
       const queryStream = await queryBuilder.stream();
       for await (const row of queryStream) {
         csvStream.write({
-          createdAt: row.audit_log_createdAt ? new Date(row.audit_log_createdAt).toISOString() : '',
+          createdAt: row.audit_log_createdAt
+            ? new Date(row.audit_log_createdAt).toISOString()
+            : '',
           actorId: row.audit_log_actorId || '',
           action: row.audit_log_action || '',
           resourceType: row.audit_log_resourceType || '',
@@ -828,7 +840,10 @@ export class AdminService {
         });
       }
     } catch (err: any) {
-      this.logger.error(`Error streaming audit logs CSV: ${err.message}`, err.stack);
+      this.logger.error(
+        `Error streaming audit logs CSV: ${err.message}`,
+        err.stack,
+      );
     } finally {
       csvStream.end();
     }

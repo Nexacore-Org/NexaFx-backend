@@ -1,4 +1,9 @@
-import { WebSocketGateway, WebSocketServer, OnGatewayConnection, OnGatewayDisconnect } from '@nestjs/websockets';
+import {
+  WebSocketGateway,
+  WebSocketServer,
+  OnGatewayConnection,
+  OnGatewayDisconnect,
+} from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
@@ -12,7 +17,9 @@ import { JwtService } from '@nestjs/jwt';
   cors: { origin: process.env.ALLOWED_ORIGINS },
   namespace: '/notifications',
 })
-export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class NotificationsGateway
+  implements OnGatewayConnection, OnGatewayDisconnect
+{
   constructor(private readonly jwtService: JwtService) {
     // Store a reference for static methods
     (global as any).__notificationsGatewayInstance = this;
@@ -43,14 +50,19 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
       NotificationsGateway.userSockets.get(userId)!.add(client);
       this.logger.log(`Socket ${client.id} connected, joined ${room}`);
     } catch (err) {
-      this.logger.warn(`Socket ${client.id} rejected: ${err.message}`);
+      this.logger.warn(
+        `Socket ${client.id} rejected: ${err instanceof Error ? err.message : String(err)}`,
+      );
       client.disconnect(true);
     }
   }
 
   /** Cleanup on disconnection */
   handleDisconnect(client: Socket) {
-    for (const [userId, sockets] of NotificationsGateway.userSockets.entries()) {
+    for (const [
+      userId,
+      sockets,
+    ] of NotificationsGateway.userSockets.entries()) {
       if (sockets.has(client)) {
         sockets.delete(client);
         if (sockets.size === 0) {
@@ -65,7 +77,8 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
   /** Emit an event to a specific user (all their sockets) */
   static sendToUser(userId: string, event: string, payload: any) {
     const room = `user:${userId}`;
-    const gateway = (global as any).__notificationsGatewayInstance as NotificationsGateway;
+    const gateway = (global as any)
+      .__notificationsGatewayInstance as NotificationsGateway;
     if (gateway && gateway.server) {
       gateway.server.to(room).emit(event, payload);
     } else {

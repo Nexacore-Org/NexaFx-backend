@@ -30,8 +30,7 @@ export class BackupManifestService {
           this.configService.get<string>('AWS_SECRET_ACCESS_KEY') || '',
       },
     });
-    this.bucketName =
-      this.configService.get<string>('BACKUP_BUCKET') || '';
+    this.bucketName = this.configService.get<string>('BACKUP_BUCKET') || '';
   }
 
   async listRecentManifests(limit = 10): Promise<BackupManifest[]> {

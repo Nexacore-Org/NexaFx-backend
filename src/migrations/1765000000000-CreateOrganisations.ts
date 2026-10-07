@@ -74,8 +74,12 @@ export class CreateOrganisations1765000000000 implements MigrationInterface {
     await queryRunner.query(`DROP INDEX "IDX_org_members_invite_token"`);
     await queryRunner.query(`DROP INDEX "IDX_org_members_org_user"`);
     await queryRunner.query(`DROP TABLE "organisation_members"`);
-    await queryRunner.query(`DROP TYPE "public"."organisation_members_invitestatus_enum"`);
-    await queryRunner.query(`DROP TYPE "public"."organisation_members_role_enum"`);
+    await queryRunner.query(
+      `DROP TYPE "public"."organisation_members_invitestatus_enum"`,
+    );
+    await queryRunner.query(
+      `DROP TYPE "public"."organisation_members_role_enum"`,
+    );
     await queryRunner.query(`DROP INDEX "IDX_organisations_name"`);
     await queryRunner.query(`DROP TABLE "organisations"`);
   }

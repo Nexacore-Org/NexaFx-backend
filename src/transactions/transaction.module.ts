@@ -27,10 +27,16 @@ import { ComplianceModule } from '../modules/compliance/compliance.module';
 import { KycModule } from '../kyc/kyc.module';
 import { MicroSavingsModule } from '../modules/micro-savings/micro-savings.module';
 import { UnifiedActivityFeedModule } from '../unified-activity-feed/unified-activity-feed.module';
+import { QueuesModule } from '../modules/queues/queues.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Transaction, TransactionCategory, TransactionReversal]),
+    QueuesModule,
+    TypeOrmModule.forFeature([
+      Transaction,
+      TransactionCategory,
+      TransactionReversal,
+    ]),
     CurrenciesModule,
     ExchangeRatesModule,
     BlockchainModule,
@@ -52,7 +58,11 @@ import { UnifiedActivityFeedModule } from '../unified-activity-feed/unified-acti
     UnifiedActivityFeedModule,
   ],
   controllers: [TransactionsController, TransactionReversalController],
-  providers: [TransactionsService, TransactionVerificationService, TransactionReversalService],
+  providers: [
+    TransactionsService,
+    TransactionVerificationService,
+    TransactionReversalService,
+  ],
   exports: [TransactionsService],
 })
 export class TransactionsModule {}

@@ -19,7 +19,8 @@ export class AuditLogsRepository extends Repository<AuditLog> {
       const auditLog = this.create({
         ...createAuditLogDto,
         actorId: createAuditLogDto.actorId || createAuditLogDto.userId,
-        resourceType: createAuditLogDto.resourceType || createAuditLogDto.entity,
+        resourceType:
+          createAuditLogDto.resourceType || createAuditLogDto.entity,
         resourceId: createAuditLogDto.resourceId || createAuditLogDto.entityId,
         status: createAuditLogDto.status as any,
       });
@@ -77,7 +78,9 @@ export class AuditLogsRepository extends Repository<AuditLog> {
 
     const typeFilter = resourceType || entity;
     if (typeFilter) {
-      query.andWhere('audit_log.resourceType = :resourceType', { resourceType: typeFilter });
+      query.andWhere('audit_log.resourceType = :resourceType', {
+        resourceType: typeFilter,
+      });
     }
 
     const userFilter = actorId || userId;

@@ -23,12 +23,12 @@ export async function scanBuffer(buffer: Buffer): Promise<void> {
     socket.on('connect', () => {
       // Send INSTREAM command
       socket.write('nINSTREAM\n');
-      
+
       // Send buffer chunk by chunk
       // ClamAV INSTREAM format: [4 byte big-endian length][chunk data]
       const chunkSize = 8192;
       let offset = 0;
-      
+
       while (offset < buffer.length) {
         const chunk = buffer.subarray(offset, offset + chunkSize);
         const sizeBuf = Buffer.alloc(4);
@@ -37,7 +37,7 @@ export async function scanBuffer(buffer: Buffer): Promise<void> {
         socket.write(chunk);
         offset += chunkSize;
       }
-      
+
       // Terminate stream with 4-byte 0
       const zeroBuf = Buffer.alloc(4);
       zeroBuf.writeUInt32BE(0, 0);

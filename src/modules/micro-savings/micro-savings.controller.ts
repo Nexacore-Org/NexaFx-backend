@@ -1,7 +1,29 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Request, HttpCode, HttpStatus, ParseUUIDPipe } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  Request,
+  HttpCode,
+  HttpStatus,
+  ParseUUIDPipe,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { MicroSavingsService } from './micro-savings.service';
-import { CreateMicroSavingsRuleDto, UpdateMicroSavingsRuleDto } from './dto/micro-savings.dto';
+import {
+  CreateMicroSavingsRuleDto,
+  UpdateMicroSavingsRuleDto,
+} from './dto/micro-savings.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 @ApiTags('Micro Savings')
@@ -14,12 +36,17 @@ export class MicroSavingsController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a micro-savings rule' })
-  async create(@Request() req: { user: { userId: string } }, @Body() dto: CreateMicroSavingsRuleDto) {
+  async create(
+    @Request() req: { user: { userId: string } },
+    @Body() dto: CreateMicroSavingsRuleDto,
+  ) {
     return this.microSavingsService.createRule(req.user.userId, dto);
   }
 
   @Get()
-  @ApiOperation({ summary: 'List active micro-savings rules with daily contribution' })
+  @ApiOperation({
+    summary: 'List active micro-savings rules with daily contribution',
+  })
   async list(@Request() req: { user: { userId: string } }) {
     return this.microSavingsService.listActiveRules(req.user.userId);
   }
@@ -52,6 +79,10 @@ export class MicroSavingsController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    return this.microSavingsService.getHistory(req.user.userId, page ?? 1, limit ?? 50);
+    return this.microSavingsService.getHistory(
+      req.user.userId,
+      page ?? 1,
+      limit ?? 50,
+    );
   }
 }

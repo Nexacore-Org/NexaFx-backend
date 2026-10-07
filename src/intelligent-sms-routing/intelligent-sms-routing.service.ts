@@ -1,4 +1,9 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SmsProviderRoute } from './entities/sms-provider-route.entity';
@@ -30,12 +35,16 @@ export class IntelligentSmsRoutingService {
   async sendSms(to: string, message: string): Promise<void> {
     const cleanTo = to.trim();
     if (!cleanTo.startsWith('+')) {
-      throw new BadRequestException('Phone number must start with "+" and include country code');
+      throw new BadRequestException(
+        'Phone number must start with "+" and include country code',
+      );
     }
 
     const matchedRoutes = await this.resolveRoutesForPhone(cleanTo);
     if (matchedRoutes.length === 0) {
-      throw new BadRequestException(`No SMS provider routes found for destination ${cleanTo}`);
+      throw new BadRequestException(
+        `No SMS provider routes found for destination ${cleanTo}`,
+      );
     }
 
     const errors: string[] = [];
@@ -46,15 +55,21 @@ export class IntelligentSmsRoutingService {
           throw new Error(`Simulated outage for provider ${provider}`);
         }
         await this.deliverSmsWithMock(provider, cleanTo, message);
-        this.logger.log(`[SMS] Delivered successfully via ${provider} to ${cleanTo}`);
+        this.logger.log(
+          `[SMS] Delivered successfully via ${provider} to ${cleanTo}`,
+        );
         return; // Success!
       } catch (err: any) {
-        this.logger.warn(`[SMS] Failed to send via ${provider}: ${err.message}`);
+        this.logger.warn(
+          `[SMS] Failed to send via ${provider}: ${err.message}`,
+        );
         errors.push(`${provider}: ${err.message}`);
       }
     }
 
-    throw new Error(`All SMS providers failed to deliver to ${cleanTo}. Details: ${errors.join(', ')}`);
+    throw new Error(
+      `All SMS providers failed to deliver to ${cleanTo}. Details: ${errors.join(', ')}`,
+    );
   }
 
   // ─── CRUD Rule Endpoints ──────────────────────────────────────────────────
@@ -65,10 +80,15 @@ export class IntelligentSmsRoutingService {
   }
 
   async getRoutes(): Promise<SmsProviderRoute[]> {
-    return this.routeRepository.find({ order: { countryCode: 'ASC', priority: 'ASC' } });
+    return this.routeRepository.find({
+      order: { countryCode: 'ASC', priority: 'ASC' },
+    });
   }
 
-  async updateRoute(id: string, dto: Partial<SmsProviderRoute>): Promise<SmsProviderRoute> {
+  async updateRoute(
+    id: string,
+    dto: Partial<SmsProviderRoute>,
+  ): Promise<SmsProviderRoute> {
     const route = await this.routeRepository.findOne({ where: { id } });
     if (!route) throw new NotFoundException('SMS Route not found');
     Object.assign(route, dto);
@@ -77,12 +97,15 @@ export class IntelligentSmsRoutingService {
 
   async deleteRoute(id: string): Promise<void> {
     const result = await this.routeRepository.delete(id);
-    if (result.affected === 0) throw new NotFoundException('SMS Route not found');
+    if (result.affected === 0)
+      throw new NotFoundException('SMS Route not found');
   }
 
   // ─── Helper Functions ─────────────────────────────────────────────────────
 
-  private async resolveRoutesForPhone(phone: string): Promise<SmsProviderRoute[]> {
+  private async resolveRoutesForPhone(
+    phone: string,
+  ): Promise<SmsProviderRoute[]> {
     // Try matching prefixes from 4 digits down to 1 (e.g. +2348, +234, +23, +2)
     const prefixes: string[] = [];
     for (let i = 5; i >= 2; i--) {
@@ -111,7 +134,11 @@ export class IntelligentSmsRoutingService {
     return routes;
   }
 
-  private async deliverSmsWithMock(provider: string, to: string, message: string): Promise<void> {
+  private async deliverSmsWithMock(
+    provider: string,
+    to: string,
+    message: string,
+  ): Promise<void> {
     this.logger.log(`[SMS-MOCK] Sending to ${to} via ${provider}: ${message}`);
     // Simulate slight network latency
     await new Promise((resolve) => setTimeout(resolve, 50));

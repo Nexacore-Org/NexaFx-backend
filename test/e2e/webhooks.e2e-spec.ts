@@ -10,7 +10,9 @@ import { truncateAll, setupTestDatabase } from '../helpers/db.helper';
 /** Seed a verified user directly into the DB and mint a JWT for them. */
 async function seedUserAndGetToken(
   dataSource: DataSource,
-  opts: { email: string; role?: string } = { email: 'webhook-user@example.com' },
+  opts: { email: string; role?: string } = {
+    email: 'webhook-user@example.com',
+  },
 ): Promise<{ userId: string; token: string }> {
   const email = opts.email;
   const role = opts.role ?? 'USER';
@@ -97,7 +99,10 @@ describe('Webhooks E2E', () => {
 
       expect(res.status).toBe(201);
       expect(res.body).toHaveProperty('id');
-      expect(res.body).toHaveProperty('url', 'https://webhook.site/test-nexafx');
+      expect(res.body).toHaveProperty(
+        'url',
+        'https://webhook.site/test-nexafx',
+      );
       expect(res.body.events).toContain('transaction.completed');
       expect(res.body).toHaveProperty('isActive', true);
       // Secret must never be exposed in create response
@@ -190,7 +195,7 @@ describe('Webhooks E2E', () => {
       expect(res.body).toEqual([]);
     });
 
-    it('does not leak other users\' endpoints', async () => {
+    it("does not leak other users' endpoints", async () => {
       await createEndpoint(app, otherToken);
 
       const res = await request(app.getHttpServer())
@@ -202,9 +207,7 @@ describe('Webhooks E2E', () => {
     });
 
     it('rejects unauthenticated requests with 401', async () => {
-      await request(app.getHttpServer())
-        .get('/v1/webhooks')
-        .expect(401);
+      await request(app.getHttpServer()).get('/v1/webhooks').expect(401);
     });
   });
 
@@ -295,7 +298,7 @@ describe('Webhooks E2E', () => {
         .expect(400);
     });
 
-    it('prevents patching another user\'s endpoint (400)', async () => {
+    it("prevents patching another user's endpoint (400)", async () => {
       const created = await createEndpoint(app, otherToken);
       const endpointId: string = created.body.id;
 

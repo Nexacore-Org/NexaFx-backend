@@ -18,7 +18,10 @@ describe('ExportProcessor — anonymisation contract', () => {
       walletSecretKeyEncrypted,
       ...safeProfile
     } = user as any;
-    return { safeProfile, stripped: { password, twoFactorSecret, walletSecretKeyEncrypted } };
+    return {
+      safeProfile,
+      stripped: { password, twoFactorSecret, walletSecretKeyEncrypted },
+    };
   }
 
   it('removes password, 2FA secret and encrypted wallet key from export profile', () => {

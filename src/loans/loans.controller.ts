@@ -11,7 +11,10 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { LoansService } from './loans.service';
-import { CurrentUser, CurrentUserPayload } from '../auth/decorators/current-user.decorator';
+import {
+  CurrentUser,
+  CurrentUserPayload,
+} from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { UserRole } from '../users/user.entity';
@@ -41,7 +44,7 @@ export class LoansController {
   }
 
   @Get('v2/loans')
-  @ApiOperation({ summary: 'List the current user\'s loan applications' })
+  @ApiOperation({ summary: "List the current user's loan applications" })
   async list(@CurrentUser() user: CurrentUserPayload) {
     return this.loansService.getUserLoans(user.userId);
   }

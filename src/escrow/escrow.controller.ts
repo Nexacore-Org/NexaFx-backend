@@ -62,7 +62,9 @@ export class EscrowController {
   }
 
   @Post(':id/release')
-  @ApiOperation({ summary: 'Release funds from a funded escrow to recipient wallet' })
+  @ApiOperation({
+    summary: 'Release funds from a funded escrow to recipient wallet',
+  })
   @ApiParam({ name: 'id', type: String, description: 'Escrow UUID' })
   @ApiResponse({ status: 200, description: 'Escrow released successfully' })
   async releaseEscrow(
@@ -96,7 +98,10 @@ export class EscrowController {
 
   @Get()
   @ApiOperation({ summary: 'List escrows for the current user' })
-  @ApiResponse({ status: 200, description: 'Escrow list retrieved successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Escrow list retrieved successfully',
+  })
   async findUserEscrows(
     @CurrentUser() user: CurrentUserPayload,
     @Query() query: EscrowQueryDto,
@@ -107,7 +112,10 @@ export class EscrowController {
   @Get(':id')
   @ApiOperation({ summary: 'Get escrow details' })
   @ApiParam({ name: 'id', type: String, description: 'Escrow UUID' })
-  @ApiResponse({ status: 200, description: 'Escrow details retrieved successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Escrow details retrieved successfully',
+  })
   async findOne(
     @CurrentUser() user: CurrentUserPayload,
     @Param('id', ParseUUIDPipe) id: string,
@@ -126,7 +134,10 @@ export class EscrowAdminController {
 
   @Get()
   @ApiOperation({ summary: 'List escrows for admin' })
-  @ApiResponse({ status: 200, description: 'Escrow list retrieved successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Escrow list retrieved successfully',
+  })
   async findAll(@Query() query: EscrowQueryDto) {
     return this.escrowService.findAll(query);
   }
@@ -136,7 +147,10 @@ export class EscrowAdminController {
   @ApiOperation({ summary: 'Resolve escrow dispute or refund as admin' })
   @ApiParam({ name: 'id', type: String, description: 'Escrow UUID' })
   @ApiBody({ type: AdminResolveEscrowDto })
-  @ApiResponse({ status: 200, description: 'Escrow resolution applied successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Escrow resolution applied successfully',
+  })
   async resolveEscrow(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AdminResolveEscrowDto,

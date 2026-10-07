@@ -6,6 +6,7 @@ import { getMessaging, MulticastMessage } from 'firebase-admin/messaging';
 @Injectable()
 export class FirebaseService {
   private readonly logger = new Logger(FirebaseService.name);
+  private initialized = false;
   constructor(private readonly configService: ConfigService) {}
 
   onModuleInit() {
@@ -31,8 +32,11 @@ export class FirebaseService {
           const serviceAccount = JSON.parse(serviceAccountJson);
           credentialConfig = {
             projectId: serviceAccount.project_id || serviceAccount.projectId,
-            clientEmail: serviceAccount.client_email || serviceAccount.clientEmail,
-            privateKey: (serviceAccount.private_key || serviceAccount.privateKey)?.replace(/\\n/g, '\n'),
+            clientEmail:
+              serviceAccount.client_email || serviceAccount.clientEmail,
+            privateKey: (
+              serviceAccount.private_key || serviceAccount.privateKey
+            )?.replace(/\\n/g, '\n'),
           };
         } catch (jsonError) {
           this.logger.error(
@@ -59,7 +63,12 @@ export class FirebaseService {
         }
       }
 
-      if (!credentialConfig || !credentialConfig.projectId || !credentialConfig.clientEmail || !credentialConfig.privateKey) {
+      if (
+        !credentialConfig ||
+        !credentialConfig.projectId ||
+        !credentialConfig.clientEmail ||
+        !credentialConfig.privateKey
+      ) {
         this.logger.warn(
           'Firebase credentials not fully configured. Push notifications will be disabled.',
         );
@@ -152,10 +161,5 @@ export class FirebaseService {
       );
       // We don't rethrow to avoid blocking main flows since notifications are secondary
     }
-  async sendPushNotification(tokens: string[], title: string, body: string, data?: any): Promise<any> {
-    return { successCount: 0, failureCount: tokens.length };
-  }
-  async sendToTokens(tokens: string[], title: string, body: string, data?: any): Promise<any> {
-    return { successCount: 0, failureCount: tokens.length };
   }
 }

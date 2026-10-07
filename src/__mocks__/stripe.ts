@@ -6,8 +6,6 @@
  * when a test calls `jest.mock('stripe')`.
  */
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 const mockStripeInstance = {
   issuing: {
     cardholders: { create: jest.fn() },

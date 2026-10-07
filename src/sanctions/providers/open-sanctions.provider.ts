@@ -84,7 +84,9 @@ export class OpenSanctionsProvider implements WatchlistProvider {
         matchType: 'NAME',
         datasets: r.datasets ?? [],
         isPep: (r.properties?.topics ?? []).some(
-          (t) => t.toLowerCase().includes('pep') || t.toLowerCase().includes('sanction'),
+          (t) =>
+            t.toLowerCase().includes('pep') ||
+            t.toLowerCase().includes('sanction'),
         ),
       }));
     } catch (error) {

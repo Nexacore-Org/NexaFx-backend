@@ -267,9 +267,7 @@ describe('KYC OCR E2E Tests (#1123)', () => {
 
     it('should return 404 when OCR result does not exist', async () => {
       await request(app.getHttpServer())
-        .get(
-          '/v1/admin/kyc/00000000-0000-0000-0000-000000000000/ocr',
-        )
+        .get('/v1/admin/kyc/00000000-0000-0000-0000-000000000000/ocr')
         .set('Authorization', `Bearer ${adminAccessToken}`)
         .expect(404);
     });

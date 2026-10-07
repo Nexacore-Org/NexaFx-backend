@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class CreateWalletConnectSessions1768000000003
-  implements MigrationInterface
-{
+export class CreateWalletConnectSessions1768000000003 implements MigrationInterface {
   name = 'CreateWalletConnectSessions1768000000003';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

@@ -28,7 +28,9 @@ export class QrService {
    */
   async generateDynamicQr(data: QrCodeData): Promise<string> {
     if (!data.merchantId || !data.amount || !data.reference) {
-      throw new BadRequestException('Merchant ID, Amount, and Reference are required for dynamic QR');
+      throw new BadRequestException(
+        'Merchant ID, Amount, and Reference are required for dynamic QR',
+      );
     }
     const payload = JSON.stringify({ type: 'DYNAMIC', ...data });
     return this.generateQrCodeImage(payload);

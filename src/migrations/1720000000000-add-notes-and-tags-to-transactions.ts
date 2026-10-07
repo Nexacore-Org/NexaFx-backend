@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddNotesAndTagsToTransactions1720000000000
-  implements MigrationInterface
-{
+export class AddNotesAndTagsToTransactions1720000000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Add userNote — private, owner-only
     await queryRunner.query(
@@ -34,9 +32,7 @@ export class AddNotesAndTagsToTransactions1720000000000
     await queryRunner.query(
       `DROP INDEX IF EXISTS "IDX_transactions_counterpartyMemo"`,
     );
-    await queryRunner.query(
-      `DROP INDEX IF EXISTS "IDX_transactions_tags_gin"`,
-    );
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_transactions_tags_gin"`);
     await queryRunner.query(
       `ALTER TABLE "transactions" DROP COLUMN IF EXISTS "tags"`,
     );

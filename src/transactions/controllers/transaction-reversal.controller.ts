@@ -8,7 +8,12 @@ import {
   UseGuards,
   HttpCode,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { TransactionReversalService } from '../services/transaction-reversal.service';
 import { ConfirmReversalDto } from '../dtos/reversal.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -40,7 +45,9 @@ export class TransactionReversalController {
 
   @Post(':id/reversal/confirm')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Step 2: Confirm and execute reversal (SUPER_ADMIN only)' })
+  @ApiOperation({
+    summary: 'Step 2: Confirm and execute reversal (SUPER_ADMIN only)',
+  })
   @ApiResponse({ status: 200, description: 'Reversal completed' })
   @ApiResponse({ status: 404, description: 'No pending reversal found' })
   @ApiResponse({ status: 409, description: 'Reversal not in pending state' })
@@ -49,6 +56,10 @@ export class TransactionReversalController {
     @Request() req: { user: { userId: string } },
     @Body() dto: ConfirmReversalDto,
   ) {
-    return this.reversalService.confirmReversal(transactionId, req.user.userId, dto);
+    return this.reversalService.confirmReversal(
+      transactionId,
+      req.user.userId,
+      dto,
+    );
   }
 }

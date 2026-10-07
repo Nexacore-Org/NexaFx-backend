@@ -56,10 +56,10 @@ describe('Wallets E2E Tests', () => {
     );
     userId = userResult[0].id;
 
-    await dataSource.query(
-      `UPDATE "user" SET kyc_status = $1 WHERE id = $2`,
-      ['APPROVED', userId],
-    );
+    await dataSource.query(`UPDATE "user" SET kyc_status = $1 WHERE id = $2`, [
+      'APPROVED',
+      userId,
+    ]);
   });
 
   describe('GET /wallets', () => {
@@ -193,9 +193,7 @@ describe('Wallets E2E Tests', () => {
 
       expect(response.status).toBeGreaterThanOrEqual(400);
       expect(response.status).toBeLessThan(500);
-      expect(JSON.stringify(response.body).toLowerCase()).toContain(
-        'watch',
-      );
+      expect(JSON.stringify(response.body).toLowerCase()).toContain('watch');
     });
   });
 });

@@ -49,10 +49,16 @@ export class CreateVirtualCards1762000000000 implements MigrationInterface {
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query('DROP INDEX IF EXISTS "IDX_virtual_cards_userId"');
     await queryRunner.query('DROP TABLE IF EXISTS "virtual_cards"');
-    await queryRunner.query('DROP TYPE IF EXISTS "public"."virtual_cards_status_enum"');
+    await queryRunner.query(
+      'DROP TYPE IF EXISTS "public"."virtual_cards_status_enum"',
+    );
     if (await queryRunner.hasTable('users')) {
-      await queryRunner.query('DROP INDEX IF EXISTS "IDX_users_stripeCardholderId"');
-      await queryRunner.query('ALTER TABLE "users" DROP COLUMN IF EXISTS "stripeCardholderId"');
+      await queryRunner.query(
+        'DROP INDEX IF EXISTS "IDX_users_stripeCardholderId"',
+      );
+      await queryRunner.query(
+        'ALTER TABLE "users" DROP COLUMN IF EXISTS "stripeCardholderId"',
+      );
     }
   }
 }

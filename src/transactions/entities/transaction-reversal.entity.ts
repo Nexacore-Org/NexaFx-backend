@@ -45,7 +45,11 @@ export class TransactionReversal {
   @Column({ type: 'varchar', length: 255, nullable: true })
   legalReference: string | null;
 
-  @Column({ type: 'enum', enum: ReversalStatus, default: ReversalStatus.PENDING_CONFIRMATION })
+  @Column({
+    type: 'enum',
+    enum: ReversalStatus,
+    default: ReversalStatus.PENDING_CONFIRMATION,
+  })
   status: ReversalStatus;
 
   @CreateDateColumn()

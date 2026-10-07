@@ -1,4 +1,3 @@
-import './tracing'; // <-- CRITICAL: MUST REMAIN ON LINE 1 BEFORE ANY NODE LOADERS
 import { NestFactory, Reflector } from '@nestjs/core';
 import { AppModule } from './app.module';
 import {

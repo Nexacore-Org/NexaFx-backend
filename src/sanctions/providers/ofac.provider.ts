@@ -29,7 +29,8 @@ export class OfacProvider implements WatchlistProvider {
 
     if (tokens.length === 0) return [];
 
-    const entries = await this.ofacRepo.createQueryBuilder('e')
+    const entries = await this.ofacRepo
+      .createQueryBuilder('e')
       .where('e."normalizedName" ILIKE :pattern', {
         pattern: `%${tokens[0]}%`,
       })
@@ -39,7 +40,11 @@ export class OfacProvider implements WatchlistProvider {
     const matches: WatchlistMatch[] = [];
 
     for (const entry of entries) {
-      const score = this.fuzzyScore(normalizedQuery, entry.normalizedName, entry.aliases);
+      const score = this.fuzzyScore(
+        normalizedQuery,
+        entry.normalizedName,
+        entry.aliases,
+      );
       if (score >= 30) {
         matches.push({
           entityId: entry.id,

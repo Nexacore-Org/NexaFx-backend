@@ -171,8 +171,9 @@ export class VaultsService {
       const transactions: VaultTransaction[] = [];
 
       if (isEarly) {
-        const penaltyPercent =
-          parseFloat(lockedVault.earlyWithdrawalPenaltyPercent);
+        const penaltyPercent = parseFloat(
+          lockedVault.earlyWithdrawalPenaltyPercent,
+        );
         const penaltyAmount = totalAmount * penaltyPercent;
         const netAmount = totalAmount - penaltyAmount;
 

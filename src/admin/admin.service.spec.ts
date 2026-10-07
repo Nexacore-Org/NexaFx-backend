@@ -13,7 +13,11 @@ import { DataRequest } from '../users/entities/data-request.entity';
 import { KycRecord } from '../kyc/entities/kyc.entity';
 import { RateAlert } from '../rate-alerts/entities/rate-alert.entity';
 import { AuditLog } from '../audit-logs/entities/audit-log.entity';
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { UserQueryDto } from './dto/user-query.dto';
 import { OverrideTransactionDto } from './dto/override-transaction.dto';
 import { TransactionLimitService } from '../transactions/services/transaction-limit.service';
@@ -540,28 +544,31 @@ describe('AdminService', () => {
           'admin-123',
         ),
       ).rejects.toThrow(NotFoundException);
-
     });
   });
 
   describe('getStats', () => {
     it('should calculate stats correctly', async () => {
       jest.spyOn(service['userRepository'], 'count').mockResolvedValue(100);
-      jest.spyOn(service['transactionRepository'], 'count').mockResolvedValue(500);
+      jest
+        .spyOn(service['transactionRepository'], 'count')
+        .mockResolvedValue(500);
       jest.spyOn(service['kycRepository'], 'count').mockResolvedValue(5);
       jest.spyOn(service['rateAlertRepository'], 'count').mockResolvedValue(20);
 
-      jest.spyOn(service['transactionRepository'], 'createQueryBuilder').mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        addSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([
-          { currency: 'NGN', volume: '500000.00' },
-          { currency: 'USD', volume: '1000.00' },
-        ]),
-      } as any);
+      jest
+        .spyOn(service['transactionRepository'], 'createQueryBuilder')
+        .mockReturnValue({
+          select: jest.fn().mockReturnThis(),
+          addSelect: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          groupBy: jest.fn().mockReturnThis(),
+          getRawMany: jest.fn().mockResolvedValue([
+            { currency: 'NGN', volume: '500000.00' },
+            { currency: 'USD', volume: '1000.00' },
+          ]),
+        } as any);
 
       const stats = await service.getStats();
 
@@ -580,9 +587,16 @@ describe('AdminService', () => {
   describe('getAdminAuditLogs', () => {
     it('should call auditLogsService.getPrivilegedLogs', async () => {
       const mockResult = { logs: [], pagination: { total: 0 } };
-      jest.spyOn(auditLogsService, 'getPrivilegedLogs').mockResolvedValue(mockResult as any);
+      jest
+        .spyOn(auditLogsService, 'getPrivilegedLogs')
+        .mockResolvedValue(mockResult as any);
 
-      const filters = { actorId: 'user-1', action: 'login', page: 1, limit: 10 };
+      const filters = {
+        actorId: 'user-1',
+        action: 'login',
+        page: 1,
+        limit: 10,
+      };
       const result = await service.getAdminAuditLogs(filters);
 
       expect(result).toBe(mockResult);
@@ -616,16 +630,26 @@ describe('AdminService', () => {
         };
       })();
 
-      jest.spyOn(service['auditLogRepository'], 'createQueryBuilder').mockReturnValue({
-        orderBy: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        stream: jest.fn().mockResolvedValue(mockQueryStream),
-      } as any);
+      jest
+        .spyOn(service['auditLogRepository'], 'createQueryBuilder')
+        .mockReturnValue({
+          orderBy: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          stream: jest.fn().mockResolvedValue(mockQueryStream),
+        } as any);
 
-      await service.streamAuditLogsCsv(mockResponse, { from: '2026-06-24', to: '2026-06-25' });
+      await service.streamAuditLogsCsv(mockResponse, {
+        from: '2026-06-24',
+        to: '2026-06-25',
+      });
 
-      expect(mockResponse.setHeader).toHaveBeenCalledWith('Content-Type', 'text/csv');
-      expect(service['auditLogRepository'].createQueryBuilder).toHaveBeenCalled();
+      expect(mockResponse.setHeader).toHaveBeenCalledWith(
+        'Content-Type',
+        'text/csv',
+      );
+      expect(
+        service['auditLogRepository'].createQueryBuilder,
+      ).toHaveBeenCalled();
     });
   });
 
@@ -635,7 +659,9 @@ describe('AdminService', () => {
   describe('getMigrationHistory', () => {
     it('should return empty applied migrations and empty snapshots when neither exist', async () => {
       jest.spyOn(service['dataSource'], 'query').mockResolvedValue([]);
-      jest.spyOn(service['migrationSnapshotRepository'], 'find').mockResolvedValue([]);
+      jest
+        .spyOn(service['migrationSnapshotRepository'], 'find')
+        .mockResolvedValue([]);
 
       const result = await service.getMigrationHistory();
 
@@ -647,16 +673,30 @@ describe('AdminService', () => {
 
     it('should return applied migrations from the TypeORM migrations table', async () => {
       const mockMigrations = [
-        { id: 1, timestamp: '1760000000000', name: 'CreateNotificationPreferences1760000000000' },
-        { id: 2, timestamp: '1761000000000', name: 'AddKycTierAndTransactionLimits1761000000000' },
+        {
+          id: 1,
+          timestamp: '1760000000000',
+          name: 'CreateNotificationPreferences1760000000000',
+        },
+        {
+          id: 2,
+          timestamp: '1761000000000',
+          name: 'AddKycTierAndTransactionLimits1761000000000',
+        },
       ];
-      jest.spyOn(service['dataSource'], 'query').mockResolvedValue(mockMigrations);
-      jest.spyOn(service['migrationSnapshotRepository'], 'find').mockResolvedValue([]);
+      jest
+        .spyOn(service['dataSource'], 'query')
+        .mockResolvedValue(mockMigrations);
+      jest
+        .spyOn(service['migrationSnapshotRepository'], 'find')
+        .mockResolvedValue([]);
 
       const result = await service.getMigrationHistory();
 
       expect(result.appliedMigrations).toHaveLength(2);
-      expect(result.appliedMigrations[0].name).toBe('CreateNotificationPreferences1760000000000');
+      expect(result.appliedMigrations[0].name).toBe(
+        'CreateNotificationPreferences1760000000000',
+      );
       expect(result.summary.totalApplied).toBe(2);
     });
 
@@ -664,11 +704,40 @@ describe('AdminService', () => {
       jest.spyOn(service['dataSource'], 'query').mockResolvedValue([]);
 
       const mockSnapshots: MigrationSnapshot[] = [
-        { id: 'snap-1', environment: 'staging', snapshotKey: 'key-1', migrationCount: 2, status: SnapshotStatus.APPLIED, appliedAt: new Date(), rolledBackAt: null, takenAt: new Date() },
-        { id: 'snap-2', environment: 'production', snapshotKey: 'key-2', migrationCount: 1, status: SnapshotStatus.ROLLED_BACK, appliedAt: new Date(), rolledBackAt: new Date(), takenAt: new Date() },
-        { id: 'snap-3', environment: 'staging', snapshotKey: 'key-3', migrationCount: 3, status: SnapshotStatus.PENDING, appliedAt: null, rolledBackAt: null, takenAt: new Date() },
+        {
+          id: 'snap-1',
+          environment: 'staging',
+          snapshotKey: 'key-1',
+          migrationCount: 2,
+          status: SnapshotStatus.APPLIED,
+          appliedAt: new Date(),
+          rolledBackAt: null,
+          takenAt: new Date(),
+        },
+        {
+          id: 'snap-2',
+          environment: 'production',
+          snapshotKey: 'key-2',
+          migrationCount: 1,
+          status: SnapshotStatus.ROLLED_BACK,
+          appliedAt: new Date(),
+          rolledBackAt: new Date(),
+          takenAt: new Date(),
+        },
+        {
+          id: 'snap-3',
+          environment: 'staging',
+          snapshotKey: 'key-3',
+          migrationCount: 3,
+          status: SnapshotStatus.PENDING,
+          appliedAt: null,
+          rolledBackAt: null,
+          takenAt: new Date(),
+        },
       ];
-      jest.spyOn(service['migrationSnapshotRepository'], 'find').mockResolvedValue(mockSnapshots);
+      jest
+        .spyOn(service['migrationSnapshotRepository'], 'find')
+        .mockResolvedValue(mockSnapshots);
 
       const result = await service.getMigrationHistory();
 
@@ -680,9 +749,15 @@ describe('AdminService', () => {
     });
 
     it('should return empty applied migrations and log a warning when migrations table query fails', async () => {
-      jest.spyOn(service['dataSource'], 'query').mockRejectedValue(new Error('relation "migrations" does not exist'));
-      jest.spyOn(service['migrationSnapshotRepository'], 'find').mockResolvedValue([]);
-      const warnSpy = jest.spyOn(service['logger'], 'warn').mockImplementation(() => {});
+      jest
+        .spyOn(service['dataSource'], 'query')
+        .mockRejectedValue(new Error('relation "migrations" does not exist'));
+      jest
+        .spyOn(service['migrationSnapshotRepository'], 'find')
+        .mockResolvedValue([]);
+      const warnSpy = jest
+        .spyOn(service['logger'], 'warn')
+        .mockImplementation(() => {});
 
       const result = await service.getMigrationHistory();
 
@@ -694,7 +769,11 @@ describe('AdminService', () => {
 
     it('should combine applied migrations and snapshots in the response', async () => {
       const mockMigrations = [
-        { id: 1, timestamp: '1762000000000', name: 'CreateMigrationSnapshots1762000000000' },
+        {
+          id: 1,
+          timestamp: '1762000000000',
+          name: 'CreateMigrationSnapshots1762000000000',
+        },
       ];
       const mockSnapshot: MigrationSnapshot = {
         id: 'snap-1',
@@ -707,8 +786,12 @@ describe('AdminService', () => {
         takenAt: new Date(),
       };
 
-      jest.spyOn(service['dataSource'], 'query').mockResolvedValue(mockMigrations);
-      jest.spyOn(service['migrationSnapshotRepository'], 'find').mockResolvedValue([mockSnapshot]);
+      jest
+        .spyOn(service['dataSource'], 'query')
+        .mockResolvedValue(mockMigrations);
+      jest
+        .spyOn(service['migrationSnapshotRepository'], 'find')
+        .mockResolvedValue([mockSnapshot]);
 
       const result = await service.getMigrationHistory();
 

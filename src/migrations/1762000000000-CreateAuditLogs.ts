@@ -6,7 +6,9 @@ export class CreateAuditLogs1762000000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Drop existing table if it exists to clean up
     await queryRunner.query('DROP TABLE IF EXISTS "audit_logs" CASCADE');
-    await queryRunner.query('DROP TYPE IF EXISTS "public"."audit_logs_status_enum" CASCADE');
+    await queryRunner.query(
+      'DROP TYPE IF EXISTS "public"."audit_logs_status_enum" CASCADE',
+    );
 
     await queryRunner.query(`
       CREATE TYPE "public"."audit_logs_status_enum" AS ENUM(
@@ -34,10 +36,18 @@ export class CreateAuditLogs1762000000000 implements MigrationInterface {
     `);
 
     // Add indexes for optimization
-    await queryRunner.query('CREATE INDEX "IDX_audit_logs_actorId" ON "audit_logs" ("actorId")');
-    await queryRunner.query('CREATE INDEX "IDX_audit_logs_action" ON "audit_logs" ("action")');
-    await queryRunner.query('CREATE INDEX "IDX_audit_logs_resourceType" ON "audit_logs" ("resourceType")');
-    await queryRunner.query('CREATE INDEX "IDX_audit_logs_createdAt" ON "audit_logs" ("createdAt")');
+    await queryRunner.query(
+      'CREATE INDEX "IDX_audit_logs_actorId" ON "audit_logs" ("actorId")',
+    );
+    await queryRunner.query(
+      'CREATE INDEX "IDX_audit_logs_action" ON "audit_logs" ("action")',
+    );
+    await queryRunner.query(
+      'CREATE INDEX "IDX_audit_logs_resourceType" ON "audit_logs" ("resourceType")',
+    );
+    await queryRunner.query(
+      'CREATE INDEX "IDX_audit_logs_createdAt" ON "audit_logs" ("createdAt")',
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

@@ -1,4 +1,13 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
+  Index,
+} from 'typeorm';
 
 export enum MicroSavingsTriggerType {
   PER_TRANSACTION = 'PER_TRANSACTION',
@@ -28,10 +37,16 @@ export class MicroSavingsRule {
   saveAmount: string;
 
   @Column({ type: 'jsonb', nullable: true })
-  perTransactionConfig: { minTransactionAmount?: number; savePercent?: number } | null;
+  perTransactionConfig: {
+    minTransactionAmount?: number;
+    savePercent?: number;
+  } | null;
 
   @Column({ type: 'jsonb', nullable: true })
-  balanceThresholdConfig: { thresholdAmount?: number; saveExcess?: boolean } | null;
+  balanceThresholdConfig: {
+    thresholdAmount?: number;
+    saveExcess?: boolean;
+  } | null;
 
   @Column({ type: 'numeric', precision: 20, scale: 8 })
   maxDailyContribution: string;

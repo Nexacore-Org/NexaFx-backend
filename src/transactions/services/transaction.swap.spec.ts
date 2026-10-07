@@ -62,7 +62,7 @@ describe('TransactionsService.createSwap', () => {
   const mockRedisService = {
     del: jest.fn(),
     delete: jest.fn(),
-  }
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -213,7 +213,7 @@ describe('TransactionsService.createSwap', () => {
     (service as any).getUserBalance = jest.fn(async () => '100');
     (service as any).getUserStellarAddress = jest.fn(async () => 'G123');
     (service as any).getUserStellarSecretKey = jest.fn(async () => 'S123');
-    (service as any).updateUserBalance = jest.fn(async () => { });
+    (service as any).updateUserBalance = jest.fn(async () => {});
   });
 
   it('should successfully create a swap transaction', async () => {

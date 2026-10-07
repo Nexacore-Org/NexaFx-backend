@@ -4,7 +4,12 @@ import * as request from 'supertest';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../../src/app.module';
 import { createTestApp } from '../helpers/app.helper';
-import { truncateAll, getLatestOtp, seedTestUser, setupTestDatabase } from '../helpers/db.helper';
+import {
+  truncateAll,
+  getLatestOtp,
+  seedTestUser,
+  setupTestDatabase,
+} from '../helpers/db.helper';
 
 describe('Authentication E2E Tests', () => {
   let app: INestApplication;
@@ -48,7 +53,7 @@ describe('Authentication E2E Tests', () => {
 
     it('should reject duplicate email with 409', async () => {
       const email = 'duplicate@example.com';
-      
+
       // Create first user
       await request(app.getHttpServer())
         .post('/v1/auth/signup')
@@ -349,9 +354,7 @@ describe('Authentication E2E Tests', () => {
 
   describe('Protected Routes', () => {
     it('should return 401 when accessing protected route without token', async () => {
-      await request(app.getHttpServer())
-        .get('/v1/kyc/status')
-        .expect(401);
+      await request(app.getHttpServer()).get('/v1/kyc/status').expect(401);
     });
 
     it('should reject invalid token with 401', async () => {

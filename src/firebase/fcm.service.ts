@@ -23,7 +23,9 @@ export class FCMService {
     try {
       const user = await this.userRepository.findOne({ where: { id: userId } });
       if (!user) {
-        this.logger.warn(`User ${userId} not found, skipping push notification.`);
+        this.logger.warn(
+          `User ${userId} not found, skipping push notification.`,
+        );
         return;
       }
 
@@ -45,7 +47,8 @@ export class FCMService {
       const stringifiedData: Record<string, string> = {};
       if (data) {
         for (const [key, value] of Object.entries(data)) {
-          stringifiedData[key] = typeof value === 'string' ? value : JSON.stringify(value);
+          stringifiedData[key] =
+            typeof value === 'string' ? value : JSON.stringify(value);
         }
       }
 
@@ -62,7 +65,8 @@ export class FCMService {
       this.logger.log(`Push notification sent successfully to user ${userId}`);
     } catch (error) {
       // Constraint: "Push delivery failure must not throw — log error and continue"
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       this.logger.error(
         `Failed to send push notification to user ${userId}: ${errorMessage}`,
         error instanceof Error ? error.stack : undefined,

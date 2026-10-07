@@ -33,10 +33,7 @@ export class EscrowService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async createEscrow(
-    userId: string,
-    dto: CreateEscrowDto,
-  ): Promise<Escrow> {
+  async createEscrow(userId: string, dto: CreateEscrowDto): Promise<Escrow> {
     const recipient = await this.usersService.findByEmail(dto.recipientEmail);
     if (!recipient) {
       throw new NotFoundException('Recipient not found');
@@ -83,7 +80,9 @@ export class EscrowService {
         throw new NotFoundException('Sender not found');
       }
 
-      const currentBalance = parseFloat(sender.balances?.[escrow.currency]?.toString() ?? '0');
+      const currentBalance = parseFloat(
+        sender.balances?.[escrow.currency]?.toString() ?? '0',
+      );
       const amount = parseFloat(escrow.amount);
       if (currentBalance < amount) {
         throw new BadRequestException('Insufficient balance');
@@ -101,9 +100,8 @@ export class EscrowService {
       });
       const encrypted = this.encryptionService.encrypt(keypair.secretKey);
 
-      const signerSecret = await this.walletsService.resolveWalletForTransaction(
-        userId,
-      );
+      const signerSecret =
+        await this.walletsService.resolveWalletForTransaction(userId);
       if (!signerSecret.encryptedSecretKey) {
         throw new BadRequestException('Sender wallet cannot sign transactions');
       }
@@ -192,7 +190,11 @@ export class EscrowService {
       escrow.releasedAt = new Date();
 
       await manager.save(escrow);
-      await this.updateUserBalance(recipient.id, escrow.currency, parseFloat(escrow.amount));
+      await this.updateUserBalance(
+        recipient.id,
+        escrow.currency,
+        parseFloat(escrow.amount),
+      );
       await this.sendStatusNotification(escrow, 'Escrow released');
       return escrow;
     });
@@ -208,15 +210,22 @@ export class EscrowService {
       if (!escrow) {
         throw new NotFoundException('Escrow not found');
       }
-      if (escrow.status !== EscrowStatus.FUNDED && escrow.status !== EscrowStatus.DISPUTED) {
+      if (
+        escrow.status !== EscrowStatus.FUNDED &&
+        escrow.status !== EscrowStatus.DISPUTED
+      ) {
         throw new BadRequestException('Escrow cannot be refunded');
       }
       if (escrow.senderId !== userId && escrow.recipientId !== userId) {
-        throw new ForbiddenException('Only sender, recipient, or admin can refund escrow');
+        throw new ForbiddenException(
+          'Only sender, recipient, or admin can refund escrow',
+        );
       }
 
       const escrowSecret = await this.getEscrowSecret(escrow);
-      const senderPublicKey = await this.getUserSourcePublicKey(escrow.senderId);
+      const senderPublicKey = await this.getUserSourcePublicKey(
+        escrow.senderId,
+      );
 
       const result = await this.stellarService.sendPayment({
         sourcePublicKey: escrow.stellarEscrowPublicKey!,
@@ -232,14 +241,20 @@ export class EscrowService {
       escrow.refundTxHash = result.hash;
 
       await manager.save(escrow);
-      await this.updateUserBalance(escrow.senderId, escrow.currency, parseFloat(escrow.amount));
+      await this.updateUserBalance(
+        escrow.senderId,
+        escrow.currency,
+        parseFloat(escrow.amount),
+      );
       await this.sendStatusNotification(escrow, 'Escrow refunded');
       return escrow;
     });
   }
 
   async disputeEscrow(userId: string, escrowId: string): Promise<Escrow> {
-    const escrow = await this.escrowRepository.findOne({ where: { id: escrowId } });
+    const escrow = await this.escrowRepository.findOne({
+      where: { id: escrowId },
+    });
     if (!escrow) {
       throw new NotFoundException('Escrow not found');
     }
@@ -247,7 +262,9 @@ export class EscrowService {
       throw new BadRequestException('Only funded escrow can be disputed');
     }
     if (escrow.senderId !== userId && escrow.recipientId !== userId) {
-      throw new ForbiddenException('Only sender or recipient can dispute escrow');
+      throw new ForbiddenException(
+        'Only sender or recipient can dispute escrow',
+      );
     }
 
     escrow.status = EscrowStatus.DISPUTED;
@@ -256,11 +273,17 @@ export class EscrowService {
     return saved;
   }
 
-  async findUserEscrows(userId: string, query: EscrowQueryDto): Promise<Escrow[]> {
+  async findUserEscrows(
+    userId: string,
+    query: EscrowQueryDto,
+  ): Promise<Escrow[]> {
     const where: any = [{ senderId: userId }, { recipientId: userId }];
     if (query.status) {
       return this.escrowRepository.find({
-        where: [{ senderId: userId, status: query.status }, { recipientId: userId, status: query.status }],
+        where: [
+          { senderId: userId, status: query.status },
+          { recipientId: userId, status: query.status },
+        ],
         order: { createdAt: 'DESC' },
       });
     }
@@ -271,7 +294,9 @@ export class EscrowService {
   }
 
   async findOne(userId: string, escrowId: string): Promise<Escrow> {
-    const escrow = await this.escrowRepository.findOne({ where: { id: escrowId } });
+    const escrow = await this.escrowRepository.findOne({
+      where: { id: escrowId },
+    });
     if (!escrow) {
       throw new NotFoundException('Escrow not found');
     }
@@ -316,12 +341,17 @@ export class EscrowService {
       try {
         await this.releaseEscrow(escrow.senderId, escrow.id);
       } catch (error) {
-        this.logger.warn(`Failed to auto-release escrow ${escrow.id}: ${error}`);
+        this.logger.warn(
+          `Failed to auto-release escrow ${escrow.id}: ${error}`,
+        );
       }
     }
   }
 
-  private async sendStatusNotification(escrow: Escrow, message: string): Promise<void> {
+  private async sendStatusNotification(
+    escrow: Escrow,
+    message: string,
+  ): Promise<void> {
     const metadata = { escrowId: escrow.id, status: escrow.status };
     await Promise.all([
       this.notificationsService.create({
@@ -343,13 +373,19 @@ export class EscrowService {
     ]).catch((err) => this.logger.warn('Notification send failed', err));
   }
 
-  private async updateUserBalance(userId: string, currency: string, amount: number): Promise<void> {
+  private async updateUserBalance(
+    userId: string,
+    currency: string,
+    amount: number,
+  ): Promise<void> {
     const user = await this.usersService.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
     user.balances ??= {};
-    const currentBalance = parseFloat(user.balances[currency]?.toString() ?? '0');
+    const currentBalance = parseFloat(
+      user.balances[currency]?.toString() ?? '0',
+    );
     user.balances[currency] = currentBalance + amount;
     await this.usersService.updateByUserId(userId, { balances: user.balances });
   }

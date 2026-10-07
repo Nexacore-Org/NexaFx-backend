@@ -15,7 +15,6 @@ import { CommonModule } from './common/common.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PlanThrottlerGuard } from './common/guards/plan-throttler.guard';
-import { ImpersonationRestrictionGuard } from './common/guards/impersonation-restriction.guard';
 import { HealthModule } from './health/health.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -44,6 +43,10 @@ import { UsersModule } from './users/users.module';
 import { PortfolioModule } from './portfolio/portfolio.module';
 import { FinancialHealthModule } from './financial-health/financial-health.module';
 import { CustomReportsModule } from './custom-reports/custom-reports.module';
+import { TransactionsV2Module } from './transactions/transaction-v2.module';
+import { TaxModule } from './tax/tax.module';
+import { FlagsModule } from './modules/flags/flags.module';
+import { UnifiedActivityFeedModule } from './unified-activity-feed/unified-activity-feed.module';
 
 @Module({
   imports: [
@@ -54,6 +57,7 @@ import { CustomReportsModule } from './custom-reports/custom-reports.module';
     ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
+      inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
         url: configService.get<string>('DATABASE_URL'),
@@ -69,6 +73,7 @@ import { CustomReportsModule } from './custom-reports/custom-reports.module';
     }),
     BullModule.forRootAsync({
       imports: [ConfigModule],
+      inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         connection: {
           url:
@@ -86,23 +91,10 @@ import { CustomReportsModule } from './custom-reports/custom-reports.module';
         },
       ],
     }),
-    ZeroDowntimeDeploymentModule,
-    RateAlertsEnhancementModule,
-    WebhookVerificationSdkModule,
-    PlatformHealthRunbookModule,
-    RegulatoryReportingModule,
-    MultiSignatureWalletsModule,
-    DashboardPreferencesModule,
-    FraudRiskScoringModule,
-    DataResidencyModule,
-    MerchantIntegrationModule,
-    ProgrammablePaymentRulesModule,
-    GraphqlSubscriptionsModule,
-    LoadTestingModule,
-    AiKycDocVerificationModule,
+    FlagsModule,
+    TaxModule,
     UnifiedActivityFeedModule,
-    MobileSdkGuideModule,
-    OwaspZapDastModule,
+    UnifiedActivityFeedModule,
     I18nModule.forRootAsync({
       useFactory: () => ({
         fallbackLanguage: 'en',
@@ -124,8 +116,6 @@ import { CustomReportsModule } from './custom-reports/custom-reports.module';
     FirebaseModule,
     TransactionsModule,
     TransactionsV2Module,
-    FiatV2Module,
-    BatchesV2Module,
     ReferralsModule,
     BeneficiariesModule,
     KycModule,

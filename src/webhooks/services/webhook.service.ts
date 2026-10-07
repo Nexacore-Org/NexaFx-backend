@@ -83,8 +83,9 @@ export class WebhookService {
       isActive: true,
       // Left undefined so the column default (latest version) applies.
       ...(preferredSchemaVersion !== undefined && {
-        preferredSchemaVersion:
-          this.assertSupportedSchemaVersion(preferredSchemaVersion),
+        preferredSchemaVersion: this.assertSupportedSchemaVersion(
+          preferredSchemaVersion,
+        ),
       }),
     });
 

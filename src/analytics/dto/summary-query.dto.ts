@@ -1,18 +1,3 @@
-import { IsOptional, IsString, IsDateString, IsEnum } from 'class-validator';
-import { TransactionCategoryColor } from '../entities/transaction-category.entity';
-
-export class SummaryQueryDto {
-  @IsOptional()
-  @IsDateString()
-  startDate?: string;
-
-  @IsOptional()
-  @IsDateString()
-  endDate?: string;
-
-  @IsOptional()
-  @IsString()
-  categoryId?: string;
 import { IsOptional, IsInt, Min, Max } from 'class-validator';
 import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -35,7 +20,10 @@ export class SummaryQueryDto {
 }
 
 export class TrendsQueryDto {
-  @ApiPropertyOptional({ example: 6, description: 'Number of months to look back' })
+  @ApiPropertyOptional({
+    example: 6,
+    description: 'Number of months to look back',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -45,7 +33,10 @@ export class TrendsQueryDto {
 }
 
 export class BalanceHistoryQueryDto {
-  @ApiPropertyOptional({ example: 30, description: 'Number of days to look back' })
+  @ApiPropertyOptional({
+    example: 30,
+    description: 'Number of days to look back',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()

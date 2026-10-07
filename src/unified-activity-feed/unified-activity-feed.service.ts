@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ActivityFeedItem, ActivityFeedType } from './entities/activity-feed-item.entity';
+import {
+  ActivityFeedItem,
+  ActivityFeedType,
+} from './entities/activity-feed-item.entity';
 
 @Injectable()
 export class UnifiedActivityFeedService {

@@ -32,6 +32,8 @@ export class CreatePaymentCorridors1768000000019 implements MigrationInterface {
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`DROP TABLE "payment_corridors"`);
-    await queryRunner.query(`DROP TYPE "payment_corridors_requiredkycTier_enum"`);
+    await queryRunner.query(
+      `DROP TYPE "payment_corridors_requiredkycTier_enum"`,
+    );
   }
 }

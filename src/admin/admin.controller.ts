@@ -486,13 +486,18 @@ export class AdminController {
     schema: {
       example: {
         appliedMigrations: [
-          { id: 1, timestamp: '1760000000000', name: 'CreateNotificationPreferences1760000000000' },
+          {
+            id: 1,
+            timestamp: '1760000000000',
+            name: 'CreateNotificationPreferences1760000000000',
+          },
         ],
         snapshots: [
           {
             id: 'uuid',
             environment: 'staging',
-            snapshotKey: 'nexafx/pre-migration/staging/2026-06-27T00:00:00Z-3.dump',
+            snapshotKey:
+              'nexafx/pre-migration/staging/2026-06-27T00:00:00Z-3.dump',
             migrationCount: 3,
             status: 'APPLIED',
             appliedAt: '2026-06-27T00:05:00Z',
@@ -516,4 +521,3 @@ export class AdminController {
     return this.adminService.getMigrationHistory();
   }
 }
-

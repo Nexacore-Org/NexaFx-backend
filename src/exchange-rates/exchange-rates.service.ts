@@ -104,7 +104,9 @@ export class ExchangeRatesService {
       const expiresAt = new Date(Date.now() + 60000).toISOString(); // 60 seconds TTL
 
       const rateDecimal = new Decimal(fetched.rate);
-      const inverseRateDecimal = rateDecimal.isZero() ? new Decimal(0) : new Decimal(1).div(rateDecimal);
+      const inverseRateDecimal = rateDecimal.isZero()
+        ? new Decimal(0)
+        : new Decimal(1).div(rateDecimal);
 
       const response: ExchangeRateResponseDto = {
         from: fromCode,
@@ -238,7 +240,9 @@ export class ExchangeRatesService {
     try {
       await this.currenciesService.validateCurrency(code);
     } catch (err: any) {
-      throw new BadRequestException(err.message || `Currency '${code}' is invalid`);
+      throw new BadRequestException(
+        err.message || `Currency '${code}' is invalid`,
+      );
     }
   }
 }

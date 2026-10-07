@@ -63,8 +63,7 @@ export class ImpersonationRestrictionGuard implements CanActivate {
 
     // Allow only the end-impersonation endpoint
     const isEndImpersonation =
-      request.method === 'POST' &&
-      /\/admin\/impersonate\/end/.test(path);
+      request.method === 'POST' && /\/admin\/impersonate\/end/.test(path);
 
     // Block any other /admin/* route
     if (/\/admin\//.test(path) && !isEndImpersonation) {

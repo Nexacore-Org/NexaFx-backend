@@ -32,7 +32,11 @@ import {
  * ```
  */
 export class CreateDepositDto {
-  @ApiProperty({ example: 100.5, description: 'Amount to deposit', minimum: 0.01 })
+  @ApiProperty({
+    example: 100.5,
+    description: 'Amount to deposit',
+    minimum: 0.01,
+  })
   @IsNumber()
   @IsPositive()
   @Min(0.01)
@@ -58,7 +62,11 @@ export class CreateDepositDto {
   @IsNotEmpty()
   sourceAddress: string;
 
-  @ApiPropertyOptional({ description: 'Optional wallet to credit (UUID). Defaults to primary wallet.', format: 'uuid' })
+  @ApiPropertyOptional({
+    description:
+      'Optional wallet to credit (UUID). Defaults to primary wallet.',
+    format: 'uuid',
+  })
   @ApiPropertyOptional({
     description:
       'Optional wallet to credit. When omitted, the user’s default wallet is used.',
@@ -69,7 +77,8 @@ export class CreateDepositDto {
 
   @ApiPropertyOptional({
     example: 'Payment for October rent',
-    description: 'Shared memo visible to both parties (max 200 chars). Also written to Stellar memo field (truncated to 28 bytes if needed).',
+    description:
+      'Shared memo visible to both parties (max 200 chars). Also written to Stellar memo field (truncated to 28 bytes if needed).',
     maxLength: 200,
   })
   @IsOptional()
@@ -103,7 +112,11 @@ export class CreateDepositDto {
  * ```
  */
 export class CreateWithdrawalDto {
-  @ApiProperty({ example: 50.25, description: 'Amount to withdraw', minimum: 0.01 })
+  @ApiProperty({
+    example: 50.25,
+    description: 'Amount to withdraw',
+    minimum: 0.01,
+  })
   @IsNumber()
   @IsPositive()
   @Min(0.01)
@@ -137,8 +150,9 @@ export class CreateWithdrawalDto {
   beneficiaryId?: string;
 
   @ApiPropertyOptional({
-    description: 'Optional wallet to withdraw from (UUID). When omitted, the user’s default wallet is used.',
-    format: 'uuid'
+    description:
+      'Optional wallet to withdraw from (UUID). When omitted, the user’s default wallet is used.',
+    format: 'uuid',
   })
   @IsOptional()
   @IsUUID()
@@ -146,7 +160,8 @@ export class CreateWithdrawalDto {
 
   @ApiPropertyOptional({
     example: 'Sending funds to Alice',
-    description: 'Shared memo visible to both parties (max 200 chars). Also written to Stellar memo field (truncated to 28 bytes if needed).',
+    description:
+      'Shared memo visible to both parties (max 200 chars). Also written to Stellar memo field (truncated to 28 bytes if needed).',
     maxLength: 200,
   })
   @IsOptional()
@@ -156,31 +171,44 @@ export class CreateWithdrawalDto {
 }
 
 export class VerifyTransactionDto {
-  @ApiProperty({ example: '550e8400-e29b-41d4-a716-446655440000', description: 'UUID of the transaction to verify' })
+  @ApiProperty({
+    example: '550e8400-e29b-41d4-a716-446655440000',
+    description: 'UUID of the transaction to verify',
+  })
   @IsUUID()
   @IsNotEmpty()
   transactionId: string;
 }
 
 export class TransactionQueryDto {
-  @ApiPropertyOptional({ enum: TransactionType, description: 'Filter by transaction type' })
+  @ApiPropertyOptional({
+    enum: TransactionType,
+    description: 'Filter by transaction type',
+  })
   @IsOptional()
   @IsEnum(TransactionType)
   type?: TransactionType;
 
-  @ApiPropertyOptional({ enum: TransactionStatus, description: 'Filter by transaction status' })
+  @ApiPropertyOptional({
+    enum: TransactionStatus,
+    description: 'Filter by transaction status',
+  })
   @IsOptional()
   @IsEnum(TransactionStatus)
   status?: TransactionStatus;
 
-  @ApiPropertyOptional({ example: 'XLM', description: 'Filter by currency code' })
+  @ApiPropertyOptional({
+    example: 'XLM',
+    description: 'Filter by currency code',
+  })
   @IsOptional()
   @IsString()
   currency?: string;
 
   @ApiPropertyOptional({
     example: 'rent',
-    description: 'Filter transactions that contain this tag (exact match, case-insensitive)',
+    description:
+      'Filter transactions that contain this tag (exact match, case-insensitive)',
     maxLength: 30,
   })
   @IsOptional()
@@ -190,7 +218,8 @@ export class TransactionQueryDto {
 
   @ApiPropertyOptional({
     example: 'mum',
-    description: 'Search across userNote, counterpartyMemo, and txHash (PostgreSQL ILIKE)',
+    description:
+      'Search across userNote, counterpartyMemo, and txHash (PostgreSQL ILIKE)',
     maxLength: 100,
   })
   @IsOptional()
@@ -198,13 +227,23 @@ export class TransactionQueryDto {
   @MaxLength(100)
   search?: string;
 
-  @ApiPropertyOptional({ example: 1, description: 'Page number', minimum: 1, default: 1 })
+  @ApiPropertyOptional({
+    example: 1,
+    description: 'Page number',
+    minimum: 1,
+    default: 1,
+  })
   @IsOptional()
   @IsNumber()
   @Min(1)
   page?: number;
 
-  @ApiPropertyOptional({ example: 20, description: 'Items per page', minimum: 1, default: 20 })
+  @ApiPropertyOptional({
+    example: 20,
+    description: 'Items per page',
+    minimum: 1,
+    default: 20,
+  })
   @IsOptional()
   @IsNumber()
   @Min(1)
@@ -212,7 +251,11 @@ export class TransactionQueryDto {
 }
 
 export class CreateSwapDto {
-  @ApiProperty({ example: 10, description: 'Amount of source currency to swap', minimum: 0.01 })
+  @ApiProperty({
+    example: 10,
+    description: 'Amount of source currency to swap',
+    minimum: 0.01,
+  })
   @IsNumber()
   @IsPositive()
   @Min(0.01)
@@ -236,7 +279,11 @@ export class CreateSwapDto {
   @IsNotEmpty()
   sourceAddress: string;
 
-  @ApiPropertyOptional({ description: 'Optional wallet to use for the swap (UUID). sourceAddress must match the wallet public key.', format: 'uuid' })
+  @ApiPropertyOptional({
+    description:
+      'Optional wallet to use for the swap (UUID). sourceAddress must match the wallet public key.',
+    format: 'uuid',
+  })
   @ApiPropertyOptional({
     description:
       'Optional wallet to use for the swap. When omitted, the user’s default wallet is used. ' +
@@ -248,7 +295,8 @@ export class CreateSwapDto {
 
   @ApiPropertyOptional({
     example: 'Converting savings to USDC',
-    description: 'Shared memo visible to both parties (max 200 chars). Also written to Stellar memo field (truncated to 28 bytes if needed).',
+    description:
+      'Shared memo visible to both parties (max 200 chars). Also written to Stellar memo field (truncated to 28 bytes if needed).',
     maxLength: 200,
   })
   @IsOptional()
@@ -290,6 +338,9 @@ export class TagUsageDto {
   @ApiProperty({ example: 'rent' })
   tag: string;
 
-  @ApiProperty({ example: 5, description: 'Number of transactions with this tag' })
+  @ApiProperty({
+    example: 5,
+    description: 'Number of transactions with this tag',
+  })
   count: number;
 }

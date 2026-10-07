@@ -17,8 +17,14 @@ export enum StellarNetwork {
 
 @Entity('wallets')
 @Index(['userId'])
-@Index('UQ_wallets_user_currency', ['userId', 'currency'], { unique: true, where: `"currency" <> 'XLM'` })
-@Index('UQ_wallets_user_publicKey', ['userId', 'publicKey'], { unique: true, where: `"publicKey" IS NOT NULL` })
+@Index('UQ_wallets_user_currency', ['userId', 'currency'], {
+  unique: true,
+  where: `"currency" <> 'XLM'`,
+})
+@Index('UQ_wallets_user_publicKey', ['userId', 'publicKey'], {
+  unique: true,
+  where: `"publicKey" IS NOT NULL`,
+})
 export class Wallet {
   @PrimaryGeneratedColumn('uuid')
   id: string;

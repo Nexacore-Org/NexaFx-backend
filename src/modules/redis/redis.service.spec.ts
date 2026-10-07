@@ -22,7 +22,12 @@ describe('RedisService', () => {
       mockClient.set.mockResolvedValue('OK');
       const result = await service.set('my-key', 'my-value', 120);
       expect(result).toBe(true);
-      expect(mockClient.set).toHaveBeenCalledWith('my-key', 'my-value', 'EX', 120);
+      expect(mockClient.set).toHaveBeenCalledWith(
+        'my-key',
+        'my-value',
+        'EX',
+        120,
+      );
     });
 
     it('should set value without TTL if 0', async () => {

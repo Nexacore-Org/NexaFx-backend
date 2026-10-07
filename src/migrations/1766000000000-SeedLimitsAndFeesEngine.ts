@@ -78,6 +78,8 @@ export class SeedLimitsAndFeesEngine1766000000000 implements MigrationInterface 
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DELETE FROM "fee_configs" WHERE "transactionType" IN ('SEND', 'EXCHANGE', 'WITHDRAWAL')`);
+    await queryRunner.query(
+      `DELETE FROM "fee_configs" WHERE "transactionType" IN ('SEND', 'EXCHANGE', 'WITHDRAWAL')`,
+    );
   }
 }

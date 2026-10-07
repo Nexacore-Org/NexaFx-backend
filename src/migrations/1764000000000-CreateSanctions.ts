@@ -71,7 +71,9 @@ export class CreateSanctions1764000000000 implements MigrationInterface {
     await queryRunner.query(`DROP TABLE "ofac_entries"`);
     await queryRunner.query(`DROP INDEX "IDX_kyc_screenings_userId_createdAt"`);
     await queryRunner.query(`DROP TABLE "kyc_screenings"`);
-    await queryRunner.query(`DROP TYPE "public"."kyc_screenings_provider_enum"`);
+    await queryRunner.query(
+      `DROP TYPE "public"."kyc_screenings_provider_enum"`,
+    );
     await queryRunner.query(`DROP TYPE "public"."kyc_screenings_status_enum"`);
   }
 }

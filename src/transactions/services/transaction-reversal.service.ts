@@ -8,8 +8,15 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Transaction, TransactionStatus, TransactionType } from '../entities/transaction.entity';
-import { TransactionReversal, ReversalStatus } from '../entities/transaction-reversal.entity';
+import {
+  Transaction,
+  TransactionStatus,
+  TransactionType,
+} from '../entities/transaction.entity';
+import {
+  TransactionReversal,
+  ReversalStatus,
+} from '../entities/transaction-reversal.entity';
 import { ConfirmReversalDto } from '../dtos/reversal.dto';
 import { AuditLogsService } from '../../audit-logs/audit-logs.service';
 import { NotificationsService } from '../../notifications/notifications.service';
@@ -30,22 +37,34 @@ export class TransactionReversalService {
     private readonly notificationsService: NotificationsService,
     private readonly configService: ConfigService,
   ) {
-    this.maxReversalAgeDays = this.configService.get<number>('REVERSAL_MAX_AGE_DAYS') ?? 90;
+    this.maxReversalAgeDays =
+      this.configService.get<number>('REVERSAL_MAX_AGE_DAYS') ?? 90;
   }
 
   /** Step 1: Preview reversal — no DB changes to original transaction */
-  async previewReversal(transactionId: string, adminId: string): Promise<object> {
+  async previewReversal(
+    transactionId: string,
+    adminId: string,
+  ): Promise<object> {
     const tx = await this.txRepo.findOne({ where: { id: transactionId } });
     if (!tx) throw new NotFoundException('Transaction not found');
 
     if (tx.status !== TransactionStatus.SUCCESS) {
-      throw new UnprocessableEntityException('Only COMPLETED (SUCCESS) transactions can be reversed');
+      throw new UnprocessableEntityException(
+        'Only COMPLETED (SUCCESS) transactions can be reversed',
+      );
     }
 
-    const existing = await this.reversalRepo.findOne({ where: { transactionId } });
-    if (existing) throw new ConflictException('A reversal already exists for this transaction');
+    const existing = await this.reversalRepo.findOne({
+      where: { transactionId },
+    });
+    if (existing)
+      throw new ConflictException(
+        'A reversal already exists for this transaction',
+      );
 
-    const ageDays = (Date.now() - tx.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+    const ageDays =
+      (Date.now() - tx.createdAt.getTime()) / (1000 * 60 * 60 * 24);
     if (ageDays > this.maxReversalAgeDays) {
       throw new UnprocessableEntityException(
         `Cannot reverse transactions older than ${this.maxReversalAgeDays} days`,
@@ -91,9 +110,14 @@ export class TransactionReversalService {
       relations: ['transaction'],
     });
 
-    if (!reversal) throw new NotFoundException('No pending reversal found for this transaction');
+    if (!reversal)
+      throw new NotFoundException(
+        'No pending reversal found for this transaction',
+      );
     if (reversal.status !== ReversalStatus.PENDING_CONFIRMATION) {
-      throw new ConflictException('Reversal is not in PENDING_CONFIRMATION status');
+      throw new ConflictException(
+        'Reversal is not in PENDING_CONFIRMATION status',
+      );
     }
 
     const tx = reversal.transaction;
@@ -122,7 +146,12 @@ export class TransactionReversalService {
       await this.auditLogsService.logSystemEvent(
         'admin.transaction_reversed',
         tx.id,
-        { adminId, reason: dto.reason, legalReference: dto.legalReference, reversalId: reversal.id },
+        {
+          adminId,
+          reason: dto.reason,
+          legalReference: dto.legalReference,
+          reversalId: reversal.id,
+        },
       );
 
       // Notify transaction owner
@@ -144,7 +173,9 @@ export class TransactionReversalService {
   }
 
   /** Get reversal info for a transaction */
-  async getReversalInfo(transactionId: string): Promise<TransactionReversal | null> {
+  async getReversalInfo(
+    transactionId: string,
+  ): Promise<TransactionReversal | null> {
     return this.reversalRepo.findOne({ where: { transactionId } });
   }
 }

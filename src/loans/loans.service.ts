@@ -15,7 +15,10 @@ import {
   LoanRepayment,
   RepaymentStatus,
 } from './entities/loan-repayment.entity';
-import { ComplianceFlag } from './entities/compliance-flag.entity';
+import {
+  ComplianceFlag,
+  ComplianceFlagStatus,
+} from '../modules/compliance/entities/compliance-flag.entity';
 import { CreditScoringService } from './credit-scoring.service';
 import { UsersService } from '../users/users.service';
 import {
@@ -568,9 +571,13 @@ export class LoansService {
     await this.complianceFlagRepo.save(
       this.complianceFlagRepo.create({
         userId: loan.userId,
-        reason: `Loan ${loan.id} defaulted after ${DEFAULT_AFTER_OVERDUE_DAYS} days overdue`,
-        entityId: loan.id,
-        isResolved: false,
+        rule: 'LOAN_DEFAULT',
+        riskScore: 50,
+        details: {
+          loanId: loan.id,
+          reason: `Loan ${loan.id} defaulted after ${DEFAULT_AFTER_OVERDUE_DAYS} days overdue`,
+        },
+        status: ComplianceFlagStatus.OPEN,
       }),
     );
 

@@ -17,9 +17,14 @@ import { WebhooksModule } from '../webhooks/webhooks.module';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { ComplianceModule } from '../modules/compliance/compliance.module';
 import { VaultsModule } from '../vaults/vaults.module';
+import { AnalyticsModule } from '../analytics/analytics.module';
+import { SanctionsModule } from '../sanctions/sanctions.module';
+import { LoansModule } from '../loans/loans.module';
+import { QueuesModule } from '../modules/queues/queues.module';
 
 @Module({
   imports: [
+    QueuesModule,
     TypeOrmModule.forFeature([
       Transaction,
       Notification,
@@ -38,6 +43,9 @@ import { VaultsModule } from '../vaults/vaults.module';
     AuditLogsModule,
     ComplianceModule,
     VaultsModule,
+    AnalyticsModule,
+    SanctionsModule,
+    LoansModule,
   ],
   providers: [ScheduledJobsService],
   exports: [ScheduledJobsService],

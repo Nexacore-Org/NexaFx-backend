@@ -1,4 +1,12 @@
-import { IsUUID, IsEnum, IsNumber, IsOptional, IsBoolean, ValidateNested, Min } from 'class-validator';
+import {
+  IsUUID,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsBoolean,
+  ValidateNested,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { MicroSavingsTriggerType } from '../entities/micro-savings-rule.entity';
 

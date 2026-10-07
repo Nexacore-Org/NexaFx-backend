@@ -68,7 +68,11 @@ export class TransactionResponseDto {
   counterpartyMemo: string | null;
 
   /** User-defined tags for grouping and filtering. */
-  @ApiPropertyOptional({ nullable: true, type: [String], example: ['rent', 'october'] })
+  @ApiPropertyOptional({
+    nullable: true,
+    type: [String],
+    example: ['rent', 'october'],
+  })
   tags: string[] | null;
 
   @ApiPropertyOptional({ nullable: true, example: 95 })

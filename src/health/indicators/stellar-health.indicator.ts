@@ -54,7 +54,9 @@ export class StellarHealthIndicator {
         responseTimeMs,
       };
     } catch (error: any) {
-      this.logger.error(`Stellar Horizon health check failed: ${error.message}`);
+      this.logger.error(
+        `Stellar Horizon health check failed: ${error.message}`,
+      );
       return {
         status: 'down',
         message: error.message,
@@ -75,7 +77,9 @@ export class StellarHealthIndicator {
 
       req.on('timeout', () => {
         req.destroy();
-        reject(new Error(`Horizon request timed out after ${this.timeoutMs}ms`));
+        reject(
+          new Error(`Horizon request timed out after ${this.timeoutMs}ms`),
+        );
       });
 
       req.on('error', (err) => {

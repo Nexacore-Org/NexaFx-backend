@@ -111,8 +111,7 @@ describe('Referrals E2E Tests', () => {
         .expect(200);
 
       // May be wrapped by TransformResponseInterceptor
-      const data =
-        res.body?.data !== undefined ? res.body.data : res.body;
+      const data = res.body?.data !== undefined ? res.body.data : res.body;
 
       expect(data).toHaveProperty('referralCode');
       expect(typeof data.referralCode).toBe('string');
@@ -141,8 +140,7 @@ describe('Referrals E2E Tests', () => {
         .set('Authorization', `Bearer ${userToken}`)
         .expect(200);
 
-      const data =
-        res.body?.data !== undefined ? res.body.data : res.body;
+      const data = res.body?.data !== undefined ? res.body.data : res.body;
 
       expect(data.referralCount).toBe(2);
       expect(data.pendingRewards).toBe(1);
@@ -150,9 +148,7 @@ describe('Referrals E2E Tests', () => {
     });
 
     it('returns 401 when no token is provided', async () => {
-      await request(app.getHttpServer())
-        .get('/v1/referrals/stats')
-        .expect(401);
+      await request(app.getHttpServer()).get('/v1/referrals/stats').expect(401);
     });
 
     it('returns 401 for an invalid token', async () => {
@@ -173,8 +169,7 @@ describe('Referrals E2E Tests', () => {
         .set('Authorization', `Bearer ${userToken}`)
         .expect(200);
 
-      const data =
-        res.body?.data !== undefined ? res.body.data : res.body;
+      const data = res.body?.data !== undefined ? res.body.data : res.body;
 
       expect(Array.isArray(data)).toBe(true);
       expect(data).toHaveLength(0);
@@ -207,7 +202,10 @@ describe('Referrals E2E Tests', () => {
       expect(item).toHaveProperty('status');
       expect(item.status).toBe('pending');
       expect(item).toHaveProperty('referee');
-      expect(item.referee).toHaveProperty('email', 'referee-detail@example.com');
+      expect(item.referee).toHaveProperty(
+        'email',
+        'referee-detail@example.com',
+      );
     });
 
     it('returns only the referrals made by the authenticated user (data isolation)', async () => {
@@ -265,9 +263,7 @@ describe('Referrals E2E Tests', () => {
     });
 
     it('returns 401 when no token is provided', async () => {
-      await request(app.getHttpServer())
-        .get('/v1/referrals')
-        .expect(401);
+      await request(app.getHttpServer()).get('/v1/referrals').expect(401);
     });
 
     it('returns 401 for an invalid token', async () => {
@@ -283,15 +279,11 @@ describe('Referrals E2E Tests', () => {
   // ---------------------------------------------------------------------------
   describe('Unauthenticated access', () => {
     it('rejects GET /v1/referrals/stats without a token (401)', async () => {
-      await request(app.getHttpServer())
-        .get('/v1/referrals/stats')
-        .expect(401);
+      await request(app.getHttpServer()).get('/v1/referrals/stats').expect(401);
     });
 
     it('rejects GET /v1/referrals without a token (401)', async () => {
-      await request(app.getHttpServer())
-        .get('/v1/referrals')
-        .expect(401);
+      await request(app.getHttpServer()).get('/v1/referrals').expect(401);
     });
   });
 });

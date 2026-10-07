@@ -309,7 +309,9 @@ describe('WebhookSchemaTransformer', () => {
       expect(WebhookSchemaTransformer.isSupportedVersion('2.0')).toBe(true);
       expect(WebhookSchemaTransformer.isSupportedVersion('3.0')).toBe(false);
       expect(WebhookSchemaTransformer.isSupportedVersion(2.0)).toBe(false);
-      expect(WebhookSchemaTransformer.isSupportedVersion(undefined)).toBe(false);
+      expect(WebhookSchemaTransformer.isSupportedVersion(undefined)).toBe(
+        false,
+      );
     });
 
     it('keeps at least two versions deliverable', () => {

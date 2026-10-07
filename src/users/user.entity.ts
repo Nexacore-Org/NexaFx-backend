@@ -24,12 +24,9 @@ export enum UserPlan {
   ENTERPRISE = 'ENTERPRISE',
 }
 
-export enum UserKycTier {
-  NONE = 'NONE',
-  BASIC = 'BASIC',
-  STANDARD = 'STANDARD',
-  ENHANCED = 'ENHANCED',
-}
+import { UserKycTier } from './enums/user-kyc-tier.enum';
+
+export { UserKycTier };
 
 @Entity('users')
 export class User {

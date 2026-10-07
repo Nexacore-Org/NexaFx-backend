@@ -55,8 +55,12 @@ export class CreateV2Tables1772000000000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_v2_project_members_project_id"`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_v2_projects_organization_id"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_v2_project_members_project_id"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_v2_projects_organization_id"`,
+    );
 
     await queryRunner.query(`DROP TABLE IF EXISTS "v2_project_members"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "v2_projects"`);

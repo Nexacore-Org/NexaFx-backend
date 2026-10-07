@@ -1,4 +1,10 @@
-import { Injectable, NestMiddleware, ForbiddenException, GoneException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NestMiddleware,
+  ForbiddenException,
+  GoneException,
+  Logger,
+} from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import * as crypto from 'crypto';
 
@@ -19,8 +25,12 @@ export class LocalStorageSignatureMiddleware implements NestMiddleware {
     const { expires, signature } = req.query;
 
     if (!expires || !signature) {
-      this.logger.warn(`Access denied to ${key}: Missing signature or expiration`);
-      throw new ForbiddenException('Access denied: Missing signature or expiration');
+      this.logger.warn(
+        `Access denied to ${key}: Missing signature or expiration`,
+      );
+      throw new ForbiddenException(
+        'Access denied: Missing signature or expiration',
+      );
     }
 
     const expiresTimestamp = parseInt(expires as string, 10);

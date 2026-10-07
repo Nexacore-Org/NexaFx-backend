@@ -1,4 +1,10 @@
-import { Injectable, UnauthorizedException, UnprocessableEntityException, NotFoundException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  UnprocessableEntityException,
+  NotFoundException,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -6,7 +12,10 @@ import * as bcrypt from 'bcrypt';
 import { GdprConsent } from './entities/gdpr-consent.entity';
 import { ErasureAuditLog } from './entities/erasure-audit-log.entity';
 import { User } from '../../users/user.entity';
-import { Transaction, TransactionStatus } from '../../transactions/entities/transaction.entity';
+import {
+  Transaction,
+  TransactionStatus,
+} from '../../transactions/entities/transaction.entity';
 import { KycRecord } from '../../kyc/entities/kyc.entity';
 import { Notification } from '../../notifications/entities/notification.entity';
 import { RateAlert } from '../../rate-alerts/entities/rate-alert.entity';
@@ -16,7 +25,10 @@ import { AuditLog } from '../../audit-logs/entities/audit-log.entity';
 import { AuditEntityType } from '../../audit-logs/enums/audit-entity-type.enum';
 import { RefreshToken } from '../../tokens/refresh-token.entity';
 import { Expense } from '../../modules/expenses/entities/expense.entity';
-import { STORAGE_SERVICE_TOKEN, StorageService } from '../../modules/storage/storage.service';
+import {
+  STORAGE_SERVICE_TOKEN,
+  StorageService,
+} from '../../modules/storage/storage.service';
 import { Inject } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -73,18 +85,27 @@ export class GdprService {
     return this.gdprConsentRepository.save(consent);
   }
 
-  async eraseUser(userId: string, passwordInput: string, reason?: string): Promise<{ filesDeleted: number; status: string }> {
+  async eraseUser(
+    userId: string,
+    passwordInput: string,
+    reason?: string,
+  ): Promise<{ filesDeleted: number; status: string }> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
-    const isPasswordValid = await bcrypt.compare(passwordInput, user.password as string);
+    const isPasswordValid = await bcrypt.compare(
+      passwordInput,
+      user.password as string,
+    );
     if (!isPasswordValid) throw new UnauthorizedException('Invalid password');
 
     const pendingTransactions = await this.transactionRepository.count({
       where: { userId, status: TransactionStatus.PENDING },
     });
     if (pendingTransactions > 0) {
-      throw new UnprocessableEntityException('Cannot erase account with pending transactions');
+      throw new UnprocessableEntityException(
+        'Cannot erase account with pending transactions',
+      );
     }
 
     // Collect all S3 keys to delete BEFORE any DB writes
@@ -94,9 +115,14 @@ export class GdprService {
     // 1. KYC document keys
     const kyc = await this.kycRepository.findOne({ where: { userId } });
     if (kyc) {
-      [kyc.documentFrontKey, kyc.documentBackKey, kyc.selfieKey, (kyc as any).proofOfAddressKey]
+      [
+        kyc.documentFrontKey,
+        kyc.documentBackKey,
+        kyc.selfieKey,
+        (kyc as any).proofOfAddressKey,
+      ]
         .filter(Boolean)
-        .forEach((key) => keysToDelete.push(key!));
+        .forEach((key) => keysToDelete.push(key));
     }
 
     // 2. Expense receipt keys
@@ -116,8 +142,11 @@ export class GdprService {
       );
       results.forEach((r, i) => {
         if (r.status === 'rejected') {
-          const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
-          this.logger.error(`CRITICAL: S3 deletion failed for key ${keysToDelete[i]}: ${msg}`);
+          const msg =
+            r.reason instanceof Error ? r.reason.message : String(r.reason);
+          this.logger.error(
+            `CRITICAL: S3 deletion failed for key ${keysToDelete[i]}: ${msg}`,
+          );
           failedDeletions.push(keysToDelete[i]);
         }
       });
@@ -134,7 +163,10 @@ export class GdprService {
     await this.userRepository.save(user);
 
     // Clear refresh tokens
-    await this.refreshTokenRepository.update({ userId }, { revokedAt: new Date() });
+    await this.refreshTokenRepository.update(
+      { userId },
+      { revokedAt: new Date() },
+    );
 
     // Nullify KYC storage keys then delete
     if (kyc) {
@@ -157,7 +189,11 @@ export class GdprService {
       action: 'gdpr.erasure',
       entity: AuditEntityType.USER,
       entityId: userId,
-      metadata: { reason, filesDeleted: keysToDelete.length - failedDeletions.length, failedDeletions },
+      metadata: {
+        reason,
+        filesDeleted: keysToDelete.length - failedDeletions.length,
+        failedDeletions,
+      },
       ipAddress: '0.0.0.0',
       userAgent: 'Anonymised',
     });
@@ -172,26 +208,43 @@ export class GdprService {
     await this.erasureAuditLogRepository.save(erasureLog);
 
     if (failedDeletions.length > 0) {
-      this.logger.error(`CRITICAL: ${failedDeletions.length} S3 keys failed to delete during GDPR erasure for user ${userId}: ${failedDeletions.join(', ')}`);
+      this.logger.error(
+        `CRITICAL: ${failedDeletions.length} S3 keys failed to delete during GDPR erasure for user ${userId}: ${failedDeletions.join(', ')}`,
+      );
     }
 
-    return { filesDeleted: keysToDelete.length - failedDeletions.length, status: 'erased' };
+    return {
+      filesDeleted: keysToDelete.length - failedDeletions.length,
+      status: 'erased',
+    };
   }
 
   async requestExport(userId: string): Promise<string> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
-    const job = await this.exportQueue.add('export', { userId, email: user.email }, {
-      jobId: `export-${userId}-${Date.now()}`
-    });
+    const job = await this.exportQueue.add(
+      'export',
+      { userId, email: user.email },
+      {
+        jobId: `export-${userId}-${Date.now()}`,
+      },
+    );
 
     return job.id!;
   }
 
-  async getExportStatus(userId: string): Promise<{ status: string, jobId: string | null }> {
-    const jobs = await this.exportQueue.getJobs(['active', 'waiting', 'delayed', 'completed', 'failed']);
-    const userJob = jobs.reverse().find(j => j.data.userId === userId);
+  async getExportStatus(
+    userId: string,
+  ): Promise<{ status: string; jobId: string | null }> {
+    const jobs = await this.exportQueue.getJobs([
+      'active',
+      'waiting',
+      'delayed',
+      'completed',
+      'failed',
+    ]);
+    const userJob = jobs.reverse().find((j) => j.data.userId === userId);
     if (!userJob) return { status: 'no_job_found', jobId: null };
 
     const state = await userJob.getState();
@@ -205,7 +258,9 @@ export class GdprService {
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-    const sevenYearsAgo = new Date(now.getTime() - 7 * 365 * 24 * 60 * 60 * 1000);
+    const sevenYearsAgo = new Date(
+      now.getTime() - 7 * 365 * 24 * 60 * 60 * 1000,
+    );
 
     // 1. Delete notifications older than 90 days
     const notificationsResult = await this.notificationRepository.delete({
@@ -234,7 +289,8 @@ export class GdprService {
         },
       });
       // We actually want to check if there are ANY transactions created AFTER 7 years ago
-      const hasRecentFinancials = await this.transactionRepository.createQueryBuilder('tx')
+      const hasRecentFinancials = await this.transactionRepository
+        .createQueryBuilder('tx')
         .where('tx.userId = :userId', { userId: user.id })
         .andWhere('tx.createdAt > :sevenYearsAgo', { sevenYearsAgo })
         .getCount();
@@ -247,7 +303,7 @@ export class GdprService {
 
     // Log the results
     const auditLog = this.auditLogRepository.create({
-      userId: null as any,
+      userId: null,
       action: 'gdpr.data_retention_cron',
       entity: AuditEntityType.SYSTEM,
       entityId: 'data-retention',
@@ -261,14 +317,21 @@ export class GdprService {
     });
     await this.auditLogRepository.save(auditLog);
 
-    this.logger.log(`Data retention complete: ${deletedUsersCount} users, ${notificationsResult.affected} notifications, ${webhooksResult.affected} webhooks deleted.`);
+    this.logger.log(
+      `Data retention complete: ${deletedUsersCount} users, ${notificationsResult.affected} notifications, ${webhooksResult.affected} webhooks deleted.`,
+    );
   }
 
-  async getConsentStatus(userId: string): Promise<{ requiresConsentUpdate: boolean, currentVersion: string | null, requiredVersion: string }> {
+  async getConsentStatus(userId: string): Promise<{
+    requiresConsentUpdate: boolean;
+    currentVersion: string | null;
+    requiredVersion: string;
+  }> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
-    const requiredVersion = this.configService.get<string>('PRIVACY_POLICY_VERSION') || '1.0';
+    const requiredVersion =
+      this.configService.get<string>('PRIVACY_POLICY_VERSION') || '1.0';
     const currentVersion = user.consentGdprVersion;
 
     return {
@@ -278,11 +341,16 @@ export class GdprService {
     };
   }
 
-  async updateConsent(userId: string, ipAddress: string | null, userAgent: string | null): Promise<void> {
+  async updateConsent(
+    userId: string,
+    ipAddress: string | null,
+    userAgent: string | null,
+  ): Promise<void> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
-    const requiredVersion = this.configService.get<string>('PRIVACY_POLICY_VERSION') || '1.0';
+    const requiredVersion =
+      this.configService.get<string>('PRIVACY_POLICY_VERSION') || '1.0';
 
     user.consentGdpr = true;
     user.consentGdprAt = new Date();

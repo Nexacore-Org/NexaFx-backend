@@ -225,14 +225,18 @@ export class RateAlertsService {
       },
     );
 
-    await this.activityFeedService.append(
-      alert.userId,
-      ActivityFeedType.RATE_ALERT_TRIGGER,
-      alert.id,
-      'RateAlert',
-    ).catch((err) =>
-      this.logger.error(`Failed to append rate alert trigger activity: ${err.message}`),
-    );
+    await this.activityFeedService
+      .append(
+        alert.userId,
+        ActivityFeedType.RATE_ALERT_TRIGGER,
+        alert.id,
+        'RateAlert',
+      )
+      .catch((err) =>
+        this.logger.error(
+          `Failed to append rate alert trigger activity: ${err.message}`,
+        ),
+      );
 
     // Atomically deactivate only if still active, preventing a double-trigger
     // when multiple scheduler instances evaluate the same alert concurrently.

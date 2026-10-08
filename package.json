@@ -140,7 +140,7 @@
     "@types/socket.io": "^3.0.1",
     "@types/speakeasy": "^2.0.10",
     "@types/supertest": "^6.0.2",
-    "@types/uuid": "^9.0.7",
+    "@types/uuid": "^11.0.0",
     "autocannon": "^8.0.0",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",

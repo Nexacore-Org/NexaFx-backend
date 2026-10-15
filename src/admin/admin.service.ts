@@ -445,8 +445,31 @@ export class AdminService {
     return user;
   }
 
-  async suspendUser(id: string, adminId: string) {
+  async suspendUser(id: string, adminId: string, actorRole?: UserRole) {
     const user = await this.getUserById(id);
+
+    if (id === adminId) {
+      throw new BadRequestException('You cannot suspend your own account');
+    }
+
+    const targetIsAdminTier =
+      user.role === UserRole.ADMIN || user.role === UserRole.SUPER_ADMIN;
+    if (targetIsAdminTier && actorRole !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException(
+        'Only a SUPER_ADMIN can suspend an admin-tier account',
+      );
+    }
+
+    if (user.role === UserRole.SUPER_ADMIN) {
+      const activeSuperAdmins = await this.userRepository.count({
+        where: { role: UserRole.SUPER_ADMIN, isSuspended: false },
+      });
+      if (activeSuperAdmins <= 1) {
+        throw new BadRequestException(
+          'The last active SUPER_ADMIN cannot be suspended',
+        );
+      }
+    }
 
     if (user.isSuspended) {
       throw new BadRequestException('User is already suspended');
@@ -465,8 +488,20 @@ export class AdminService {
     return { message: 'User suspended successfully' };
   }
 
-  async unsuspendUser(id: string, adminId: string) {
+  async unsuspendUser(id: string, adminId: string, actorRole?: UserRole) {
     const user = await this.getUserById(id);
+
+    if (id === adminId) {
+      throw new BadRequestException('You cannot change your own status');
+    }
+
+    const targetIsAdminTier =
+      user.role === UserRole.ADMIN || user.role === UserRole.SUPER_ADMIN;
+    if (targetIsAdminTier && actorRole !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException(
+        'Only a SUPER_ADMIN can change an admin-tier account',
+      );
+    }
 
     if (!user.isSuspended) {
       throw new BadRequestException('User is not suspended');
@@ -606,10 +641,20 @@ export class AdminService {
     id: string,
     updateDto: UpdateUserPlanDto,
     adminId: string,
+    actorRole?: UserRole,
   ) {
     const user = await this.getUserById(id);
 
-    // No restrictions on changing plan for any role? Allow.
+    // A plan change on an admin-tier account is an admin decision, so it takes
+    // a SUPER_ADMIN — the same rule updateUserRole applies.
+    const targetIsAdminTier =
+      user.role === UserRole.ADMIN || user.role === UserRole.SUPER_ADMIN;
+    if (targetIsAdminTier && actorRole !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException(
+        'Only a SUPER_ADMIN can change the plan of an admin-tier account',
+      );
+    }
+
     if (user.plan === updateDto.plan) {
       return user;
     }

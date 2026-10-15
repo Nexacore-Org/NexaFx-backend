@@ -175,9 +175,14 @@ export class AdminController {
   async updateUserPlan(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateDto: UpdateUserPlanDto,
-    @CurrentUser() admin: { userId: string },
+    @CurrentUser() admin: { userId: string; role: UserRole },
   ) {
-    return this.adminService.updateUserPlan(id, updateDto, admin.userId);
+    return this.adminService.updateUserPlan(
+      id,
+      updateDto,
+      admin.userId,
+      admin.role,
+    );
   }
 
   @Patch('users/:id/suspend')
@@ -191,9 +196,9 @@ export class AdminController {
   @ApiResponse({ status: 404, description: 'User not found' })
   async suspendUser(
     @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() admin: { userId: string },
+    @CurrentUser() admin: { userId: string; role: UserRole },
   ) {
-    return this.adminService.suspendUser(id, admin.userId);
+    return this.adminService.suspendUser(id, admin.userId, admin.role);
   }
 
   @Patch('users/:id/unsuspend')
@@ -206,9 +211,9 @@ export class AdminController {
   @ApiResponse({ status: 404, description: 'User not found' })
   async unsuspendUser(
     @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() admin: { userId: string },
+    @CurrentUser() admin: { userId: string; role: UserRole },
   ) {
-    return this.adminService.unsuspendUser(id, admin.userId);
+    return this.adminService.unsuspendUser(id, admin.userId, admin.role);
   }
 
   @Get('users/:id/data-requests')

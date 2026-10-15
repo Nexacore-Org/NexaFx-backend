@@ -22,15 +22,20 @@ export class AddPerformanceIndexes1762000000000 implements MigrationInterface {
       CREATE INDEX "IDX_rate_alerts_active_triggered" ON "rate_alerts" ("isActive", "triggeredAt")
     `);
 
-    // 4. audit_logs: composite index on (userId, createdAt, action)
+    // 4. audit_logs: composite index on the real column. audit_logs has no
+    // "userId" column (the owner is "actorId"), so the old statement made
+    // migration:run fail on a fresh database.
     await queryRunner.query(`
-      CREATE INDEX "IDX_audit_logs_user_created_action" ON "audit_logs" ("userId", "createdAt", "action")
+      CREATE INDEX IF NOT EXISTS "IDX_audit_logs_actor_created_action" ON "audit_logs" ("actorId", "createdAt", "action")
     `);
 
-    // 5. kyc_records: composite index on (userId, status)
-    await queryRunner.query(`
-      CREATE INDEX "IDX_kyc_records_user_status" ON "kyc_records" ("userId", "status")
-    `);
+    // 5. kyc_records: no migration creates this table, so only index it when it
+    // actually exists.
+    if (await queryRunner.hasTable('kyc_records')) {
+      await queryRunner.query(`
+        CREATE INDEX IF NOT EXISTS "IDX_kyc_records_user_status" ON "kyc_records" ("userId", "status")
+      `);
+    }
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

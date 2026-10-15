@@ -4,6 +4,7 @@ import {
   UnprocessableEntityException,
   ForbiddenException,
   Logger,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -96,10 +97,14 @@ export class ImpersonationService {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + ttlSeconds * 1000);
 
-    // 6. Sign the impersonation JWT
-    const secret =
-      this.configService.get<string>('JWT_SECRET') ||
-      'default-secret-change-in-production';
+    // 6. Sign the impersonation JWT. Never fall back to a known default: a
+    // guessable secret would let anyone mint an impersonation token.
+    const secret = this.configService.get<string>('JWT_SECRET');
+    if (!secret) {
+      throw new InternalServerErrorException(
+        'JWT_SECRET must be configured before impersonation can be used',
+      );
+    }
 
     const impersonationToken = this.jwtService.sign(
       {

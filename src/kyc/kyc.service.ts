@@ -340,6 +340,33 @@ export class KycService {
     });
   }
 
+  /**
+   * Short-lived signed URLs for every document stored on an application, so a
+   * reviewer can open the files without a route that builds a filesystem path
+   * out of user-supplied parameters.
+   */
+  async getDocumentUrls(applicationId: string) {
+    const application = await this.kycRepository.findOne({
+      where: { id: applicationId },
+    });
+
+    if (!application) {
+      throw new NotFoundException('KYC application not found');
+    }
+
+    const documents = await Promise.all(
+      Object.entries(application.documents ?? {}).map(
+        async ([type, document]) => ({
+          type,
+          mimeType: document.mimeType,
+          url: await this.storageService.getSignedUrl(document.s3Key, 300),
+        }),
+      ),
+    );
+
+    return { applicationId, documents };
+  }
+
   async getKycStatus(userId: string) {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {

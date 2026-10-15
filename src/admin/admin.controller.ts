@@ -42,7 +42,6 @@ import {
   UpsertTransactionLimitDto,
 } from './dto/transaction-limit.dto';
 import { Response } from 'express';
-import { join } from 'path';
 import { AdminAuditLogsQueryDto } from './dto/admin-audit-logs-query.dto';
 import { AdminAuditLogsExportQueryDto } from './dto/admin-audit-logs-export-query.dto';
 import { UserKycTier } from '../users/user.entity';
@@ -376,48 +375,25 @@ export class AdminController {
     );
   }
 
-  // ── KYC File Serving (must be before kyc/:id to avoid route conflict) ──
+  // ── KYC document access (kept before any kyc/:id route) ──
+  //
+  // The old `kyc-file/:userId/:version/:filename` route joined raw route params
+  // into a filesystem path, so `..` segments served arbitrary server files
+  // (including .env) to any admin, and it never matched the `${env}/kyc/...`
+  // storage layout anyway. Documents are exposed as short-lived signed URLs.
 
-  @Get('kyc-file/:userId/:version/:filename')
-  @ApiOperation({ summary: 'Serve KYC uploaded file (Admin only)' })
-  @ApiParam({ name: 'userId', type: String })
-  @ApiParam({ name: 'version', type: String })
-  @ApiParam({ name: 'filename', type: String })
-  @ApiResponse({ status: 200, description: 'Returns the requested file' })
-  @ApiResponse({ status: 404, description: 'File not found' })
-  serveKycFile(
-    @Param('userId') userId: string,
-    @Param('version') version: string,
-    @Param('filename') filename: string,
-    @Res() res,
-  ) {
-    const filePath = join(
-      process.cwd(),
-      'uploads',
-      'kyc',
-      userId,
-      version,
-      filename,
-    );
-    interface FileSendError {
-      message?: string;
-      code?: string;
-      status?: number;
-    }
-
-    interface TypedResponse {
-      sendFile(filePath: string, cb?: (err?: FileSendError) => void): unknown;
-      status(code: number): { send(body: unknown): unknown };
-      send(body: unknown): unknown;
-    }
-
-    const typedRes = res as TypedResponse;
-
-    return typedRes.sendFile(filePath, (err?: FileSendError) => {
-      if (err) {
-        typedRes.status(404).send({ message: 'File not found' });
-      }
-    });
+  @Get('kyc/:id/documents')
+  @ApiOperation({
+    summary: 'Signed document URLs for a KYC application (Admin only)',
+  })
+  @ApiParam({ name: 'id', description: 'KYC application id' })
+  @ApiResponse({
+    status: 200,
+    description: 'Short-lived signed URL per stored document',
+  })
+  @ApiResponse({ status: 404, description: 'KYC application not found' })
+  getKycDocuments(@Param('id', ParseUUIDPipe) id: string) {
+    return this.kycService.getDocumentUrls(id);
   }
 
   @Get('stats')

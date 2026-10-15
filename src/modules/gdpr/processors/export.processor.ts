@@ -113,7 +113,8 @@ export class ExportProcessor extends WorkerHost {
       await Promise.all([
         this.notificationRepository.find({ where: { userId } }),
         this.kycRepository.find({ where: { userId } }),
-        this.auditLogRepository.find({ where: { userId } }),
+        // AuditLog has no userId column; the owner is actorId.
+        this.auditLogRepository.find({ where: { actorId: userId } }),
         this.referralRepository.find({
           where: [{ referrerId: userId }, { refereeId: userId }],
         }),

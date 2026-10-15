@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { I18nModule, AcceptLanguageResolver } from 'nestjs-i18n';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -17,6 +17,7 @@ import { RolesGuard } from './common/guards/roles.guard';
 import { PlanThrottlerGuard } from './common/guards/plan-throttler.guard';
 import { HealthModule } from './health/health.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
+import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { NotificationsModule } from './notifications/notifications.module';
 import { GdprModule } from './modules/gdpr/gdpr.module';
 import { TransactionsModule } from './transactions/transaction.module';
@@ -142,6 +143,12 @@ import { UnifiedActivityFeedModule } from './unified-activity-feed/unified-activ
   ],
   controllers: [AppController],
   providers: [
+    {
+      // Reads the @Audit metadata; without this the twelve annotated handlers
+      // produced no audit rows at all.
+      provide: APP_INTERCEPTOR,
+      useClass: AuditInterceptor,
+    },
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,

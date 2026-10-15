@@ -23,6 +23,7 @@ import { WebhookEndpoint } from '../../webhooks/entities/webhook-endpoint.entity
 import { WebhookDelivery } from '../../webhooks/entities/webhook-delivery.entity';
 import { AuditLog } from '../../audit-logs/entities/audit-log.entity';
 import { AuditEntityType } from '../../audit-logs/enums/audit-entity-type.enum';
+import { AuditLogStatus } from '../../audit-logs/enums/audit-log-status.enum';
 import { RefreshToken } from '../../tokens/refresh-token.entity';
 import { Expense } from '../../modules/expenses/entities/expense.entity';
 import {
@@ -184,11 +185,16 @@ export class GdprService {
     await this.webhookEndpointRepository.delete({ userId });
 
     // Log erasure event
+    // Write the mapped columns: userId/entity/entityId are accessors rather
+    // than columns, so Repository.create dropped them and left resourceType and
+    // status (both NOT NULL) unset, failing the insert after the account had
+    // already been anonymised.
     const auditLog = this.auditLogRepository.create({
-      userId,
+      actorId: userId,
       action: 'gdpr.erasure',
-      entity: AuditEntityType.USER,
-      entityId: userId,
+      resourceType: AuditEntityType.USER,
+      resourceId: userId,
+      status: AuditLogStatus.SUCCESS,
       metadata: {
         reason,
         filesDeleted: keysToDelete.length - failedDeletions.length,
@@ -303,10 +309,11 @@ export class GdprService {
 
     // Log the results
     const auditLog = this.auditLogRepository.create({
-      userId: null,
+      actorId: null,
       action: 'gdpr.data_retention_cron',
-      entity: AuditEntityType.SYSTEM,
-      entityId: 'data-retention',
+      resourceType: AuditEntityType.SYSTEM,
+      resourceId: null,
+      status: AuditLogStatus.SUCCESS,
       metadata: {
         notificationsDeleted: notificationsResult.affected || 0,
         webhookDeliveriesDeleted: webhooksResult.affected || 0,

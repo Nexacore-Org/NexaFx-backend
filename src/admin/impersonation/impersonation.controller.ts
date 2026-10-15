@@ -35,29 +35,9 @@ import { Audit } from '../../common/decorators/audit.decorator';
 export class ImpersonationController {
   constructor(private readonly impersonationService: ImpersonationService) {}
 
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
-  @Post('impersonate/:userId')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Start impersonating a user (Admin/Super-Admin only)',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Impersonation token generated successfully',
-    type: ImpersonationResponseDto,
-  })
-  async impersonate(
-    @CurrentUser() admin: CurrentUserPayload,
-    @Param('userId', ParseUUIDPipe) userId: string,
-    @Req() req: any,
-  ): Promise<ImpersonationResponseDto> {
-    return this.impersonationService.startImpersonation(
-      admin.userId,
-      userId,
-      req,
-    );
-  }
-
+  // Declared before `impersonate/:userId`: Express matches in declaration
+  // order, so the parameterised route used to swallow /impersonate/end as
+  // userId='end' and fail ParseUUIDPipe — the session could never be ended.
   @Post('impersonate/end')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'End the current impersonation session' })
@@ -77,6 +57,29 @@ export class ImpersonationController {
       targetUserId,
       jti,
       adminId,
+      req,
+    );
+  }
+
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Post('impersonate/:userId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Start impersonating a user (Admin/Super-Admin only)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Impersonation token generated successfully',
+    type: ImpersonationResponseDto,
+  })
+  async impersonate(
+    @CurrentUser() admin: CurrentUserPayload,
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Req() req: any,
+  ): Promise<ImpersonationResponseDto> {
+    return this.impersonationService.startImpersonation(
+      admin.userId,
+      userId,
       req,
     );
   }

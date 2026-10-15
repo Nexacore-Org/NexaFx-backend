@@ -18,7 +18,7 @@ const mockedBcrypt = bcrypt as jest.Mocked<typeof bcrypt>;
 // Lightweight entity stubs so getRepositoryToken resolves without importing the whole graph
 class User {}
 class Transaction {}
-class KycRecord {}
+class KYCApplication {}
 class Notification {}
 class RateAlert {}
 class WebhookEndpoint {}
@@ -82,7 +82,7 @@ describe('GdprService', () => {
         { provide: getRepositoryToken(GdprConsent), useValue: consentRepo },
         { provide: getRepositoryToken(User), useValue: userRepo },
         { provide: getRepositoryToken(Transaction), useValue: txRepo },
-        { provide: getRepositoryToken(KycRecord), useValue: kycRepo },
+        { provide: getRepositoryToken(KYCApplication), useValue: kycRepo },
         {
           provide: getRepositoryToken(Notification),
           useValue: notificationRepo,
@@ -157,7 +157,7 @@ describe('GdprService', () => {
       userRepo.findOne.mockResolvedValue({ ...baseUser });
       mockedBcrypt.compare.mockResolvedValue(true as never);
       txRepo.count.mockResolvedValue(0);
-      kycRepo.findOne.mockResolvedValue(null);
+      kycRepo.find.mockResolvedValue([]);
       expenseRepo.find.mockResolvedValue([]);
 
       const result = await service.eraseUser('user-1', 'password');
@@ -206,12 +206,16 @@ describe('GdprService', () => {
       userRepo.findOne.mockResolvedValue({ ...baseUser });
       mockedBcrypt.compare.mockResolvedValue(true as never);
       txRepo.count.mockResolvedValue(0);
-      kycRepo.findOne.mockResolvedValue({
-        documentFrontKey: 'kyc/front.jpg',
-        documentBackKey: null,
-        selfieKey: null,
-        proofOfAddressKey: null,
-      });
+      kycRepo.find.mockResolvedValue([
+        {
+          documents: {
+            governmentIdFront: {
+              s3Key: 'kyc/front.jpg',
+              mimeType: 'image/jpeg',
+            },
+          },
+        },
+      ]);
       expenseRepo.find.mockResolvedValue([]);
       storageService.delete.mockRejectedValue(new Error('S3 down'));
 

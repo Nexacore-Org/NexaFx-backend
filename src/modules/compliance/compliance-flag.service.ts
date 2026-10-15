@@ -9,6 +9,7 @@ import { Sar } from './entities/sar.entity';
 import { User } from '../../users/user.entity';
 import { Transaction } from '../../transactions/entities/transaction.entity';
 import { ComplianceFlagQueryDto } from './dto/compliance-flag-query.dto';
+import { toCsvRow } from '../../common/utils/csv.util';
 
 @Injectable()
 export class ComplianceFlagService {
@@ -179,18 +180,49 @@ export class ComplianceFlagService {
       sarByFlagId.set(sar.flagId, list);
     }
 
-    const header =
-      'Flag ID,User ID,Rule,Risk Score,Status,Created At,SAR Reference,SAR Narrative,SAR Filed At';
+    // Every field is escaped, so a narrative containing a comma, a quote or a
+    // newline (or starting with '=') can no longer corrupt or inject into the
+    // export the regulator opens in a spreadsheet.
+    const header = toCsvRow([
+      'Flag ID',
+      'User ID',
+      'Rule',
+      'Risk Score',
+      'Status',
+      'Created At',
+      'SAR Reference',
+      'SAR Narrative',
+      'SAR Filed At',
+    ]);
     const rows = flags
       .map((flag) => {
         const flagSars = sarByFlagId.get(flag.id) || [];
         if (flagSars.length === 0) {
-          return `${flag.id},${flag.userId},${flag.rule},${flag.riskScore},${flag.status},${flag.createdAt.toISOString()},,,`;
+          return toCsvRow([
+            flag.id,
+            flag.userId,
+            flag.rule,
+            flag.riskScore,
+            flag.status,
+            flag.createdAt.toISOString(),
+            '',
+            '',
+            '',
+          ]);
         }
         return flagSars
-          .map(
-            (sar) =>
-              `${flag.id},${flag.userId},${flag.rule},${flag.riskScore},${flag.status},${flag.createdAt.toISOString()},${sar.reportReference},${sar.narrative},${sar.filedAt.toISOString()}`,
+          .map((sar) =>
+            toCsvRow([
+              flag.id,
+              flag.userId,
+              flag.rule,
+              flag.riskScore,
+              flag.status,
+              flag.createdAt.toISOString(),
+              sar.reportReference,
+              sar.narrative,
+              sar.filedAt.toISOString(),
+            ]),
           )
           .join('\n');
       })

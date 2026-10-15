@@ -10,15 +10,14 @@ import {
 } from './report-schedule.entity';
 import { ReportJob, JobStatus } from './report-job.entity';
 import { v4 as uuidv4 } from 'uuid';
+import { toCsvRow } from '../../common/utils/csv.util';
 
 function toCSV(rows: Record<string, any>[]): string {
   if (rows.length === 0) return '';
   const headers = Object.keys(rows[0]);
   const lines = [
-    headers.join(','),
-    ...rows.map((row) =>
-      headers.map((h) => JSON.stringify(row[h] ?? '')).join(','),
-    ),
+    toCsvRow(headers),
+    ...rows.map((row) => toCsvRow(headers.map((h) => row[h]))),
   ];
   return lines.join('\n');
 }

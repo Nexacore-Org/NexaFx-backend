@@ -19,7 +19,7 @@ import { Wallet } from '../../../wallets/entities/wallet.entity';
 import { Transaction } from '../../../transactions/entities/transaction.entity';
 import { LedgerEntry } from '../../../ledger/entities/ledger-entry.entity';
 import { Notification } from '../../../notifications/entities/notification.entity';
-import { KycRecord } from '../../../kyc/entities/kyc.entity';
+import { KYCApplication } from '../../../kyc/entities/kyc-application.entity';
 import { AuditLog } from '../../../audit-logs/entities/audit-log.entity';
 import { Referral } from '../../../referrals/entities/referral.entity';
 import { RateAlert } from '../../../rate-alerts/entities/rate-alert.entity';
@@ -39,7 +39,8 @@ export class ExportProcessor extends WorkerHost {
     private ledgerRepository: Repository<LedgerEntry>,
     @InjectRepository(Notification)
     private notificationRepository: Repository<Notification>,
-    @InjectRepository(KycRecord) private kycRepository: Repository<KycRecord>,
+    @InjectRepository(KYCApplication)
+    private kycApplicationRepository: Repository<KYCApplication>,
     @InjectRepository(AuditLog)
     private auditLogRepository: Repository<AuditLog>,
     @InjectRepository(Referral)
@@ -110,16 +111,27 @@ export class ExportProcessor extends WorkerHost {
           })
         : [];
 
-    const [notifications, kycRecords, auditLogs, referrals, rateAlerts] =
+    const [notifications, kycApplicationRows, auditLogs, referrals, rateAlerts] =
       await Promise.all([
         this.notificationRepository.find({ where: { userId } }),
-        this.kycRepository.find({ where: { userId } }),
+        this.kycApplicationRepository.find({ where: { userId } }),
         this.auditLogRepository.find({ where: { userId } }),
         this.referralRepository.find({
           where: [{ referrerId: userId }, { refereeId: userId }],
         }),
         this.rateAlertRepository.find({ where: { userId } }),
       ]);
+
+    // The application rows are exported, the storage keys inside them are not.
+    const kycApplications = kycApplicationRows.map((application) => ({
+      ...application,
+      documents: Object.fromEntries(
+        Object.entries(application.documents ?? {}).map(([type, document]) => [
+          type,
+          { mimeType: document?.mimeType ?? null },
+        ]),
+      ),
+    }));
 
     const {
       password,
@@ -134,7 +146,7 @@ export class ExportProcessor extends WorkerHost {
       transactions,
       ledgerEntries,
       notifications,
-      kycRecords,
+      kycApplications,
       auditLogs,
       referrals,
       rateAlerts,

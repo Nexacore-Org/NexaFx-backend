@@ -24,7 +24,17 @@ export class PortfolioSnapshot {
   userId: string;
 
   /** Total portfolio value in USD at snapshot time */
-  @Column({ type: 'decimal', precision: 24, scale: 8 })
+  @Column({
+    type: 'decimal',
+    precision: 24,
+    scale: 8,
+    // Postgres hands decimals back as strings; the API contract says number.
+    transformer: {
+      to: (value: number) => value,
+      from: (value: string | number | null) =>
+        value === null ? value : Number(value),
+    },
+  })
   totalValueUsd: number;
 
   /** Per-currency holdings at snapshot time */

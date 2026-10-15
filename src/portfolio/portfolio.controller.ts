@@ -1,9 +1,9 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
   Query,
-  Request,
   UseGuards,
   ParseIntPipe,
   DefaultValuePipe,
@@ -19,6 +19,10 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PortfolioService } from './portfolio.service';
+import {
+  CurrentUser,
+  CurrentUserPayload,
+} from '../auth/decorators/current-user.decorator';
 
 @ApiTags('Portfolio')
 @ApiBearerAuth('access-token')
@@ -40,8 +44,10 @@ export class PortfolioController {
   @ApiOkResponse({
     description: 'Live portfolio valuation with per-asset breakdown',
   })
-  async computeValue(@Request() req) {
-    return this.portfolioService.computeAndSnapshot(req.user.id.toString());
+  async computeValue(@CurrentUser() user: CurrentUserPayload) {
+    // The JWT payload carries userId; `user.id` is undefined, so every handler
+    // threw a TypeError.
+    return this.portfolioService.computeAndSnapshot(user.userId);
   }
 
   /**
@@ -50,8 +56,8 @@ export class PortfolioController {
   @Get('snapshot')
   @ApiOperation({ summary: 'Retrieve the latest portfolio snapshot' })
   @ApiOkResponse({ description: 'Most recent portfolio snapshot' })
-  async latestSnapshot(@Request() req) {
-    return this.portfolioService.getLatestSnapshot(req.user.id.toString());
+  async latestSnapshot(@CurrentUser() user: CurrentUserPayload) {
+    return this.portfolioService.getLatestSnapshot(user.userId);
   }
 
   /**
@@ -68,9 +74,14 @@ export class PortfolioController {
     description: 'Number of snapshots (default 30, max 90)',
   })
   async history(
-    @Request() req,
+    @CurrentUser() user: CurrentUserPayload,
     @Query('limit', new DefaultValuePipe(30), ParseIntPipe) limit: number,
   ) {
-    return this.portfolioService.getHistory(req.user.id.toString(), limit);
+    // take: 0 means "no limit" to TypeORM, so the cap has a lower bound too.
+    if (limit < 1 || limit > 90) {
+      throw new BadRequestException('limit must be between 1 and 90');
+    }
+
+    return this.portfolioService.getHistory(user.userId, limit);
   }
 }

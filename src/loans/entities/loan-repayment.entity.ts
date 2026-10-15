@@ -58,4 +58,8 @@ export class LoanRepayment {
 
   @Column({ type: 'timestamp with time zone', nullable: true })
   paidAt: Date | null;
+
+  /** When a late penalty was last added, so it can be applied once per day. */
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  lastPenaltyAppliedAt: Date | null;
 }

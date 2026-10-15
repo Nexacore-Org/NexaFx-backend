@@ -106,7 +106,7 @@ export class PortfolioService {
     });
     if (!snapshot) {
       throw new NotFoundException(
-        'No portfolio snapshot found. Request GET /portfolio/value to generate one.',
+        'No portfolio snapshot found. Request POST /v2/portfolio/value to generate one.',
       );
     }
     return snapshot;
@@ -120,7 +120,8 @@ export class PortfolioService {
     return this.snapshotRepo.find({
       where: { userId },
       order: { createdAt: 'DESC' },
-      take: Math.min(limit, 90), // hard-cap at 90 to keep response sizes manageable
+      // Clamped on both ends: TypeORM treats take: 0 as "no limit".
+      take: Math.min(Math.max(limit, 1), 90),
     });
   }
 }

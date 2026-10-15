@@ -53,23 +53,31 @@ export class SanctionsService {
     // Date of birth and nationality are not collected anywhere yet.
     const query = { fullName };
 
-    let matches: WatchlistMatch[] = [];
+    const primary = await this.openSanctions.screen(query);
+    let matches: WatchlistMatch[] = primary.matches;
     let provider = ScreeningProvider.OPEN_SANCTIONS;
+    // An outage must never look like "no matches": that is how a sanctions
+    // control silently clears people.
+    let providerFailed = primary.failed;
 
-    matches = await this.openSanctions.screen(query);
-
-    if (matches.length === 0 && provider === ScreeningProvider.OPEN_SANCTIONS) {
-      const fallbackMatches = await this.ofac.screen(query);
-      if (fallbackMatches.length > 0 || matches.length === 0) {
-        matches = fallbackMatches;
+    if (matches.length === 0) {
+      const fallback = await this.ofac.screen(query);
+      if (fallback.matches.length > 0) {
+        // Only credit OFAC when it actually produced the decision.
+        matches = fallback.matches;
         provider = ScreeningProvider.OFAC;
+        providerFailed = false;
+      } else if (fallback.failed) {
+        providerFailed = true;
       }
     }
 
     const topScore =
       matches.length > 0 ? Math.max(...matches.map((m) => m.score)) : 0;
 
-    const status = this.resolveStatus(topScore);
+    const status = providerFailed
+      ? ScreeningStatus.ERROR
+      : this.resolveStatus(topScore);
 
     const screening = this.screeningRepo.create({
       userId,
@@ -85,7 +93,7 @@ export class SanctionsService {
     await this.screeningRepo.save(screening);
 
     this.logger.log(
-      `Screened user ${userId}: score=${topScore} status=${status} provider=${provider}`,
+      `Screened user ${userId}: score=${topScore} status=${status} provider=${provider} failed=${providerFailed}`,
     );
 
     return screening;

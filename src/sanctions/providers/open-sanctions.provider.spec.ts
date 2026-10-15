@@ -54,9 +54,10 @@ describe('OpenSanctionsProvider', () => {
         },
       };
       (httpService.post as jest.Mock).mockReturnValue(of(response));
-      const matches = await provider.screen({ fullName: 'Osama Bin Laden' });
-      expect(matches.length).toBe(1);
-      expect(matches[0].score).toBe(99);
+      const result = await provider.screen({ fullName: 'Osama Bin Laden' });
+      expect(result.failed).toBe(false);
+      expect(result.matches.length).toBe(1);
+      expect(result.matches[0].score).toBe(99);
     });
 
     it('should return no matches for a clean name', async () => {
@@ -70,16 +71,17 @@ describe('OpenSanctionsProvider', () => {
         },
       };
       (httpService.post as jest.Mock).mockReturnValue(of(response));
-      const matches = await provider.screen({ fullName: 'John Doe' });
-      expect(matches.length).toBe(0);
+      const result = await provider.screen({ fullName: 'John Doe' });
+      expect(result.matches.length).toBe(0);
     });
 
-    it('should return an empty array if the API call fails', async () => {
+    it('should report a failure instead of an empty result if the API call fails', async () => {
       (httpService.post as jest.Mock).mockImplementation(() => {
         throw new Error('API Error');
       });
-      const matches = await provider.screen({ fullName: 'John Doe' });
-      expect(matches).toEqual([]);
+      const result = await provider.screen({ fullName: 'John Doe' });
+      expect(result.matches).toEqual([]);
+      expect(result.failed).toBe(true);
     });
   });
 });

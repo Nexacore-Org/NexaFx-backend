@@ -53,17 +53,22 @@ describe('SanctionsService', () => {
   });
 
   describe('screenUser', () => {
-    it('should fail-closed (return BLOCKED) if a provider fails', async () => {
+    it('should fail-closed (return ERROR) if a provider fails', async () => {
       (service as any).userRepo.findOne.mockResolvedValue({
         firstName: 'Test',
         lastName: 'User',
       });
-      (service as any).openSanctions.screen.mockRejectedValue(
-        new Error('Provider timeout'),
-      );
+      (service as any).openSanctions.screen.mockResolvedValue({
+        matches: [],
+        failed: true,
+      });
+      (service as any).ofac.screen.mockResolvedValue({
+        matches: [],
+        failed: false,
+      });
 
       const screening = await service.screenUser('user1');
-      expect(screening.status).toBe(ScreeningStatus.BLOCKED);
+      expect(screening.status).toBe(ScreeningStatus.ERROR);
     });
 
     it('should flag a known-sanctioned test fixture', async () => {
@@ -71,7 +76,10 @@ describe('SanctionsService', () => {
         firstName: 'Test',
         lastName: 'User',
       });
-      (service as any).openSanctions.screen.mockResolvedValue([{ score: 99 }]);
+      (service as any).openSanctions.screen.mockResolvedValue({
+        matches: [{ score: 99 }],
+        failed: false,
+      });
       const screening = await service.screenUser('user1');
       expect(screening.status).toBe(ScreeningStatus.BLOCKED);
     });
@@ -81,8 +89,14 @@ describe('SanctionsService', () => {
         firstName: 'Test',
         lastName: 'User',
       });
-      (service as any).openSanctions.screen.mockResolvedValue([]);
-      (service as any).ofac.screen.mockResolvedValue([]);
+      (service as any).openSanctions.screen.mockResolvedValue({
+        matches: [],
+        failed: false,
+      });
+      (service as any).ofac.screen.mockResolvedValue({
+        matches: [],
+        failed: false,
+      });
       const screening = await service.screenUser('user1');
       expect(screening.status).toBe(ScreeningStatus.CLEAR);
     });

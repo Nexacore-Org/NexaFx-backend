@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import {
   WatchlistProvider,
-  WatchlistMatch,
+  WatchlistScreenResult,
   ScreeningQuery,
 } from '../interfaces/watchlist-provider.interface';
 
@@ -37,7 +37,7 @@ export class OpenSanctionsProvider implements WatchlistProvider {
     private readonly configService: ConfigService,
   ) {}
 
-  async screen(query: ScreeningQuery): Promise<WatchlistMatch[]> {
+  async screen(query: ScreeningQuery): Promise<WatchlistScreenResult> {
     const apiKey = this.configService.get<string>('OPENSANCTIONS_API_KEY');
 
     const properties: Record<string, string[]> = {
@@ -77,23 +77,27 @@ export class OpenSanctionsProvider implements WatchlistProvider {
 
       const results = response.data?.responses?.q0?.results ?? [];
 
-      return results.map((r) => ({
-        entityId: r.id,
-        name: r.caption,
-        score: Math.round(r.score * 100),
-        matchType: 'NAME',
-        datasets: r.datasets ?? [],
-        isPep: (r.properties?.topics ?? []).some(
-          (t) =>
-            t.toLowerCase().includes('pep') ||
-            t.toLowerCase().includes('sanction'),
-        ),
-      }));
+      return {
+        matches: results.map((r) => ({
+          entityId: r.id,
+          name: r.caption,
+          score: Math.round(r.score * 100),
+          matchType: 'NAME',
+          datasets: r.datasets ?? [],
+          isPep: (r.properties?.topics ?? []).some(
+            (t) =>
+              t.toLowerCase().includes('pep') ||
+              t.toLowerCase().includes('sanction'),
+          ),
+        })),
+        failed: false,
+      };
     } catch (error) {
       this.logger.warn(
         `Open Sanctions API unavailable: ${error instanceof Error ? error.message : String(error)}`,
       );
-      return [];
+      // Report the failure instead of an empty result, which reads as CLEAR.
+      return { matches: [], failed: true };
     }
   }
 }

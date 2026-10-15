@@ -14,6 +14,8 @@ export enum ScreeningStatus {
   CLEAR = 'CLEAR',
   WARNING = 'WARNING',
   BLOCKED = 'BLOCKED',
+  /** The providers could not be queried; the user is not cleared. */
+  ERROR = 'ERROR',
 }
 
 export enum ScreeningProvider {

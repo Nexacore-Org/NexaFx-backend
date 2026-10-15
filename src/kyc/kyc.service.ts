@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
   Logger,
   Inject,
   Optional,
@@ -24,6 +25,7 @@ import {
 import { scanBuffer } from '../common/helpers/virus-scanner.helper';
 import { validateSelfieVideo } from '../common/helpers/video-duration-scanner.helper';
 import { SanctionsService } from '../sanctions/sanctions.service';
+import { ScreeningStatus } from '../sanctions/entities/kyc-screening.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UnifiedActivityFeedService } from '../unified-activity-feed/unified-activity-feed.service';
 import { ActivityFeedType } from '../unified-activity-feed/entities/activity-feed-item.entity';
@@ -217,6 +219,33 @@ export class KycService {
         );
       }
 
+      // The tier belongs to the stored application, not to this request: a
+      // STANDARD application must not be able to swap in ENHANCED documents and
+      // be approved for a tier it never proved.
+      if (targetTier !== existingKyc.targetTier) {
+        throw new BadRequestException(
+          `This application was submitted for ${existingKyc.targetTier} and must be resubmitted for that tier.`,
+        );
+      }
+
+      const applicant = await manager.findOne(User, { where: { id: userId } });
+      if (
+        existingKyc.targetTier === UserKycTier.STANDARD &&
+        applicant?.kycTier !== UserKycTier.BASIC
+      ) {
+        throw new BadRequestException(
+          'STANDARD tier requires BASIC tier first. Please verify your email.',
+        );
+      }
+      if (
+        existingKyc.targetTier === UserKycTier.ENHANCED &&
+        applicant?.kycTier !== UserKycTier.STANDARD
+      ) {
+        throw new BadRequestException(
+          'ENHANCED tier requires STANDARD tier first. Please apply for STANDARD first.',
+        );
+      }
+
       const documents: Record<string, { s3Key: string; mimeType: string }> = {};
       const storagePath = `kyc/${userId}`;
 
@@ -293,7 +322,9 @@ export class KycService {
       }
 
       existingKyc.status = KycStatus.PENDING;
-      existingKyc.documents = documents;
+      // Merge instead of replace: a resubmission must never drop the documents
+      // an approval for the stored tier relies on (ID and selfie).
+      existingKyc.documents = { ...existingKyc.documents, ...documents };
       existingKyc.rejectionReason = null;
       existingKyc.reviewedBy = null;
       existingKyc.reviewedAt = null;
@@ -431,6 +462,15 @@ export class KycService {
       const user = await manager.findOne(User, { where: { id: kyc.userId } });
       if (!user) throw new NotFoundException('User not found');
 
+      // Screen before the tier is granted: a sanctions hit has to block the
+      // approval instead of being recorded after the user already has access.
+      const screening = await this.sanctionsService?.screenUser(user.id);
+      if (screening?.status === ScreeningStatus.BLOCKED) {
+        throw new ConflictException(
+          'Approval refused: this applicant is blocked by sanctions screening.',
+        );
+      }
+
       kyc.status = KycStatus.APPROVED;
       kyc.reviewedBy = reviewerId;
       kyc.reviewedAt = new Date();
@@ -492,12 +532,6 @@ export class KycService {
         )
         .catch((err: Error) =>
           this.logger.error(`Failed to append KYC activity: ${err.message}`),
-        );
-
-      this.sanctionsService
-        ?.screenUser(user.id)
-        .catch((err: Error) =>
-          this.logger.error(`Sanctions screening failed: ${err.message}`),
         );
 
       return { message: 'KYC approved successfully' };

@@ -20,6 +20,7 @@ describe('OfacProvider', () => {
         {
           provide: getRepositoryToken(OfacEntry),
           useValue: {
+            count: jest.fn().mockResolvedValue(1),
             createQueryBuilder: jest.fn().mockReturnThis(),
             where: jest.fn().mockReturnThis(),
             limit: jest.fn().mockReturnThis(),
@@ -47,16 +48,18 @@ describe('OfacProvider', () => {
           aliases: [],
         },
       ]);
-      const matches = await provider.screen({ fullName: 'Osama Bin Laden' });
-      expect(matches.length).toBe(1);
-      expect(matches[0].score).toBe(100);
+      const result = await provider.screen({ fullName: 'Osama Bin Laden' });
+      expect(result.failed).toBe(false);
+      expect(result.matches.length).toBe(1);
+      expect(result.matches[0].score).toBe(100);
     });
 
     it('should return no matches for a clean name', async () => {
       const ofacRepo = (provider as any).ofacRepo;
       ofacRepo.getMany.mockResolvedValue([]);
-      const matches = await provider.screen({ fullName: 'John Doe' });
-      expect(matches.length).toBe(0);
+      const result = await provider.screen({ fullName: 'John Doe' });
+      expect(result.failed).toBe(false);
+      expect(result.matches.length).toBe(0);
     });
   });
 });

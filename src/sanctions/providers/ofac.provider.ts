@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { OfacEntry } from '../entities/ofac-entry.entity';
 import {
   WatchlistProvider,
+  WatchlistScreenResult,
   WatchlistMatch,
   ScreeningQuery,
 } from '../interfaces/watchlist-provider.interface';
@@ -23,11 +24,18 @@ export class OfacProvider implements WatchlistProvider {
     private readonly ofacRepo: Repository<OfacEntry>,
   ) {}
 
-  async screen(query: ScreeningQuery): Promise<WatchlistMatch[]> {
+  async screen(query: ScreeningQuery): Promise<WatchlistScreenResult> {
+    // A table that has never synced proves nothing about a user, so it must not
+    // be reported as "no match".
+    if ((await this.ofacRepo.count()) === 0) {
+      this.logger.warn('OFAC list is empty — cannot screen against it');
+      return { matches: [], failed: true };
+    }
+
     const normalizedQuery = this.normalize(query.fullName);
     const tokens = normalizedQuery.split(/\s+/).filter(Boolean);
 
-    if (tokens.length === 0) return [];
+    if (tokens.length === 0) return { matches: [], failed: false };
 
     const entries = await this.ofacRepo
       .createQueryBuilder('e')
@@ -57,7 +65,10 @@ export class OfacProvider implements WatchlistProvider {
       }
     }
 
-    return matches.sort((a, b) => b.score - a.score).slice(0, 10);
+    return {
+      matches: matches.sort((a, b) => b.score - a.score).slice(0, 10),
+      failed: false,
+    };
   }
 
   async syncFromTreasury(): Promise<number> {

@@ -395,10 +395,10 @@ export class AdminService {
   }
 
   async getUserById(id: string) {
-    const user = await this.userRepository.findOne({
-      where: { id },
-      relations: ['kycRecords', 'transactions'], // Load related data if needed
-    });
+    // Load no relations: `kycRecords`/`transactions` are not relations on User,
+    // so TypeORM threw EntityPropertyNotFoundError and every /admin/users/:id
+    // action that goes through here returned a 500.
+    const user = await this.userRepository.findOne({ where: { id } });
 
     if (!user) {
       throw new NotFoundException('User not found');

@@ -38,6 +38,7 @@ import {
   LedgerDirection,
 } from '../ledger/entities/ledger-entry.entity';
 import { User, UserKycTier } from '../users/user.entity';
+import Decimal from 'decimal.js';
 
 const MIN_CREDIT_SCORE = 40;
 const DAILY_PENALTY_RATE = 0.005;
@@ -130,8 +131,15 @@ export class LoansService {
       relations: ['repayments'],
     });
     if (!loan) throw new NotFoundException('Loan not found');
-    if (loan.status !== LoanStatus.ACTIVE) {
-      throw new BadRequestException('Only ACTIVE loans can be repaid');
+    // A defaulted borrower must be able to cure the debt, so DEFAULTED loans are
+    // repayable; every other status is refused.
+    if (
+      loan.status !== LoanStatus.ACTIVE &&
+      loan.status !== LoanStatus.DEFAULTED
+    ) {
+      throw new BadRequestException(
+        'Only ACTIVE or DEFAULTED loans can be repaid',
+      );
     }
 
     const user = await this.usersService.findById(userId);
@@ -196,10 +204,12 @@ export class LoansService {
       const newPaidAmount = parseFloat(repayment.paidAmount) + payAmount;
 
       repayment.paidAmount = newPaidAmount.toFixed(8);
-      repayment.status =
-        newPaidAmount >= parseFloat(repayment.totalDue) - 0.000000005
-          ? RepaymentStatus.PAID
-          : RepaymentStatus.PARTIAL;
+      // Exact comparison: the epsilon hid rounding drift in the instalments.
+      repayment.status = new Decimal(newPaidAmount).gte(
+        new Decimal(repayment.totalDue),
+      )
+        ? RepaymentStatus.PAID
+        : RepaymentStatus.PARTIAL;
 
       if (repayment.status === RepaymentStatus.PAID) {
         repayment.paidAt = new Date();
@@ -446,17 +456,43 @@ export class LoansService {
 
     for (const repayment of overdueRepayments) {
       try {
+        // A defaulted loan stops accruing: the borrower must not face a debt
+        // that grows forever.
+        if (repayment.loan?.status === LoanStatus.DEFAULTED) {
+          continue;
+        }
+
+        const now = new Date();
+
+        // At most one penalty per calendar day, however often the cron runs.
+        if (
+          repayment.lastPenaltyAppliedAt &&
+          this.isSameUtcDay(repayment.lastPenaltyAppliedAt, now)
+        ) {
+          continue;
+        }
+
         const overdueSince = await this.getOverdueSinceDays(repayment);
 
-        // Apply daily penalty on the outstanding amount
-        const outstanding =
-          parseFloat(repayment.totalDue) - parseFloat(repayment.paidAmount);
-        const dailyPenalty = outstanding * DAILY_PENALTY_RATE;
-        const newPenalty = parseFloat(repayment.penaltyAmount) + dailyPenalty;
-        const newTotalDue = parseFloat(repayment.totalDue) + dailyPenalty;
+        // Penalise principal + interest only: charging a percentage of
+        // totalDue made each run compound on the penalties of the last.
+        const base = Decimal.max(
+          new Decimal(repayment.totalDue)
+            .minus(repayment.penaltyAmount)
+            .minus(repayment.paidAmount),
+          0,
+        );
+        const dailyPenalty = base
+          .mul(DAILY_PENALTY_RATE)
+          .toDecimalPlaces(8, Decimal.ROUND_HALF_UP);
 
-        repayment.penaltyAmount = newPenalty.toFixed(8);
-        repayment.totalDue = newTotalDue.toFixed(8);
+        repayment.penaltyAmount = new Decimal(repayment.penaltyAmount)
+          .plus(dailyPenalty)
+          .toFixed(8);
+        repayment.totalDue = new Decimal(repayment.totalDue)
+          .plus(dailyPenalty)
+          .toFixed(8);
+        repayment.lastPenaltyAppliedAt = now;
         await this.repaymentRepo.save(repayment);
 
         // After 7 days: default the loan
@@ -471,6 +507,15 @@ export class LoansService {
     }
   }
 
+  /** True when both timestamps fall on the same UTC calendar day. */
+  private isSameUtcDay(a: Date, b: Date): boolean {
+    return (
+      a.getUTCFullYear() === b.getUTCFullYear() &&
+      a.getUTCMonth() === b.getUTCMonth() &&
+      a.getUTCDate() === b.getUTCDate()
+    );
+  }
+
   // ── Private helpers ────────────────────────────────────────────────────────
 
   private buildRepaymentSchedule(
@@ -478,19 +523,32 @@ export class LoansService {
     dto: AdminApproveLoanDto,
   ): Partial<LoanRepayment>[] {
     const instalments = loan.termDays === 30 ? 1 : loan.termDays / 30;
-    const principal = dto.approvedAmount / instalments;
-    const annualRate = dto.interestRatePercent / 100;
-    const monthlyRate = annualRate / 12;
-    const interestPerInstalment = dto.approvedAmount * monthlyRate;
+    const principalTotal = new Decimal(dto.approvedAmount);
+    // Every instalment but the last is rounded down; the last one takes the
+    // remainder, so the principal sums to exactly the approved amount
+    // (3 x 33.33333333 !== 100).
+    const principalPerInstalment = principalTotal
+      .div(instalments)
+      .toDecimalPlaces(8, Decimal.ROUND_DOWN);
+    const monthlyRate = new Decimal(dto.interestRatePercent).div(100).div(12);
+    const interestPerInstalment = principalTotal
+      .mul(monthlyRate)
+      .toDecimalPlaces(8, Decimal.ROUND_HALF_UP);
 
     const repayments: Partial<LoanRepayment>[] = [];
     const startDate = new Date();
+    let allocated = new Decimal(0);
 
     for (let i = 1; i <= instalments; i++) {
       const dueDate = new Date(
         startDate.getTime() + i * 30 * 24 * 60 * 60 * 1000,
       );
-      const totalDue = principal + interestPerInstalment;
+      const isLastInstalment = i === instalments;
+      const principal = isLastInstalment
+        ? principalTotal.minus(allocated)
+        : principalPerInstalment;
+      allocated = allocated.plus(principal);
+      const totalDue = principal.plus(interestPerInstalment);
 
       repayments.push({
         loanId: loan.id,
@@ -502,6 +560,7 @@ export class LoansService {
         paidAmount: '0.00000000',
         status: RepaymentStatus.SCHEDULED,
         paidAt: null,
+        lastPenaltyAppliedAt: null,
       });
     }
 

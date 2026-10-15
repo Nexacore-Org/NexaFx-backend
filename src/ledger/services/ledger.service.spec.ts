@@ -132,7 +132,7 @@ describe('LedgerService', () => {
       expect(feeEntry?.currency).toBe('USD');
     });
 
-    it('uses same currency for fee when feeCurrency is null on SWAP', async () => {
+    it('omits the fee legs entirely when the swap fee is zero', async () => {
       const tx = makeTransaction({
         type: TransactionType.SWAP,
         amount: '100.00000000',
@@ -145,13 +145,12 @@ describe('LedgerService', () => {
       const qr = makeQueryRunner();
 
       const result = await service.record(tx, qr);
-      expect(result).toHaveLength(6);
+      expect(result).toHaveLength(4);
 
       const feeEntry = result.find(
         (e: any) => e.accountType === LedgerAccountType.FEE_REVENUE,
       );
-      expect(feeEntry?.amount).toBe('0.00000000');
-      expect(feeEntry?.currency).toBe('USD');
+      expect(feeEntry).toBeUndefined();
     });
 
     it('records 2 entries for LOAN_DISBURSEMENT', async () => {

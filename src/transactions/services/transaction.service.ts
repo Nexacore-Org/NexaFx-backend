@@ -343,6 +343,9 @@ export class TransactionsService {
       transaction.status = TransactionStatus.FAILED;
       transaction.failureReason = error.message;
       await this.transactionRepository.save(transaction);
+      // The PENDING insert already wrote ledger entries: reverse them so the
+      // failed deposit nets to zero.
+      await this.ledgerService.reverse(transaction);
 
       await this.auditLogsService.logTransactionEvent(
         userId,
@@ -591,6 +594,7 @@ export class TransactionsService {
       transaction.status = TransactionStatus.FAILED;
       transaction.failureReason = error.message;
       await this.transactionRepository.save(transaction);
+      await this.ledgerService.reverse(transaction);
 
       await this.auditLogsService.logTransactionEvent(
         userId,
@@ -1310,6 +1314,7 @@ export class TransactionsService {
     const oldStatus = transaction.status;
     transaction.status = TransactionStatus.CANCELLED;
     await this.transactionRepository.save(transaction);
+    await this.ledgerService.reverse(transaction);
 
     await this.auditLogsService.logTransactionEvent(
       transaction.userId,

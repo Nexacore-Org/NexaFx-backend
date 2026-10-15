@@ -1,13 +1,19 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
-import { DataSource } from 'typeorm';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { DataSource, IsNull } from 'typeorm';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { WalletsService } from './wallets.service';
 import { Wallet, StellarNetwork } from './entities/wallet.entity';
 import { UsersService } from '../users/users.service';
 import { StellarService } from '../modules/stellar/stellar.service';
 import { EncryptionService } from '../common/services/encryption.service';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
 // Manual mock prevents ts-jest from transpiling the real users.service.ts,
 // which avoids broken dead-code in its transitive dependency chain.
@@ -23,6 +29,7 @@ describe('WalletsService', () => {
   let encryptionService: Record<string, jest.Mock>;
   let configService: Record<string, jest.Mock>;
   let dataSource: Record<string, jest.Mock>;
+  let auditLogsService: Record<string, jest.Mock>;
 
   const VALID_PUBLIC_KEY =
     'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOUJ3UHMNGUAO7UP';
@@ -40,12 +47,14 @@ describe('WalletsService', () => {
       network: StellarNetwork.TESTNET,
       createdAt: new Date('2025-01-01'),
       updatedAt: new Date('2025-01-01'),
+      archivedAt: null,
       ...overrides,
     }) as Wallet;
 
   beforeEach(async () => {
     walletRepo = {
       find: jest.fn().mockResolvedValue([]),
+      findAndCount: jest.fn().mockResolvedValue([[], 0]),
       findOne: jest.fn().mockResolvedValue(null),
       save: jest
         .fn()
@@ -75,6 +84,9 @@ describe('WalletsService', () => {
     configService = {
       get: jest.fn().mockReturnValue('TESTNET'),
     };
+    auditLogsService = {
+      logWalletEvent: jest.fn().mockResolvedValue(undefined),
+    };
 
     // Mock DataSource.transaction to execute the callback with a manager
     const mockManager = {
@@ -100,6 +112,7 @@ describe('WalletsService', () => {
         { provide: EncryptionService, useValue: encryptionService },
         { provide: ConfigService, useValue: configService },
         { provide: DataSource, useValue: dataSource },
+        { provide: AuditLogsService, useValue: auditLogsService },
       ],
     }).compile();
 
@@ -118,7 +131,7 @@ describe('WalletsService', () => {
       const result = await service.findAllByUser('user-1');
 
       expect(walletRepo.find).toHaveBeenCalledWith({
-        where: { userId: 'user-1' },
+        where: { userId: 'user-1', archivedAt: IsNull() },
         order: { createdAt: 'ASC' },
       });
       expect(result).toEqual(wallets);
@@ -133,9 +146,18 @@ describe('WalletsService', () => {
       const result = await service.findByUserAndCurrency('user-1', 'ngn');
 
       expect(walletRepo.findOne).toHaveBeenCalledWith({
-        where: { userId: 'user-1', currency: 'NGN' },
+        where: {
+          userId: 'user-1',
+          currency: 'NGN',
+          archivedAt: IsNull(),
+        },
       });
-      expect(result).toEqual(wallet);
+      expect(result).toMatchObject({
+        id: wallet.id,
+        currency: 'NGN',
+        isWatchOnly: false,
+      });
+      expect(result).not.toHaveProperty('encryptedSecretKey');
     });
 
     it('should throw NotFoundException when wallet is not found', async () => {
@@ -378,7 +400,7 @@ describe('WalletsService', () => {
       // Verify clear + set pattern
       const walletRepoMock = mockManager.getRepository(Wallet);
       expect(walletRepoMock.update).toHaveBeenCalledWith(
-        { userId: 'user-1', isDefault: true },
+        { userId: 'user-1', isDefault: true, archivedAt: IsNull() },
         { isDefault: false },
       );
       expect(walletRepoMock.update).toHaveBeenCalledWith(
@@ -459,9 +481,82 @@ describe('WalletsService', () => {
   });
 
   describe('deleteWallet', () => {
-    it('should delete a non-default wallet when user has more than one', async () => {
+    it('should archive an empty custodial wallet and audit the removal', async () => {
       const nonDefaultWallet = makeWallet({ isDefault: false });
       walletRepo.findOne.mockResolvedValue(nonDefaultWallet);
+      walletRepo.count.mockResolvedValue(2);
+
+      await service.deleteWallet('user-1', 'wallet-2');
+
+      expect(stellarService.getWalletBalances).toHaveBeenCalledWith(
+        VALID_PUBLIC_KEY,
+      );
+      expect(walletRepo.update).toHaveBeenCalledWith(
+        {
+          id: 'wallet-2',
+          userId: 'user-1',
+        },
+        {
+          archivedAt: expect.any(Date),
+        },
+      );
+      expect(walletRepo.delete).not.toHaveBeenCalled();
+      expect(auditLogsService.logWalletEvent).toHaveBeenCalledWith(
+        'user-1',
+        'WALLET_DELETED',
+        'wallet-2',
+        { deletionType: 'archived' },
+      );
+    });
+
+    it('should reject custodial wallets with native funds above the base reserve', async () => {
+      walletRepo.findOne.mockResolvedValue(makeWallet({ isDefault: false }));
+      walletRepo.count.mockResolvedValue(2);
+      stellarService.getWalletBalances.mockResolvedValue([
+        { asset: 'XLM', balance: '0.6' },
+      ]);
+
+      await expect(service.deleteWallet('user-1', 'wallet-2')).rejects.toThrow(
+        ConflictException,
+      );
+      expect(walletRepo.update).not.toHaveBeenCalled();
+      expect(walletRepo.delete).not.toHaveBeenCalled();
+    });
+
+    it('should reject custodial wallets with any positive non-native asset balance', async () => {
+      walletRepo.findOne.mockResolvedValue(makeWallet({ isDefault: false }));
+      walletRepo.count.mockResolvedValue(2);
+      stellarService.getWalletBalances.mockResolvedValue([
+        { asset: 'USDC', balance: '0.00000001' },
+      ]);
+
+      await expect(service.deleteWallet('user-1', 'wallet-2')).rejects.toThrow(
+        ConflictException,
+      );
+      expect(walletRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('should reject a positive issued asset even when its code is XLM', async () => {
+      walletRepo.findOne.mockResolvedValue(makeWallet({ isDefault: false }));
+      walletRepo.count.mockResolvedValue(2);
+      stellarService.getWalletBalances.mockResolvedValue([
+        {
+          asset: 'XLM',
+          assetIssuer: 'GISSUER',
+          balance: '0.1',
+        },
+      ]);
+
+      await expect(service.deleteWallet('user-1', 'wallet-2')).rejects.toThrow(
+        ConflictException,
+      );
+      expect(walletRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('should hard-delete a watch-only wallet and audit the removal', async () => {
+      walletRepo.findOne.mockResolvedValue(
+        makeWallet({ isDefault: false, encryptedSecretKey: null }),
+      );
       walletRepo.count.mockResolvedValue(2);
 
       await service.deleteWallet('user-1', 'wallet-2');
@@ -470,6 +565,27 @@ describe('WalletsService', () => {
         id: 'wallet-2',
         userId: 'user-1',
       });
+      expect(stellarService.getWalletBalances).not.toHaveBeenCalled();
+      expect(auditLogsService.logWalletEvent).toHaveBeenCalledWith(
+        'user-1',
+        'WALLET_DELETED',
+        'wallet-2',
+        { deletionType: 'hard-deleted' },
+      );
+    });
+
+    it('should not archive a custodial wallet when balance verification fails', async () => {
+      walletRepo.findOne.mockResolvedValue(makeWallet({ isDefault: false }));
+      walletRepo.count.mockResolvedValue(2);
+      stellarService.getWalletBalances.mockRejectedValue(
+        new Error('Horizon unavailable'),
+      );
+
+      await expect(service.deleteWallet('user-1', 'wallet-2')).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      expect(walletRepo.update).not.toHaveBeenCalled();
+      expect(walletRepo.delete).not.toHaveBeenCalled();
     });
 
     it('should reject deleting the default wallet', async () => {
@@ -479,6 +595,25 @@ describe('WalletsService', () => {
       await expect(service.deleteWallet('user-1', 'wallet-1')).rejects.toThrow(
         BadRequestException,
       );
+    });
+
+    describe('wallet read responses', () => {
+      it('should omit encrypted secrets and retain watch-only status in wallet lists', async () => {
+        walletRepo.findAndCount.mockResolvedValue([
+          [
+            makeWallet({ encryptedSecretKey: 'encrypted-secret' }),
+            makeWallet({ id: 'watch-only', encryptedSecretKey: null }),
+          ],
+          2,
+        ]);
+
+        const result = await service.listWallets('user-1');
+
+        expect(result.items[0].isWatchOnly).toBe(false);
+        expect(result.items[1].isWatchOnly).toBe(true);
+        expect(result.items[0]).not.toHaveProperty('encryptedSecretKey');
+        expect(result.items[1]).not.toHaveProperty('encryptedSecretKey');
+      });
     });
 
     it('should reject deleting the only remaining wallet', async () => {

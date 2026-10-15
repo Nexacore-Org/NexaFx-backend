@@ -9,6 +9,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import * as archiver from 'archiver';
 import { ConfigService } from '@nestjs/config';
+import { instanceToPlain } from 'class-transformer';
 import { PassThrough } from 'stream';
 import Mailgun from 'mailgun.js';
 import * as FormData from 'form-data';
@@ -129,7 +130,7 @@ export class ExportProcessor extends WorkerHost {
 
     return {
       profile: [safeProfile],
-      wallets,
+      wallets: wallets.map((wallet) => instanceToPlain(wallet)),
       transactions,
       ledgerEntries,
       notifications,

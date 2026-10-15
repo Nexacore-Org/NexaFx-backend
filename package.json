@@ -37,7 +37,7 @@
     "@aws-sdk/lib-storage": "^3.1139.0",
     "@aws-sdk/s3-request-presigner": "^3.500.0",
     "@bull-board/api": "^8.0.1",
-    "@bull-board/express": "^8.3.0",
+    "@bull-board/express": "^9.10.4",
     "@maxmind/geoip2-node": "^7.1.0",
     "@nestjs-modules/ioredis": "^2.2.2",
     "@nestjs/apollo": "^13.3.0",

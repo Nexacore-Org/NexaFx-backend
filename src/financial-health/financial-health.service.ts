@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  Optional,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -7,6 +13,10 @@ import {
   HealthGrade,
 } from './entities/financial-health-score.entity';
 import Decimal from 'decimal.js';
+import {
+  Transaction,
+  TransactionStatus,
+} from '../transactions/entities/transaction.entity';
 
 /**
  * Injection token for the notifier used to announce score changes.
@@ -36,6 +46,12 @@ export class FinancialHealthService {
   ) {}
 
   async getLatestScore(userId: string): Promise<FinancialHealthScore | null> {
+    if (!userId) {
+      // TypeORM drops `undefined` conditions, so an empty userId would return
+      // the most recent score of any user.
+      throw new BadRequestException('userId is required');
+    }
+
     return this.scoreRepo.findOne({
       where: { userId },
       order: { calculatedAt: 'DESC' },
@@ -46,6 +62,10 @@ export class FinancialHealthService {
     userId: string,
     weeks = 12,
   ): Promise<FinancialHealthScore[]> {
+    if (!userId) {
+      throw new BadRequestException('userId is required');
+    }
+
     return this.scoreRepo
       .createQueryBuilder('score')
       .where('score.userId = :userId', { userId })
@@ -78,10 +98,23 @@ export class FinancialHealthService {
       'Starting weekly Financial Health Evaluation pipeline loop...',
     );
 
-    // Process only active transacting users to keep resources highly optimized
-    const activeUsers = await this.dataSource.query(`
-      SELECT DISTINCT "userId" FROM transactions WHERE "status" = 'COMPLETED'
-    `);
+    // Only successfully settled transactions count. The status column is a
+    // Postgres enum whose values are PENDING/SUCCESS/FAILED/CANCELLED, so the
+    // previous raw 'COMPLETED' filter aborted the whole run.
+    let activeUsers: { userId: string }[];
+    try {
+      activeUsers = await this.dataSource
+        .getRepository(Transaction)
+        .createQueryBuilder('transaction')
+        .select('DISTINCT transaction.userId', 'userId')
+        .where('transaction.status = :status', {
+          status: TransactionStatus.SUCCESS,
+        })
+        .getRawMany();
+    } catch (err) {
+      this.logger.error('Weekly financial health evaluation query failed', err);
+      return;
+    }
 
     for (const row of activeUsers) {
       try {

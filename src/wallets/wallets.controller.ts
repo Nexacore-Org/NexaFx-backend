@@ -106,10 +106,17 @@ export class WalletsController {
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   @ApiParam({ name: 'id', format: 'uuid' })
-  @ApiOperation({ summary: 'Delete a non-default wallet' })
+  @ApiOperation({
+    summary: 'Remove a non-default wallet (custodial wallets are archived)',
+  })
   @ApiResponse({
     status: 400,
     description: 'Cannot delete only or default wallet',
+  })
+  @ApiResponse({
+    status: 409,
+    description:
+      'Custodial wallet has on-chain funds or balance is unavailable',
   })
   async remove(
     @Request() req: { user: { userId: string } },

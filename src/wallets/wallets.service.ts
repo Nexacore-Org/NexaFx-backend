@@ -1,11 +1,13 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, IsNull, Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../users/users.service';
 import { User } from '../users/user.entity';
@@ -14,6 +16,8 @@ import { GenerateWalletDto, ImportWalletDto } from './dto/wallet.dto';
 import { StellarService } from '../modules/stellar/stellar.service';
 import { WalletBalanceResult } from '../modules/stellar/stellar.types';
 import { EncryptionService } from '../common/services/encryption.service';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import Decimal from 'decimal.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -22,6 +26,7 @@ const MAX_WALLETS_PER_USER = 20;
 const MAX_LABEL_LENGTH = 64;
 const DEFAULT_PRIMARY_LABEL = 'Primary';
 const DEFAULT_IMPORTED_LABEL = 'Imported (watch-only)';
+const STELLAR_BASE_RESERVE_XLM = '0.5';
 
 /** Stellar public keys start with G and are 56 characters of base32. */
 const STELLAR_ADDRESS_RE = /^G[A-Z2-7]{55}$/;
@@ -41,7 +46,6 @@ export interface WalletListItem {
   currency: string;
   balance: string;
   publicKey: string | null;
-  encryptedSecretKey: string | null;
   label: string;
   isDefault: boolean;
   isWatchOnly: boolean;
@@ -85,6 +89,7 @@ export class WalletsService {
     private readonly encryptionService: EncryptionService,
     private readonly configService: ConfigService,
     private readonly dataSource: DataSource,
+    private readonly auditLogsService: AuditLogsService,
   ) {
     // Resolve once at startup — the network does not change at runtime.
     const raw = this.configService.get<string>('STELLAR_NETWORK') ?? 'TESTNET';
@@ -101,7 +106,7 @@ export class WalletsService {
    */
   async findAllByUser(userId: string): Promise<Wallet[]> {
     return this.walletRepository.find({
-      where: { userId },
+      where: { userId, archivedAt: IsNull() },
       order: { createdAt: 'ASC' },
     });
   }
@@ -112,17 +117,17 @@ export class WalletsService {
   async findByUserAndCurrency(
     userId: string,
     currency: string,
-  ): Promise<Wallet> {
+  ): Promise<WalletListItem> {
     const targetCurrency = currency.trim().toUpperCase();
     const wallet = await this.walletRepository.findOne({
-      where: { userId, currency: targetCurrency },
+      where: { userId, currency: targetCurrency, archivedAt: IsNull() },
     });
     if (!wallet) {
       throw new NotFoundException(
         `Wallet with currency '${targetCurrency}' not found for this user`,
       );
     }
-    return wallet;
+    return this.toListItem(wallet);
   }
 
   /**
@@ -135,7 +140,9 @@ export class WalletsService {
   ): Promise<void> {
     this.assertValidStellarAddress(publicKey);
 
-    const count = await this.walletRepository.count({ where: { userId } });
+    const count = await this.walletRepository.count({
+      where: { userId, archivedAt: IsNull() },
+    });
     if (count > 0) return;
 
     await this.walletRepository.save(
@@ -163,7 +170,7 @@ export class WalletsService {
   ): Promise<Wallet> {
     const targetCurrency = currency.trim().toUpperCase();
     const existing = await this.walletRepository.findOne({
-      where: { userId, currency: targetCurrency },
+      where: { userId, currency: targetCurrency, archivedAt: IsNull() },
     });
     if (existing) return existing;
 
@@ -193,7 +200,7 @@ export class WalletsService {
    * @throws NotFoundException when an explicit walletId is not found.
    * @throws BadRequestException when the resolved wallet is watch-only.
     const existing = await this.walletRepository.findOne({
-      where: { userId, currency: 'XLM' },
+      where: { userId, currency: 'XLM', archivedAt: IsNull() },
     });
     if (existing) {
       return;
@@ -226,12 +233,12 @@ export class WalletsService {
 
     if (walletId) {
       wallet = await this.walletRepository.findOne({
-        where: { id: walletId, userId },
+        where: { id: walletId, userId, archivedAt: IsNull() },
       });
       if (!wallet) throw new NotFoundException('Wallet not found');
     } else {
       wallet = await this.walletRepository.findOne({
-        where: { userId, isDefault: true },
+        where: { userId, isDefault: true, archivedAt: IsNull() },
       });
     }
 
@@ -276,7 +283,7 @@ export class WalletsService {
     const skip = (safePage - 1) * safePageSize;
 
     const [wallets, total] = await this.walletRepository.findAndCount({
-      where: { userId },
+      where: { userId, archivedAt: IsNull() },
       order: { createdAt: 'ASC' },
       skip,
       take: safePageSize,
@@ -298,7 +305,6 @@ export class WalletsService {
           currency: w.currency,
           balance: w.balance,
           publicKey: w.publicKey,
-          encryptedSecretKey: w.encryptedSecretKey,
           label: w.label,
           isDefault: w.isDefault,
           isWatchOnly: !w.encryptedSecretKey,
@@ -312,11 +318,7 @@ export class WalletsService {
     );
 
     return {
-      items: withBalances.map((b: any) => ({
-        ...b,
-        isWatchOnly: false,
-        balanceError: null,
-      })) as any,
+      items: withBalances,
       total,
       page: safePage,
       pageSize: safePageSize,
@@ -384,7 +386,7 @@ export class WalletsService {
     this.assertValidStellarAddress(publicKey);
 
     const duplicate = await this.walletRepository.findOne({
-      where: { userId, publicKey },
+      where: { userId, publicKey, archivedAt: IsNull() },
     });
     if (duplicate) {
       throw new BadRequestException(
@@ -442,7 +444,7 @@ export class WalletsService {
       const walletRepo = manager.getRepository(Wallet);
 
       const target = await walletRepo.findOne({
-        where: { id: walletId, userId },
+        where: { id: walletId, userId, archivedAt: IsNull() },
       });
       if (!target) throw new NotFoundException('Wallet not found');
 
@@ -450,7 +452,7 @@ export class WalletsService {
 
       // Clear all defaults first, then set the target.
       await walletRepo.update(
-        { userId, isDefault: true },
+        { userId, isDefault: true, archivedAt: IsNull() },
         { isDefault: false },
       );
       await walletRepo.update({ id: walletId }, { isDefault: true });
@@ -471,8 +473,8 @@ export class WalletsService {
   }
 
   /**
-   * Delete a non-default wallet.
-   * The user must have at least two wallets before one can be deleted.
+   * Archive custodial wallets so their keys remain recoverable. Watch-only
+   * wallets can be deleted because this service does not hold their secrets.
    */
   async deleteWallet(userId: string, walletId: string): Promise<void> {
     const wallet = await this.requireOwnedWallet(userId, walletId);
@@ -483,7 +485,9 @@ export class WalletsService {
       );
     }
 
-    const total = await this.walletRepository.count({ where: { userId } });
+    const total = await this.walletRepository.count({
+      where: { userId, archivedAt: IsNull() },
+    });
     if (total <= 1) {
       throw new BadRequestException(
         'You cannot delete your only wallet. ' +
@@ -491,8 +495,58 @@ export class WalletsService {
       );
     }
 
-    await this.walletRepository.delete({ id: walletId, userId });
-    this.logger.log(`Deleted wallet ${walletId} for user ${userId}`);
+    const isCustodial = Boolean(wallet.encryptedSecretKey);
+    if (isCustodial) {
+      if (!wallet.publicKey) {
+        throw new ConflictException(
+          'Cannot verify this custodial wallet balance. The wallet was not removed.',
+        );
+      }
+
+      let balances: WalletBalanceResult[];
+      try {
+        balances = await this.stellarService.getWalletBalances(
+          wallet.publicKey,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Could not verify balances for custodial wallet ${wallet.id}: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`,
+        );
+        throw new ServiceUnavailableException(
+          'Unable to verify this wallet balance. The wallet was not removed.',
+        );
+      }
+      const hasFunds = balances.some((balance) => {
+        const amount = new Decimal(balance.balance);
+        return balance.asset === 'XLM' && !balance.assetIssuer
+          ? amount.gt(STELLAR_BASE_RESERVE_XLM)
+          : amount.gt(0);
+      });
+      if (hasFunds) {
+        throw new ConflictException(
+          'This wallet has on-chain funds. Transfer all assets before removing it.',
+        );
+      }
+
+      await this.walletRepository.update(
+        { id: walletId, userId },
+        { archivedAt: new Date() },
+      );
+    } else {
+      await this.walletRepository.delete({ id: walletId, userId });
+    }
+
+    await this.auditLogsService.logWalletEvent(
+      userId,
+      AuditAction.WALLET_DELETED,
+      walletId,
+      { deletionType: isCustodial ? 'archived' : 'hard-deleted' },
+    );
+    this.logger.log(
+      `${isCustodial ? 'Archived' : 'Deleted'} wallet ${walletId} for user ${userId}`,
+    );
   }
 
   // ── Private — helpers ─────────────────────────────────────────────────────
@@ -502,14 +556,16 @@ export class WalletsService {
     walletId: string,
   ): Promise<Wallet> {
     const wallet = await this.walletRepository.findOne({
-      where: { id: walletId, userId },
+      where: { id: walletId, userId, archivedAt: IsNull() },
     });
     if (!wallet) throw new NotFoundException('Wallet not found');
     return wallet;
   }
 
   private async assertBelowWalletLimit(userId: string): Promise<void> {
-    const count = await this.walletRepository.count({ where: { userId } });
+    const count = await this.walletRepository.count({
+      where: { userId, archivedAt: IsNull() },
+    });
     if (count >= MAX_WALLETS_PER_USER) {
       throw new BadRequestException(
         `You have reached the maximum of ${MAX_WALLETS_PER_USER} wallets per account.`,
@@ -541,7 +597,9 @@ export class WalletsService {
    * current wallet count for the user.
    */
   private async nextAutoLabel(userId: string): Promise<string> {
-    const count = await this.walletRepository.count({ where: { userId } });
+    const count = await this.walletRepository.count({
+      where: { userId, archivedAt: IsNull() },
+    });
     return `Wallet ${count + 1}`;
   }
 
@@ -553,19 +611,18 @@ export class WalletsService {
     let balances: WalletBalanceResult[] = [];
     let balanceError: string | null = null;
 
-    try {
-      balances = await this.stellarService.getWalletBalances(
-        wallet.publicKey as string,
-      );
-      balances = await this.stellarService.getWalletBalances(
-        wallet.publicKey as any,
-      );
-    } catch (err) {
-      balanceError =
-        err instanceof Error ? err.message : 'Failed to fetch balances';
-      this.logger.warn(
-        `Balance fetch failed for wallet ${wallet.id}: ${balanceError}`,
-      );
+    if (wallet.publicKey) {
+      try {
+        balances = await this.stellarService.getWalletBalances(
+          wallet.publicKey,
+        );
+      } catch (err) {
+        balanceError =
+          err instanceof Error ? err.message : 'Failed to fetch balances';
+        this.logger.warn(
+          `Balance fetch failed for wallet ${wallet.id}: ${balanceError}`,
+        );
+      }
     }
 
     return {
@@ -573,7 +630,6 @@ export class WalletsService {
       userId: wallet.userId,
       currency: wallet.currency,
       balance: wallet.balance,
-      encryptedSecretKey: wallet.encryptedSecretKey,
       updatedAt: wallet.updatedAt,
       balances,
       balanceError,

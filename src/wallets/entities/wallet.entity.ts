@@ -8,6 +8,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { Exclude } from 'class-transformer';
 import { User } from '../../users/user.entity';
 
 export enum StellarNetwork {
@@ -19,7 +20,7 @@ export enum StellarNetwork {
 @Index(['userId'])
 @Index('UQ_wallets_user_currency', ['userId', 'currency'], {
   unique: true,
-  where: `"currency" <> 'XLM'`,
+  where: `"currency" <> 'XLM' AND "archivedAt" IS NULL`,
 })
 @Index('UQ_wallets_user_publicKey', ['userId', 'publicKey'], {
   unique: true,
@@ -50,6 +51,7 @@ export class Wallet {
   @Column({ type: 'varchar', length: 56, nullable: true })
   publicKey: string | null;
 
+  @Exclude({ toPlainOnly: true })
   @Column({ type: 'text', nullable: true })
   encryptedSecretKey: string | null;
 
@@ -61,6 +63,9 @@ export class Wallet {
 
   @Column({ type: 'varchar', length: 10, default: StellarNetwork.TESTNET })
   network: StellarNetwork;
+
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  archivedAt: Date | null;
 
   @CreateDateColumn({ type: 'timestamp with time zone' })
   createdAt: Date;

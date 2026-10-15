@@ -73,6 +73,15 @@ describe('Wallets E2E Tests', () => {
       expect(response.body.length).toBeGreaterThanOrEqual(1);
     });
 
+    it('should not expose the encrypted secret key in wallet details', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/v1/wallets/XLM')
+        .set('Authorization', `Bearer ${userToken}`)
+        .expect(200);
+
+      expect(response.body).not.toHaveProperty('encryptedSecretKey');
+    });
+
     it('should require authentication', async () => {
       await request(app.getHttpServer()).get('/v1/wallets').expect(401);
     });

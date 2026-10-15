@@ -7,11 +7,11 @@ import { SanctionsService } from './sanctions.service';
 import { SanctionsController } from './sanctions.controller';
 import { OpenSanctionsProvider } from './providers/open-sanctions.provider';
 import { OfacProvider } from './providers/ofac.provider';
-import { KycRecord } from '../kyc/entities/kyc.entity';
+import { User } from '../users/user.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([KycScreening, OfacEntry, KycRecord]),
+    TypeOrmModule.forFeature([KycScreening, OfacEntry, User]),
     HttpModule,
   ],
   controllers: [SanctionsController],

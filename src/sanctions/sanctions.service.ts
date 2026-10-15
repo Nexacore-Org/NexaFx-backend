@@ -11,7 +11,7 @@ import {
   ScreeningStatus,
   ScreeningProvider,
 } from './entities/kyc-screening.entity';
-import { KycRecord } from '../kyc/entities/kyc.entity';
+import { User, UserKycTier } from '../users/user.entity';
 import { OpenSanctionsProvider } from './providers/open-sanctions.provider';
 import { OfacProvider } from './providers/ofac.provider';
 import { WatchlistMatch } from './interfaces/watchlist-provider.interface';
@@ -26,25 +26,32 @@ export class SanctionsService {
   constructor(
     @InjectRepository(KycScreening)
     private readonly screeningRepo: Repository<KycScreening>,
-    @InjectRepository(KycRecord)
-    private readonly kycRepo: Repository<KycRecord>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
     private readonly openSanctions: OpenSanctionsProvider,
     private readonly ofac: OfacProvider,
   ) {}
 
   async screenUser(userId: string): Promise<KycScreening> {
-    const kyc = await this.kycRepo.findOne({
-      where: { userId },
-      order: { createdAt: 'DESC' },
-    });
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException(`User ${userId} not found`);
+    }
 
-    const fullName = kyc?.fullName ?? userId;
-    const dateOfBirth = kyc?.dateOfBirth
-      ? kyc.dateOfBirth.toString().substring(0, 10)
-      : undefined;
-    const nationality = kyc?.nationality ?? undefined;
+    // Screen the person, never the identifier: a UUID matches no list and
+    // silently clears the user. Names live on the user, because the live KYC
+    // flow (kyc_applications) stores documents only.
+    const fullName = [user.firstName, user.lastName]
+      .filter((part): part is string => Boolean(part && part.trim()))
+      .join(' ')
+      .trim();
 
-    const query = { fullName, dateOfBirth, nationality };
+    if (!fullName) {
+      throw new ForbiddenException('Cannot screen a user with no name on file');
+    }
+
+    // Date of birth and nationality are not collected anywhere yet.
+    const query = { fullName };
 
     let matches: WatchlistMatch[] = [];
     let provider = ScreeningProvider.OPEN_SANCTIONS;
@@ -67,8 +74,8 @@ export class SanctionsService {
     const screening = this.screeningRepo.create({
       userId,
       fullName,
-      dateOfBirth: kyc?.dateOfBirth ?? null,
-      nationality: nationality ?? null,
+      dateOfBirth: null,
+      nationality: null,
       score: topScore,
       status,
       provider,
@@ -145,17 +152,21 @@ export class SanctionsService {
   async rescreenAllUsers(): Promise<{ processed: number; failed: number }> {
     this.logger.log('Starting monthly re-screening of all users');
 
-    const kycs = await this.kycRepo
-      .createQueryBuilder('k')
-      .select(['k.userId'])
-      .distinctOn(['k.userId'])
-      .where('k.status = :status', { status: 'approved' })
+    // Drive the re-screen from users holding a verified tier; the legacy
+    // kyc_records query filtered on a lowercase 'approved' and matched nobody.
+    const users = await this.userRepo
+      .createQueryBuilder('user')
+      .select(['user.id'])
+      .where('user.kycTier IN (:...tiers)', {
+        tiers: [UserKycTier.STANDARD, UserKycTier.ENHANCED],
+      })
+      .orderBy('user.id', 'ASC')
       .getMany();
 
     let processed = 0;
     let failed = 0;
 
-    for (const { userId } of kycs) {
+    for (const { id: userId } of users) {
       try {
         await this.screenUser(userId);
         processed++;

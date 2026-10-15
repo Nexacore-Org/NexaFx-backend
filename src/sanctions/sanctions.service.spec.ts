@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { SanctionsService } from './sanctions.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { KycScreening, ScreeningStatus } from './entities/kyc-screening.entity';
-import { KycRecord } from '../kyc/entities/kyc.entity';
+import { User } from '../users/user.entity';
 import { OpenSanctionsProvider } from './providers/open-sanctions.provider';
 import { OfacProvider } from './providers/ofac.provider';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
@@ -24,7 +24,7 @@ describe('SanctionsService', () => {
           },
         },
         {
-          provide: getRepositoryToken(KycRecord),
+          provide: getRepositoryToken(User),
           useValue: {
             findOne: jest.fn(),
           },
@@ -54,8 +54,9 @@ describe('SanctionsService', () => {
 
   describe('screenUser', () => {
     it('should fail-closed (return BLOCKED) if a provider fails', async () => {
-      (service as any).kycRepo.findOne.mockResolvedValue({
-        fullName: 'Test User',
+      (service as any).userRepo.findOne.mockResolvedValue({
+        firstName: 'Test',
+        lastName: 'User',
       });
       (service as any).openSanctions.screen.mockRejectedValue(
         new Error('Provider timeout'),
@@ -66,8 +67,9 @@ describe('SanctionsService', () => {
     });
 
     it('should flag a known-sanctioned test fixture', async () => {
-      (service as any).kycRepo.findOne.mockResolvedValue({
-        fullName: 'Test User',
+      (service as any).userRepo.findOne.mockResolvedValue({
+        firstName: 'Test',
+        lastName: 'User',
       });
       (service as any).openSanctions.screen.mockResolvedValue([{ score: 99 }]);
       const screening = await service.screenUser('user1');
@@ -75,8 +77,9 @@ describe('SanctionsService', () => {
     });
 
     it('should clear a clean test fixture', async () => {
-      (service as any).kycRepo.findOne.mockResolvedValue({
-        fullName: 'Test User',
+      (service as any).userRepo.findOne.mockResolvedValue({
+        firstName: 'Test',
+        lastName: 'User',
       });
       (service as any).openSanctions.screen.mockResolvedValue([]);
       (service as any).ofac.screen.mockResolvedValue([]);

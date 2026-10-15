@@ -37,7 +37,7 @@ import {
   LedgerAccountType,
   LedgerDirection,
 } from '../ledger/entities/ledger-entry.entity';
-import { UserKycTier } from '../users/user.entity';
+import { User, UserKycTier } from '../users/user.entity';
 
 const MIN_CREDIT_SCORE = 40;
 const DAILY_PENALTY_RATE = 0.005;
@@ -159,14 +159,39 @@ export class LoansService {
     }
 
     const repayment = pendingRepayments[0];
-    const remainingDue =
-      parseFloat(repayment.totalDue) - parseFloat(repayment.paidAmount);
 
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
+      // Lock the instalment and the user row, then recompute from those rows:
+      // the reads above happen outside the transaction, so concurrent
+      // repayments could both settle this instalment and lose a debit.
+      const lockedRepayment = await queryRunner.manager.findOne(LoanRepayment, {
+        where: { id: repayment.id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!lockedRepayment || lockedRepayment.status === RepaymentStatus.PAID) {
+        throw new BadRequestException('This repayment is already settled');
+      }
+
+      const lockedUser = await queryRunner.manager.findOne(User, {
+        where: { id: userId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!lockedUser) {
+        throw new NotFoundException('User not found');
+      }
+
+      repayment.totalDue = lockedRepayment.totalDue;
+      repayment.paidAmount = lockedRepayment.paidAmount;
+      const remainingDue =
+        parseFloat(repayment.totalDue) - parseFloat(repayment.paidAmount);
+      const freshBalance = parseFloat(
+        (lockedUser.balances?.['XLM'] ?? 0).toString(),
+      );
+
       const payAmount = Math.min(dto.amount, remainingDue);
       const newPaidAmount = parseFloat(repayment.paidAmount) + payAmount;
 
@@ -182,10 +207,10 @@ export class LoansService {
 
       await queryRunner.manager.save(LoanRepayment, repayment);
 
-      // Debit user balance
-      const newBalance = balance - payAmount;
+      // Debit user balance from the locked row
+      const newBalance = freshBalance - payAmount;
       await queryRunner.manager.update('users', userId, {
-        balances: { ...user.balances, XLM: newBalance },
+        balances: { ...lockedUser.balances, XLM: newBalance },
       });
 
       // Create internal transaction record
@@ -282,6 +307,16 @@ export class LoansService {
     await queryRunner.startTransaction();
 
     try {
+      // The PENDING check above ran on an unlocked read, so re-read the row
+      // under a write lock: two concurrent approvals must not both disburse.
+      const lockedLoan = await queryRunner.manager.findOne(LoanApplication, {
+        where: { id: loanId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!lockedLoan || lockedLoan.status !== LoanStatus.PENDING) {
+        throw new BadRequestException('Only PENDING loans can be approved');
+      }
+
       const now = new Date();
       const dueDate = new Date(
         now.getTime() + loan.termDays * 24 * 60 * 60 * 1000,
@@ -297,13 +332,21 @@ export class LoansService {
 
       await queryRunner.manager.save(LoanApplication, loan);
 
-      // Credit user balance (LOAN_DISBURSEMENT)
+      // Credit the balance computed from the locked user row
+      const lockedUser = await queryRunner.manager.findOne(User, {
+        where: { id: loan.userId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!lockedUser) {
+        throw new NotFoundException('Loan applicant not found');
+      }
+
       const currentBalance = parseFloat(
-        (user.balances?.['XLM'] ?? 0).toString(),
+        (lockedUser.balances?.['XLM'] ?? 0).toString(),
       );
       const newBalance = currentBalance + dto.approvedAmount;
       await queryRunner.manager.update('users', loan.userId, {
-        balances: { ...user.balances, XLM: newBalance },
+        balances: { ...lockedUser.balances, XLM: newBalance },
       });
 
       // Create internal transaction record for disbursement
@@ -491,9 +534,33 @@ export class LoansService {
     await queryRunner.startTransaction();
 
     try {
-      const newBalance = balance - amountDue;
+      // Lock the user row, then debit the fresh balance: the read above is
+      // stale when an auto-debit and a manual repayment overlap.
+      const lockedUser = await queryRunner.manager.findOne(User, {
+        where: { id: loan.userId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!lockedUser) {
+        await queryRunner.rollbackTransaction();
+        return;
+      }
+
+      const freshBalance = parseFloat(
+        (lockedUser.balances?.['XLM'] ?? 0).toString(),
+      );
+      if (freshBalance < amountDue) {
+        await queryRunner.rollbackTransaction();
+        repayment.status = RepaymentStatus.OVERDUE;
+        await this.repaymentRepo.save(repayment);
+        this.logger.warn(
+          `Repayment ${repayment.id} marked OVERDUE — insufficient balance`,
+        );
+        return;
+      }
+
+      const newBalance = freshBalance - amountDue;
       await queryRunner.manager.update('users', loan.userId, {
-        balances: { ...user.balances, XLM: newBalance },
+        balances: { ...lockedUser.balances, XLM: newBalance },
       });
 
       // Transaction record

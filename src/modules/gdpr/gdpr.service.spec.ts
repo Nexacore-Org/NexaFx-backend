@@ -168,7 +168,7 @@ describe('GdprService', () => {
           email: 'deleted-user-1@nexafx.deleted',
           firstName: 'Deleted',
           lastName: 'Deleted',
-          password: '',
+          password: null,
           isActive: false,
         }),
       );

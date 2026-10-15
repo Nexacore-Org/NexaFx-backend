@@ -4,11 +4,18 @@ export class CreateAuditLogs1762000000000 implements MigrationInterface {
   name = 'CreateAuditLogs1762000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // Drop existing table if it exists to clean up
-    await queryRunner.query('DROP TABLE IF EXISTS "audit_logs" CASCADE');
-    await queryRunner.query(
-      'DROP TYPE IF EXISTS "public"."audit_logs_status_enum" CASCADE',
-    );
+    // No destructive DROP: re-running this migration used to wipe the audit
+    // trail. On a database that already has the table only the column the
+    // entity declares but this migration forgot is added.
+    if (await queryRunner.hasTable('audit_logs')) {
+      await queryRunner.query(
+        `ALTER TABLE "audit_logs" ADD COLUMN IF NOT EXISTS "impersonatedByAdminId" uuid`,
+      );
+      await queryRunner.query(
+        `CREATE INDEX IF NOT EXISTS "IDX_audit_logs_impersonatedByAdminId" ON "audit_logs" ("impersonatedByAdminId")`,
+      );
+      return;
+    }
 
     await queryRunner.query(`
       CREATE TYPE "public"."audit_logs_status_enum" AS ENUM(
@@ -21,6 +28,7 @@ export class CreateAuditLogs1762000000000 implements MigrationInterface {
       CREATE TABLE "audit_logs" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "actorId" uuid,
+        "impersonatedByAdminId" uuid,
         "targetId" uuid,
         "action" character varying NOT NULL,
         "resourceType" character varying NOT NULL,

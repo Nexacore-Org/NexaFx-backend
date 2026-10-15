@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   UnauthorizedException,
   UnprocessableEntityException,
@@ -93,10 +94,16 @@ export class GdprService {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
-    const isPasswordValid = await bcrypt.compare(
-      passwordInput,
-      user.password as string,
-    );
+    if (!user.password) {
+      // bcrypt.compare throws on a missing hash — every OAuth-only account hit
+      // a 500 here. Until the alternative verification step exists they get an
+      // explicit error instead of an unhandled failure.
+      throw new BadRequestException(
+        'This account has no password. Alternative verification is required before it can be erased.',
+      );
+    }
+
+    const isPasswordValid = await bcrypt.compare(passwordInput, user.password);
     if (!isPasswordValid) throw new UnauthorizedException('Invalid password');
 
     const pendingTransactions = await this.transactionRepository.count({
@@ -150,13 +157,22 @@ export class GdprService {
       });
     }
 
-    // Anonymise user
+    // Anonymise user (including the personal data that used to survive erasure)
     user.email = `deleted-${user.id}@nexafx.deleted`;
     user.firstName = 'Deleted';
     user.lastName = 'Deleted';
-    user.password = '';
+    user.password = null;
+    // passwordHash is NOT NULL, so it is overwritten with a value that cannot
+    // match any password rather than left in place.
+    user.passwordHash = `erased-${user.id}`;
+    user.phone = null;
+    user.fcmTokens = [];
+    user.fcmToken = null;
+    user.stripeCardholderId = null;
+    user.referralCode = `erased-${user.id}`;
     user.twoFactorSecret = null;
     user.isActive = false;
+    user.isDeleted = true;
     user.deletedAt = new Date();
     await this.userRepository.save(user);
 

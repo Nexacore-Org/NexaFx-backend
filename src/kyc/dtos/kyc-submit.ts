@@ -1,4 +1,4 @@
-import { IsEnum, IsNotEmpty } from 'class-validator';
+import { IsIn, IsNotEmpty } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { UserKycTier } from '../../users/user.entity';
 
@@ -11,7 +11,7 @@ export class SubmitKycDto {
     enum: [UserKycTier.STANDARD, UserKycTier.ENHANCED],
     description: 'Target KYC tier to upgrade to',
   })
-  @IsEnum(UserKycTier)
+  @IsIn([UserKycTier.STANDARD, UserKycTier.ENHANCED])
   @IsNotEmpty()
   targetTier: UserKycTier.STANDARD | UserKycTier.ENHANCED;
 }

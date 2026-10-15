@@ -16,7 +16,7 @@ import {
   Transaction,
   TransactionStatus,
 } from '../../transactions/entities/transaction.entity';
-import { KycRecord } from '../../kyc/entities/kyc.entity';
+import { KYCApplication } from '../../kyc/entities/kyc-application.entity';
 import { Notification } from '../../notifications/entities/notification.entity';
 import { RateAlert } from '../../rate-alerts/entities/rate-alert.entity';
 import { WebhookEndpoint } from '../../webhooks/entities/webhook-endpoint.entity';
@@ -45,8 +45,8 @@ export class GdprService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(Transaction)
     private readonly transactionRepository: Repository<Transaction>,
-    @InjectRepository(KycRecord)
-    private readonly kycRepository: Repository<KycRecord>,
+    @InjectRepository(KYCApplication)
+    private readonly kycApplicationRepository: Repository<KYCApplication>,
     @InjectRepository(Notification)
     private readonly notificationRepository: Repository<Notification>,
     @InjectRepository(RateAlert)
@@ -112,17 +112,15 @@ export class GdprService {
     const keysToDelete: string[] = [];
     const failedDeletions: string[] = [];
 
-    // 1. KYC document keys
-    const kyc = await this.kycRepository.findOne({ where: { userId } });
-    if (kyc) {
-      [
-        kyc.documentFrontKey,
-        kyc.documentBackKey,
-        kyc.selfieKey,
-        (kyc as any).proofOfAddressKey,
-      ]
-        .filter(Boolean)
-        .forEach((key) => keysToDelete.push(key));
+    // 1. KYC document keys — the live flow keeps them in
+    // kyc_applications.documents, not on the legacy kyc_records row.
+    const kycApplications = await this.kycApplicationRepository.find({
+      where: { userId },
+    });
+    for (const application of kycApplications) {
+      Object.values(application.documents ?? {}).forEach((document) => {
+        if (document?.s3Key) keysToDelete.push(document.s3Key);
+      });
     }
 
     // 2. Expense receipt keys
@@ -168,15 +166,14 @@ export class GdprService {
       { revokedAt: new Date() },
     );
 
-    // Nullify KYC storage keys then delete
-    if (kyc) {
-      kyc.documentFrontKey = null as any;
-      kyc.documentBackKey = null as any;
-      kyc.selfieKey = null as any;
-      (kyc as any).proofOfAddressKey = null;
-      await this.kycRepository.save(kyc);
+    // Drop the document keys, then the applications themselves.
+    if (kycApplications.length > 0) {
+      await this.kycApplicationRepository.update(
+        { userId },
+        { documents: {} },
+      );
     }
-    await this.kycRepository.delete({ userId });
+    await this.kycApplicationRepository.delete({ userId });
 
     // Delete non-financial records
     await this.notificationRepository.delete({ userId });

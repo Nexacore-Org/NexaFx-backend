@@ -7,7 +7,7 @@ import { GdprService } from './gdpr.service';
 import { GdprController } from './gdpr.controller';
 import { User } from '../../users/user.entity';
 import { Transaction } from '../../transactions/entities/transaction.entity';
-import { KycRecord } from '../../kyc/entities/kyc.entity';
+import { KYCApplication } from '../../kyc/entities/kyc-application.entity';
 import { Notification } from '../../notifications/entities/notification.entity';
 import { RateAlert } from '../../rate-alerts/entities/rate-alert.entity';
 import { WebhookEndpoint } from '../../webhooks/entities/webhook-endpoint.entity';
@@ -29,7 +29,7 @@ import { Referral } from '../../referrals/entities/referral.entity';
       ErasureAuditLog,
       User,
       Transaction,
-      KycRecord,
+      KYCApplication,
       Notification,
       RateAlert,
       WebhookEndpoint,

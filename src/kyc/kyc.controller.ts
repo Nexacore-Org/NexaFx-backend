@@ -29,11 +29,13 @@ import {
 } from '../auth/decorators/current-user.decorator';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { FileValidationPipe } from '../common/pipes/file-validation.pipe';
-import { UserKycTier } from '../users/user.entity';
+import { SubmitKycDto } from './dtos/kyc-submit';
 
-export class ApplyKycDto {
-  targetTier: UserKycTier.STANDARD | UserKycTier.ENHANCED;
-}
+/**
+ * The validated DTO lives in `dtos/kyc-submit.ts`. This subclass stays only so
+ * existing imports keep resolving; the body is bound as SubmitKycDto.
+ */
+export class ApplyKycDto extends SubmitKycDto {}
 
 @ApiTags('KYC')
 @Controller('kyc')
@@ -64,7 +66,7 @@ export class KycController {
   @Post('apply')
   @ApiOperation({ summary: 'Submit KYC application' })
   @ApiConsumes('multipart/form-data')
-  @ApiBody({ type: ApplyKycDto })
+  @ApiBody({ type: SubmitKycDto })
   @UseInterceptors(
     FileFieldsInterceptor([
       { name: 'governmentIdFront', maxCount: 1 },
@@ -92,7 +94,7 @@ export class KycController {
       proofOfAddress?: Express.Multer.File[];
       videoSelfie?: Express.Multer.File[];
     },
-    @Body() dto: ApplyKycDto,
+    @Body() dto: SubmitKycDto,
   ) {
     return this.kycService.applyForKyc(user.userId, dto.targetTier, {
       governmentIdFront: files.governmentIdFront?.[0],
@@ -107,7 +109,7 @@ export class KycController {
   @ApiOperation({ summary: 'Resubmit KYC application after rejection' })
   @ApiParam({ name: 'applicationId', description: 'KYC application UUID' })
   @ApiConsumes('multipart/form-data')
-  @ApiBody({ type: ApplyKycDto })
+  @ApiBody({ type: SubmitKycDto })
   @UseInterceptors(
     FileFieldsInterceptor([
       { name: 'governmentIdFront', maxCount: 1 },
@@ -136,7 +138,7 @@ export class KycController {
       proofOfAddress?: Express.Multer.File[];
       videoSelfie?: Express.Multer.File[];
     },
-    @Body() dto: ApplyKycDto,
+    @Body() dto: SubmitKycDto,
   ) {
     return this.kycService.resubmitKyc(
       applicationId,

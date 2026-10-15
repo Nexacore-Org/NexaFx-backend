@@ -66,6 +66,16 @@ export class KycService {
       throw new NotFoundException('User not found');
     }
 
+    // Reject an unusable tier before a single file is uploaded.
+    if (
+      targetTier !== UserKycTier.STANDARD &&
+      targetTier !== UserKycTier.ENHANCED
+    ) {
+      throw new BadRequestException(
+        'targetTier must be either STANDARD or ENHANCED.',
+      );
+    }
+
     if (user.kycTier === UserKycTier.NONE) {
       throw new BadRequestException(
         'User must verify email to reach BASIC tier first.',

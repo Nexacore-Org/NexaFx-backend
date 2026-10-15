@@ -4,6 +4,7 @@ import * as request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { DataSource } from 'typeorm';
+import { RateComparisonService } from '../src/exchange-rates/rate-comparison.service';
 
 jest.mock('firebase-admin', () => ({
   credential: { cert: jest.fn() },
@@ -58,7 +59,24 @@ describe('NexaFx E2E Tests', () => {
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(RateComparisonService)
+      .useValue({
+        compare: jest.fn().mockResolvedValue({
+          amount: 10,
+          fromCurrency: 'EUR',
+          toCurrency: 'NGN',
+          nexafx: {
+            rate: 1600,
+            fee: 40,
+            youReceive: 15960,
+            provider: 'nexafx',
+          },
+          competitors: [],
+          nexafxAdvantage: 'N/A',
+          disclaimer: 'Competitor rates are indicative.',
+        }),
+      }).compile();
 
     app = moduleFixture.createNestApplication();
     await app.init();
@@ -92,6 +110,22 @@ describe('NexaFx E2E Tests', () => {
         .get('/')
         .expect(200)
         .expect('Hello World!');
+    });
+  });
+
+  describe('Rate Comparison', () => {
+    it('GET /exchange-rates/compare returns the comparison response', () => {
+      return request(app.getHttpServer())
+        .get('/exchange-rates/compare?from=EUR&to=NGN&amount=10')
+        .expect(200)
+        .expect((response) => {
+          expect(response.body).toMatchObject({
+            amount: 10,
+            fromCurrency: 'EUR',
+            toCurrency: 'NGN',
+            nexafx: { provider: 'nexafx' },
+          });
+        });
     });
   });
 

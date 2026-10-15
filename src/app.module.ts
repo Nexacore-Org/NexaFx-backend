@@ -11,6 +11,7 @@ import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { CurrenciesModule } from './currencies/currencies.module';
 import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
+import { RateComparisonModule } from './exchange-rates/rate-comparison.module';
 import { CommonModule } from './common/common.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -109,6 +110,7 @@ import { UnifiedActivityFeedModule } from './unified-activity-feed/unified-activ
     AuthModule,
     CurrenciesModule,
     ExchangeRatesModule,
+    RateComparisonModule,
     GatewaysModule,
     HealthModule,
     AuditLogsModule,

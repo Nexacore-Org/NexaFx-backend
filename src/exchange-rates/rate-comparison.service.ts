@@ -6,6 +6,8 @@ import { Cache } from 'cache-manager';
 import { firstValueFrom } from 'rxjs';
 import { ExchangeRatesService } from './exchange-rates.service';
 import Decimal from 'decimal.js';
+import { FeesService } from '../fees/fees.service';
+import { FeeTransactionType } from '../fees/entities/fee-config.entity';
 
 export interface CompetitorRate {
   provider: string;
@@ -45,10 +47,10 @@ export class RateComparisonService {
     private readonly exchangeRatesService: ExchangeRatesService,
     private readonly httpService: HttpService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly feesService: FeesService,
   ) {
     this.providers = [
       new WiseProvider(httpService),
-      new GoogleFinanceProvider(httpService),
       new CentralBankProvider(httpService),
     ];
   }
@@ -65,10 +67,13 @@ export class RateComparisonService {
       fromCode,
       toCode,
     );
-    const nexafxFee = new Decimal(nexafxRate.rate)
-      .times(amount)
-      .times(0.005)
-      .toNumber();
+    const grossReceive = new Decimal(amount).times(nexafxRate.rate);
+    const fee = await this.feesService.calculateFee(
+      FeeTransactionType.CONVERT,
+      toCode,
+      grossReceive.toNumber(),
+    );
+    const nexafxFee = fee.feeAmount;
     const nexafxYouReceive = new Decimal(amount)
       .times(nexafxRate.rate)
       .minus(nexafxFee)
@@ -158,28 +163,6 @@ class WiseProvider implements CompetitorRateProvider {
   }
 }
 
-class GoogleFinanceProvider implements CompetitorRateProvider {
-  name = 'Google Finance';
-  constructor(private readonly httpService: HttpService) {}
-
-  async fetchRate(
-    from: string,
-    to: string,
-  ): Promise<{ rate: Decimal; fee?: Decimal } | null> {
-    try {
-      const url = `https://www.google.com/finance/quote/${from}-${to}`;
-      const resp = await firstValueFrom(
-        this.httpService.get(url, { timeout: 5000 }),
-      );
-      const match = resp.data?.match(/data-last-price="([\d.]+)"/);
-      if (!match) return null;
-      return { rate: new Decimal(match[1]), fee: new Decimal(0) };
-    } catch {
-      return null;
-    }
-  }
-}
-
 class CentralBankProvider implements CompetitorRateProvider {
   name = 'Central Bank (CBN)';
   constructor(private readonly httpService: HttpService) {}
@@ -188,7 +171,7 @@ class CentralBankProvider implements CompetitorRateProvider {
     from: string,
     to: string,
   ): Promise<{ rate: Decimal; fee?: Decimal } | null> {
-    if (to !== 'NGN') return null;
+    if (from !== 'USD' || to !== 'NGN') return null;
     try {
       const url =
         'https://www.cbn.gov.ng/api/exchangerates/get-rate?format=json';

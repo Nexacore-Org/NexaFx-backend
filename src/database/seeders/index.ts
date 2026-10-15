@@ -6,6 +6,7 @@ import { seedBeneficiaries } from './beneficiary.seeder';
 import { seedTransactions } from './transaction.seeder';
 import { seedReferrals } from './referral.seeder';
 import { seedKyc } from './kyc.seeder';
+import { seedFeeConfigs } from '../../fees/seeds/fee-config.seed';
 
 /**
  * Orchestrates every seeder in dependency order. Each seeder is idempotent
@@ -19,4 +20,5 @@ export async function runAllSeeders(dataSource: DataSource): Promise<void> {
   await seedTransactions(dataSource);
   await seedReferrals(dataSource);
   await seedKyc(dataSource);
+  await seedFeeConfigs(dataSource);
 }

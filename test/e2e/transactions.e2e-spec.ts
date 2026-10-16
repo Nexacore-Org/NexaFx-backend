@@ -9,7 +9,6 @@ import {
   seedTestUser,
   getLatestOtp,
   setupTestDatabase,
-  createKycApplication,
 } from '../helpers/db.helper';
 import { v4 as uuidv4 } from 'uuid';
 

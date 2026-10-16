@@ -148,9 +148,42 @@ export async function getLatestOtp(
 /**
  * Truncate all tables.
  * Called once before all tests in a suite.
+ *
+ * The data source is optional: the connection pool is owned by the Nest
+ * app, so suites that only need the truncate pass the app's DataSource and
+ * suites that manage their own data source can call this with no argument.
  */
-export async function setupTestDatabase(dataSource: DataSource): Promise<void> {
-  await truncateAll(dataSource);
+export async function setupTestDatabase(dataSource?: DataSource): Promise<void> {
+  if (dataSource) {
+    await truncateAll(dataSource);
+  }
+}
+
+/**
+ * Truncate all tables between individual tests.
+ * Kept distinct from setupTestDatabase so suites can read as
+ * before-all/after-all vs before-each.
+ */
+export async function cleanDatabase(dataSource?: DataSource): Promise<void> {
+  if (dataSource) {
+    await truncateAll(dataSource);
+  }
+}
+
+/**
+ * Release database resources at the end of a suite.
+ * The TypeORM pool is closed by app.close(), so this is a no-op unless a
+ * suite created its own data source.
+ */
+export async function teardownTestDatabase(dataSource?: DataSource): Promise<void> {
+  if (dataSource && typeof dataSource.destroy === 'function') {
+    await dataSource.destroy();
+  }
+}
+
+/** Alias of teardownTestDatabase for suites that close the database. */
+export async function closeTestDatabase(dataSource?: DataSource): Promise<void> {
+  await teardownTestDatabase(dataSource);
 }
 
 /** Random 8-char uppercase referral code; unique per seed call. */

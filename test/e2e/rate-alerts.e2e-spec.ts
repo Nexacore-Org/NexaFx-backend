@@ -8,7 +8,7 @@ import {
   seedTestUser,
   setupTestDatabase,
 } from '../helpers/db.helper';
-import { User } from '../../src/user/entities/user.entity';
+import { User } from '../../src/users/user.entity';
 import { RateAlert } from '../../src/rate-alerts/entities/rate-alert.entity';
 
 describe('Rate Alerts E2E Tests', () => {

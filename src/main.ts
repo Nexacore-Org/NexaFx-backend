@@ -26,7 +26,9 @@ import { runWithRequestId } from './common/context/request-context';
 import { sanitizeRequestId } from './common/utils/request-id.util';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+  });
   const logger = new Logger('Bootstrap');
   const configService = app.get(ConfigService);
 

@@ -55,7 +55,6 @@ export class UsersAdminController {
     }
     const safeUser = { ...user } as any;
     delete safeUser.password;
-    delete safeUser.passwordHash;
     delete safeUser.hashedPassword;
     return safeUser;
   }
@@ -76,7 +75,6 @@ export class UsersAdminController {
     );
     const safeUser = { ...updatedUser } as any;
     delete safeUser.password;
-    delete safeUser.passwordHash;
     delete safeUser.hashedPassword;
     return safeUser;
   }
@@ -100,7 +98,6 @@ export class UsersAdminController {
     );
     const safeUser = { ...updatedUser } as any;
     delete safeUser.password;
-    delete safeUser.passwordHash;
     delete safeUser.hashedPassword;
     return safeUser;
   }

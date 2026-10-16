@@ -214,4 +214,41 @@ describe('UsersService', () => {
       expect(updateSpy).not.toHaveBeenCalled();
     });
   });
+
+  describe('createUser without a password', () => {
+    const baseParams = {
+      email: 'oauth-only@example.com',
+      walletPublicKey: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      walletSecretKeyEncrypted: 'encrypted',
+      referralCode: 'OAUTH123',
+    };
+
+    beforeEach(() => {
+      jest.spyOn(userRepository, 'findOne').mockResolvedValue(null);
+      jest
+        .spyOn(userRepository, 'save')
+        .mockImplementation(async (entity: any) => entity);
+    });
+
+    it('persists a user with a null password and no passwordHash column', async () => {
+      const createSpy = jest.spyOn(userRepository, 'create');
+
+      await service.createUser({ ...baseParams });
+
+      const payload = createSpy.mock.calls[0][0] as Record<string, unknown>;
+      expect(payload.password).toBeNull();
+      expect(payload).not.toHaveProperty('passwordHash');
+    });
+
+    it('stores a bcrypt hash in password when one is supplied', async () => {
+      const createSpy = jest.spyOn(userRepository, 'create');
+
+      await service.createUser({ ...baseParams, password: 'Secret123!' });
+
+      const payload = createSpy.mock.calls[0][0] as Record<string, unknown>;
+      expect(typeof payload.password).toBe('string');
+      expect(payload.password).not.toBe('Secret123!');
+      expect(payload).not.toHaveProperty('passwordHash');
+    });
+  });
 });

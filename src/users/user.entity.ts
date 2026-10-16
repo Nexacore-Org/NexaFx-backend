@@ -47,10 +47,6 @@ export class User {
   @Exclude({ toPlainOnly: true })
   password: string | null;
 
-  @Column({ type: 'varchar', length: 255, select: false })
-  @Exclude({ toPlainOnly: true })
-  passwordHash?: string;
-
   @OneToMany(() => KYCApplication, (app) => app.user)
   kycApplications: KYCApplication[];
 

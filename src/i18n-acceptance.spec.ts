@@ -245,7 +245,6 @@ describe('I18n Acceptance Criteria', () => {
         'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOUJ3UHMNGUAO7UP',
       walletSecretKeyEncrypted: 'encrypted',
       password: null,
-      passwordHash: undefined,
       twoFactorSecret: null,
       balances: {},
       fcmTokens: [],

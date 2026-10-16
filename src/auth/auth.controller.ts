@@ -24,6 +24,7 @@ import {
   CurrentUserPayload,
 } from './decorators/current-user.decorator';
 import { LoginDto } from './dto/login.dto';
+import { LogoutDto } from './dto/logout.dto';
 import { VerifyLoginOtpDto } from './dto/verify-login-otp.dto';
 import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -319,13 +320,13 @@ export class AuthController {
     },
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async logout(@Req() req: any) {
+  @ApiResponse({ status: 401, description: 'Refresh token unknown or not owned by the caller' })
+  async logout(@Req() req: any, @Body() dto: LogoutDto) {
     const userId = req.user.userId;
-    const tokenId = req.user.jti; // JWT ID
     const ipAddress = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('User-Agent');
 
-    return this.authService.logout(userId, tokenId, ipAddress, userAgent);
+    return this.authService.logout(userId, dto.refreshToken, ipAddress, userAgent);
   }
 
   @Post('logout-all')

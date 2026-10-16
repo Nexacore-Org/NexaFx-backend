@@ -38,6 +38,15 @@ export async function seedFeeConfigs(dataSource: DataSource): Promise<void> {
       maxFee: '25.00000000',
       isActive: true,
     },
+    {
+      transactionType: FeeTransactionType.SWAP,
+      currency: '*',
+      feeType: FeeType.PERCENTAGE,
+      feeValue: '0.25000000',
+      minFee: '0.05000000',
+      maxFee: '25.00000000',
+      isActive: true,
+    },
   ];
 
   for (const cfg of defaults) {

@@ -16,6 +16,9 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       clientSecret: configService.get<string>('GOOGLE_CLIENT_SECRET')!,
       callbackURL: configService.get<string>('GOOGLE_CALLBACK_URL')!,
       scope: ['email', 'profile'],
+      // OAuth login-CSRF protection: without a state parameter the callback
+      // accepts a response minted for someone else's authorisation request.
+      state: true,
     });
   }
 
@@ -27,10 +30,17 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   ): Promise<any> {
     try {
       const rawProfile = profile as any;
-      const email =
-        profile.emails?.[0]?.value ?? rawProfile._json?.email ?? null;
+      const email = profile.emails?.[0]?.value ?? rawProfile._json?.email ?? null;
       if (!email) {
         return done(null, { error: 'No email found in Google profile' });
+      }
+
+      // Linking on an unverified provider address would hand the account to
+      // whoever controls that address on Google.
+      if (rawProfile._json?.email_verified !== true) {
+        return done(null, {
+          error: 'Google account email is not verified',
+        });
       }
 
       const firstName =

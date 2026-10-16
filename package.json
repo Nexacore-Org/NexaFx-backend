@@ -86,7 +86,7 @@
     "joi": "^18.2.3",
     "mailgun.js": "^14.0.0",
     "maxmind": "^5.0.6",
-    "nestjs-i18n": "^10.8.4",
+    "nestjs-i18n": "^10.8.5",
     "nestjs-throttler-storage-redis": "^0.5.1",
     "passport": "^0.7.0",
     "passport-github2": "^0.1.12",

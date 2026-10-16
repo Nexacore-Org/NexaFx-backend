@@ -7,6 +7,8 @@ import {
   Param,
   Query,
   Request,
+  Res,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -14,6 +16,7 @@ import {
   ApiOperation,
   ApiQuery,
 } from '@nestjs/swagger';
+import { Response } from 'express';
 import { AnalyticsService } from './analytics.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { AssignCategoryDto } from './dto/assign-category.dto';
@@ -93,6 +96,26 @@ export class AnalyticsController {
   @ApiOperation({ summary: 'Get export job status' })
   async getExportStatus(@Request() req, @Param('id') id: string) {
     return this.analyticsService.getExportJob(id, req.user.userId);
+  }
+
+  @Get('export/:id/download')
+  @ApiOperation({ summary: 'Download a completed export (owner only)' })
+  async downloadExport(
+    @Request() req,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const { buffer, contentType, filename } =
+      await this.analyticsService.getExportFile(id, req.user.userId);
+    if (!buffer) {
+      throw new NotFoundException('Export file not available');
+    }
+    res.setHeader('Content-Type', contentType);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${filename}"`,
+    );
+    res.send(buffer);
   }
 }
 

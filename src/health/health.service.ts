@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { RedisHealthIndicator } from './indicators/redis-health.indicator';
 import { StellarHealthIndicator } from './indicators/stellar-health.indicator';
@@ -41,14 +41,23 @@ export class HealthService {
 
     // A dependency that is "not_configured" does NOT block readiness —
     // only "down" does.
-    const allReady =
+    //
+    // Critical dependencies (DB, Redis, BullMQ) gate readiness: if any of
+    // them is down the instance cannot serve traffic and must be pulled
+    // out of rotation. Degraded dependencies (Stellar, Mailgun) are
+    // third-party services whose outage should not mark every pod
+    // unready simultaneously; they are reported in details but do not
+    // fail readiness.
+    const criticalReady =
       dbStatus === 'ok' &&
       redisStatus.status !== 'down' &&
-      stellarStatus.status !== 'down' &&
       bullmqStatus.status !== 'down';
 
-    return {
-      status: allReady ? ('ok' as const) : ('error' as const),
+    const degraded =
+      stellarStatus.status === 'down' || redisStatus.status === 'down';
+
+    const body = {
+      status: criticalReady ? ('ok' as const) : ('error' as const),
       details: {
         database: dbStatus,
         redis: redisStatus.status,
@@ -56,6 +65,12 @@ export class HealthService {
         bullmq: bullmqStatus.status,
       },
     };
+
+    if (!criticalReady) {
+      throw new ServiceUnavailableException(body);
+    }
+
+    return body;
   }
 
   /* ------------------------------------------------------------------ */
@@ -73,6 +88,8 @@ export class HealthService {
   private async checkDatabase(): Promise<string> {
     const timeoutMs = parseInt(process.env.HEALTH_DB_TIMEOUT_MS ?? '3000', 10);
 
+    let timer: NodeJS.Timeout | undefined;
+
     try {
       if (!this.dataSource.isInitialized) {
         return 'disconnected';
@@ -80,21 +97,25 @@ export class HealthService {
 
       await Promise.race([
         this.dataSource.query('SELECT 1'),
-        new Promise<never>((_, reject) =>
-          setTimeout(
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
             () =>
               reject(
                 new Error(`Database query timed out after ${timeoutMs}ms`),
               ),
             timeoutMs,
-          ),
-        ),
+          );
+        }),
       ]);
 
       return 'ok';
     } catch (error: any) {
       this.logger.error(`Database health check failed: ${error.message}`);
       return 'error';
+    } finally {
+      if (timer) {
+        clearTimeout(timer);
+      }
     }
   }
 }

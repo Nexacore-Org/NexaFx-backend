@@ -30,6 +30,9 @@ import { CreateNotificationDto } from '../notifications/dto/create-notification.
 import { NotificationType } from '../notifications/entities/notification.entity';
 import { AuditEntityType } from '../audit-logs/enums/audit-entity-type.enum';
 
+const BROADCAST_BATCH_SIZE = 500;
+const FCM_MULTICAST_LIMIT = 500;
+
 @Injectable()
 export class PushNotificationsService {
   private readonly logger = new Logger('PushNotificationsService');
@@ -48,60 +51,86 @@ export class PushNotificationsService {
     createBroadcastDto: CreateBroadcastDto,
   ): Promise<BroadcastResponseDto> {
     try {
-      // Get all active users (verified users)
-      const activeUsers = (this.usersService as any).findAllActive
-        ? await (this.usersService as any).findAllActive()
-        : [];
-      const recipientCount = activeUsers.length;
-
-      // Create the broadcast record
+      // Create the broadcast record first so notifications can reference it.
       const broadcast = this.pushNotificationsRepository.create({
         title: createBroadcastDto.title,
         message: createBroadcastDto.message,
         sentBy: adminId,
-        recipientCount,
+        recipientCount: 0,
         status: PushNotificationStatus.ACTIVE,
       });
 
       const savedBroadcast =
         await this.pushNotificationsRepository.save(broadcast);
 
-      // Fan out individual notifications to all active users
-      const notificationPromises = activeUsers.map((user) => {
-        const notificationDto: CreateNotificationDto = {
-          userId: user.id,
-          title: createBroadcastDto.title,
-          message: createBroadcastDto.message,
-          type: NotificationType.MESSAGING,
-          metadata: {
-            broadcastId: savedBroadcast.id,
-            isBroadcast: true,
-          },
-        };
-        return this.notificationsService
-          .create(notificationDto)
-          .catch((err) => {
-            this.logger.warn(
-              `Failed to create notification for user ${user.id}: ${err.message}`,
-            );
-          });
-      });
+      // Fan out in pages so we never load every user into memory at once.
+      let recipientCount = 0;
+      let offset = 0;
 
-      await Promise.all(notificationPromises);
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const batch = await this.usersService.findActiveUsersForBroadcast(
+          offset,
+          BROADCAST_BATCH_SIZE,
+        );
 
-      // Collect FCM tokens and send
-      const tokens = activeUsers.flatMap((u: any) => u.fcmTokens || []);
-      if (tokens.length > 0) {
-        this.firebaseService
-          .sendToTokens(
-            tokens,
-            createBroadcastDto.title,
-            createBroadcastDto.message,
-          )
-          .catch((err) =>
-            this.logger.error(`FCM Broadcast failed: ${err.message}`),
+        if (batch.length === 0) {
+          break;
+        }
+
+        recipientCount += batch.length;
+
+        // Bulk insert notifications for this batch.
+        const notificationDtos: CreateNotificationDto[] = batch.map(
+          (user) => ({
+            userId: user.id,
+            title: createBroadcastDto.title,
+            message: createBroadcastDto.message,
+            type: NotificationType.MESSAGING,
+            metadata: {
+              broadcastId: savedBroadcast.id,
+              isBroadcast: true,
+            },
+          }),
+        );
+
+        try {
+          await this.notificationsService.createMany(notificationDtos);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          this.logger.warn(
+            `Failed to bulk create notifications for broadcast ${savedBroadcast.id}: ${message}`,
           );
+        }
+
+        // Send FCM in chunks of 500 tokens (sendEachForMulticast limit).
+        const tokens = batch.flatMap((user) => user.fcmTokens || []);
+        for (let i = 0; i < tokens.length; i += FCM_MULTICAST_LIMIT) {
+          const chunk = tokens.slice(i, i + FCM_MULTICAST_LIMIT);
+          try {
+            await this.firebaseService.sendToTokens(
+              chunk,
+              createBroadcastDto.title,
+              createBroadcastDto.message,
+            );
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            this.logger.error(`FCM Broadcast chunk failed: ${message}`);
+          }
+        }
+
+        if (batch.length < BROADCAST_BATCH_SIZE) {
+          break;
+        }
+
+        offset += BROADCAST_BATCH_SIZE;
       }
+
+      // Persist the actual number of recipients reached.
+      await this.pushNotificationsRepository.update(savedBroadcast.id, {
+        recipientCount,
+      });
+      savedBroadcast.recipientCount = recipientCount;
 
       // Log the action
       await this.auditLogsService.createLog({
@@ -260,83 +289,8 @@ export class PushNotificationsService {
       }
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      this.logger.error(
-        `Failed to deactivate broadcast: ${errorMessage}`,
-        error,
-      );
+      this.logger.error(`Failed to deactivate broadcast: ${errorMessage}`, error);
       throw new BadRequestException('Failed to deactivate broadcast');
     }
-  }
-
-  async bulkDeactivate(
-    ids: string[],
-    adminId: string,
-  ): Promise<{ deactivated: number }> {
-    try {
-      if (!ids || ids.length === 0) {
-        throw new BadRequestException('At least one broadcast ID is required');
-      }
-
-      // Verify all broadcasts exist
-      const broadcasts = await this.pushNotificationsRepository.find({
-        where: { id: In(ids) },
-      });
-
-      if (broadcasts.length === 0) {
-        throw new NotFoundException('No broadcasts found with provided IDs');
-      }
-
-      if (broadcasts.length !== ids.length) {
-        throw new BadRequestException(
-          `Only ${broadcasts.length} of ${ids.length} broadcasts were found`,
-        );
-      }
-
-      // Update all to INACTIVE
-      const result = await this.pushNotificationsRepository.update(
-        { id: In(ids) },
-        { status: PushNotificationStatus.INACTIVE },
-      );
-
-      const deactivated = result.affected || 0;
-
-      // Log the action
-      await this.auditLogsService.createLog({
-        userId: adminId,
-        action: 'BULK_DEACTIVATE_BROADCASTS',
-        entity: AuditEntityType.SYSTEM,
-        entityId: `${deactivated} broadcasts`,
-        metadata: {
-          broadcastIds: ids,
-          deactivatedCount: deactivated,
-        },
-      });
-
-      this.logger.log(
-        `${deactivated} broadcasts deactivated in bulk by admin ${adminId}`,
-      );
-
-      return { deactivated };
-    } catch (error) {
-      if (
-        error instanceof NotFoundException ||
-        error instanceof BadRequestException
-      ) {
-        throw error;
-      }
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      this.logger.error(
-        `Failed to bulk deactivate broadcasts: ${errorMessage}`,
-        error,
-      );
-      throw new BadRequestException('Failed to bulk deactivate broadcasts');
-    }
-  }
-
-  async getActiveCount(): Promise<number> {
-    return this.pushNotificationsRepository.count({
-      where: { status: PushNotificationStatus.ACTIVE },
-    });
   }
 }

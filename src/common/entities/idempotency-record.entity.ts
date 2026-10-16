@@ -33,6 +33,6 @@ export class IdempotencyRecord {
   @CreateDateColumn({ type: 'timestamp with time zone' })
   createdAt: Date;
 
-  @Column({ type: 'timestamp with time zone' })
+  @Column({ type: 'timestamp with time zone', name: 'expiresAt' })
   expiresAt: Date;
 }

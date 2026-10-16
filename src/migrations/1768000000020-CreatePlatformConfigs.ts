@@ -31,6 +31,22 @@ export class CreatePlatformConfigs1768000000020 implements MigrationInterface {
         CONSTRAINT "PK_config_versions" PRIMARY KEY ("id")
       )
     `);
+
+    // Seed the maintenance-mode flag as a key/value entry so the
+    // PlatformConfig entity (key/value model) matches this migration and
+    // SuperAdminService.getOrCreatePlatformConfig can read/write it without
+    // hitting a missing column or NOT NULL key violation.
+    await queryRunner.query(`
+      INSERT INTO "platform_configs" ("key", "value", "description", "category", "isEditable")
+      VALUES (
+        'maintenanceMode',
+        'false'::jsonb,
+        'Global maintenance mode kill switch',
+        'system',
+        true
+      )
+      ON CONFLICT ("key") DO NOTHING
+    `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

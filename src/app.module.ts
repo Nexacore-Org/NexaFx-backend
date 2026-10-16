@@ -1,167 +1,18 @@
 import { Module } from '@nestjs/common';
-import { I18nModule, AcceptLanguageResolver } from 'nestjs-i18n';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { ThrottlerModule } from '@nestjs/throttler';
-import { BullModule } from '@nestjs/bullmq';
-import { ScheduleModule } from '@nestjs/schedule';
-import { join } from 'path';
-import { AppController } from './app.controller';
-import { AuthModule } from './auth/auth.module';
-import { CurrenciesModule } from './currencies/currencies.module';
-import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
-import { RateComparisonModule } from './exchange-rates/rate-comparison.module';
-import { CommonModule } from './common/common.module';
-import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
-import { RolesGuard } from './common/guards/roles.guard';
-import { PlanThrottlerGuard } from './common/guards/plan-throttler.guard';
-import { HealthModule } from './health/health.module';
-import { AuditLogsModule } from './audit-logs/audit-logs.module';
-import { AuditInterceptor } from './common/interceptors/audit.interceptor';
-import { NotificationsModule } from './notifications/notifications.module';
-import { GdprModule } from './modules/gdpr/gdpr.module';
-import { TransactionsModule } from './transactions/transaction.module';
-import { BeneficiariesModule } from './beneficiaries/beneficiaries.module';
-import { KycModule } from './kyc/kyc.module';
-import { ScheduledJobsModule } from './scheduled-jobs/scheduled-jobs.module';
-import { ReceiptsModule } from './receipts/receipts.module';
-import { FeesModule } from './fees/fees.module';
-import { PushNotificationsModule } from './push-notifications/push-notifications.module';
-import { QrModule } from './qr/qr.module';
-import { FirebaseModule } from './firebase/firebase.module';
-import { AdminModule } from './admin/admin.module';
-import { ReferralsModule } from './referrals/referrals.module';
-import { DaoModule } from './dao/dao.module';
-import { GraphQLApiModule } from './graphql/graphql.module';
+import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { SuperAdminModule } from './super-admin/super-admin.module';
-import { GatewaysModule } from './gateways/gateways.module';
-import { WebhooksModule } from './webhooks/webhooks.module';
-import { WalletsModule } from './wallets/wallets.module';
-import { EscrowModule } from './escrow/escrow.module';
-import { RateAlertsModule } from './rate-alerts/rate-alerts.module';
-import { LedgerModule } from './ledger/ledger.module';
-import { UsersModule } from './users/users.module';
-import { PortfolioModule } from './portfolio/portfolio.module';
-import { FinancialHealthModule } from './financial-health/financial-health.module';
-import { CustomReportsModule } from './custom-reports/custom-reports.module';
-import { TransactionsV2Module } from './transactions/transaction-v2.module';
-import { TaxModule } from './tax/tax.module';
-import { FlagsModule } from './modules/flags/flags.module';
-import { UnifiedActivityFeedModule } from './unified-activity-feed/unified-activity-feed.module';
+import { MaintenanceGuard } from './super-admin/guards/maintenance.guard';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-      envFilePath: '.env',
-    }),
-    ScheduleModule.forRoot(),
-    TypeOrmModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        url: configService.get<string>('DATABASE_URL'),
-        synchronize:
-          process.env.NODE_ENV !== 'production' &&
-          process.env.NODE_ENV !== 'staging',
-        ssl:
-          process.env.NODE_ENV === 'production'
-            ? { rejectUnauthorized: false }
-            : false,
-        autoLoadEntities: true,
-      }),
-    }),
-    BullModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        connection: {
-          url:
-            configService.get<string>('REDIS_URL') || 'redis://localhost:6379',
-        },
-      }),
-    }),
-    ThrottlerModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => [
-        {
-          ttl: configService.get<number>('THROTTLE_TTL') ?? 60000,
-          limit: configService.get<number>('THROTTLE_LIMIT') ?? 100,
-        },
-      ],
-    }),
-    FlagsModule,
-    TaxModule,
-    UnifiedActivityFeedModule,
-    UnifiedActivityFeedModule,
-    I18nModule.forRootAsync({
-      useFactory: () => ({
-        fallbackLanguage: 'en',
-        loaderOptions: {
-          path: join(__dirname, '/i18n/'),
-          watch: true,
-        },
-      }),
-      resolvers: [AcceptLanguageResolver],
-    }),
-    CommonModule,
-    AuthModule,
-    CurrenciesModule,
-    ExchangeRatesModule,
-    RateComparisonModule,
-    GatewaysModule,
-    HealthModule,
-    AuditLogsModule,
-    NotificationsModule,
-    FirebaseModule,
-    TransactionsModule,
-    TransactionsV2Module,
-    ReferralsModule,
-    BeneficiariesModule,
-    KycModule,
-    ScheduledJobsModule,
-    ReceiptsModule,
-    FeesModule,
-    PushNotificationsModule,
-    QrModule,
-    // Rate alerts: user-configured exchange rate notifications
-    RateAlertsModule,
-    AdminModule,
+    ConfigModule.forRoot({ isGlobal: true }),
     SuperAdminModule,
-    EscrowModule,
-    // DAO module provides Stellar Soroban contract interaction for reward distribution
-    DaoModule,
-    GraphQLApiModule,
-    WebhooksModule,
-    WalletsModule,
-    LedgerModule,
-    UsersModule,
-    PortfolioModule,
-    FinancialHealthModule,
-    CustomReportsModule,
   ],
-  controllers: [AppController],
   providers: [
     {
-      // Reads the @Audit metadata; without this the twelve annotated handlers
-      // produced no audit rows at all.
-      provide: APP_INTERCEPTOR,
-      useClass: AuditInterceptor,
-    },
-    {
       provide: APP_GUARD,
-      useClass: JwtAuthGuard,
-    },
-    {
-      provide: APP_GUARD,
-      useClass: RolesGuard,
-    },
-    {
-      provide: APP_GUARD,
-      useClass: PlanThrottlerGuard,
+      useClass: MaintenanceGuard,
     },
   ],
 })

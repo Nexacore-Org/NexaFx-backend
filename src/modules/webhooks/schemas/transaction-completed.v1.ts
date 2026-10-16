@@ -36,12 +36,61 @@ export interface TransactionCompletedV1Data {
   [key: string]: unknown;
 }
 
+/**
+ * Sensitive columns that must never leave the process, even though v1 is a
+ * frozen pass-through of the entity. These are credential/secret material on
+ * the User relation (and any other entity that may be attached).
+ */
+const SENSITIVE_KEYS = new Set<string>([
+  'password',
+  'passwordHash',
+  'walletSecretKeyEncrypted',
+  'walletSecretKey',
+  'twoFactorSecret',
+  'twoFactorRecoveryCodes',
+  'refreshToken',
+  'refreshTokenHash',
+  'phone',
+  'balances',
+]);
+
+/**
+ * Relation keys that carry nested entities. v1 only ever promised scalar
+ * columns, so object-valued relations are dropped rather than serialised.
+ */
+const RELATION_KEYS = new Set<string>([
+  'user',
+  'category',
+  'wallet',
+  'transaction',
+  'counterparty',
+  'recipient',
+  'sender',
+]);
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    !(value instanceof Date)
+  );
+}
+
 export const buildTransactionCompletedV1: WebhookPayloadBuilder<
   unknown,
   TransactionCompletedV1Data
-> = (data) =>
-  // Shallow copy only. v1 is a frozen pass-through of the entity, but the stored
-  // delivery payload must not alias the caller's object.
-  ({
-    ...((data ?? {}) as Record<string, unknown>),
-  }) as unknown as TransactionCompletedV1Data;
+> = (data) => {
+  const source = (data ?? {}) as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(source)) {
+    if (SENSITIVE_KEYS.has(key)) continue;
+    if (RELATION_KEYS.has(key)) continue;
+    // Drop any other object-valued relation (nested entity) that slipped in.
+    if (isPlainObject(value)) continue;
+    out[key] = value;
+  }
+
+  return out as unknown as TransactionCompletedV1Data;
+};

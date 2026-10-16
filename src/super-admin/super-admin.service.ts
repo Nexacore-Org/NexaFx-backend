@@ -248,22 +248,17 @@ export class SuperAdminService {
       }
     }
 
-    const snapshot = await this.getPlatformConfigSnapshot();
+    const snapshot = await this.getOrCreatePlatformConfig();
 
     await this.auditLogsService.createLog({
       userId: actor.id,
       action: AuditAction.PLATFORM_CONFIG_UPDATED,
       entity: AuditEntityType.SYSTEM,
-      entityId: config.id,
       metadata: {
         actorRole: actor.role,
         maintenanceMode: snapshot.maintenanceMode,
-        updatedFeeConfigIds: dto.feeConfigs?.map((item) => item.id) ?? [],
-        updatedCurrencies:
-          dto.currencies?.map((item) => ({
-            code: item.code.toUpperCase(),
-            isActive: item.isActive,
-          })) ?? [],
+        currencies: dto.currencies ?? [],
+        feeConfigs: dto.feeConfigs ?? [],
       },
       isSensitive: true,
     });
@@ -271,18 +266,35 @@ export class SuperAdminService {
     return snapshot;
   }
 
-  private async requireSuperAdmin(actorUserId: string): Promise<User> {
-    const actor = await this.requireUser(actorUserId);
+  async getOrCreatePlatformConfig(): Promise<PlatformConfig> {
+    const existing = await this.platformConfigRepository.findOne({
+      where: {},
+      order: { createdAt: 'ASC' },
+    });
 
-    if (actor.role !== UserRole.SUPER_ADMIN) {
-      throw new ForbiddenException('SUPER_ADMIN role required');
+    if (existing) {
+      return existing;
     }
 
-    return actor;
+    const created = this.platformConfigRepository.create({
+      maintenanceMode: false,
+    });
+
+    return this.platformConfigRepository.save(created);
+  }
+
+  private async requireSuperAdmin(userId: string): Promise<User> {
+    const user = await this.requireUser(userId);
+
+    if (user.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('SUPER_ADMIN privileges required');
+    }
+
+    return user;
   }
 
   private async requireUser(userId: string): Promise<User> {
-    const user = await this.usersService.findById(userId);
+    const user = await this.userRepository.findOne({ where: { id: userId } });
 
     if (!user) {
       throw new NotFoundException('User not found');
@@ -295,86 +307,49 @@ export class SuperAdminService {
     target: User,
     nextRole: UserRole,
   ): Promise<void> {
-    if (
-      target.role === UserRole.SUPER_ADMIN &&
-      nextRole !== UserRole.SUPER_ADMIN
-    ) {
-      const totalSuperAdmins = await this.userRepository.count({
-        where: { role: UserRole.SUPER_ADMIN },
+    if (target.role !== UserRole.SUPER_ADMIN || nextRole === UserRole.SUPER_ADMIN) {
+      return;
+    }
+
+    const superAdminCount = await this.userRepository.count({
+      where: { role: UserRole.SUPER_ADMIN },
+    });
+
+    if (superAdminCount <= 1) {
+      throw new BadRequestException(
+        'Cannot demote the last remaining SUPER_ADMIN',
+      );
+    }
+  }
+
+  private async generateUniqueReferralCode(): Promise<string> {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const candidate = await bcrypt
+        .genSalt(6)
+        .then((salt) => salt.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8));
+
+      const existing = await this.userRepository.findOne({
+        where: { referralCode: candidate },
       });
 
-      if (totalSuperAdmins <= 1) {
-        throw new BadRequestException('Cannot demote the last SUPER_ADMIN');
+      if (!existing) {
+        return candidate;
       }
     }
-  }
 
-  private async getOrCreatePlatformConfig(): Promise<PlatformConfig> {
-    const [existingConfig] = await this.platformConfigRepository.find({
-      order: { createdAt: 'ASC' },
-      take: 1,
-    });
-
-    if (existingConfig) {
-      return existingConfig;
-    }
-
-    const created = this.platformConfigRepository.create({
-      maintenanceMode: false,
-    });
-
-    return this.platformConfigRepository.save(created);
-  }
-
-  private async getPlatformConfigSnapshot() {
-    const [config, feeConfigs, currencies] = await Promise.all([
-      this.getOrCreatePlatformConfig(),
-      this.feeConfigRepository.find({
-        order: { transactionType: 'ASC', currency: 'ASC' },
-      }),
-      this.currencyRepository.find({
-        order: { isBase: 'DESC', code: 'ASC' },
-      }),
-    ]);
-
-    return {
-      maintenanceMode: config.maintenanceMode,
-      feeConfigs,
-      currencies,
-    };
+    throw new BadRequestException('Unable to generate a unique referral code');
   }
 
   private sanitizeUser(
     user: User,
   ): Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'> {
-    const { password, walletSecretKeyEncrypted, twoFactorSecret, ...safeUser } =
-      user;
+    const {
+      password: _password,
+      walletSecretKeyEncrypted: _walletSecretKeyEncrypted,
+      twoFactorSecret: _twoFactorSecret,
+      ...safeUser
+    } = user;
 
     return safeUser;
-  }
-
-  private async generateUniqueReferralCode(): Promise<string> {
-    const characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    const codeLength = 8;
-
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      let code = '';
-
-      for (let index = 0; index < codeLength; index += 1) {
-        code += characters[Math.floor(Math.random() * characters.length)];
-      }
-
-      const existingUser = await this.userRepository.findOne({
-        where: { referralCode: code },
-      });
-
-      if (!existingUser) {
-        return code;
-      }
-    }
-
-    throw new BadRequestException(
-      'Unable to generate referral code. Please try again.',
-    );
   }
 }

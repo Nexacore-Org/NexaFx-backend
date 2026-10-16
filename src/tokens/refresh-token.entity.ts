@@ -13,6 +13,13 @@ import { User } from '../users/user.entity';
 @Index(['userId', 'revokedAt'])
 @Index(['tokenHash'], { unique: true })
 export class RefreshToken {
+  /**
+   * Canonical table name for this entity. Consumers (e.g. the GDPR
+   * hard-delete cron) must reference this instead of hard-coding the
+   * table name, so the query always targets the real table.
+   */
+  static readonly TABLE_NAME = 'refresh_tokens';
+
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

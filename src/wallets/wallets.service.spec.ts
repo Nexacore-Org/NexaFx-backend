@@ -368,6 +368,16 @@ describe('WalletsService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    it('should reject a base32-shaped public key with an invalid checksum', async () => {
+      walletRepo.count.mockResolvedValue(0);
+
+      await expect(
+        service.importWatchOnly('user-1', {
+          publicKey: `G${'A'.repeat(55)}`,
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
     it('should reject when user has reached the wallet limit', async () => {
       walletRepo.count.mockResolvedValue(20);
 

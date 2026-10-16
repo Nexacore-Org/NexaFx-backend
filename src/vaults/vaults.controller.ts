@@ -79,9 +79,17 @@ export class VaultsController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete vault (only if MATURED or CLOSED)' })
+  @ApiOperation({
+    summary: 'Delete an empty CLOSED or BROKEN vault',
+    description:
+      'Vaults can only be deleted after all current balance and accrued interest have been withdrawn.',
+  })
   @ApiResponse({ status: 204 })
-  @ApiResponse({ status: 422, description: 'Cannot delete ACTIVE vault' })
+  @ApiResponse({
+    status: 422,
+    description:
+      'Vault is not CLOSED or BROKEN, or still has a balance or accrued interest.',
+  })
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(
     @Request() req: { user: { userId: string } },

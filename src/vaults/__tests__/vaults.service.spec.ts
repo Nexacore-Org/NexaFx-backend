@@ -7,6 +7,7 @@ import { VaultTransaction } from '../entities/vault-transaction.entity';
 import { UsersService } from '../../users/users.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { ConfigService } from '@nestjs/config';
+import { UnprocessableEntityException } from '@nestjs/common';
 import { CreateVaultDto } from '../dto/create-vault.dto';
 import { VaultStatus } from '../enum/vault-status.enum';
 
@@ -108,6 +109,79 @@ describe('VaultsService', () => {
 
       expect(vaultRepository.create).toHaveBeenCalled();
       expect(vaultRepository.save).toHaveBeenCalled();
+    });
+  });
+
+  describe('deleteVault', () => {
+    const makeVault = (overrides: Partial<SavingsVault> = {}): SavingsVault =>
+      ({
+        id: 'vaultId',
+        userId: 'userId',
+        status: VaultStatus.CLOSED,
+        currentBalance: '0',
+        accruedInterest: '0',
+        ...overrides,
+      }) as SavingsVault;
+
+    beforeEach(() => {
+      jest.spyOn(vaultRepository, 'findOne').mockResolvedValue(makeVault());
+      jest.spyOn(vaultRepository, 'remove').mockResolvedValue(makeVault());
+    });
+
+    it.each([
+      ['CLOSED', VaultStatus.CLOSED],
+      ['BROKEN', VaultStatus.BROKEN],
+    ])('deletes an empty %s vault', async (_name, status) => {
+      await service.deleteVault('userId', 'vaultId');
+
+      expect(vaultRepository.remove).toHaveBeenCalledWith(
+        expect.objectContaining({ status }),
+      );
+    });
+
+    it('rejects a MATURED vault and directs the user to withdraw first', async () => {
+      jest
+        .spyOn(vaultRepository, 'findOne')
+        .mockResolvedValue(
+          makeVault({ status: VaultStatus.MATURED, currentBalance: '100' }),
+        );
+
+      await expect(service.deleteVault('userId', 'vaultId')).rejects.toThrow(
+        new UnprocessableEntityException(
+          'Cannot delete a MATURED vault while it still holds funds. Withdraw funds first.',
+        ),
+      );
+      expect(vaultRepository.remove).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['CLOSED', VaultStatus.CLOSED, 'current balance', { currentBalance: '0.00000001' }],
+      ['CLOSED', VaultStatus.CLOSED, 'accrued interest', { accruedInterest: '0.00000001' }],
+      ['BROKEN', VaultStatus.BROKEN, 'current balance', { currentBalance: '0.00000001' }],
+      ['BROKEN', VaultStatus.BROKEN, 'accrued interest', { accruedInterest: '0.00000001' }],
+    ])(
+      'rejects a %s vault with nonzero %s',
+      async (_name, status, _balanceName, balance) => {
+        jest
+          .spyOn(vaultRepository, 'findOne')
+          .mockResolvedValue(makeVault({ status, ...balance }));
+
+        await expect(service.deleteVault('userId', 'vaultId')).rejects.toThrow(
+          UnprocessableEntityException,
+        );
+        expect(vaultRepository.remove).not.toHaveBeenCalled();
+      },
+    );
+
+    it('rejects an ACTIVE vault', async () => {
+      jest
+        .spyOn(vaultRepository, 'findOne')
+        .mockResolvedValue(makeVault({ status: VaultStatus.ACTIVE }));
+
+      await expect(service.deleteVault('userId', 'vaultId')).rejects.toThrow(
+        UnprocessableEntityException,
+      );
+      expect(vaultRepository.remove).not.toHaveBeenCalled();
     });
   });
 });

@@ -19,6 +19,7 @@ import { EncryptionService } from '../common/services/encryption.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import Decimal from 'decimal.js';
+import { isStellarPublicKey } from '../common/decorators/is-stellar-public-key.decorator';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -27,9 +28,6 @@ const MAX_LABEL_LENGTH = 64;
 const DEFAULT_PRIMARY_LABEL = 'Primary';
 const DEFAULT_IMPORTED_LABEL = 'Imported (watch-only)';
 const STELLAR_BASE_RESERVE_XLM = '0.5';
-
-/** Stellar public keys start with G and are 56 characters of base32. */
-const STELLAR_ADDRESS_RE = /^G[A-Z2-7]{55}$/;
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -574,7 +572,7 @@ export class WalletsService {
   }
 
   private assertValidStellarAddress(address: string): void {
-    if (!STELLAR_ADDRESS_RE.test(address)) {
+    if (!isStellarPublicKey(address)) {
       throw new BadRequestException(
         `"${address}" is not a valid Stellar public key.`,
       );

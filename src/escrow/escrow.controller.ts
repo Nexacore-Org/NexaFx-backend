@@ -75,14 +75,15 @@ export class EscrowController {
   }
 
   @Post(':id/refund')
-  @ApiOperation({ summary: 'Refund a funded escrow back to the sender' })
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Refund a funded escrow back to the sender as admin' })
   @ApiParam({ name: 'id', type: String, description: 'Escrow UUID' })
   @ApiResponse({ status: 200, description: 'Escrow refunded successfully' })
   async refundEscrow(
-    @CurrentUser() user: CurrentUserPayload,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.escrowService.refundEscrow(user.userId, id);
+    return this.escrowService.adminRefundEscrow(id);
   }
 
   @Post(':id/dispute')

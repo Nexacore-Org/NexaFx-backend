@@ -166,6 +166,19 @@ export class EscrowService {
       ) {
         throw new BadRequestException('Escrow is not funded');
       }
+      if (!force) {
+        if (!escrow.fundedAt) {
+          throw new BadRequestException('Escrow funding time is unavailable');
+        }
+        const releaseAvailableAt = new Date(
+          escrow.fundedAt.getTime() + escrow.disputeWindowHours * 60 * 60 * 1000,
+        );
+        if (new Date() < releaseAvailableAt) {
+          throw new BadRequestException(
+            'Escrow cannot be released before the dispute window closes',
+          );
+        }
+      }
 
       const recipient = await this.usersService.findById(escrow.recipientId);
       if (!recipient) {
@@ -200,7 +213,7 @@ export class EscrowService {
     });
   }
 
-  async refundEscrow(userId: string, escrowId: string): Promise<Escrow> {
+  async adminRefundEscrow(escrowId: string): Promise<Escrow> {
     return this.dataSource.transaction(async (manager) => {
       const escrow = await manager.findOne(Escrow, {
         where: { id: escrowId },
@@ -215,11 +228,6 @@ export class EscrowService {
         escrow.status !== EscrowStatus.DISPUTED
       ) {
         throw new BadRequestException('Escrow cannot be refunded');
-      }
-      if (escrow.senderId !== userId && escrow.recipientId !== userId) {
-        throw new ForbiddenException(
-          'Only sender, recipient, or admin can refund escrow',
-        );
       }
 
       const escrowSecret = await this.getEscrowSecret(escrow);
@@ -252,23 +260,36 @@ export class EscrowService {
   }
 
   async disputeEscrow(userId: string, escrowId: string): Promise<Escrow> {
-    const escrow = await this.escrowRepository.findOne({
-      where: { id: escrowId },
-    });
-    if (!escrow) {
-      throw new NotFoundException('Escrow not found');
-    }
-    if (escrow.status !== EscrowStatus.FUNDED) {
-      throw new BadRequestException('Only funded escrow can be disputed');
-    }
-    if (escrow.senderId !== userId && escrow.recipientId !== userId) {
-      throw new ForbiddenException(
-        'Only sender or recipient can dispute escrow',
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const escrow = await manager.findOne(Escrow, {
+        where: { id: escrowId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!escrow) {
+        throw new NotFoundException('Escrow not found');
+      }
+      if (escrow.status !== EscrowStatus.FUNDED) {
+        throw new BadRequestException('Only funded escrow can be disputed');
+      }
+      if (escrow.senderId !== userId && escrow.recipientId !== userId) {
+        throw new ForbiddenException(
+          'Only sender or recipient can dispute escrow',
+        );
+      }
+      if (!escrow.fundedAt) {
+        throw new BadRequestException('Escrow funding time is unavailable');
+      }
+      const disputeWindowExpiresAt = new Date(
+        escrow.fundedAt.getTime() +
+          escrow.disputeWindowHours * 60 * 60 * 1000,
       );
-    }
+      if (new Date() >= disputeWindowExpiresAt) {
+        throw new BadRequestException('The escrow dispute window has closed');
+      }
 
-    escrow.status = EscrowStatus.DISPUTED;
-    const saved = await this.escrowRepository.save(escrow);
+      escrow.status = EscrowStatus.DISPUTED;
+      return manager.save(escrow);
+    });
     await this.sendStatusNotification(saved, 'Escrow disputed');
     return saved;
   }
@@ -322,7 +343,7 @@ export class EscrowService {
     if (dto.outcome === 'release') {
       return this.releaseEscrow(escrow.senderId, id, true);
     }
-    return this.refundEscrow(escrow.senderId, id);
+    return this.adminRefundEscrow(id);
   }
 
   @Cron(CronExpression.EVERY_5_MINUTES)

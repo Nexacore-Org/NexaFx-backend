@@ -198,13 +198,18 @@ describe('EscrowService', () => {
 
   describe('disputeEscrow', () => {
     it('blocks auto-release when disputed', async () => {
-      escrowRepository.findOne.mockResolvedValue({
-        ...mockEscrow,
-        status: EscrowStatus.FUNDED,
-      });
-      escrowRepository.save.mockResolvedValue({
-        ...mockEscrow,
-        status: EscrowStatus.DISPUTED,
+      dataSource.transaction.mockImplementation(async (_options, fn?) => {
+        const callback = typeof _options === 'function' ? _options : fn;
+        return callback({
+          findOne: jest.fn().mockResolvedValue({
+            ...mockEscrow,
+            status: EscrowStatus.FUNDED,
+            fundedAt: new Date(Date.now() - 1000),
+          }),
+          save: jest
+            .fn()
+            .mockImplementation((entity) => Promise.resolve(entity)),
+        } as any);
       });
 
       const result = await service.disputeEscrow('sender-id', 'escrow-id');
@@ -213,14 +218,56 @@ describe('EscrowService', () => {
     });
 
     it('throws if escrow not funded', async () => {
-      escrowRepository.findOne.mockResolvedValue({
-        ...mockEscrow,
-        status: EscrowStatus.PENDING,
+      dataSource.transaction.mockImplementation(async (_options, fn?) => {
+        const callback = typeof _options === 'function' ? _options : fn;
+        return callback({
+          findOne: jest.fn().mockResolvedValue({
+            ...mockEscrow,
+            status: EscrowStatus.PENDING,
+          }),
+        } as any);
       });
 
       await expect(
         service.disputeEscrow('sender-id', 'escrow-id'),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects disputes after the dispute window closes', async () => {
+      dataSource.transaction.mockImplementation(async (_options, fn?) => {
+        const callback = typeof _options === 'function' ? _options : fn;
+        return callback({
+          findOne: jest.fn().mockResolvedValue({
+            ...mockEscrow,
+            status: EscrowStatus.FUNDED,
+            fundedAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
+          }),
+        } as any);
+      });
+
+      await expect(
+        service.disputeEscrow('sender-id', 'escrow-id'),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('releaseEscrow', () => {
+    it('blocks sender release while the dispute window is open', async () => {
+      dataSource.transaction.mockImplementation(async (_options, fn?) => {
+        const callback = typeof _options === 'function' ? _options : fn;
+        return callback({
+          findOne: jest.fn().mockResolvedValue({
+            ...mockEscrow,
+            status: EscrowStatus.FUNDED,
+            fundedAt: new Date(),
+          }),
+        } as any);
+      });
+
+      await expect(
+        service.releaseEscrow('sender-id', 'escrow-id'),
+      ).rejects.toThrow(BadRequestException);
+      expect(stellarService.sendPayment).not.toHaveBeenCalled();
     });
   });
 

@@ -42,7 +42,7 @@ export class LoanApplication {
   @Column({ type: 'int' })
   termDays: number;
 
-  @Column({ type: 'decimal', precision: 5, scale: 4, default: 0 })
+  @Column({ type: 'decimal', precision: 7, scale: 4, default: 0 })
   interestRatePercent: string;
 
   @Column({ type: 'enum', enum: LoanStatus, default: LoanStatus.PENDING })

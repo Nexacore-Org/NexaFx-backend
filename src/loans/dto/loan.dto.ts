@@ -2,6 +2,7 @@ import {
   IsNumber,
   IsPositive,
   IsIn,
+  Max,
   Min,
   IsOptional,
   IsString,
@@ -33,9 +34,14 @@ export class AdminApproveLoanDto {
   @IsPositive()
   approvedAmount: number;
 
-  @ApiProperty({ example: 5.0, description: 'Annual interest rate percent' })
+  @ApiProperty({
+    example: 5.0,
+    description: 'Annual interest rate percent',
+    maximum: 999.9999,
+  })
   @IsNumber()
   @Min(0)
+  @Max(999.9999)
   interestRatePercent: number;
 }
 

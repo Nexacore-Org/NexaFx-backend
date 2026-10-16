@@ -503,18 +503,17 @@ export class AuthService {
     // Check if email already exists
     const existingUser = await this.usersService.findByEmail(normalizedEmail);
 
-    if (existingUser) {
-      if (existingUser.isVerified) {
-        // Email already registered and verified - return generic message to prevent enumeration
-        await this.simulateProcessingDelay(signupDto.password);
-        return { message: genericMessage };
-      } else {
-        // Unverified user exists - delete and allow re-signup
-        await this.usersService.deleteById(existingUser.id);
-      }
+    const pendingUser = existingUser && !existingUser.isVerified ? existingUser : null;
+
+    if (existingUser && existingUser.isVerified) {
+      // Email already registered and verified - return generic message to prevent enumeration
+      await this.simulateProcessingDelay(signupDto.password);
+      return { message: genericMessage };
     }
 
-    // Check phone uniqueness if provided
+    // Validation happens before any write: the previous order deleted the
+    // pending account first, so a bad phone or referral code left the user
+    // with nothing at all.
     if (signupDto.phone) {
       const existingPhone = await this.usersService.findByPhone(
         signupDto.phone,
@@ -536,6 +535,31 @@ export class AuthService {
     }
 
     const generatedReferralCode = await this.generateUniqueReferralCode();
+    if (pendingUser) {
+      // Re-signup reuses the pending row instead of destroying it, so the
+      // user keeps the same id, wallet, GDPR consent and referral, and nobody
+      // can wipe another person's in-progress registration.
+      await this.usersService.updateByUserId(pendingUser.id, {
+        password: signupDto.password
+          ? await bcrypt.hash(signupDto.password, 12)
+          : pendingUser.password,
+        firstName: signupDto.firstName || pendingUser.firstName,
+        lastName: signupDto.lastName || pendingUser.lastName,
+        phone: signupDto.phone || pendingUser.phone,
+      });
+
+      const otp = await this.otpsService.generateOtp(pendingUser, OtpType.SIGNUP);
+      await this.otpDeliveryService.sendOtp({
+        email: pendingUser.email,
+        type: OtpType.SIGNUP,
+        otp,
+      });
+
+      return {
+        message: 'A verification code has been sent to the pending account',
+      };
+    }
+
 
     // Generate Stellar wallet using blockchain module
     const wallet = await this.stellarService.generateWallet();

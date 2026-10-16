@@ -11,8 +11,14 @@ export class PlatformConfig {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'boolean', default: false })
-  maintenanceMode: boolean;
+  @Column({ type: 'varchar', length: 255, unique: true })
+  key: string;
+
+  @Column({ type: 'jsonb' })
+  value: Record<string, unknown>;
+
+  @Column({ type: 'varchar', length: 255 })
+  category: string;
 
   @CreateDateColumn()
   createdAt: Date;

@@ -47,6 +47,7 @@ import { GdprService } from '../modules/gdpr/gdpr.service';
 
 @Injectable()
 export class AuthService {
+  private readonly resendCooldowns = new Map<string, number>();
   constructor(
     private readonly usersService: UsersService,
     private readonly otpsService: OtpsService,
@@ -660,6 +661,20 @@ export class AuthService {
       return { message: genericMessage };
     }
 
+    // Per-address cooldown. The route is unauthenticated and every accepted
+    // call sends an email and, when the user has a phone, an SMS, so the
+    // per-IP throttle alone still allowed a targeted mail-bomb or SMS-spend
+    // run against one address.
+    const cooldownSeconds = this.getResendCooldownSeconds();
+    const lastSentAt = this.resendCooldowns.get(user.id);
+    if (
+      lastSentAt !== undefined &&
+      Date.now() - lastSentAt < cooldownSeconds * 1000
+    ) {
+      return { message: genericMessage };
+    }
+    this.resendCooldowns.set(user.id, Date.now());
+
     // Generate and send new OTP
     const otp = await this.otpsService.generateOtp(user, OtpType.SIGNUP);
     await this.otpDeliveryService.sendOtp({
@@ -669,6 +684,14 @@ export class AuthService {
     });
 
     return { message: genericMessage };
+  }
+
+  private getResendCooldownSeconds(): number {
+    const parsed = parseInt(
+      this.configService.get<string>('AUTH_RESEND_COOLDOWN_SECONDS') ?? '60',
+      10,
+    );
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 60;
   }
 
   async logout(

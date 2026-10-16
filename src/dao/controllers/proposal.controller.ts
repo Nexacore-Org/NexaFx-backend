@@ -70,12 +70,12 @@ export class ProposalController {
     description: 'votingStartAt/votingEndAt validation failed',
   })
   async createProposal(
-    @Request() req: { user: { userId: string; user: any } },
+    @Request() req: { user: { userId: string; role: UserRole } },
     @Body() createProposalDto: CreateProposalDto,
   ) {
     return this.proposalService.createProposal(
       req.user.userId,
-      req.user.user,
+      req.user.role,
       createProposalDto,
     );
   }
@@ -117,13 +117,12 @@ export class ProposalController {
   })
   async castVote(
     @Param('id') proposalId: string,
-    @Request() req: { user: { userId: string; user: any } },
+    @Request() req: { user: { userId: string } },
     @Body() castVoteDto: CastVoteDto,
   ) {
     const result = await this.proposalService.castVote(
       proposalId,
       req.user.userId,
-      req.user.user,
       castVoteDto,
     );
     await this.redisService.del(`proposal_results_${proposalId}`);
@@ -293,15 +292,10 @@ export class ProposalController {
       },
     },
   })
-  @ApiResponse({ status: 404, description: 'Proposal not found' })
-  @ApiResponse({
-    status: 400,
-    description: 'Only ACTIVE proposals can be cancelled',
-  })
   async cancelProposal(
     @Param('id') proposalId: string,
     @Request() req: { user: { userId: string } },
   ) {
-    return this.proposalService.cancelProposal(proposalId);
+    return this.proposalService.cancelProposal(proposalId, req.user.userId);
   }
 }

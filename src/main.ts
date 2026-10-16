@@ -21,9 +21,9 @@ import { createAdminQueueAuthMiddleware } from './modules/queues/admin-queue-aut
 import { QueuesDashboardService } from './modules/queues/queues-dashboard.service';
 import { join } from 'path';
 import * as compression from 'compression';
-import { v4 as uuidv4 } from 'uuid';
 import { Request, Response, NextFunction } from 'express';
 import { runWithRequestId } from './common/context/request-context';
+import { sanitizeRequestId } from './common/utils/request-id.util';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -32,7 +32,9 @@ async function bootstrap() {
 
   // Trace Correlation & Request ID Context Propagation Middleware
   app.use((req: Request, res: Response, next: NextFunction) => {
-    const requestId = (req.headers['x-request-id'] as string) || uuidv4();
+    // Validated: the value is echoed into log lines, so a client-supplied
+    // newline would otherwise let it forge extra log entries.
+    const requestId = sanitizeRequestId(req.headers['x-request-id']);
     req.headers['x-request-id'] = requestId;
     res.setHeader('X-Request-ID', requestId);
     // Bind the request ID to the async context so it survives async
@@ -98,7 +100,13 @@ async function bootstrap() {
   app.enableCors({
     origin: origins.length ? origins : false,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Request-ID',
+      'Idempotency-Key',
+    ],
+    exposedHeaders: ['X-Request-ID', 'X-Idempotency-Replayed'],
   });
 
   const port = configService.get<number>('PORT') ?? 3000;

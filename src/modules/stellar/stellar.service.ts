@@ -11,6 +11,7 @@ import {
   Transaction,
   TransactionBuilder,
 } from 'stellar-sdk';
+import Decimal from 'decimal.js';
 import * as crypto from 'crypto';
 
 import {
@@ -30,6 +31,8 @@ import { AuditAction } from '../../audit-logs/enums/audit-action.enum';
 
 const DEFAULT_TESTNET_HORIZON = 'https://horizon-testnet.stellar.org';
 const DEFAULT_TESTNET_FRIENDBOT = 'https://friendbot.stellar.org';
+const ESCROW_ACCOUNT_MINIMUM_BALANCE = '1';
+const STROOPS_PER_XLM = '10000000';
 
 interface StellarErrorShape {
   message: string;
@@ -244,6 +247,7 @@ export class StellarService {
     let fromSecret: string;
     let destPublicKey: string;
     let paymentAmount: string;
+    let paymentAsset: string | Asset | undefined;
     let paymentMemo: string | undefined = memo;
     let paymentUserId: string | undefined = userId;
 
@@ -251,6 +255,7 @@ export class StellarService {
       fromSecret = fromSecretOrParams.secretKey;
       destPublicKey = fromSecretOrParams.destination;
       paymentAmount = fromSecretOrParams.amount;
+      paymentAsset = fromSecretOrParams.asset;
       paymentMemo = fromSecretOrParams.memo;
       paymentUserId = fromSecretOrParams.userId;
     } else {
@@ -269,7 +274,7 @@ export class StellarService {
       }).addOperation(
         Operation.payment({
           destination: destPublicKey,
-          asset: Asset.native(),
+          asset: this.resolvePaymentAsset(paymentAsset),
           amount: paymentAmount,
         }),
       );
@@ -321,6 +326,177 @@ export class StellarService {
           'Stellar payment submission failed',
       );
     }
+  }
+
+  async createEscrowAccount(params: {
+    destination: string;
+    amount: string;
+    secretKey: string;
+    memo?: string;
+    userId?: string;
+  }): Promise<SendPaymentResult> {
+    const { destination, amount, secretKey, memo, userId } = params;
+    const keypair = Keypair.fromSecret(secretKey);
+    const baseFee =
+      this.configService.get<string>('STELLAR_BASE_FEE') || BASE_FEE;
+    const closureFees = new Decimal(baseFee).mul(2).div(STROOPS_PER_XLM);
+    const startingBalance = new Decimal(amount)
+      .plus(ESCROW_ACCOUNT_MINIMUM_BALANCE)
+      .plus(closureFees)
+      .toFixed(7);
+
+    try {
+      const account = await this.server.loadAccount(keypair.publicKey());
+      const builder = new TransactionBuilder(account, {
+        fee: baseFee,
+        networkPassphrase: this.networkPassphrase,
+      }).addOperation(
+        Operation.createAccount({
+          destination,
+          startingBalance,
+        }),
+      );
+
+      if (memo) {
+        builder.addMemo(Memo.text(memo));
+      }
+
+      const transaction = builder.setTimeout(180).build();
+      transaction.sign(keypair);
+      const result = await this.server.submitTransaction(transaction);
+
+      if (userId) {
+        await this.auditLogsService.logSystemEvent(
+          AuditAction.TRANSACTION_SUBMITTED,
+          userId,
+          {
+            transactionHash: result.hash,
+            ledger: result.ledger,
+            network: this.configService.get<string>('STELLAR_NETWORK'),
+          },
+        );
+      }
+
+      return { hash: result.hash, ledger: result.ledger };
+    } catch (err: unknown) {
+      const error = toStellarError(err);
+      this.logger.error(`Failed to create Stellar escrow account: ${error.message}`);
+      if (userId) {
+        await this.auditLogsService.logSystemEvent(
+          AuditAction.TRANSACTION_SUBMITTED + '_FAILED',
+          userId,
+          {
+            destination,
+            amount: startingBalance,
+            error: error.message,
+            resultCodes: error.response?.data?.extras?.result_codes,
+          },
+        );
+      }
+      throw new TransactionSubmissionError(
+        error.response?.data?.extras?.result_codes ??
+          'Stellar escrow account creation failed',
+      );
+    }
+  }
+
+  async closeEscrowAccount(params: {
+    destination: string;
+    reserveDestination: string;
+    amount: string;
+    secretKey: string;
+    memo?: string;
+    userId?: string;
+  }): Promise<SendPaymentResult> {
+    const {
+      destination,
+      reserveDestination,
+      amount,
+      secretKey,
+      memo,
+      userId,
+    } = params;
+    const keypair = Keypair.fromSecret(secretKey);
+    const baseFee =
+      this.configService.get<string>('STELLAR_BASE_FEE') || BASE_FEE;
+
+    try {
+      const account = await this.server.loadAccount(keypair.publicKey());
+      const builder = new TransactionBuilder(account, {
+        fee: baseFee,
+        networkPassphrase: this.networkPassphrase,
+      })
+        .addOperation(
+          Operation.payment({
+            destination,
+            asset: Asset.native(),
+            amount,
+          }),
+        )
+        .addOperation(Operation.accountMerge({ destination: reserveDestination }));
+
+      if (memo) {
+        builder.addMemo(Memo.text(memo));
+      }
+
+      const transaction = builder.setTimeout(180).build();
+      transaction.sign(keypair);
+      const result = await this.server.submitTransaction(transaction);
+
+      if (userId) {
+        await this.auditLogsService.logSystemEvent(
+          AuditAction.TRANSACTION_SUBMITTED,
+          userId,
+          {
+            transactionHash: result.hash,
+            ledger: result.ledger,
+            network: this.configService.get<string>('STELLAR_NETWORK'),
+          },
+        );
+      }
+
+      return { hash: result.hash, ledger: result.ledger };
+    } catch (err: unknown) {
+      const error = toStellarError(err);
+      this.logger.error(`Failed to close Stellar escrow account: ${error.message}`);
+      if (userId) {
+        await this.auditLogsService.logSystemEvent(
+          AuditAction.TRANSACTION_SUBMITTED + '_FAILED',
+          userId,
+          {
+            destination,
+            reserveDestination,
+            amount,
+            error: error.message,
+            resultCodes: error.response?.data?.extras?.result_codes,
+          },
+        );
+      }
+      throw new TransactionSubmissionError(
+        error.response?.data?.extras?.result_codes ??
+          'Stellar escrow account closure failed',
+      );
+    }
+  }
+
+  private resolvePaymentAsset(asset?: string | Asset): Asset {
+    if (!asset) {
+      return Asset.native();
+    }
+    if (asset instanceof Asset) {
+      return asset;
+    }
+    if (asset.toUpperCase() === 'XLM') {
+      return Asset.native();
+    }
+
+    const separator = asset.indexOf(':');
+    if (separator <= 0 || separator === asset.length - 1) {
+      throw new Error(
+        'Issued Stellar assets must be specified as CODE:ISSUER',
+      );
+    }
+    return new Asset(asset.slice(0, separator), asset.slice(separator + 1));
   }
 
   listenForPayments(

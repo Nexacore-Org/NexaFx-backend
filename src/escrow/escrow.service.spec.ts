@@ -90,6 +90,8 @@ describe('EscrowService', () => {
           useValue: {
             generateWallet: jest.fn(),
             sendPayment: jest.fn(),
+            createEscrowAccount: jest.fn(),
+            closeEscrowAccount: jest.fn(),
           },
         },
         {
@@ -145,6 +147,50 @@ describe('EscrowService', () => {
       expect(stellarService.generateWallet).not.toHaveBeenCalled();
       expect(usersService.updateByUserId).not.toHaveBeenCalled();
     });
+
+    it('rejects self-escrow', async () => {
+      usersService.findByEmail.mockResolvedValue({ id: 'sender-id' } as any);
+
+      await expect(
+        service.createEscrow('sender-id', {
+          recipientEmail: 'sender@example.com',
+          amount: 10,
+          currency: 'XLM',
+          title: 'Test escrow',
+          description: 'Test escrow description',
+          releaseCondition: 'Complete work',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(escrowRepository.save).not.toHaveBeenCalled();
+    });
+
+    it.each([0, -1])('rejects non-positive amount %s', async (amount) => {
+      await expect(
+        service.createEscrow('sender-id', {
+          recipientEmail: 'recipient@example.com',
+          amount,
+          currency: 'XLM',
+          title: 'Test escrow',
+          description: 'Test escrow description',
+          releaseCondition: 'Complete work',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(usersService.findByEmail).not.toHaveBeenCalled();
+    });
+
+    it('rejects currencies without an on-chain asset mapping', async () => {
+      await expect(
+        service.createEscrow('sender-id', {
+          recipientEmail: 'recipient@example.com',
+          amount: 10,
+          currency: 'USD',
+          title: 'Test escrow',
+          description: 'Test escrow description',
+          releaseCondition: 'Complete work',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(usersService.findByEmail).not.toHaveBeenCalled();
+    });
   });
 
   describe('fundEscrow', () => {
@@ -172,7 +218,8 @@ describe('EscrowService', () => {
       stellarService.generateWallet.mockResolvedValue(keypair);
       encryptionService.encrypt.mockReturnValue('encrypted-secret');
       encryptionService.decrypt.mockReturnValue('user-secret');
-      stellarService.sendPayment.mockResolvedValue(transactionResult);
+      stellarService.createEscrowAccount.mockResolvedValue(transactionResult);
+      usersService.updateByUserId.mockResolvedValue(undefined);
 
       const result = await service.fundEscrow('sender-id', 'escrow-id');
 
@@ -180,6 +227,18 @@ describe('EscrowService', () => {
       expect(result.stellarEscrowPublicKey).toBe('escrow-pub');
       expect(result.stellarEscrowSecretEncrypted).toBe('encrypted-secret');
       expect(result.fundedTxHash).toBe('tx-hash');
+      expect(stellarService.createEscrowAccount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          destination: 'escrow-pub',
+          amount: '10.00000000',
+        }),
+      );
+      expect(usersService.updateByUserId).toHaveBeenCalledWith(
+        'sender-id',
+        expect.objectContaining({
+          balances: { XLM: 10 },
+        }),
+      );
     });
 
     it('throws if escrow not found', async () => {

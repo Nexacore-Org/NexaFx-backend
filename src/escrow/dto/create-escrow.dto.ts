@@ -7,6 +7,9 @@ import {
   IsString,
   IsInt,
   Min,
+  IsPositive,
+  IsIn,
+  IsDateString,
 } from 'class-validator';
 
 export class CreateEscrowDto {
@@ -15,11 +18,12 @@ export class CreateEscrowDto {
   recipientEmail: string;
 
   @ApiProperty({ example: 100.0 })
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 7 })
+  @IsPositive()
   amount: number;
 
-  @ApiProperty({ example: 'XLM' })
-  @IsString()
+  @ApiProperty({ example: 'XLM', enum: ['XLM'] })
+  @IsIn(['XLM'])
   currency: string;
 
   @ApiProperty({ example: 'Website development milestone 1' })
@@ -39,7 +43,7 @@ export class CreateEscrowDto {
 
   @ApiProperty({ required: false, example: '2026-07-01T00:00:00.000Z' })
   @IsOptional()
-  @IsString()
+  @IsDateString()
   autoReleaseAt?: string;
 
   @ApiProperty({ required: false, example: 24 })

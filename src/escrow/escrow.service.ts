@@ -34,16 +34,36 @@ export class EscrowService {
   ) {}
 
   async createEscrow(userId: string, dto: CreateEscrowDto): Promise<Escrow> {
+    if (!Number.isFinite(dto.amount) || dto.amount <= 0) {
+      throw new BadRequestException('Escrow amount must be greater than zero');
+    }
+    if (Number(dto.amount.toFixed(7)) !== dto.amount) {
+      throw new BadRequestException(
+        'Escrow amount cannot have more than 7 decimal places',
+      );
+    }
+    if (dto.currency?.toUpperCase() !== 'XLM') {
+      throw new BadRequestException(
+        'Escrows currently support XLM currency only',
+      );
+    }
+    if (dto.autoReleaseAt && Number.isNaN(Date.parse(dto.autoReleaseAt))) {
+      throw new BadRequestException('autoReleaseAt must be a valid date');
+    }
+
     const recipient = await this.usersService.findByEmail(dto.recipientEmail);
     if (!recipient) {
       throw new NotFoundException('Recipient not found');
+    }
+    if (recipient.id === userId) {
+      throw new BadRequestException('Cannot create an escrow with yourself');
     }
 
     const escrow = this.escrowRepository.create({
       senderId: userId,
       recipientId: recipient.id,
       amount: dto.amount.toFixed(8),
-      currency: dto.currency,
+      currency: 'XLM',
       title: dto.title,
       description: dto.description,
       releaseCondition: dto.releaseCondition,
@@ -74,6 +94,7 @@ export class EscrowService {
       if (escrow.status !== EscrowStatus.PENDING) {
         throw new BadRequestException('Escrow is not pending funding');
       }
+      this.assertEscrowCurrency(escrow);
 
       const sender = await this.usersService.findById(userId);
       if (!sender) {
@@ -87,13 +108,6 @@ export class EscrowService {
       if (currentBalance < amount) {
         throw new BadRequestException('Insufficient balance');
       }
-
-      await this.usersService.updateByUserId(userId, {
-        balances: {
-          ...sender.balances,
-          [escrow.currency]: currentBalance - amount,
-        },
-      });
 
       const keypair = await this.stellarService.generateWallet(userId, {
         source: 'escrow.fund',
@@ -110,14 +124,19 @@ export class EscrowService {
         signerSecret.encryptedSecretKey,
       );
 
-      const result = await this.stellarService.sendPayment({
-        sourcePublicKey: await this.getUserSourcePublicKey(userId),
-        destination: keypair.publicKey,
-        asset: 'XLM',
-        amount: escrow.amount,
+      const result = await this.stellarService.createEscrowAccount({
         secretKey,
+        destination: keypair.publicKey,
+        amount: escrow.amount,
         memo: `ESCROW-FUND-${escrow.id}`,
         userId,
+      });
+
+      await this.usersService.updateByUserId(userId, {
+        balances: {
+          ...sender.balances,
+          [escrow.currency]: currentBalance - amount,
+        },
       });
 
       escrow.status = EscrowStatus.FUNDED;
@@ -187,13 +206,16 @@ export class EscrowService {
 
       const escrowSecret = await this.getEscrowSecret(escrow);
       const receiverPublicKey = await this.getUserSourcePublicKey(recipient.id);
+      this.assertEscrowCurrency(escrow);
+      const senderPublicKey = await this.getUserSourcePublicKey(
+        escrow.senderId,
+      );
 
-      const result = await this.stellarService.sendPayment({
-        sourcePublicKey: escrow.stellarEscrowPublicKey!,
+      const result = await this.stellarService.closeEscrowAccount({
         destination: receiverPublicKey,
-        asset: 'XLM',
         amount: escrow.amount,
         secretKey: escrowSecret,
+        reserveDestination: senderPublicKey,
         memo: `ESCROW-RELEASE-${escrow.id}`,
         userId: escrow.senderId,
       });
@@ -235,12 +257,13 @@ export class EscrowService {
         escrow.senderId,
       );
 
-      const result = await this.stellarService.sendPayment({
+      this.assertEscrowCurrency(escrow);
+      const result = await this.stellarService.closeEscrowAccount({
         sourcePublicKey: escrow.stellarEscrowPublicKey!,
         destination: senderPublicKey,
-        asset: 'XLM',
         amount: escrow.amount,
         secretKey: escrowSecret,
+        reserveDestination: senderPublicKey,
         memo: `ESCROW-REFUND-${escrow.id}`,
         userId: escrow.senderId,
       });
@@ -409,5 +432,13 @@ export class EscrowService {
     );
     user.balances[currency] = currentBalance + amount;
     await this.usersService.updateByUserId(userId, { balances: user.balances });
+  }
+
+  private assertEscrowCurrency(escrow: Escrow): void {
+    if (escrow.currency !== 'XLM') {
+      throw new BadRequestException(
+        'Escrows currently support XLM currency only',
+      );
+    }
   }
 }

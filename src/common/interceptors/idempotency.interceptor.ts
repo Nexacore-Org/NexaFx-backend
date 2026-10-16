@@ -5,6 +5,7 @@ import {
   CallHandler,
   ConflictException,
   BadRequestException,
+  UnprocessableEntityException,
   HttpStatus,
 } from '@nestjs/common';
 import { Observable, from, of, throwError } from 'rxjs';
@@ -30,7 +31,9 @@ export class IdempotencyInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest();
     const response = context.switchToHttp().getResponse();
     const idempotencyKey = request.headers['idempotency-key'];
-    const userId = request.user?.id;
+    // JwtStrategy populates userId, not id: reading .id left userId
+    // undefined, which short-circuited the whole replay path below.
+    const userId = request.user?.userId ?? request.user?.id;
     const method = request.method;
     const url = request.url;
 
@@ -39,24 +42,19 @@ export class IdempotencyInterceptor implements NestInterceptor {
     const isMandatory = this.isMandatoryEndpoint(request.route?.path || url);
 
     if (isMandatory && !idempotencyKey) {
-      return throwError(() => {
-        const error = new Error(
-          'Idempotency-Key header is required for this endpoint',
-        );
-        (error as any).status = HttpStatus.UNPROCESSABLE_ENTITY;
-        return error;
-      });
+      return throwError(
+        () =>
+          new UnprocessableEntityException(
+            'Idempotency-Key header is required for this endpoint',
+          ),
+      );
     }
 
     if (idempotencyKey) {
       const validation =
         this.idempotencyService.validateIdempotencyKey(idempotencyKey);
       if (!validation.valid) {
-        return throwError(() => {
-          const error = new Error(validation.error);
-          (error as any).status = HttpStatus.BAD_REQUEST;
-          return error;
-        });
+        return throwError(() => new BadRequestException(validation.error));
       }
     }
 
@@ -95,6 +93,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
               endpoint,
               response.statusCode,
               responseData,
+              request.body,
             );
           }),
           map((responseData) => {
@@ -112,19 +111,14 @@ export class IdempotencyInterceptor implements NestInterceptor {
             return conflictError;
           });
         }
-        if (error['status'] === HttpStatus.UNPROCESSABLE_ENTITY) {
-          return throwError(() => {
-            const err: any = new Error(error.message);
-            err.status = HttpStatus.UNPROCESSABLE_ENTITY;
-            return err;
-          });
+        if (
+          error['code'] === 'IDEMPOTENCY_KEY_BODY_MISMATCH' ||
+          error['status'] === HttpStatus.UNPROCESSABLE_ENTITY
+        ) {
+          return throwError(() => new UnprocessableEntityException(error.message));
         }
         if (error['status'] === HttpStatus.BAD_REQUEST) {
-          return throwError(() => {
-            const err: any = new Error(error.message);
-            err.status = HttpStatus.BAD_REQUEST;
-            return err;
-          });
+          return throwError(() => new BadRequestException(error.message));
         }
         return throwError(() => error);
       }),

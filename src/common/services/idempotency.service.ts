@@ -1,4 +1,4 @@
-import { Injectable, Inject, Optional } from '@nestjs/common';
+import { Injectable, Inject, Optional, UnprocessableEntityException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';
 
@@ -6,6 +6,8 @@ export interface IdempotencyCacheEntry {
   endpoint: string;
   statusCode: number;
   body: any;
+  /** Hash of the request body the key was first used with. */
+  requestHash?: string;
   expiresAt: number;
 }
 
@@ -139,6 +141,18 @@ export class IdempotencyService {
     }
 
     if (cached) {
+      // Same key, same endpoint but a different body: replaying the old
+      // response would hide the new request, and running the handler would
+      // apply it twice.
+      const requestHash = this.generateRequestHash(requestBody);
+      if (cached.requestHash && cached.requestHash !== requestHash) {
+        const error: any = new UnprocessableEntityException(
+          'Idempotency key already used with a different request body',
+        );
+        error.code = 'IDEMPOTENCY_KEY_BODY_MISMATCH';
+        throw error;
+      }
+
       return {
         statusCode: cached.statusCode,
         body: cached.body,
@@ -155,11 +169,15 @@ export class IdempotencyService {
     endpoint: string,
     responseStatus: number,
     responseBody: any,
+    requestBody?: any,
   ): Promise<void> {
     await this.cache.set(userId, key, {
       endpoint,
       statusCode: responseStatus,
       body: responseBody,
+      ...(requestBody === undefined
+        ? {}
+        : { requestHash: this.generateRequestHash(requestBody) }),
     });
   }
 }

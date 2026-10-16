@@ -76,6 +76,12 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({
+    default: {
+      ttl: 60 * 1000,
+      limit: Number(process.env.THROTTLE_AUTH_LIMIT ?? 5),
+    },
+  })
   @Version('2')
   @Post('login')
   @HttpCode(HttpStatus.OK)
@@ -86,7 +92,13 @@ export class AuthController {
   }
 
   @Public()
-  @Post('verify-login-otp')
+  @Throttle({
+    default: {
+      ttl: 60 * 1000,
+      limit: Number(process.env.THROTTLE_AUTH_LIMIT ?? 5),
+    },
+  })
+  @Post('verify-login-otp')  @Post('verify-login-otp')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify login OTP and receive access tokens' })
   @ApiBody({ type: VerifyLoginOtpDto })
@@ -226,7 +238,13 @@ export class AuthController {
   }
 
   @Public()
-  @Post('refresh')
+  @Throttle({
+    default: {
+      ttl: 60 * 1000,
+      limit: Number(process.env.THROTTLE_AUTH_LIMIT ?? 5),
+    },
+  })
+  @Post('refresh')  @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refresh access token' })
   @ApiBody({ type: RefreshTokenDto })
@@ -276,7 +294,13 @@ export class AuthController {
   }
 
   @Public()
-  @Post('verify-signup-otp')
+  @Throttle({
+    default: {
+      ttl: 60 * 1000,
+      limit: Number(process.env.THROTTLE_AUTH_LIMIT ?? 5),
+    },
+  })
+  @Post('verify-signup-otp')  @Post('verify-signup-otp')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify signup OTP and complete registration' })
   @ApiBody({ type: VerifySignupOtpDto })
@@ -295,7 +319,13 @@ export class AuthController {
   }
 
   @Public()
-  @Post('resend-signup-otp')
+  @Throttle({
+    default: {
+      ttl: 60 * 1000,
+      limit: Number(process.env.THROTTLE_AUTH_LIMIT ?? 5),
+    },
+  })
+  @Post('resend-signup-otp')  @Post('resend-signup-otp')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Resend signup verification OTP' })
   @ApiBody({ type: ForgotPasswordDto })

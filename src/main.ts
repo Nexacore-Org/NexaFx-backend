@@ -26,7 +26,9 @@ import { Request, Response, NextFunction } from 'express';
 import { runWithRequestId } from './common/context/request-context';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+  });
   const logger = new Logger('Bootstrap');
   const configService = app.get(ConfigService);
 

@@ -33,6 +33,7 @@ import { FirebaseModule } from './firebase/firebase.module';
 import { AdminModule } from './admin/admin.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { DaoModule } from './dao/dao.module';
+import { CardsModule } from './cards/cards.module';
 import { GraphQLApiModule } from './graphql/graphql.module';
 import { SuperAdminModule } from './super-admin/super-admin.module';
 import { GatewaysModule } from './gateways/gateways.module';
@@ -134,6 +135,8 @@ import { UnifiedActivityFeedModule } from './unified-activity-feed/unified-activ
     EscrowModule,
     // DAO module provides Stellar Soroban contract interaction for reward distribution
     DaoModule,
+    // Stripe Issuing virtual cards, backed by the virtual_cards table
+    CardsModule,
     GraphQLApiModule,
     WebhooksModule,
     WalletsModule,

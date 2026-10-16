@@ -43,10 +43,10 @@ export class ReportExportJob {
   })
   format: ExportFormat;
 
-  @Column({ type: 'timestamptz' })
+  @Column({ name: 'from_date', type: 'timestamptz' })
   fromDate: Date;
 
-  @Column({ type: 'timestamptz' })
+  @Column({ name: 'to_date', type: 'timestamptz' })
   toDate: Date;
 
   @Column({ type: 'varchar', length: 255, nullable: true })

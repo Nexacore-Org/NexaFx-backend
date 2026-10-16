@@ -57,4 +57,32 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     }
     return context.switchToHttp().getRequest<Express.Request>();
   }
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const result = (await super.canActivate(context)) as boolean;
+    if (!result) {
+      return false;
+    }
+
+    // FIX: Use getRequest(context) instead of switchToHttp().getRequest() to support GraphQL
+    const request = this.getRequest(context);
+    const user = request.user;
+
+    // Check for partial_auth (2FA pending) restriction
+    if (user && user.authStage === 'partial_auth') {
+      const isGraphql = context.getType() === 'graphql';
+      
+      if (isGraphql) {
+        throw new UnauthorizedException('2FA verification required');
+      }
+
+      // Allow specific HTTP endpoints like /two-factor/verify
+      const path = request.path || request.url;
+      if (!path?.includes('/two-factor/verify')) {
+        throw new UnauthorizedException('2FA verification required');
+      }
+    }
+
+    return true;
+  }
 }

@@ -449,3 +449,6 @@ This platform supports real-time updates via two complementary transports:
 
 <!-- handsoff-issue-1292 -->
 - #1292: [Wave 200pts] v2: FIX — No migrations for webhook_endpoints/deliveries, push_notifications, sms_provider_routes
+
+<!-- handsoff-issue-1293 -->
+- #1293: [Wave 200pts] v2: FIX — Retry of a refunded FAILED withdrawal flips it to SUCCESS without reversing the refund

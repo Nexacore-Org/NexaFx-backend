@@ -19,6 +19,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { Response } from 'express';
 import { AuthService } from './auth.service';
 import { Public } from './decorators/public.decorator';
+import { BlockDuringImpersonation } from '../common/guards/impersonation-restriction.guard';
 import {
   CurrentUser,
   CurrentUserPayload,
@@ -206,6 +207,7 @@ export class AuthController {
   }
 
   @Post('change-password')
+  @BlockDuringImpersonation()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Change password for authenticated user' })
   @ApiBody({ type: ChangePasswordDto })
@@ -424,6 +426,7 @@ export class AuthController {
   }
 
   @Post('oauth/unlink')
+  @BlockDuringImpersonation()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Unlink an OAuth provider from your account' })
   @ApiBody({ type: UnlinkOauthDto })
@@ -436,6 +439,7 @@ export class AuthController {
   }
 
   @Post('set-password')
+  @BlockDuringImpersonation()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Set a password for OAuth-only accounts' })
   @ApiBody({ type: SetPasswordDto })

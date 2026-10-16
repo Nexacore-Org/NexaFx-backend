@@ -31,6 +31,7 @@ import {
   UpdateNotificationPreferencesDto,
 } from './dto';
 import { DataExportService } from './services/data-export.service';
+import { BlockDuringImpersonation } from '../common/guards/impersonation-restriction.guard';
 import { AccountDeletionService } from './services/account-deletion.service';
 import { TransactionLimitService } from '../transactions/services/transaction-limit.service';
 
@@ -64,6 +65,7 @@ export class UsersController {
   }
 
   @Post('me/data-export')
+  @BlockDuringImpersonation()
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Request data export (GDPR Article 15)' })
   @ApiResponse({
@@ -90,6 +92,7 @@ export class UsersController {
   }
 
   @Post('me/data-export/retry')
+  @BlockDuringImpersonation()
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Retry a failed data export request' })
   @ApiResponse({ status: 202, description: 'Data export retry accepted' })
@@ -114,6 +117,7 @@ export class UsersController {
   }
 
   @Post('me/delete-account')
+  @BlockDuringImpersonation()
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Request account deletion (GDPR Article 17)' })
   @ApiResponse({
@@ -137,6 +141,7 @@ export class UsersController {
   }
 
   @Delete('profile')
+  @BlockDuringImpersonation()
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Delete current user account' })
   @ApiResponse({

@@ -15,6 +15,7 @@ import { RateComparisonModule } from './exchange-rates/rate-comparison.module';
 import { CommonModule } from './common/common.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
+import { ImpersonationRestrictionGuard } from './common/guards/impersonation-restriction.guard';
 import { PlanThrottlerGuard } from './common/guards/plan-throttler.guard';
 import { HealthModule } from './health/health.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
@@ -158,6 +159,13 @@ import { UnifiedActivityFeedModule } from './unified-activity-feed/unified-activ
     {
       provide: APP_GUARD,
       useClass: RolesGuard,
+    },
+    {
+      // Runs after JwtAuthGuard so request.user is populated. Without this the
+      // guard existed but was never invoked: impersonation sessions could
+      // change passwords, touch 2FA and call /admin routes.
+      provide: APP_GUARD,
+      useClass: ImpersonationRestrictionGuard,
     },
     {
       provide: APP_GUARD,

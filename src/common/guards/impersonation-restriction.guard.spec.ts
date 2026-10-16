@@ -48,11 +48,29 @@ describe('ImpersonationRestrictionGuard', () => {
     };
 
     return {
+      getType: () => 'http',
       switchToHttp: () => ({
         getRequest: () => request,
       }),
       getHandler: () => ({}),
       getClass: () => ({}),
+    } as any;
+  }
+
+  function createGraphQLContext(opts: {
+    isImpersonation: boolean;
+    method: string;
+    url: string;
+  }): ExecutionContext {
+    const inner = createMockContext(opts);
+    const request = inner.switchToHttp().getRequest();
+
+    return {
+      getType: () => 'graphql',
+      getHandler: () => ({}),
+      getClass: () => ({}),
+      switchToHttp: () => inner.switchToHttp(),
+      getContext: () => ({ req: request }),
     } as any;
   }
 
@@ -153,5 +171,28 @@ describe('ImpersonationRestrictionGuard', () => {
     });
 
     expect(guard.canActivate(ctx)).toBe(true);
+  });
+
+  describe('GraphQL context', () => {
+    it('reads the request from the GraphQL execution context', () => {
+      mockReflector.getAllAndOverride.mockReturnValueOnce(true);
+      const ctx = createGraphQLContext({
+        isImpersonation: true,
+        method: 'POST',
+        url: '/v1/auth/change-password',
+      });
+
+      expect(() => guard.canActivate(ctx)).toThrow(ForbiddenException);
+    });
+
+    it('allows non-impersonated GraphQL operations', () => {
+      const ctx = createGraphQLContext({
+        isImpersonation: false,
+        method: 'POST',
+        url: '/graphql',
+      });
+
+      expect(guard.canActivate(ctx)).toBe(true);
+    });
   });
 });

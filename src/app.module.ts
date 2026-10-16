@@ -17,6 +17,7 @@ import { RateComparisonModule } from './exchange-rates/rate-comparison.module';
 import { CommonModule } from './common/common.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
+import { ImpersonationRestrictionGuard } from './common/guards/impersonation-restriction.guard';
 import { PlanThrottlerGuard } from './common/guards/plan-throttler.guard';
 import { HealthModule } from './health/health.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
@@ -62,6 +63,22 @@ import { MaintenanceGuard } from './super-admin/guards/maintenance.guard';
     {
       provide: APP_GUARD,
       useClass: MaintenanceGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: ImpersonationRestrictionGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: PlanThrottlerGuard,
     },
   ],
 })

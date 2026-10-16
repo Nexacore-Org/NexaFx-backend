@@ -6,6 +6,7 @@ import {
   SetMetadata,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { GqlExecutionContext } from '@nestjs/graphql';
 import type { Request } from 'express';
 import type { CurrentUserPayload } from '../../auth/decorators/current-user.decorator';
 
@@ -37,9 +38,8 @@ export class ImpersonationRestrictionGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const request = context
-      .switchToHttp()
-      .getRequest<Request & { user: CurrentUserPayload }>();
+    const request = this.getRequest(context);
+    if (!request) return true;
 
     const user = request.user;
     if (!user?.isImpersonation) {
@@ -79,5 +79,23 @@ export class ImpersonationRestrictionGuard implements CanActivate {
     }
 
     return true;
+  }
+
+  /**
+   * REST requests expose the request directly, GraphQL wraps it in the
+   * execution context. Without this branch a GraphQL operation would read a
+   * context object with no user and silently skip every restriction.
+   */
+  private getRequest(
+    context: ExecutionContext,
+  ): (Request & { user: CurrentUserPayload }) | undefined {
+    if (context.getType<string>() === 'graphql') {
+      return GqlExecutionContext.create(context).getContext<{
+        req?: Request & { user: CurrentUserPayload };
+      }>()?.req;
+    }
+    return context.switchToHttp().getRequest<
+      Request & { user: CurrentUserPayload }
+    >();
   }
 }

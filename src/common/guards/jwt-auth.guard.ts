@@ -7,6 +7,7 @@ import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import { GqlExecutionContext } from '@nestjs/graphql';
 import { IS_PUBLIC_KEY } from '../../auth/decorators/public.decorator';
+import { ALLOW_PARTIAL_AUTH_KEY } from '../../auth/decorators/allow-partial-auth.decorator';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
@@ -25,19 +26,18 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     const ok = await super.canActivate(context);
     if (!ok) return false;
 
-    const req = context.switchToHttp().getRequest<{
+    const req = this.getRequest(context) as {
       method?: string;
-      originalUrl?: string;
-      url?: string;
       user?: { authStage?: string };
-    }>();
+    };
 
     if (req.user?.authStage === 'partial_auth') {
-      const method = (req.method ?? '').toUpperCase();
-      const url = req.originalUrl ?? req.url ?? '';
-      const path = url.split('?')[0];
-
-      const allowed = method === 'POST' && path === '/two-factor/verify';
+      // Metadata instead of a path comparison: URI versioning prefixes every
+      // route (/v1/two-factor/verify), so matching on the raw URL never matched.
+      const allowed = this.reflector.getAllAndOverride<boolean>(
+        ALLOW_PARTIAL_AUTH_KEY,
+        [context.getHandler(), context.getClass()],
+      );
 
       if (!allowed) {
         throw new ForbiddenException(

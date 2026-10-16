@@ -839,21 +839,29 @@ export class AuthService {
 
   async logout(
     userId: string,
-    tokenId?: string,
+    refreshToken: string,
     ipAddress?: string,
     userAgent?: string,
-  ): Promise<void> {
-    // If you have a logout endpoint that invalidates refresh tokens
-    if (tokenId) {
-      await this.refreshTokensService.revokeRefreshToken(tokenId);
+  ): Promise<{ message: string }> {
+    // Resolving the token first means an unknown, expired or already-revoked
+    // token is rejected before anything is written, and the ownership check
+    // stops one user from revoking somebody else's session.
+    const stored = await this.refreshTokensService.validateRefreshToken(
+      refreshToken,
+    );
+
+    if (stored.userId !== userId) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
-    // Log logout action
+    await this.refreshTokensService.revokeRefreshToken(refreshToken);
+
     await this.auditLogsService.logAuthEvent(userId, AuditAction.LOGOUT, {
-      tokenId,
       ip: ipAddress,
       device: userAgent,
     });
+
+    return { message: 'Logged out successfully' };
   }
 
   async logoutAllDevices(

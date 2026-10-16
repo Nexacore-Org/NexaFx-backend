@@ -21,11 +21,13 @@ import { AuthService } from './auth.service';
 import { OAuthCodeService } from './oauth-code.service';
 import { ExchangeOauthCodeDto } from './dto/exchange-oauth-code.dto';
 import { Public } from './decorators/public.decorator';
+import { BlockDuringImpersonation } from '../common/guards/impersonation-restriction.guard';
 import {
   CurrentUser,
   CurrentUserPayload,
 } from './decorators/current-user.decorator';
 import { LoginDto } from './dto/login.dto';
+import { LogoutDto } from './dto/logout.dto';
 import { VerifyLoginOtpDto } from './dto/verify-login-otp.dto';
 import { VerifyTwoFactorDto } from './dto/verify-2fa.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -226,6 +228,7 @@ export class AuthController {
   }
 
   @Post('change-password')
+  @BlockDuringImpersonation()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Change password for authenticated user' })
   @ApiBody({ type: ChangePasswordDto })
@@ -358,13 +361,13 @@ export class AuthController {
     },
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async logout(@Req() req: any) {
+  @ApiResponse({ status: 401, description: 'Refresh token unknown or not owned by the caller' })
+  async logout(@Req() req: any, @Body() dto: LogoutDto) {
     const userId = req.user.userId;
-    const tokenId = req.user.jti; // JWT ID
     const ipAddress = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('User-Agent');
 
-    return this.authService.logout(userId, tokenId, ipAddress, userAgent);
+    return this.authService.logout(userId, dto.refreshToken, ipAddress, userAgent);
   }
 
   @Post('logout-all')
@@ -477,6 +480,7 @@ export class AuthController {
   }
 
   @Post('oauth/unlink')
+  @BlockDuringImpersonation()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Unlink an OAuth provider from your account' })
   @ApiBody({ type: UnlinkOauthDto })
@@ -489,6 +493,7 @@ export class AuthController {
   }
 
   @Post('set-password')
+  @BlockDuringImpersonation()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Set a password for OAuth-only accounts' })
   @ApiBody({ type: SetPasswordDto })

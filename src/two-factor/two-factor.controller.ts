@@ -24,6 +24,8 @@ import { TwoFactorStatusDto } from './dto/two-factor-status.dto';
 import { RecoverTwoFactorDto } from './dto/recover-two-factor.dto';
 import { AuthService } from '../auth/auth.service';
 import { Public } from '../auth/decorators/public.decorator';
+import { AllowPartialAuth } from '../auth/decorators/allow-partial-auth.decorator';
+import { BlockDuringImpersonation } from '../common/guards/impersonation-restriction.guard';
 
 @ApiTags('Two Factor')
 @ApiBearerAuth('access-token')
@@ -35,6 +37,7 @@ export class TwoFactorController {
   ) {}
 
   @Post('setup')
+  @BlockDuringImpersonation()
   @ApiOperation({ summary: 'Generate authenticator setup secret and QR code' })
   @ApiResponse({
     status: 201,
@@ -48,6 +51,7 @@ export class TwoFactorController {
   }
 
   @Post('confirm')
+  @BlockDuringImpersonation()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Confirm two-factor authentication and generate backup codes',
@@ -74,6 +78,7 @@ export class TwoFactorController {
   }
 
   @Post('disable')
+  @BlockDuringImpersonation()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Disable two-factor authentication' })
   @ApiBody({ type: TwoFactorCodeDto })
@@ -107,6 +112,8 @@ export class TwoFactorController {
   })
   @Post('verify')
   @HttpCode(HttpStatus.OK)
+  // Reachable with a PARTIAL_AUTH token: this is the route that exchanges it.
+  @AllowPartialAuth()
   @ApiOperation({
     summary: 'Verify TOTP and exchange PARTIAL_AUTH for full JWT',
   })
@@ -171,6 +178,7 @@ export class TwoFactorController {
   }
 
   @Get('backup-codes/regenerate')
+  @BlockDuringImpersonation()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Regenerate backup codes (requires active TOTP)',

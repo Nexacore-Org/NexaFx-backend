@@ -55,7 +55,7 @@ describe('TransactionsService fee integration behavior', () => {
   };
 
   const currenciesService = {
-    findOne: jest.fn(async () => ({ isActive: true })),
+    getCurrency: jest.fn(async () => ({ isActive: true, code: 'XLM' })),
   };
 
   const exchangeRatesService = {
@@ -67,6 +67,8 @@ describe('TransactionsService fee integration behavior', () => {
     signTransaction: jest.fn(async () => ({})),
     submitTransaction: jest.fn(async () => ({ hash: 'stellar-hash' })),
     sendPayment: jest.fn(async () => ({ hash: 'stellar-hash' })),
+    findIncomingPayment: jest.fn(async () => null),
+    verifyTransaction: jest.fn(async () => ({ status: 'SUCCESS' })),
     getWalletBalances: jest.fn(async () => [{ asset: 'XLM', balance: '100' }]),
     getAssetWithDefaultIssuer: jest.fn((code: string) => ({ code })),
     getAsset: jest.fn((code: string) => ({ code })),
@@ -228,6 +230,105 @@ describe('TransactionsService fee integration behavior', () => {
       }),
       expect.anything(),
     );
+  });
+
+  it('creates pending deposit instructions without sending a payment', async () => {
+    const transaction = await service.createDeposit('user-1', {
+      amount: 100,
+      currency: 'XLM',
+      sourceAddress: 'G_UNTRUSTED_CLIENT_ADDRESS',
+    });
+
+    expect(transaction.status).toBe(TransactionStatus.PENDING);
+    expect(transaction.txHash).toBeUndefined();
+    expect(transaction.depositAddress).toBe(
+      'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+    );
+    expect(transaction.depositMemo).toMatch(/^[a-f0-9]{28}$/);
+    expect(stellarService.sendPayment).not.toHaveBeenCalled();
+    expect(stellarService.createTransaction).not.toHaveBeenCalled();
+  });
+
+  it('returns BadRequestException when the deposit currency is unknown', async () => {
+    currenciesService.getCurrency.mockRejectedValueOnce(
+      new NotFoundException("Currency with code 'ZZZ' not found"),
+    );
+
+    await expect(
+      service.createDeposit('user-1', {
+        amount: 100,
+        currency: 'ZZZ',
+        sourceAddress: 'G_SOURCE_ADDRESS',
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(transactionRepository.create).not.toHaveBeenCalled();
+    expect(stellarService.sendPayment).not.toHaveBeenCalled();
+  });
+
+  it('returns BadRequestException when the deposit currency is inactive', async () => {
+    currenciesService.getCurrency.mockResolvedValueOnce({
+      isActive: false,
+      code: 'XLM',
+    });
+
+    await expect(
+      service.createDeposit('user-1', {
+        amount: 100,
+        currency: 'XLM',
+        sourceAddress: 'G_SOURCE_ADDRESS',
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(transactionRepository.create).not.toHaveBeenCalled();
+  });
+
+  it('returns BadRequestException when the withdrawal currency is unknown', async () => {
+    currenciesService.getCurrency.mockRejectedValueOnce(
+      new NotFoundException("Currency with code 'ZZZ' not found"),
+    );
+
+    await expect(
+      service.createWithdrawal('user-1', {
+        amount: 100,
+        currency: 'ZZZ',
+        destinationAddress:
+          'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(transactionRepository.create).not.toHaveBeenCalled();
+  });
+
+  it('leaves a deposit pending until a matching inbound payment is found', async () => {
+    const transaction = {
+      id: 'tx-pending-deposit',
+      userId: 'user-1',
+      type: TransactionType.DEPOSIT,
+      amount: '100.00000000',
+      currency: 'XLM',
+      status: TransactionStatus.PENDING,
+      txHash: null,
+      createdAt: new Date(),
+      metadata: {
+        depositAddress:
+          'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+        depositMemo: '0123456789abcdef0123456789ab',
+      },
+    } as Transaction;
+    transactionRepository.findOne.mockResolvedValueOnce(transaction);
+
+    const result = await service.verifyTransaction(transaction.id);
+
+    expect(result.status).toBe(TransactionStatus.PENDING);
+    expect(stellarService.findIncomingPayment).toHaveBeenCalledWith({
+      address: transaction.metadata.depositAddress,
+      amount: transaction.amount,
+      currency: transaction.currency,
+      memo: transaction.metadata.depositMemo,
+      createdAfter: transaction.createdAt,
+    });
+    expect(stellarService.verifyTransaction).not.toHaveBeenCalled();
   });
 
   it('calls calculateFee and recordFee during withdrawal', async () => {

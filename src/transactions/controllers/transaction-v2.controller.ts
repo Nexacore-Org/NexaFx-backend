@@ -23,7 +23,10 @@ import {
   UserCompletionStats,
 } from '../services/transaction-confidence.service';
 import { CreateDepositDto } from '../dtos/transaction.dto';
-import { TransactionResponseDto } from '../dtos/transaction-response.dto';
+import {
+  DepositResponseDto,
+  TransactionResponseDto,
+} from '../dtos/transaction-response.dto';
 
 @ApiTags('Transactions-v2')
 @ApiBearerAuth('access-token')
@@ -51,7 +54,7 @@ export class TransactionV2Controller {
   @ApiResponse({
     status: 201,
     description: 'Transaction created successfully',
-    type: TransactionResponseDto,
+    type: DepositResponseDto,
   })
   @ApiResponse({
     status: 422,
@@ -61,7 +64,7 @@ export class TransactionV2Controller {
   async createTransaction(
     @Request() req,
     @Body() createDepositDto: CreateDepositDto,
-  ): Promise<TransactionResponseDto> {
+  ): Promise<DepositResponseDto> {
     const transaction = await this.transactionsService.createDeposit(
       req.user.userId,
       createDepositDto,

@@ -47,6 +47,41 @@ interface StellarErrorShape {
   };
 }
 
+interface IncomingPaymentSearch {
+  address: string;
+  amount: string;
+  currency: string;
+  memo: string;
+  createdAfter: Date;
+}
+
+interface IncomingPaymentRecord {
+  created_at: string;
+  from: string;
+  to: string;
+  amount: string;
+  transaction_hash: string;
+  asset_type: string;
+  asset_code?: string;
+  asset_issuer?: string;
+}
+
+function isIncomingPaymentRecord(
+  value: unknown,
+): value is IncomingPaymentRecord {
+  if (typeof value !== 'object' || value === null) return false;
+
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.created_at === 'string' &&
+    typeof record.from === 'string' &&
+    typeof record.to === 'string' &&
+    typeof record.amount === 'string' &&
+    typeof record.transaction_hash === 'string' &&
+    typeof record.asset_type === 'string'
+  );
+}
+
 function toStellarError(error: unknown): StellarErrorShape {
   if (error instanceof Error) {
     return error;
@@ -521,6 +556,76 @@ export class StellarService {
     return () => {
       closeStream();
     };
+  }
+
+  async findIncomingPayment(
+    search: IncomingPaymentSearch,
+  ): Promise<{ hash: string } | null> {
+    const expectedAsset = this.getAssetWithDefaultIssuer(
+      search.currency.toUpperCase(),
+    );
+    let page = await this.server
+      .payments()
+      .forAccount(search.address)
+      .order('desc')
+      .limit(200)
+      .call();
+
+    while (page.records.length > 0) {
+      for (const record of page.records) {
+        if (!isIncomingPaymentRecord(record)) continue;
+
+        const paymentCreatedAt = Date.parse(record.created_at);
+        if (
+          !Number.isFinite(paymentCreatedAt) ||
+          paymentCreatedAt < search.createdAfter.getTime()
+        ) {
+          continue;
+        }
+
+        if (
+          record.from === search.address ||
+          record.to !== search.address ||
+          !new Decimal(record.amount).equals(search.amount)
+        ) {
+          continue;
+        }
+
+        const assetMatches = expectedAsset.isNative()
+          ? record.asset_type === 'native'
+          : record.asset_type !== 'native' &&
+            record.asset_code === expectedAsset.getCode() &&
+            record.asset_issuer === expectedAsset.getIssuer();
+        if (!assetMatches) continue;
+
+        const transaction = await this.server
+          .transactions()
+          .transaction(record.transaction_hash)
+          .call();
+
+        if (
+          transaction.successful &&
+          transaction.memo_type === 'text' &&
+          transaction.memo === search.memo
+        ) {
+          return { hash: record.transaction_hash };
+        }
+      }
+
+      const oldestRecord = page.records[page.records.length - 1];
+      if (
+        page.records.length < 200 ||
+        (isIncomingPaymentRecord(oldestRecord) &&
+          Date.parse(oldestRecord.created_at) <
+            search.createdAfter.getTime())
+      ) {
+        return null;
+      }
+
+      page = await page.next();
+    }
+
+    return null;
   }
 
   /* -------------------- TRANSACTION -------------------- */

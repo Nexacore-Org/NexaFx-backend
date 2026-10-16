@@ -20,15 +20,13 @@ import {
 /**
  * Payload for POST /transactions/deposit.
  *
- * **Frontend contract** (lib/api/transactions.ts):
- * All three fields below must be sent. `sourceAddress` is the user’s Stellar
- * public key — read it from `GET /users/profile` → `walletAddress`. Omitting
- * it will cause the backend to return a 400 with the message
- * "sourceAddress should not be empty".
+ * `sourceAddress` is accepted for compatibility with older clients but is
+ * ignored. The server selects the destination wallet and returns its address
+ * and a unique payment memo in the deposit response.
  *
  * Example request body:
  * ```json
- * { "amount": 100.5, "currency": "XLM", "sourceAddress": "GDQP2K..." }
+ * { "amount": 100.5, "currency": "XLM" }
  * ```
  */
 export class CreateDepositDto {
@@ -47,20 +45,15 @@ export class CreateDepositDto {
   @IsNotEmpty()
   currency: string;
 
-  /**
-   * The user’s Stellar public key (G…).
-   * **Required.** Obtain from `GET /users/profile` → `walletAddress`.
-   * The backend uses this as the transaction source account on the Stellar
-   * network; the request will be rejected with 400 if this field is absent.
-   */
-  @ApiProperty({
+  /** @deprecated Accepted for compatibility; never used as a payment source. */
+  @ApiPropertyOptional({
     example: 'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOUJ3UHMNGUAO7UP',
     description:
-      'User’s Stellar public key (G…). Required. Read from GET /users/profile → walletAddress.',
+      'Deprecated and ignored. The deposit destination is resolved from the authenticated user’s selected wallet.',
   })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  sourceAddress: string;
+  sourceAddress?: string;
 
   @ApiPropertyOptional({
     description:
@@ -78,7 +71,7 @@ export class CreateDepositDto {
   @ApiPropertyOptional({
     example: 'Payment for October rent',
     description:
-      'Shared memo visible to both parties (max 200 chars). Also written to Stellar memo field (truncated to 28 bytes if needed).',
+      'Optional shared memo visible to both parties (max 200 chars).',
     maxLength: 200,
   })
   @IsOptional()

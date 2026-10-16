@@ -27,6 +27,7 @@ const ALLOWED_EXTENSIONS: Record<string, string> = {
   'video/quicktime': '.mov',
 };
 
+const VIDEO_FIELD_NAMES = new Set(['videoSelfie']);
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB for images/docs
 const MAX_VIDEO_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB for video selfies
 
@@ -60,9 +61,10 @@ export class FileValidationPipe implements PipeTransform {
       return;
     }
 
-    const isVideoField =
-      fieldName === 'videoSelfie' ||
-      (file.mimetype && ALLOWED_VIDEO_MIME_TYPES.has(file.mimetype));
+    // Limits come from the field name only. The previous check also trusted
+    // file.mimetype, so sending a video content-type on documentFront picked
+    // the 50 MB video allowance for a field that only accepts images and PDFs.
+    const isVideoField = VIDEO_FIELD_NAMES.has(fieldName);
 
     const maxSize = isVideoField
       ? MAX_VIDEO_FILE_SIZE_BYTES

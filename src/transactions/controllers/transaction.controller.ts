@@ -188,11 +188,15 @@ export class TransactionsController {
     @Param('id') id: string,
     @Request() req,
   ): Promise<TransactionResponseDto> {
+    // Argument order matters: the service signature is
+    // (transactionId, requestingUserId, requestingUserRole, adminId).
+    // req.user.id does not exist on the validated JWT user, so passing it as
+    // the role left requestingUserRole undefined and skipped the status guard.
     return this.transactionsService.verifyTransaction(
       id,
       req.user.userId,
-      req.user.id,
       req.user.role,
+      req.user.userId,
     );
   }
 

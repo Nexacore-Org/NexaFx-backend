@@ -1,8 +1,16 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, In } from 'typeorm';
 import { UsersService } from '../users.service';
 import { RefreshTokensService } from '../../tokens/refresh-tokens.service';
+import { RefreshToken } from '../../tokens/refresh-token.entity';
+import { BackupCode } from '../../two-factor/entities/backup-code.entity';
+import { OAuthAccount } from '../../auth/entities/oauth-account.entity';
 import { User } from '../user.entity';
 import { DataRequest } from '../entities/data-request.entity';
 import {
@@ -12,6 +20,7 @@ import {
 import { Transaction } from '../../transactions/entities/transaction.entity';
 import { Notification } from '../../notifications/entities/notification.entity';
 import { KycRecord } from '../../kyc/entities/kyc.entity';
+import { Wallet } from '../../wallets/entities/wallet.entity';
 import { Beneficiary } from '../../beneficiaries/entities/beneficiary.entity';
 import { AuditLog } from '../../audit-logs/entities/audit-log.entity';
 import { NotificationType } from '../../notifications/entities/notification.entity';
@@ -59,7 +68,10 @@ export class AccountDeletionService {
     });
 
     if (existingRequest) {
-      throw new Error('An account deletion request is already in progress.');
+      // A plain Error surfaced as a 500; this is a client-state conflict.
+      throw new ConflictException(
+        'An account deletion request is already in progress.',
+      );
     }
 
     const dataRequest = this.dataRequestRepository.create({
@@ -194,22 +206,32 @@ export class AccountDeletionService {
       await queryRunner.manager.save(user);
 
       // Revoke all refresh tokens
+      // The table is refresh_tokens and the entity is RefreshToken: TypeORM
+      // threw on the string target, which rolled the whole transaction back.
       await queryRunner.manager.update(
-        'refresh_token',
+        RefreshToken,
         { userId },
         { revokedAt: new Date() },
       );
+
+      // Two-factor backup codes and linked OAuth identities are personal data
+      // too, and both were left behind.
+      await queryRunner.manager.delete(BackupCode, { userId });
+      await queryRunner.manager.delete(OAuthAccount, { userId });
 
       // Anonymize KYC records
       await queryRunner.manager.update(
         KycRecord,
         { userId },
         {
+          // These columns are NOT NULL: writing null aborted the transaction,
+          // so nothing was ever anonymized. The stored objects are dropped by
+          // their storage key and the key itself is replaced.
           fullName: 'DELETED',
           documentNumber: 'DELETED',
-          documentFrontKey: null as any,
-          documentBackKey: null as any,
-          selfieKey: null as any,
+          documentFrontKey: 'deleted',
+          documentBackKey: 'deleted',
+          selfieKey: 'deleted',
           rejectionReason: 'Account deleted',
           status: 'rejected' as any,
         },
@@ -227,6 +249,14 @@ export class AccountDeletionService {
         },
       );
 
+      // The encrypted wallet secret is personal data and is unrecoverable
+      // once the account is anonymized.
+      await queryRunner.manager.update(
+        Wallet,
+        { userId },
+        { encryptedSecretKey: 'deleted' },
+      );
+
       // Note: Audit logs are retained for compliance
       // Only clear IP/userAgent in audit logs if they contain PII
 
@@ -237,7 +267,8 @@ export class AccountDeletionService {
         {
           title: 'Account Deleted',
           body: 'This account has been anonymized',
-          data: null as any,
+          // jsonb NOT NULL: the payload is emptied rather than nulled.
+          data: {},
         },
       );
 

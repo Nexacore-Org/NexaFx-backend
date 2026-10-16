@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -8,7 +8,8 @@ import * as bcrypt from 'bcrypt';
 
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
-import { OtpsService, OtpType } from '../otps/otps.service';
+import { OtpsService } from '../otps/otps.service';
+import { OtpType } from '../otps/otp.entity';
 import { RefreshTokensService } from '../tokens/refresh-tokens.service';
 import { OtpDeliveryService } from './email/otp-delivery.service';
 import { StellarService } from '../blockchain/stellar/stellar.service';
@@ -233,6 +234,126 @@ describe('AuthService login lockout', () => {
         failedLoginAttempts: 0,
         lockedUntil: null,
       });
+    });
+  });
+
+  describe('account status enforcement (#1226)', () => {
+    const suspended = () =>
+      makeUser({ password: null, isSuspended: true, failedLoginAttempts: 0 });
+    const deleted = () =>
+      makeUser({ password: null, isDeleted: true, failedLoginAttempts: 0 });
+    const deactivated = () =>
+      makeUser({ password: null, isActive: false, failedLoginAttempts: 0 });
+
+    it('login does not send an OTP for a suspended account', async () => {
+      usersService.findByEmail.mockResolvedValue(suspended());
+
+      const result = await service.login({ email: EMAIL, password: PASSWORD });
+
+      expect(result).toEqual({ message: GENERIC });
+    });
+
+    it('login does not send an OTP for a deleted account', async () => {
+      usersService.findByEmail.mockResolvedValue(deleted());
+
+      const result = await service.login({ email: EMAIL, password: PASSWORD });
+
+      expect(result).toEqual({ message: GENERIC });
+    });
+
+    it('loginV2 rejects a deactivated account', async () => {
+      usersService.findByEmail.mockResolvedValue(deactivated());
+
+      await expect(
+        service.loginV2({ email: EMAIL, password: PASSWORD }, 'en'),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('loginV2 rejects a suspended account', async () => {
+      usersService.findByEmail.mockResolvedValue(suspended());
+
+      await expect(
+        service.loginV2({ email: EMAIL, password: PASSWORD }, 'en'),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('verifyLoginOtp refuses a suspended account', async () => {
+      usersService.findById.mockResolvedValue(suspended());
+      const otpsService = (service as unknown as {
+        otpsService: { validateOtp: jest.Mock };
+      }).otpsService;
+      otpsService.validateOtp = jest.fn().mockResolvedValue(true);
+
+      await expect(
+        service.verifyLoginOtp({ email: EMAIL, otp: '123456' }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(otpsService.validateOtp).not.toHaveBeenCalled();
+    });
+
+    it('verifyLoginOtp refuses a deleted account', async () => {
+      usersService.findById.mockResolvedValue(deleted());
+      const otpsService = (service as unknown as {
+        otpsService: { validateOtp: jest.Mock };
+      }).otpsService;
+      otpsService.validateOtp = jest.fn().mockResolvedValue(true);
+
+      await expect(
+        service.verifyLoginOtp({ email: EMAIL, otp: '123456' }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('refreshAccessToken stops minting tokens for a deleted account', async () => {
+      const refreshTokensService = (service as unknown as {
+        refreshTokensService: {
+          validateRefreshToken: jest.Mock;
+          createRefreshToken: jest.Mock;
+        };
+      }).refreshTokensService;
+      refreshTokensService.validateRefreshToken.mockResolvedValue({
+        userId: 'user-1',
+      });
+      usersService.findById.mockResolvedValue(deleted());
+
+      await expect(service.refreshAccessToken('token')).rejects.toThrow();
+      expect(refreshTokensService.createRefreshToken).not.toHaveBeenCalled();
+    });
+
+    it('refreshAccessToken stops minting tokens for a suspended account', async () => {
+      const refreshTokensService = (service as unknown as {
+        refreshTokensService: {
+          validateRefreshToken: jest.Mock;
+          createRefreshToken: jest.Mock;
+        };
+      }).refreshTokensService;
+      refreshTokensService.validateRefreshToken.mockResolvedValue({
+        userId: 'user-1',
+      });
+      usersService.findById.mockResolvedValue(suspended());
+
+      await expect(service.refreshAccessToken('token')).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('still issues tokens for a healthy account', async () => {
+      const refreshTokensService = (service as unknown as {
+        refreshTokensService: {
+          validateRefreshToken: jest.Mock;
+          createRefreshToken: jest.Mock;
+        };
+        jwtService: { sign: jest.Mock };
+      }).refreshTokensService;
+      refreshTokensService.validateRefreshToken.mockResolvedValue({
+        userId: 'user-1',
+      });
+      refreshTokensService.createRefreshToken.mockResolvedValue('refresh');
+      usersService.findById.mockResolvedValue(
+        makeUser({ failedLoginAttempts: 0 }),
+      );
+
+      const result = await service.refreshAccessToken('token');
+
+      expect(result.accessToken).toEqual(expect.any(String));
     });
   });
 

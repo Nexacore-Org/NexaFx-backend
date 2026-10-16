@@ -5,6 +5,7 @@ import {
   ConflictException,
   BadRequestException,
   UnprocessableEntityException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ThrottlerException } from '@nestjs/throttler';
 import { JwtService } from '@nestjs/jwt';
@@ -92,6 +93,31 @@ export class AuthService {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 15;
   }
 
+  /**
+   * Account state gate for every path that issues a token or sends an OTP.
+   *
+   * JwtStrategy rejects suspended, deleted and deactivated accounts at request
+   * time, but token issuance did not: suspended and soft-deleted users still
+   * received OTP emails and fresh token pairs that were then refused, and
+   * refreshAccessToken kept minting tokens for deleted accounts.
+   */
+  private assertAccountUsable(user: {
+    isVerified: boolean;
+    isActive: boolean;
+    isSuspended: boolean;
+    isDeleted: boolean;
+  }): void {
+    if (user.isDeleted) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+    if (user.isSuspended) {
+      throw new ForbiddenException('Account is suspended');
+    }
+    if (!user.isActive) {
+      throw new ForbiddenException('Account is deactivated');
+    }
+  }
+
   private isLockedOut(user: { lockedUntil: Date | null }): boolean {
     return !!user.lockedUntil && new Date() < user.lockedUntil;
   }
@@ -120,7 +146,13 @@ export class AuthService {
       return { message: genericMessage };
     }
 
-    if (!user || !user.isVerified || !user.isActive) {
+    if (
+      !user ||
+      !user.isVerified ||
+      !user.isActive ||
+      user.isSuspended ||
+      user.isDeleted
+    ) {
       await this.simulateProcessingDelay();
 
       // Log failed login attempt
@@ -212,7 +244,15 @@ export class AuthService {
   ): Promise<{ message: string }> {
     const user = await this.usersService.findByEmail(loginDto.email);
 
-    if (!user || !user.isVerified) {
+    // loginV2 checked only isVerified, so a deactivated account could still
+    // receive an OTP here while v1 refused it.
+    if (
+      !user ||
+      !user.isVerified ||
+      !user.isActive ||
+      user.isSuspended ||
+      user.isDeleted
+    ) {
       await this.simulateProcessingDelay();
       throw new UnauthorizedException(
         this.i18nService.translate('auth.INVALID_CREDENTIALS', { lang }),
@@ -281,7 +321,7 @@ export class AuthService {
     userAgent?: string,
   ): Promise<any> {
     const user = await this.usersService.findByEmail(verifyDto.email);
-    if (!user || !user.isVerified || !user.isActive) {
+    if (!user || !user.isVerified) {
       // Log failed OTP verification
       await this.auditLogsService.logAuthEvent(
         undefined,
@@ -296,6 +336,8 @@ export class AuthService {
 
       throw new UnauthorizedException('Invalid credentials');
     }
+
+    this.assertAccountUsable(user);
 
     await this.otpsService.validateOtp(user, verifyDto.otp, OtpType.LOGIN);
     await this.usersService.updateByUserId(user.id, {
@@ -543,9 +585,11 @@ export class AuthService {
       await this.refreshTokensService.validateRefreshToken(refreshToken);
     const user = await this.usersService.findById(tokenEntity.userId);
 
-    if (!user || !user.isVerified || !user.isActive) {
+    if (!user || !user.isVerified) {
       throw new UnauthorizedException('Invalid refresh token');
     }
+
+    this.assertAccountUsable(user);
 
     const payload: JwtPayload = {
       sub: user.id,

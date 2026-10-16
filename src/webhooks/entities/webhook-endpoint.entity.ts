@@ -24,6 +24,21 @@ export class WebhookEndpoint {
   @Column()
   secret: string;
 
+  /**
+   * Previous signing secret, retained only for the grace window after a
+   * rotation so in-flight consumers can still verify deliveries. Null when no
+   * rotation is in progress.
+   */
+  @Column({ type: 'varchar', nullable: true })
+  previousSecret: string | null;
+
+  /**
+   * Timestamp at which `previousSecret` stops being accepted for dual
+   * signature verification. Null when no rotation is in progress.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  previousSecretExpiresAt: Date | null;
+
   @Column('text', { array: true })
   events: string[];
 

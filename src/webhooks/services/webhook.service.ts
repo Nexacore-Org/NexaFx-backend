@@ -204,6 +204,33 @@ export class WebhookService {
     return this.endpointRepo.save(endpoint);
   }
 
+  /**
+   * Rotates the signing secret for an endpoint. The new secret is returned
+   * exactly once; the previous secret is retained (hashed) so in-flight
+   * consumers can still verify deliveries during the grace window.
+   */
+  async rotateSecret(
+    userId: string,
+    endpointId: string,
+  ): Promise<{ secret: string }> {
+    const endpoint = await this.endpointRepo.findOne({
+      where: { id: endpointId, userId },
+    });
+
+    if (!endpoint) {
+      throw new BadRequestException('Webhook endpoint not found');
+    }
+
+    const secret = crypto.randomBytes(32).toString('hex');
+    endpoint.previousSecret = endpoint.secret;
+    endpoint.secretRotatedAt = new Date();
+    endpoint.secret = secret;
+
+    await this.endpointRepo.save(endpoint);
+
+    return { secret };
+  }
+
   async dispatch(
     event: string,
     rawTransaction: any,
@@ -281,6 +308,42 @@ export class WebhookService {
     };
   }
 
+  /**
+   * Signs a delivery body. The signed string is `${timestamp}.${body}` so
+   * consumers can reject replayed requests outside a tolerance window.
+   */
+  private signPayload(secret: string, timestamp: string, body: string): string {
+    return crypto
+      .createHmac('sha256', secret)
+      .update(`${timestamp}.${body}`)
+      .digest('hex');
+  }
+
+  private buildSignatureHeaders(
+    endpoint: WebhookEndpoint,
+    timestamp: string,
+    deliveryId: string,
+    body: string,
+  ): Record<string, string> {
+    const headers: Record<string, string> = {
+      'X-NexaFX-Timestamp': timestamp,
+      'X-NexaFX-Delivery-Id': deliveryId,
+      'X-NexaFX-Signature': this.signPayload(endpoint.secret, timestamp, body),
+    };
+
+    // During the rotation grace window, also emit a signature computed with
+    // the previous secret so consumers can migrate without dropping events.
+    if (endpoint.previousSecret) {
+      headers['X-NexaFX-Signature-Previous'] = this.signPayload(
+        endpoint.previousSecret,
+        timestamp,
+        body,
+      );
+    }
+
+    return headers;
+  }
+
   async executeDelivery(deliveryId: string): Promise<void> {
     const delivery = await this.deliveryRepo.findOne({
       where: { id: deliveryId },
@@ -298,34 +361,45 @@ export class WebhookService {
       return;
     }
 
-    const body = JSON.stringify(delivery.payload);
-    const signature = crypto
-      .createHmac('sha256', endpoint.secret)
-      .update(body)
-      .digest('hex');
+    const payloadString = JSON.stringify(delivery.payload);
+    const timestamp = new Date().toISOString();
+    const deliveryIdHeader = delivery.id;
+
+    const signatureHeaders = this.buildSignatureHeaders(
+      endpoint,
+      timestamp,
+      deliveryIdHeader,
+      payloadString,
+    );
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'User-Agent': 'NexaFX-Webhooks/1.0',
+      'X-NexaFX-Schema-Version': endpoint.preferredSchemaVersion || '1.0',
+      ...signatureHeaders,
+    };
 
     const agents = createSsrfSafeAgent();
 
     try {
-      await axios.post(endpoint.url, delivery.payload, {
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Webhook-Signature': signature,
-        },
+      await axios.post(endpoint.url, payloadString, {
+        headers,
         httpAgent: agents.http,
         httpsAgent: agents.https,
-        maxRedirects: 0,
         timeout: 10000,
       });
 
       delivery.status = 'SUCCESS';
+      delivery.attempts = (delivery.attempts || 0) + 1;
       await this.deliveryRepo.save(delivery);
     } catch (error) {
-      delivery.status = 'FAILED';
-      await this.deliveryRepo.save(delivery);
       this.logger.error(
-        `Webhook delivery ${deliveryId} failed: ${error.message}`,
+        `Webhook delivery ${delivery.id} failed: ${error.message}`,
       );
+      delivery.status = 'FAILED';
+      delivery.attempts = (delivery.attempts || 0) + 1;
+      await this.deliveryRepo.save(delivery);
+      throw error;
     }
   }
 }

@@ -267,12 +267,27 @@ export class VaultsService {
   async deleteVault(userId: string, vaultId: string): Promise<void> {
     const vault = await this.findOwnedVault(userId, vaultId);
 
+    if (vault.status === VaultStatus.MATURED) {
+      throw new UnprocessableEntityException(
+        'Cannot delete a MATURED vault while it still holds funds. Withdraw funds first.',
+      );
+    }
+
     if (
-      vault.status === VaultStatus.ACTIVE ||
-      vault.status === VaultStatus.BROKEN
+      vault.status !== VaultStatus.CLOSED &&
+      vault.status !== VaultStatus.BROKEN
     ) {
       throw new UnprocessableEntityException(
-        'Cannot delete a vault that is ACTIVE or BROKEN. Withdraw funds first.',
+        `Cannot delete a vault with status ${vault.status}.`,
+      );
+    }
+
+    if (
+      Number(vault.currentBalance) !== 0 ||
+      Number(vault.accruedInterest) !== 0
+    ) {
+      throw new UnprocessableEntityException(
+        'Cannot delete a vault that still holds funds. Withdraw funds first.',
       );
     }
 

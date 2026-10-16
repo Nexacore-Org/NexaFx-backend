@@ -4,9 +4,9 @@ import {
   IsOptional,
   IsString,
   Length,
-  Matches,
   MaxLength,
 } from 'class-validator';
+import { IsStellarPublicKey } from '../../common/decorators/is-stellar-public-key.decorator';
 
 export class GenerateWalletDto {
   @ApiPropertyOptional({
@@ -27,9 +27,7 @@ export class ImportWalletDto {
   @IsString()
   @IsNotEmpty()
   @Length(56, 56)
-  @Matches(/^G[A-Z0-9]{55}$/, {
-    message: 'publicKey must be a valid Stellar public key',
-  })
+  @IsStellarPublicKey()
   publicKey: string;
 
   @ApiPropertyOptional({ example: 'Cold storage (watch-only)' })

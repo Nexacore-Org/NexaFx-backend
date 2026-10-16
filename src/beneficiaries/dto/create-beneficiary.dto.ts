@@ -6,9 +6,10 @@ import {
   IsBoolean,
   IsString,
   Length,
-  Matches,
+  ValidateIf,
 } from 'class-validator';
 import { BeneficiaryNetwork } from '../entities/beneficiary.entity';
+import { IsStellarPublicKey } from '../../common/decorators/is-stellar-public-key.decorator';
 
 export class CreateBeneficiaryDto {
   @ApiProperty({ example: 'My Binance Wallet' })
@@ -22,11 +23,15 @@ export class CreateBeneficiaryDto {
   })
   @IsString()
   @IsNotEmpty()
-  @Matches(/^G[A-Z0-9]{55}$/, {
-    message:
-      'walletAddress must be a valid Stellar public key (starts with G, 56 chars)',
-  })
   walletAddress: string;
+
+  @ValidateIf(
+    (dto: CreateBeneficiaryDto) => dto.network !== BeneficiaryNetwork.OTHER,
+  )
+  @IsStellarPublicKey()
+  get stellarWalletAddressForValidation(): string {
+    return this.walletAddress;
+  }
 
   @ApiProperty({ example: 'USDC' })
   @IsString()

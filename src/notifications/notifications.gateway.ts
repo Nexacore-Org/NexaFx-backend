@@ -20,10 +20,8 @@ import { JwtService } from '@nestjs/jwt';
 export class NotificationsGateway
   implements OnGatewayConnection, OnGatewayDisconnect
 {
-  constructor(private readonly jwtService: JwtService) {
-    // Store a reference for static methods
-    (global as any).__notificationsGatewayInstance = this;
-  }
+  constructor(private readonly jwtService: JwtService) {}
+
   @WebSocketServer()
   server: Server;
 
@@ -37,8 +35,10 @@ export class NotificationsGateway
       const token = client.handshake.auth?.token;
       if (!token) throw new Error('Missing token');
       const raw = token.startsWith('Bearer ') ? token.slice(7) : token;
-      const jwtService = new JwtService({ secret: process.env.JWT_SECRET });
-      const payload = await jwtService.verifyAsync(raw);
+      const payload = await this.jwtService.verifyAsync(raw);
+      if (payload.partial_auth || payload.impersonation) {
+        throw new Error('Partial auth or impersonation token not allowed');
+      }
       const userId = payload.sub?.toString();
       if (!userId) throw new Error('Invalid token payload');
 
@@ -75,14 +75,12 @@ export class NotificationsGateway
   }
 
   /** Emit an event to a specific user (all their sockets) */
-  static sendToUser(userId: string, event: string, payload: any) {
+  sendToUser(userId: string, event: string, payload: any) {
     const room = `user:${userId}`;
-    const gateway = (global as any)
-      .__notificationsGatewayInstance as NotificationsGateway;
-    if (gateway && gateway.server) {
-      gateway.server.to(room).emit(event, payload);
+    if (this.server) {
+      this.server.to(room).emit(event, payload);
     } else {
-      console.warn('NotificationsGateway not initialized – cannot emit');
+      this.logger.warn('NotificationsGateway not initialized – cannot emit');
     }
   }
 

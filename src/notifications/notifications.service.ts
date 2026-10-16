@@ -13,6 +13,7 @@ import { User } from '../users/user.entity';
 import { FCMService } from '../firebase/fcm.service';
 import { ConfigService } from '@nestjs/config';
 import { MailService } from '../modules/mail/mail.service';
+import { NotificationsGateway } from './notifications.gateway';
 
 @Injectable()
 export class NotificationsService {
@@ -26,6 +27,7 @@ export class NotificationsService {
     private readonly fcmService: FCMService,
     private readonly configService: ConfigService,
     private readonly mailService: MailService,
+    private readonly notificationsGateway: NotificationsGateway,
   ) {}
 
   async create(dto: CreateNotificationDto): Promise<Notification>;
@@ -44,19 +46,19 @@ export class NotificationsService {
     data?: Record<string, any>,
   ): Promise<Notification> {
     try {
+      let notification: Notification;
       if (typeof userIdOrDto === 'string') {
         const resolvedData = this.resolveActionUrl(
           type as NotificationType,
           data,
         );
-        const notification = this.notificationRepository.create({
+        notification = this.notificationRepository.create({
           userId: userIdOrDto,
           type: type as NotificationType,
           title: title as string,
           body: body as string,
           data: resolvedData,
         });
-        return await this.notificationRepository.save(notification);
       } else {
         const dto = userIdOrDto;
         const deepLink =
@@ -69,15 +71,18 @@ export class NotificationsService {
         const metadata = dto.metadata || {};
         const mergedData = { ...metadata, actionUrl: deepLink };
 
-        const notification = this.notificationRepository.create({
+        notification = this.notificationRepository.create({
           userId: dto.userId,
           type: dto.type,
           title: dto.title,
           body: dto.message || '',
           data: mergedData,
         });
-        return await this.notificationRepository.save(notification);
       }
+
+      const saved = await this.notificationRepository.save(notification);
+      this.emitToUser(saved);
+      return saved;
     } catch (error) {
       this.logger.error('Failed to create notification', error);
       throw new BadRequestException('Failed to create notification');
@@ -169,6 +174,20 @@ export class NotificationsService {
     }
 
     return notification;
+  }
+
+  /**
+   * Emit a newly created notification to the user's real-time socket room.
+   * Failures here must never break the notification creation flow.
+   */
+  private emitToUser(notification: Notification): void {
+    try {
+      this.notificationsGateway.sendToUser(notification.userId, notification);
+    } catch (error) {
+      this.logger.error(
+        `Failed to emit real-time notification for user ${notification.userId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   /**

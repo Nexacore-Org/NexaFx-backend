@@ -23,6 +23,7 @@ import { TwoFactorStatusDto } from './dto/two-factor-status.dto';
 import { RecoverTwoFactorDto } from './dto/recover-two-factor.dto';
 import { AuthService } from '../auth/auth.service';
 import { Public } from '../auth/decorators/public.decorator';
+import { AllowPartialAuth } from '../auth/decorators/allow-partial-auth.decorator';
 
 @ApiTags('Two Factor')
 @ApiBearerAuth('access-token')
@@ -100,6 +101,8 @@ export class TwoFactorController {
 
   @Post('verify')
   @HttpCode(HttpStatus.OK)
+  // Reachable with a PARTIAL_AUTH token: this is the route that exchanges it.
+  @AllowPartialAuth()
   @ApiOperation({
     summary: 'Verify TOTP and exchange PARTIAL_AUTH for full JWT',
   })

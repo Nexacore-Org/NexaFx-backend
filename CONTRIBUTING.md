@@ -154,13 +154,17 @@ All commits **must** follow the [Conventional Commits](https://www.conventionalc
 
 ### Scopes
 
-Use module names as scopes (e.g., `auth`, `transactions`, `currencies`, `common`, `kyc`).
+Scopes are **optional**. A type and description are required; add a scope when it
+makes the change easier to find (`auth`, `transactions`, `currencies`, `common`,
+`kyc`, …). Both `fix(auth): ...` and `fix: ...` are accepted by the commit-lint
+check.
 
 ### Examples
 
 ```bash
 feat(widgets): add widget management module
 fix(auth): correct JWT expiration validation
+fix: correct JWT expiration validation
 docs(contributing): update branch rules
 style(common): format all files with Prettier
 ```

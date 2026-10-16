@@ -15,13 +15,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Calculate PR size
+- name: Calculate PR size
         id: calc_size
         run: |
-          # Calculate total added and removed lines, excluding exempted files
-          # Exemptions: *.md, openapi.json, and anything with "migration" in the path
-          LINES=$(git diff origin/${{ github.base_ref }}...${{ github.event.pull_request.head.sha }} --numstat | awk '!/\.md$/ && !/openapi\.json$/ && !/package-lock\.json$/ && !/migration/ {add+=$1; subs+=$2} END {print add+subs+0}')
-          echo "Total changed lines (excluding exemptions): $LINES"
+          # Count added lines only. Deletions are what reviewers want least to
+          # worry about: a PR that removes dead code can be thousands of lines
+          # yet adds almost nothing, and counting removals made such cleanups
+          # impossible to merge. Exemptions: *.md, openapi.json,
+          # package-lock.json, and anything with "migration" in the path.
+          LINES=$(git diff origin/${{ github.base_ref }}...${{ github.event.pull_request.head.sha }} --numstat | awk '!/\.md$/ && !/openapi\.json$/ && !/package-lock\.json$/ && !/migration/ {add+=$1} END {print add+0}')
+          echo "Total added lines (excluding exemptions): $LINES"
           echo "lines=$LINES" >> $GITHUB_OUTPUT
 
       - name: Comment on PR if size > 500
@@ -33,11 +36,11 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: "⚠️ **Warning**: This PR modifies more than 500 lines of code (current size: ${{ steps.calc_size.outputs.lines }} lines). Please consider breaking it down into smaller PRs to make reviewing easier."
+              body: "⚠️ **Warning**: This PR adds more than 500 lines of code (current size: ${{ steps.calc_size.outputs.lines }} lines). Please consider breaking it up into smaller PRs to make reviewing easier."
             })
 
       - name: Fail if size > 1500
         if: ${{ steps.calc_size.outputs.lines > 1500 }}
         run: |
-          echo "Error: PR size (${{ steps.calc_size.outputs.lines }} lines) exceeds the 1500 lines limit."
+          echo "Error: PR adds ${{ steps.calc_size.outputs.lines }} lines, which exceeds the 1500 lines limit."
           exit 1

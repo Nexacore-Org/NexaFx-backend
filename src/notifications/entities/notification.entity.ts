@@ -44,7 +44,7 @@ export class Notification {
   @Column({ type: 'jsonb', default: {} })
   data: Record<string, any>;
 
-  @Column({ type: 'boolean', default: false })
+  @Column({ type: 'boolean', default: false, name: 'isRead' })
   isRead: boolean;
 
   @Column({ type: 'timestamp', nullable: true })

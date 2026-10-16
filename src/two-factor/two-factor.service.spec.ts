@@ -13,6 +13,8 @@ import { TwoFactorService } from './two-factor.service';
 import { BackupCode } from './entities/backup-code.entity';
 import { UsersService } from '../users/users.service';
 import { EncryptionService } from '../common/services/encryption.service';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { ConfigService } from '@nestjs/config';
 
 jest.mock('speakeasy', () => ({
   generateSecret: jest.fn(),
@@ -76,6 +78,8 @@ describe('TwoFactorService', () => {
         { provide: getRepositoryToken(BackupCode), useValue: repo },
         { provide: UsersService, useValue: usersService },
         { provide: EncryptionService, useValue: encryptionService },
+        { provide: AuditLogsService, useValue: { logAuthEvent: jest.fn() } },
+        { provide: ConfigService, useValue: { get: jest.fn() } },
       ],
     }).compile();
 
@@ -107,8 +111,7 @@ describe('TwoFactorService', () => {
       });
       expect(encryptionService.encrypt).toHaveBeenCalledWith('PLAINSECRET');
       expect(usersService.updateByUserId).toHaveBeenCalledWith('user-1', {
-        twoFactorSecret: 'enc-secret',
-        isTwoFactorEnabled: false,
+        pendingTwoFactorSecret: 'enc-secret',
       });
       expect(qrcode.toDataURL).toHaveBeenCalledWith(
         'otpauth://totp/NexaFX:alice',
@@ -154,15 +157,21 @@ describe('TwoFactorService', () => {
       );
 
       expect(encryptionService.decrypt).toHaveBeenCalledWith('enc-secret');
-      expect(totpVerify).toHaveBeenCalledWith({
-        secret: 'PLAINSECRET',
-        encoding: 'base32',
-        token: '123456',
-        window: 1,
-      });
-      expect(usersService.updateByUserId).toHaveBeenCalledWith('user-1', {
-        isTwoFactorEnabled: true,
-      });
+      expect(totpVerify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          secret: 'PLAINSECRET',
+          encoding: 'base32',
+          token: '123456',
+        }),
+      );
+      expect(usersService.updateByUserId).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({
+          twoFactorSecret: expect.any(String),
+          pendingTwoFactorSecret: null,
+          isTwoFactorEnabled: true,
+        }),
+      );
       expect(repo.delete).toHaveBeenCalledWith({ userId: 'user-1' });
 
       expect(backupCodes).toHaveLength(8);
@@ -237,10 +246,14 @@ describe('TwoFactorService', () => {
 
       await service.disableTwoFactor('user-1', '123456');
 
-      expect(usersService.updateByUserId).toHaveBeenCalledWith('user-1', {
-        isTwoFactorEnabled: false,
-        twoFactorSecret: null,
-      });
+      expect(usersService.updateByUserId).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({
+          isTwoFactorEnabled: false,
+          twoFactorSecret: null,
+          pendingTwoFactorSecret: null,
+        }),
+      );
       expect(repo.delete).toHaveBeenCalledWith({ userId: 'user-1' });
     });
 
@@ -291,15 +304,22 @@ describe('TwoFactorService', () => {
       );
     });
 
-    it('tolerates exactly one step of clock drift (window: 1)', async () => {
+    it('checks the previous, current and next step for clock drift', async () => {
       usersService.findById.mockResolvedValue(enabledUser);
-      totpVerify.mockReturnValue(true);
+      totpVerify.mockReturnValue(false);
 
       await service.verifyTotpCode('user-1', '123456');
 
-      expect(totpVerify).toHaveBeenCalledWith(
-        expect.objectContaining({ window: 1 }),
-      );
+      // Previous, current and next time step, each verified without a window
+      // so the matched step is known.
+      expect(totpVerify).toHaveBeenCalledTimes(3);
+      for (const call of totpVerify.mock.calls) {
+        expect(call[0]).toEqual(expect.objectContaining({ window: 0 }));
+        expect(call[0].epoch).toEqual(expect.any(Number));
+      }
+      const epochs = totpVerify.mock.calls.map((call) => call[0].epoch);
+      expect(epochs[1] - epochs[0]).toBe(30_000);
+      expect(epochs[2] - epochs[1]).toBe(30_000);
     });
 
     it('throws NotFoundException for an unknown user', async () => {
@@ -337,9 +357,10 @@ describe('TwoFactorService', () => {
         where: { userId: 'user-1', consumedAt: IsNull() },
       });
       expect(repo.update).toHaveBeenCalledTimes(1);
-      expect(repo.update).toHaveBeenCalledWith('bc-2', {
-        consumedAt: expect.any(Date),
-      });
+      expect(repo.update).toHaveBeenCalledWith(
+        { id: 'bc-2', consumedAt: IsNull() },
+        { consumedAt: expect.any(Date) },
+      );
     });
 
     it('rejects reuse: a code that is already consumed is not returned by the query', async () => {

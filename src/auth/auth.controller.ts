@@ -100,6 +100,12 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({
+    default: {
+      ttl: 60 * 1000,
+      limit: Number(process.env.THROTTLE_TWO_FACTOR_LIMIT ?? 5),
+    },
+  })
   @Post('verify-2fa')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({

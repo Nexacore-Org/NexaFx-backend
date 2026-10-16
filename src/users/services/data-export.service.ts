@@ -1,10 +1,15 @@
-import { Injectable, Logger, ConflictException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
 import { createWriteStream } from 'fs';
-const archiver = {} as any;
+import * as archiver from 'archiver';
 import { format } from 'date-fns';
 import { Transaction } from '../../transactions/entities/transaction.entity';
 import { Notification } from '../../notifications/entities/notification.entity';
@@ -60,9 +65,12 @@ export class DataExportService {
   }
 
   async requestDataExport(userId: string): Promise<DataRequest> {
+    // Only EXPORT requests block an export. Without the type filter a pending
+    // deletion request made every export request fail with a 409.
     const existingRequest = await this.dataRequestRepository.findOne({
       where: {
         userId,
+        type: DataRequestType.EXPORT,
         status: In([DataRequestStatus.PENDING, DataRequestStatus.PROCESSING]),
       },
     });
@@ -124,7 +132,7 @@ export class DataExportService {
       const expiresAt = new Date(
         Date.now() + this.EXPORT_EXPIRY_HOURS * 60 * 60 * 1000,
       );
-      const downloadUrl = `/api/data-exports/download/${requestId}`;
+      const downloadUrl = `/v1/users/me/data-export/${requestId}/download`;
 
       request.status = DataRequestStatus.COMPLETE;
       request.completedAt = new Date();
@@ -148,17 +156,14 @@ export class DataExportService {
       );
 
       try {
-        const auditLogRepository = this.auditLogRepository;
-        await auditLogRepository.manager.query(
-          'INSERT INTO notifications (id, "userId", type, title, message, "createdAt", "updatedAt", status) VALUES (gen_random_uuid(), $1, $2, $3, $4, NOW(), NOW(), $5)',
-          [
-            userId,
-            'SYSTEM',
-            'Data Export Failed',
-            'Your data export request failed. Please try again later.',
-            'UNREAD',
-          ],
-        );
+        // The raw INSERT named message and status columns that the
+        // notifications table does not have, so the fallback failed too.
+        await this.notificationRepository.create({
+          userId,
+          type: NotificationType.SYSTEM,
+          title: 'Data Export Failed',
+          body: 'Your data export request failed. Please try again later.',
+        });
       } catch (notifyError) {
         this.logger.error('Failed to send failure notification:', notifyError);
       }
@@ -396,6 +401,80 @@ export class DataExportService {
       where: { userId },
       order: { requestedAt: 'DESC' },
     });
+  }
+
+  /**
+   * Resolves the archive for a download request after checking ownership and
+   * expiry. Returns null when the request does not belong to the user, is not
+   * complete, has expired, or the file is no longer on disk.
+   */
+  async getExportFilePath(
+    requestId: string,
+    userId: string,
+  ): Promise<string | null> {
+    const request = await this.dataRequestRepository.findOne({
+      where: { id: requestId, userId, type: DataRequestType.EXPORT },
+    });
+
+    if (!request || request.status !== DataRequestStatus.COMPLETE) {
+      return null;
+    }
+
+    if (request.expiresAt && new Date() > request.expiresAt) {
+      return null;
+    }
+
+    // The archive name carries a timestamp, so match the per-user prefix and
+    // take the newest match.
+    const safeUserId = userId.replace(/[^a-zA-Z0-9-]/g, '');
+    const prefix = `nexafx-export_${safeUserId}_`;
+
+    if (!fs.existsSync(this.EXPORT_DIR)) {
+      return null;
+    }
+
+    const candidate = fs
+      .readdirSync(this.EXPORT_DIR)
+      .filter((entry) => entry.startsWith(prefix) && entry.endsWith('.zip'))
+      .sort()
+      .pop();
+
+    if (!candidate) {
+      return null;
+    }
+
+    const zipPath = path.join(this.EXPORT_DIR, candidate);
+    return fs.existsSync(zipPath) ? zipPath : null;
+  }
+
+  /**
+   * Removes expired archives. The ZIPs in the export directory were written
+   * once and never cleaned, so they accumulated for the lifetime of the
+   * container.
+   */
+  @Cron(CronExpression.EVERY_HOUR)
+  cleanupExpiredExports(): { removed: number } {
+    let removed = 0;
+
+    if (!fs.existsSync(this.EXPORT_DIR)) {
+      return { removed };
+    }
+
+    const cutoff = Date.now() - this.EXPORT_EXPIRY_HOURS * 60 * 60 * 1000;
+    for (const entry of fs.readdirSync(this.EXPORT_DIR)) {
+      if (!entry.endsWith('.zip')) continue;
+      const filePath = path.join(this.EXPORT_DIR, entry);
+      try {
+        if (fs.statSync(filePath).mtimeMs < cutoff) {
+          fs.unlinkSync(filePath);
+          removed += 1;
+        }
+      } catch {
+        // A file we cannot stat or delete is not worth failing the sweep over.
+      }
+    }
+
+    return { removed };
   }
 
   async getRequestById(requestId: string): Promise<DataRequest | null> {

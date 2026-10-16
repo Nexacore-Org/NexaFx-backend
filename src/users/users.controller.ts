@@ -11,6 +11,9 @@ import {
   UseInterceptors,
   UploadedFile,
   Version,
+  NotFoundException,
+  Param,
+  Res,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -31,6 +34,8 @@ import {
   UpdateNotificationPreferencesDto,
 } from './dto';
 import { DataExportService } from './services/data-export.service';
+import * as path from 'path';
+import type { Response } from 'express';
 import { AccountDeletionService } from './services/account-deletion.service';
 import { TransactionLimitService } from '../transactions/services/transaction-limit.service';
 
@@ -111,6 +116,33 @@ export class UsersController {
       req.user.userId,
     );
     return { requests };
+  }
+
+  @Get('me/data-export/:requestId/download')
+  @ApiOperation({ summary: 'Download a completed data export archive' })
+  @ApiResponse({ status: 200, description: 'ZIP archive stream' })
+  @ApiResponse({ status: 404, description: 'Unknown, incomplete or expired export' })
+  async downloadDataExport(
+    @Request() req: { user: { userId: string } },
+    @Param('requestId') requestId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    // The stored downloadUrl pointed at a route that did not exist.
+    const zipPath = await this.dataExportService.getExportFilePath(
+      requestId,
+      req.user.userId,
+    );
+
+    if (!zipPath) {
+      throw new NotFoundException('Export not found or expired');
+    }
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${path.basename(zipPath)}"`,
+    );
+    res.sendFile(zipPath);
   }
 
   @Post('me/delete-account')

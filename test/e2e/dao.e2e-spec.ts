@@ -14,6 +14,11 @@ import { ProposalStatus } from '../../src/dao/enums/proposal-status.enum';
  * (which JwtStrategy never returns) into ProposalService, so both
  * POST /dao/proposals and POST /dao/proposals/:id/vote crashed with a
  * TypeError (500). The service now loads the User by userId itself.
+ *
+ * Regression guard for #1306: votes cast before `votingStartAt` must be
+ * rejected with 400, and a duplicate vote for the same proposal must be
+ * rejected with 409 (Conflict) rather than surfacing the unique-index
+ * violation as a 500.
  */
 describe('DAO governance (e2e)', () => {
   let app: INestApplication;
@@ -120,6 +125,50 @@ describe('DAO governance (e2e)', () => {
         .expect(201);
 
       expect(res.body).toBeDefined();
+    });
+
+    it('rejects a vote cast before votingStartAt (400)', async () => {
+      const futureStart = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      const created = await request(app.getHttpServer())
+        .post('/dao/proposals')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          title: 'Future proposal',
+          description: 'Voting has not opened yet.',
+          status: ProposalStatus.ACTIVE,
+          votingStartAt: futureStart,
+        })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post(`/dao/proposals/${created.body.id}/vote`)
+        .set('Authorization', `Bearer ${voterToken}`)
+        .send({ choice: 'for' })
+        .expect(400);
+    });
+
+    it('rejects a duplicate vote for the same proposal (409)', async () => {
+      const created = await request(app.getHttpServer())
+        .post('/dao/proposals')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          title: 'Duplicate vote guard',
+          description: 'Only one vote per voter is allowed.',
+          status: ProposalStatus.ACTIVE,
+        })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post(`/dao/proposals/${created.body.id}/vote`)
+        .set('Authorization', `Bearer ${voterToken}`)
+        .send({ choice: 'for' })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post(`/dao/proposals/${created.body.id}/vote`)
+        .set('Authorization', `Bearer ${voterToken}`)
+        .send({ choice: 'against' })
+        .expect(409);
     });
   });
 });

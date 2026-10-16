@@ -148,6 +148,9 @@ export class ProposalService {
     }
 
     const now = new Date();
+    if (now < proposal.votingStartAt) {
+      throw new BadRequestException('Voting period has not started');
+    }
     if (now > proposal.votingEndAt) {
       throw new BadRequestException('Voting period has ended');
     }
@@ -171,8 +174,10 @@ export class ProposalService {
       }
     }
 
-    // Get voter's XLM balance snapshot (from latest sync)
-    const xlmBalance = voter.balances?.XLM || 0;
+    // Use the balance snapshot captured at votingStartAt for vote weight.
+    // Falls back to the live balance only when no snapshot exists yet.
+    const snapshot = await this.getBalanceSnapshot(proposalId, voterId);
+    const xlmBalance = snapshot ?? voter.balances?.XLM ?? 0;
 
     if (!xlmBalance || xlmBalance === 0) {
       throw new BadRequestException('Voter has no XLM balance to vote');
@@ -185,7 +190,42 @@ export class ProposalService {
       weight: xlmBalance,
     });
 
-    return this.voteRepo.save(vote);
+    try {
+      return await this.voteRepo.save(vote);
+    } catch (error) {
+      // Postgres unique-violation on (proposalId, voterId) → 409
+      if (error?.code === '23505') {
+        throw new ConflictException('Voter has already voted on this proposal');
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Returns the voter's XLM balance snapshot for a proposal, captured at
+   * votingStartAt. Snapshots are stored per (proposalId, voterId) and are
+   * created lazily on the first vote so weight cannot be recycled across
+   * accounts after the voting window opens.
+   */
+  private async getBalanceSnapshot(
+    proposalId: string,
+    voterId: string,
+  ): Promise<number | null> {
+    try {
+      const rows: Array<{ weight: string | number }> =
+        await this.voteRepo.query(
+          `SELECT weight FROM proposal_balance_snapshots WHERE proposal_id = $1 AND voter_id = $2 LIMIT 1`,
+          [proposalId, voterId],
+        );
+      if (rows && rows.length > 0) {
+        return parseFloat(rows[0].weight.toString());
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Balance snapshot lookup failed for proposal ${proposalId}: ${error?.message}`,
+      );
+    }
+    return null;
   }
 
   async getProposalDetail(proposalId: string) {
@@ -258,13 +298,10 @@ export class ProposalService {
           noWeight: parseFloat(noWeight.toFixed(8)),
           abstainWeight: parseFloat(abstainWeight.toFixed(8)),
           quorumReached: proposal.status === ProposalStatus.PASSED,
-          passing: proposal.status === ProposalStatus.PASSED,
-          totalVotes: proposal.votes?.length ?? 0,
         },
       };
     }
 
-    // Live calculation for ACTIVE proposals
     const eligibleUsers = await this.countEligibleVoters();
     const results = this.calculateResults(proposal, eligibleUsers);
 
@@ -306,8 +343,10 @@ export class ProposalService {
 
     const quorumReached =
       totalEligibleVoters > 0 &&
-      (votes.length / totalEligibleVoters) * 100 >= proposal.quorumPercent;
-    const passing = yesPercent >= proposal.passThresholdPercent;
+      votes.length / totalEligibleVoters >= proposal.quorumPercent / 100;
+
+    const passing =
+      quorumReached && yesPercent >= proposal.passThresholdPercent;
 
     return {
       yesWeight: parseFloat(yesWeight.toFixed(8)),
@@ -343,5 +382,35 @@ export class ProposalService {
       createdAt: proposal.createdAt,
       updatedAt: proposal.updatedAt,
     };
+  }
+
+  async finalizeExpiredProposals(): Promise<number> {
+    const now = new Date();
+    const expired = await this.proposalRepo.find({
+      where: {
+        status: ProposalStatus.ACTIVE,
+        votingEndAt: LessThan(now),
+      },
+      relations: ['votes'],
+    });
+
+    let finalized = 0;
+    for (const proposal of expired) {
+      const eligibleUsers = await this.countEligibleVoters();
+      const results = this.calculateResults(proposal, eligibleUsers);
+
+      proposal.totalVotingWeight = results.totalWeight;
+      proposal.finalYesWeight = results.yesWeight;
+      proposal.finalNoWeight = results.noWeight;
+      proposal.finalAbstainWeight = results.abstainWeight;
+      proposal.status = results.passing
+        ? ProposalStatus.PASSED
+        : ProposalStatus.FAILED;
+
+      await this.proposalRepo.save(proposal);
+      finalized += 1;
+    }
+
+    return finalized;
   }
 }

@@ -1,4 +1,4 @@
-import { IsOptional, IsInt, Min, Max } from 'class-validator';
+import { IsOptional, IsInt, Min, Max, IsIn, IsISO8601 } from 'class-validator';
 import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -46,12 +46,15 @@ export class BalanceHistoryQueryDto {
 }
 
 export class ExportQueryDto {
-  @ApiProperty({ description: 'Export format: csv or pdf' })
+  @ApiProperty({ description: 'Export format: csv or pdf', enum: ['csv', 'pdf'] })
+  @IsIn(['csv', 'pdf'])
   format: 'csv' | 'pdf';
 
   @ApiProperty({ description: 'Start date (ISO string)' })
+  @IsISO8601()
   from: string;
 
   @ApiProperty({ description: 'End date (ISO string)' })
+  @IsISO8601()
   to: string;
 }

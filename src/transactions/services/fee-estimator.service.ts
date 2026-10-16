@@ -167,7 +167,7 @@ export class FeeEstimatorService {
     const fromCurrency = params.fromCurrency.toUpperCase();
     const toCurrency = params.toCurrency.toUpperCase();
 
-    const rateResponse = await this.exchangeRatesService.getRate(
+    const rateResponse = await this.exchangeRatesService.getFreshRate(
       fromCurrency,
       toCurrency,
     );

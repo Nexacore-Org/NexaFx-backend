@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { CurrenciesService } from '../currencies/currencies.service';
@@ -29,6 +30,7 @@ export interface ExchangeRateResponseDto {
 @Injectable()
 export class ExchangeRatesService {
   private readonly logger = new Logger(ExchangeRatesService.name);
+  private readonly maxStaleAgeMs: number;
 
   private readonly rateUpdatesSubject = new Subject<{
     from: string;
@@ -47,10 +49,23 @@ export class ExchangeRatesService {
   constructor(
     private readonly currenciesService: CurrenciesService,
     private readonly providerClient: ExchangeRatesProviderClient,
+    private readonly configService: ConfigService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     @InjectRepository(ExchangeRateSnapshot)
     private readonly snapshotRepository: Repository<ExchangeRateSnapshot>,
-  ) {}
+  ) {
+    const maxStaleAgeSeconds = Number(
+      this.configService.get<string | number>(
+        'EXCHANGE_RATES_MAX_STALE_AGE_SECONDS',
+      ) ?? 300,
+    );
+    if (!Number.isFinite(maxStaleAgeSeconds) || maxStaleAgeSeconds < 0) {
+      throw new Error(
+        'EXCHANGE_RATES_MAX_STALE_AGE_SECONDS must be a non-negative number',
+      );
+    }
+    this.maxStaleAgeMs = maxStaleAgeSeconds * 1000;
+  }
 
   /**
    * Validate a currency pair (both currencies must be valid)
@@ -81,9 +96,16 @@ export class ExchangeRatesService {
     if (cachedEntry) {
       const now = Date.now();
       const expiresAtMs = new Date(cachedEntry.expiresAt).getTime();
+      const cachedAtMs = new Date(cachedEntry.cachedAt).getTime();
+      const cachedAgeMs = now - cachedAtMs;
 
       // Check if cache is still valid (60 seconds)
-      if (now < expiresAtMs) {
+      if (
+        now < expiresAtMs &&
+        Number.isFinite(cachedAtMs) &&
+        cachedAgeMs >= 0 &&
+        cachedAgeMs <= this.maxStaleAgeMs
+      ) {
         return {
           from: cachedEntry.from,
           to: cachedEntry.to,
@@ -153,6 +175,18 @@ export class ExchangeRatesService {
 
       // Attempt cached lookup for stale fallback
       if (cachedEntry) {
+        const cachedAtMs = new Date(cachedEntry.cachedAt).getTime();
+        const staleAgeMs = Date.now() - cachedAtMs;
+        if (
+          !Number.isFinite(cachedAtMs) ||
+          staleAgeMs < 0 ||
+          staleAgeMs > this.maxStaleAgeMs
+        ) {
+          throw new ServiceUnavailableException(
+            `Cached exchange rate for ${fromCode}->${toCode} is older than the maximum permitted age`,
+          );
+        }
+
         return {
           from: cachedEntry.from,
           to: cachedEntry.to,
@@ -170,6 +204,22 @@ export class ExchangeRatesService {
         `Exchange rate provider is currently unavailable for pair ${fromCode}->${toCode}`,
       );
     }
+  }
+
+  /**
+   * Fetch a rate that is safe to use for a financial operation.
+   */
+  async getFreshRate(
+    from: string,
+    to: string,
+  ): Promise<ExchangeRateResponseDto> {
+    const rate = await this.getRate(from, to);
+    if (rate.stale) {
+      throw new ServiceUnavailableException(
+        `A fresh exchange rate is required for ${from}->${to}`,
+      );
+    }
+    return rate;
   }
 
   /**

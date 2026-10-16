@@ -7,7 +7,7 @@ import {
 import { Repository, In } from 'typeorm';
 import { Notification, NotificationType } from './entities/notification.entity';
 import { CreateNotificationDto } from './dto/create-notification.dto';
-import { resolveDeepLink } from './deep-links.registry';
+import { resolveDeepLink, buildFcmData } from './deep-links.registry';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from '../users/user.entity';
 import { FCMService } from '../firebase/fcm.service';
@@ -45,12 +45,16 @@ export class NotificationsService {
   ): Promise<Notification> {
     try {
       if (typeof userIdOrDto === 'string') {
+        const resolvedData = this.resolveActionUrl(
+          type as NotificationType,
+          data,
+        );
         const notification = this.notificationRepository.create({
           userId: userIdOrDto,
           type: type as NotificationType,
           title: title as string,
           body: body as string,
-          data: data || {},
+          data: resolvedData,
         });
         return await this.notificationRepository.save(notification);
       } else {
@@ -78,6 +82,33 @@ export class NotificationsService {
       this.logger.error('Failed to create notification', error);
       throw new BadRequestException('Failed to create notification');
     }
+  }
+
+  /**
+   * Resolve a deep link for a notification type + data payload and store it
+   * under data.actionUrl so clients (and FCM) can navigate to the right screen.
+   */
+  private resolveActionUrl(
+    type: NotificationType,
+    data?: Record<string, any>,
+  ): Record<string, any> {
+    const base = data ? { ...data } : {};
+    if (base.actionUrl) {
+      return base;
+    }
+
+    const resourceId =
+      base.transactionId ?? base.resourceId ?? base.relatedId ?? undefined;
+
+    const actionUrl = resolveDeepLink(type, {
+      notificationId: base.notificationId ?? '',
+      resourceId,
+    });
+
+    if (actionUrl) {
+      base.actionUrl = actionUrl;
+    }
+    return base;
   }
 
   async dispatch(
@@ -118,7 +149,12 @@ export class NotificationsService {
 
       // 3. Send FCM push if push preference is enabled (opt-in based on user preferences)
       if (prefs.push === true) {
-        await this.fcmService.sendPush(userId, title, body, data);
+        const notificationData = (notification.data || {}) as Record<
+          string,
+          any
+        >;
+        const fcmData = buildFcmData(type, notificationData);
+        await this.fcmService.sendPush(userId, title, body, fcmData);
       }
 
       // 4. Send email if email preference is enabled (opt-in based on user preferences)
@@ -248,7 +284,6 @@ export class NotificationsService {
         `,
         text: body,
       });
-      this.logger.log(`Email sent successfully to ${to}`);
     } catch (error) {
       this.logger.error(
         `Failed to send email to ${to}: ${error instanceof Error ? error.message : String(error)}`,

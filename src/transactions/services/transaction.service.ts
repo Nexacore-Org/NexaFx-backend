@@ -1033,7 +1033,9 @@ export class TransactionsService {
       );
     }
 
-    const isAdmin = requestingUserRole === UserRole.ADMIN;
+    const isAdmin =
+      requestingUserRole === UserRole.ADMIN ||
+      requestingUserRole === UserRole.SUPER_ADMIN;
     if (
       requestingUserId &&
       !isAdmin &&
@@ -1044,11 +1046,12 @@ export class TransactionsService {
       );
     }
 
-    if (
-      requestingUserRole &&
-      !isAdmin &&
-      transaction.status !== TransactionStatus.PENDING
-    ) {
+    // Unconditional for interactive callers: the old guard only ran when a
+    // role was passed, and the controller passed undefined, so an already
+    // verified transaction could be re-verified (and re-credited) forever.
+    // The internal scheduler passes requestingUserId 'system' and is exempt.
+    const isSystemCaller = requestingUserId === 'system';
+    if (!isAdmin && !isSystemCaller && transaction.status !== TransactionStatus.PENDING) {
       throw new BadRequestException(
         `Transaction is already ${transaction.status.toLowerCase()} and cannot be re-verified`,
       );
@@ -1073,7 +1076,15 @@ export class TransactionsService {
         );
         await this.redisService.delete('admin_stats');
 
-        if (transaction.type === TransactionType.DEPOSIT) {
+        // Claim the transition atomically: only the caller that actually moved
+        // the row out of PENDING credits the balance, so repeated or concurrent
+        // verify calls cannot inflate it.
+        const claimed = await this.transactionRepository.update(
+          { id: transactionId, status: TransactionStatus.PENDING },
+          { status: TransactionStatus.SUCCESS },
+        );
+
+        if (transaction.type === TransactionType.DEPOSIT && (claimed.affected ?? 0) === 1) {
           await this.updateUserBalance(
             transaction.userId,
             transaction.currency,

@@ -51,6 +51,27 @@ export function resolveDeepLink(
   return builder ? builder(ctx) : `${SCHEME}home`;
 }
 
+/**
+ * Resolve a deep link from a notification type plus a loosely-typed data bag.
+ * Accepts either `transactionId` or `resourceId` so server-generated
+ * notifications (reconciliation, rate alerts, referrals) can be navigated to
+ * without callers having to know the registry's context shape.
+ */
+export function resolveDeepLinkFromData(
+  type: NotificationType,
+  data: Record<string, any> | undefined,
+  notificationId: string,
+): string {
+  const resourceId =
+    data?.resourceId ?? data?.transactionId ?? undefined;
+  return resolveDeepLink(type, {
+    notificationId,
+    resourceId: resourceId != null ? String(resourceId) : undefined,
+    resourceType: data?.resourceType,
+    actionType: data?.actionType,
+  });
+}
+
 export function buildFcmData(
   type: NotificationType,
   ctx: DeepLinkContext,

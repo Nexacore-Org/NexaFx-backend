@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { createHmac, timingSafeEqual } from 'crypto';
+import { createHmac, hkdfSync, timingSafeEqual } from 'crypto';
 import { Repository } from 'typeorm';
 import { NotificationType } from '../enum/notificationType.enum';
 import {
@@ -21,6 +21,9 @@ import { NotificationPreferenceUpdateDto } from '../dto/notification-preference.
 const NON_DISABLEABLE_TYPES = new Set<NotificationType>([
   NotificationType.TRANSACTION,
 ]);
+
+// Unsubscribe links are bearer credentials, so they must not live forever.
+const UNSUBSCRIBE_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class NotificationPreferenceService {
@@ -139,7 +142,8 @@ export class NotificationPreferenceService {
     userId: string,
     notificationType: NotificationType,
   ): string {
-    const body = `${userId}:${notificationType}`;
+    const issuedAt = Date.now();
+    const body = `${userId}:${notificationType}:${issuedAt}`;
     const signature = this.sign(body);
     return Buffer.from(`${body}:${signature}`).toString('base64url');
   }
@@ -176,16 +180,23 @@ export class NotificationPreferenceService {
     }
 
     const parts = decoded.split(':');
-    if (parts.length !== 3) {
+    if (parts.length !== 4) {
       throw new ForbiddenException('Invalid unsubscribe token');
     }
 
-    const [userId, notificationType, signature] = parts;
+    const [userId, notificationType, issuedAtRaw, signature] = parts;
     if (!Object.values(NotificationType).includes(notificationType as any)) {
       throw new ForbiddenException('Invalid unsubscribe token');
     }
 
-    const expected = this.sign(`${userId}:${notificationType}`);
+    const issuedAt = Number(issuedAtRaw);
+    if (!Number.isFinite(issuedAt) || issuedAt <= 0) {
+      throw new ForbiddenException('Invalid unsubscribe token');
+    }
+
+    const expected = this.sign(
+      `${userId}:${notificationType}:${issuedAtRaw}`,
+    );
     const expectedBuffer = Buffer.from(expected);
     const actualBuffer = Buffer.from(signature);
 
@@ -196,6 +207,10 @@ export class NotificationPreferenceService {
       throw new ForbiddenException('Invalid unsubscribe token');
     }
 
+    if (Date.now() - issuedAt > UNSUBSCRIBE_TOKEN_TTL_MS) {
+      throw new ForbiddenException('Unsubscribe token has expired');
+    }
+
     return {
       userId,
       notificationType: notificationType as NotificationType,
@@ -203,11 +218,24 @@ export class NotificationPreferenceService {
   }
 
   private sign(payload: string): string {
-    const secret = this.configService.get<string>('JWT_SECRET');
-    if (!secret) {
+    return createHmac('sha256', this.getSigningSecret()).update(payload).digest('hex');
+  }
+
+  private getSigningSecret(): string {
+    const dedicated = this.configService.get<string>('UNSUBSCRIBE_SECRET');
+    if (dedicated) {
+      return dedicated;
+    }
+
+    const jwtSecret = this.configService.get<string>('JWT_SECRET');
+    if (!jwtSecret) {
       throw new BadRequestException('JWT_SECRET is required');
     }
 
-    return createHmac('sha256', secret).update(payload).digest('hex');
+    // Derive a purpose-bound key so the JWT signing key is never reused
+    // verbatim for unsubscribe tokens.
+    return Buffer.from(
+      hkdfSync('sha256', jwtSecret, 'unsubscribe-token', 'nexafx-unsubscribe', 32),
+    ).toString('hex');
   }
 }

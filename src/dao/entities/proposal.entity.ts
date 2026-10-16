@@ -9,6 +9,13 @@ import {
 } from 'typeorm';
 import { Vote } from './vote.entity';
 
+export enum OnChainStatus {
+  PENDING = 'PENDING',
+  SUBMITTED = 'SUBMITTED',
+  SUCCESS = 'SUCCESS',
+  FAILED = 'FAILED',
+}
+
 export enum ProposalStatus {
   ACTIVE = 'ACTIVE',
   PASSED = 'PASSED',
@@ -76,4 +83,14 @@ export class Proposal {
 
   @UpdateDateColumn({ type: 'timestamp with time zone' })
   updatedAt: Date;
+
+  @Column({
+    type: 'enum',
+    enum: OnChainStatus,
+    default: OnChainStatus.PENDING,
+  })
+  onChainStatus: OnChainStatus;
+
+  @Column({ nullable: true })
+  onChainTxHash?: string;
 }

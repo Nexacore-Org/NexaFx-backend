@@ -2,6 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../../src/app.module';
+import { StellarService } from '../../src/modules/stellar/stellar.service';
 import { createTestApp } from '../helpers/app.helper';
 import {
   truncateAll,
@@ -204,6 +205,31 @@ describe('Transactions E2E Tests', () => {
         })
         .expect(400);
     });
+  });
+
+  it('returns pending deposit instructions without sending platform funds', async () => {
+    const sendPaymentSpy = jest.spyOn(
+      app.get(StellarService),
+      'sendPayment',
+    );
+
+    try {
+      const response = await request(app.getHttpServer())
+        .post('/v1/transactions/deposit')
+        .set('Authorization', `Bearer ${kycApprovedUserToken}`)
+        .send({
+          amount: '100',
+          currency: 'USD',
+        })
+        .expect(201);
+
+      expect(response.body.status).toBe('PENDING');
+      expect(response.body.depositAddress).toEqual(expect.any(String));
+      expect(response.body.depositMemo).toMatch(/^[a-f0-9]{28}$/);
+      expect(sendPaymentSpy).not.toHaveBeenCalled();
+    } finally {
+      sendPaymentSpy.mockRestore();
+    }
   });
 
   describe('POST /transactions/withdraw', () => {

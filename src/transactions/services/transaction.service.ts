@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/require-await */
 import { Operation, Asset } from 'stellar-sdk';
+import { randomBytes } from 'crypto';
 import {
   Injectable,
   NotFoundException,
@@ -28,6 +29,7 @@ import {
 import { NotificationsService } from '../../notifications/notifications.service';
 import { NotificationType } from '../../notifications/entities/notification.entity';
 import { CurrenciesService } from '../../currencies/currencies.service';
+import { Currency } from '../../currencies/currency.entity';
 import { CurrencyPairService } from '../../currencies/services/currency-pair.service';
 import { ExchangeRatesService } from '../../exchange-rates/exchange-rates.service';
 import { StellarService } from '../../modules/stellar/stellar.service';
@@ -83,6 +85,11 @@ function toError(err: unknown): Error {
 interface StellarSubmitResult {
   hash: string;
 }
+
+type DepositTransaction = Transaction & {
+  depositAddress: string;
+  depositMemo: string;
+};
 
 function isStellarSubmitResult(value: unknown): value is StellarSubmitResult {
   return (
@@ -200,12 +207,29 @@ export class TransactionsService {
     createDepositDto: CreateDepositDto,
     ipAddress?: string,
     userAgent?: string,
-  ): Promise<Transaction> {
-    const { amount, currency, sourceAddress } = createDepositDto;
+  ): Promise<DepositTransaction> {
+    const { amount, currency } = createDepositDto;
 
     this.logger.log(
       `Creating deposit for user ${userId}: ${amount} ${currency}`,
     );
+
+    let currencyData: Currency;
+    try {
+      currencyData = await this.currenciesService.getCurrency(currency);
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw new BadRequestException(
+          `Currency ${currency} is not supported or inactive`,
+        );
+      }
+      throw error;
+    }
+    if (!currencyData.isActive) {
+      throw new BadRequestException(
+        `Currency ${currency} is not supported or inactive`,
+      );
+    }
 
     if (this.limitsService) {
       await this.limitsService.checkLimit(
@@ -216,13 +240,6 @@ export class TransactionsService {
       );
     } else {
       await this.transactionLimitService.check(userId, amount, currency);
-    }
-
-    const currencyData = await this.currenciesService.findOne(currency);
-    if (!currencyData || !currencyData.isActive) {
-      throw new BadRequestException(
-        `Currency ${currency} is not supported or inactive`,
-      );
     }
 
     let rate: string;
@@ -252,6 +269,13 @@ export class TransactionsService {
           amount,
         )) || { feeAmount: 0, feeCurrency: currency, feeType: FeeType.FLAT };
 
+    const depositAddress = await this.getUserStellarAddress(
+      userId,
+      createDepositDto.walletId,
+      true,
+    );
+    const depositMemo = randomBytes(14).toString('hex');
+
     const transaction = this.transactionRepository.create({
       userId,
       type: TransactionType.DEPOSIT,
@@ -262,6 +286,10 @@ export class TransactionsService {
       feeCurrency: fee.feeCurrency,
       status: TransactionStatus.PENDING,
       counterpartyMemo: createDepositDto.memo ?? null,
+      metadata: {
+        depositAddress,
+        depositMemo,
+      },
     });
 
     try {
@@ -275,58 +303,15 @@ export class TransactionsService {
           amount: transaction.amount,
           currency: transaction.currency,
           feeAmount: fee.feeAmount,
-          sourceAddress,
+          depositAddress,
+          depositMemo,
           ip: ipAddress,
           device: userAgent,
         },
       );
 
-      const destinationAddress = await this.getUserStellarAddress(
-        userId,
-        createDepositDto.walletId,
-      );
-
-      const paymentOperation = Operation.payment({
-        destination: destinationAddress,
-        asset: Asset.native(),
-        amount: amount.toString(),
-      });
-
-      // Use counterpartyMemo on Stellar if provided (truncated to 28 bytes)
-      const stellarMemo = createDepositDto.memo
-        ? truncateMemoTo28Bytes(createDepositDto.memo)
-        : `DEPOSIT-${transaction.id}`;
-
-      const stellarTx = await this.stellarService.createTransaction({
-        sourcePublicKey: sourceAddress,
-        operations: [paymentOperation],
-        memo: stellarMemo,
-      });
-
-      const secretKey = await this.getStellarSecretKey();
-      const paymentResult = await this.stellarService.sendPayment(
-        secretKey,
-        destinationAddress,
-        amount.toString(),
-        `DEPOSIT-${transaction.id}`,
-        userId,
-      );
-
-      transaction.txHash = paymentResult.hash;
-      transaction.stellarTxHash = paymentResult.hash;
-      await this.transactionRepository.save(transaction);
-
-      try {
-        await this.referralsService.processReferralReward(userId);
-      } catch (referralError) {
-        const error = toError(referralError);
-        this.logger.warn(
-          `Referral reward processing failed for user ${userId}: ${error.message}`,
-        );
-      }
-
       this.logger.log(
-        `Deposit transaction created successfully: ${transaction.id}`,
+        `Deposit instructions created successfully: ${transaction.id}`,
       );
 
       this.autoAssignCategory(transaction).catch((e) =>
@@ -335,7 +320,11 @@ export class TransactionsService {
         ),
       );
 
-      return transaction;
+      return {
+        ...transaction,
+        depositAddress,
+        depositMemo,
+      };
     } catch (err) {
       const error = toError(err);
       this.logger.error(`Failed to create deposit transaction`, error);
@@ -414,8 +403,18 @@ export class TransactionsService {
     }
     // ── End resolve destination address ─────────────────────────────────────
 
-    const currencyData = await this.currenciesService.findOne(currency);
-    if (!currencyData || !currencyData.isActive) {
+    let currencyData: Currency;
+    try {
+      currencyData = await this.currenciesService.getCurrency(currency);
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw new BadRequestException(
+          `Currency ${currency} is not supported or inactive`,
+        );
+      }
+      throw error;
+    }
+    if (!currencyData.isActive) {
       throw new BadRequestException(
         `Currency ${currency} is not supported or inactive`,
       );
@@ -1027,12 +1026,6 @@ export class TransactionsService {
       throw new NotFoundException('Transaction not found');
     }
 
-    if (!transaction.txHash) {
-      throw new BadRequestException(
-        'Transaction does not have a blockchain hash yet',
-      );
-    }
-
     const isAdmin = requestingUserRole === UserRole.ADMIN;
     if (
       requestingUserId &&
@@ -1042,6 +1035,34 @@ export class TransactionsService {
       throw new ForbiddenException(
         'You do not have permission to verify this transaction',
       );
+    }
+
+    if (!transaction.txHash) {
+      if (
+        transaction.type !== TransactionType.DEPOSIT ||
+        transaction.status !== TransactionStatus.PENDING ||
+        !transaction.metadata?.depositAddress ||
+        !transaction.metadata?.depositMemo
+      ) {
+        throw new BadRequestException(
+          'Transaction does not have a blockchain hash yet',
+        );
+      }
+
+      const inboundPayment = await this.stellarService.findIncomingPayment({
+        address: transaction.metadata.depositAddress,
+        amount: transaction.amount,
+        currency: transaction.currency,
+        memo: transaction.metadata.depositMemo,
+        createdAfter: transaction.createdAt,
+      });
+      if (!inboundPayment) {
+        return transaction;
+      }
+
+      transaction.txHash = inboundPayment.hash;
+      transaction.stellarTxHash = inboundPayment.hash;
+      await this.transactionRepository.save(transaction);
     }
 
     if (
@@ -1079,6 +1100,16 @@ export class TransactionsService {
             transaction.currency,
             parseFloat(transaction.amount),
           );
+          try {
+            await this.referralsService.processReferralReward(
+              transaction.userId,
+            );
+          } catch (referralError) {
+            const error = toError(referralError);
+            this.logger.warn(
+              `Referral reward processing failed for user ${transaction.userId}: ${error.message}`,
+            );
+          }
         }
 
         this.logger.log(`Transaction verified successfully: ${transactionId}`);
@@ -1584,10 +1615,12 @@ export class TransactionsService {
   private async getUserStellarAddress(
     userId: string,
     walletId?: string,
+    allowWatchOnly = false,
   ): Promise<string> {
     const ctx = await this.walletsService.resolveWalletForTransaction(
       userId,
       walletId,
+      { allowWatchOnly },
     );
     return ctx.publicKey;
   }
@@ -1606,19 +1639,6 @@ export class TransactionsService {
       );
     }
     return this.encryptionService.decrypt(ctx.encryptedSecretKey);
-  }
-
-  private async getStellarSecretKey(): Promise<string> {
-    const stellarSecret = (this as any).configService?.get(
-      'STELLAR_HOT_WALLET_SECRET',
-    ) as string | undefined;
-    if (stellarSecret) {
-      return stellarSecret;
-    }
-
-    throw new BadRequestException(
-      'Secret key required for this operation. Please provide it securely.',
-    );
   }
 
   private async getUserBalance(

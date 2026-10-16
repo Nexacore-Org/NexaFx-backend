@@ -94,8 +94,16 @@ export class TransactionResponseDto {
 export class DepositResponseDto extends TransactionResponseDto {
   @ApiProperty({
     example: 'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOUJ3UHMNGUAO7UP',
+    description: 'Stellar account to which the requested deposit should be sent.',
   })
-  sourceAddress: string;
+  depositAddress: string;
+
+  @ApiProperty({
+    example: '1a2b3c4d5e6f708192a3b4c5d6e7f809',
+    description: 'Unique Stellar memo required to match and credit the deposit.',
+    maxLength: 28,
+  })
+  depositMemo: string;
 }
 
 export class WithdrawalResponseDto extends TransactionResponseDto {

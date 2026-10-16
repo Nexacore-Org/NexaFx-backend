@@ -43,6 +43,68 @@ describe('StellarService', () => {
     expect(keypair.secretKey).toMatch(/^S/);
   });
 
+  it('matches an inbound payment by destination, amount, asset, and memo', async () => {
+    const address =
+      'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
+    const memo = '0123456789abcdef0123456789ab';
+    const paymentPage = {
+      records: [
+        {
+          created_at: new Date().toISOString(),
+          from: address,
+          to: address,
+          amount: '100.0000000',
+          transaction_hash: 'self-payment-hash',
+          asset_type: 'native',
+        },
+        {
+          created_at: new Date().toISOString(),
+          from: 'G_SOURCE_ACCOUNT',
+          to: address,
+          amount: '100.0000000',
+          transaction_hash: 'stellar-inbound-hash',
+          asset_type: 'native',
+        },
+      ],
+      next: jest.fn(),
+    };
+    const paymentBuilder = {
+      forAccount: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      call: jest.fn().mockResolvedValue(paymentPage),
+    };
+    const transactionBuilder = {
+      transaction: jest.fn().mockReturnThis(),
+      call: jest.fn().mockResolvedValue({
+        successful: true,
+        memo_type: 'text',
+        memo,
+      }),
+    };
+
+    Object.defineProperty(service, 'server', {
+      value: {
+        payments: jest.fn(() => paymentBuilder),
+        transactions: jest.fn(() => transactionBuilder),
+      },
+    });
+
+    await expect(
+      service.findIncomingPayment({
+        address,
+        amount: '100.00000000',
+        currency: 'XLM',
+        memo,
+        createdAfter: new Date(Date.now() - 60_000),
+      }),
+    ).resolves.toEqual({ hash: 'stellar-inbound-hash' });
+    expect(paymentBuilder.forAccount).toHaveBeenCalledWith(address);
+    expect(transactionBuilder.transaction).toHaveBeenCalledWith(
+      'stellar-inbound-hash',
+    );
+  });
+
   it('skips Friendbot funding in production', async () => {
     const config = service['configService'];
     jest.spyOn(config, 'get').mockImplementation((key: string) => {

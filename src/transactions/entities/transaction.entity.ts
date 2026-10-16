@@ -121,8 +121,9 @@ export class Transaction {
   userNote: string | null;
 
   /**
-   * Shared memo visible to both parties. Also written to the Stellar
-   * transaction memo field (truncated to 28 bytes if needed).
+   * Shared memo visible to both parties. Used as the Stellar transaction memo
+   * for outbound transactions; deposit verification uses a separate generated
+   * memo stored in transaction metadata.
    */
   @Column({ type: 'varchar', length: 200, nullable: true })
   counterpartyMemo: string | null;

@@ -36,6 +36,7 @@ import {
   TransactionResponseDto,
   TransactionListResponseDto,
   SwapResponseDto,
+  DepositResponseDto,
 } from '../dtos/transaction-response.dto';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -59,7 +60,7 @@ export class TransactionsController {
   @ApiResponse({
     status: 201,
     description: 'Deposit transaction created successfully',
-    type: TransactionResponseDto,
+    type: DepositResponseDto,
   })
   @ApiResponse({
     status: 400,
@@ -69,12 +70,15 @@ export class TransactionsController {
     status: 401,
     description: 'Unauthorized - Invalid or missing JWT token',
   })
-  @ApiResponse({ status: 500, description: 'Blockchain transaction failed' })
+  @ApiResponse({
+    status: 500,
+    description: 'Failed to create deposit payment instructions',
+  })
   @Audit('transaction.created')
   async createDeposit(
     @Request() req,
     @Body() createDepositDto: CreateDepositDto,
-  ): Promise<TransactionResponseDto> {
+  ): Promise<DepositResponseDto> {
     return this.transactionsService.createDeposit(
       req.user.userId,
       createDepositDto,

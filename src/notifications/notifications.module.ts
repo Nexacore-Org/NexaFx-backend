@@ -8,10 +8,12 @@ import { NotificationPreference } from './entities/notification-preference.entit
 import { NotificationPreferenceService } from './services/notification-preference.service';
 import { NotificationPreferenceController } from './controllers/notification-preference.controller';
 import { User } from '../users/user.entity';
+import { MailModule } from '../modules/mail/mail.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Notification, NotificationPreference, User]),
+    MailModule,
   ],
   controllers: [NotificationsController, NotificationPreferenceController],
   providers: [NotificationsService, NotificationPreferenceService],

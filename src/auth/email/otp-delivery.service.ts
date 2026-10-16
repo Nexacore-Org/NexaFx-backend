@@ -56,13 +56,21 @@ export class OtpDeliveryService {
       if (user && user.phone) {
         const smsMessage = `Your NexaFX ${params.type.toLowerCase().replace('_', ' ')} code is: ${params.otp}. Expiry 10 minutes.`;
         await this.smsRoutingService.sendSms(user.phone, smsMessage);
-        this.logger.log(`[OTP] SMS sent successfully to ${user.phone}`);
+        this.logger.log(`[OTP] SMS sent successfully to ${this.maskPhone(user.phone)}`);
       }
     } catch (smsError: any) {
       this.logger.error(
         `[OTP] Failed to deliver OTP via SMS for ${params.email}: ${smsError.message}`,
       );
     }
+  }
+
+  private maskPhone(phone: string): string {
+    if (!phone) {
+      return '***';
+    }
+    const visible = phone.slice(-4);
+    return `***${visible}`;
   }
 
   private buildTemplate(type: OtpType, otp: string): EmailTemplate {

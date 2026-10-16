@@ -12,8 +12,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { User } from '../users/user.entity';
 import { FCMService } from '../firebase/fcm.service';
 import { ConfigService } from '@nestjs/config';
-import Mailgun from 'mailgun.js';
-import FormData from 'form-data';
+import { MailService } from '../modules/mail/mail.service';
 
 @Injectable()
 export class NotificationsService {
@@ -26,6 +25,7 @@ export class NotificationsService {
     private readonly userRepository: Repository<User>,
     private readonly fcmService: FCMService,
     private readonly configService: ConfigService,
+    private readonly mailService: MailService,
   ) {}
 
   async create(dto: CreateNotificationDto): Promise<Notification>;
@@ -239,6 +239,19 @@ export class NotificationsService {
     return { count };
   }
 
+  /**
+   * Escape user-influenced text before interpolating it into the branded
+   * HTML email template to prevent HTML/link injection.
+   */
+  private escapeHtml(value: string): string {
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   private async sendEmail(
     to: string,
     subject: string,
@@ -253,40 +266,28 @@ export class NotificationsService {
       return;
     }
 
-    const apiKey = this.configService.get<string>('MAILGUN_API_KEY');
-    const domain = this.configService.get<string>('MAILGUN_DOMAIN');
-    const fromEmail = this.configService.get<string>('MAILGUN_FROM_EMAIL');
-    const fromName =
-      this.configService.get<string>('MAILGUN_FROM_NAME') ?? 'NexaFX';
+    const safeSubject = this.escapeHtml(subject);
+    const safeBody = this.escapeHtml(body);
 
-    if (!apiKey || !domain || !fromEmail) {
-      this.logger.error(
-        'Missing Mailgun configuration: MAILGUN_API_KEY, MAILGUN_DOMAIN, and MAILGUN_FROM_EMAIL are required',
-      );
-      return;
-    }
+    const html = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 5px;">
+        <h2 style="color: #333;">${safeSubject}</h2>
+        <p style="font-size: 16px; color: #555; line-height: 1.5;">${safeBody}</p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+        <p style="font-size: 12px; color: #999; text-align: center;">This is an automated notification from NexaFX.</p>
+      </div>
+    `;
 
     try {
-      const mailgun = new Mailgun(FormData);
-      const client = mailgun.client({ username: 'api', key: apiKey });
-
-      await client.messages.create(domain, {
-        from: `${fromName} <${fromEmail}>`,
-        to: [to],
-        subject: subject,
-        html: `
-          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 5px;">
-            <h2 style="color: #333;">${subject}</h2>
-            <p style="font-size: 16px; color: #555; line-height: 1.5;">${body}</p>
-            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
-            <p style="font-size: 12px; color: #999; text-align: center;">This is an automated notification from NexaFX.</p>
-          </div>
-        `,
+      await this.mailService.enqueueEmail({
+        to,
+        subject,
+        html,
         text: body,
       });
     } catch (error) {
       this.logger.error(
-        `Failed to send email to ${to}: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to enqueue notification email to ${to}: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }

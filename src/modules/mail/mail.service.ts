@@ -14,6 +14,18 @@ export interface SendEmailJob {
   from?: string;
 }
 
+const HTML_ESCAPE_MAP: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
+
+export function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => HTML_ESCAPE_MAP[char]);
+}
+
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);

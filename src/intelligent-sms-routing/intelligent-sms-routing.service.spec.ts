@@ -153,5 +153,159 @@ describe('IntelligentSmsRoutingService', () => {
         'All SMS providers failed to deliver',
       );
     });
+
+    it('should call the adapter with the recipient and body', async () => {
+      const mockRoutes = [
+        {
+          id: '1',
+          countryCode: '+234',
+          providerName: 'twilio',
+          priority: 0,
+          isActive: true,
+        },
+      ];
+
+      mockRepository.find
+        .mockResolvedValueOnce([]) // +2348
+        .mockResolvedValueOnce(mockRoutes); // +234
+
+      const adapter = { send: jest.fn().mockResolvedValue(undefined) };
+      service.registerProvider('twilio', adapter);
+      service.setProviderHealth('twilio', true);
+
+      await service.sendSms('+2348012345678', 'Your code is 123456');
+
+      expect(adapter.send).toHaveBeenCalledWith(
+        '+2348012345678',
+        'Your code is 123456',
+      );
+    });
+
+    it('should failover to the next route when the adapter throws', async () => {
+      const mockRoutes = [
+        {
+          id: '1',
+          countryCode: '+234',
+          providerName: 'twilio',
+          priority: 0,
+          isActive: true,
+        },
+        {
+          id: '2',
+          countryCode: '+234',
+          providerName: 'infobip',
+          priority: 1,
+          isActive: true,
+        },
+      ];
+
+      mockRepository.find
+        .mockResolvedValueOnce([]) // +2348
+        .mockResolvedValueOnce(mockRoutes); // +234
+
+      const failing = {
+        send: jest.fn().mockRejectedValue(new Error('twilio down')),
+      };
+      const healthy = { send: jest.fn().mockResolvedValue(undefined) };
+
+      service.registerProvider('twilio', failing);
+      service.registerProvider('infobip', healthy);
+      service.setProviderHealth('twilio', true);
+      service.setProviderHealth('infobip', true);
+
+      await service.sendSms('+2348012345678', 'Your code is 123456');
+
+      expect(failing.send).toHaveBeenCalled();
+      expect(healthy.send).toHaveBeenCalledWith(
+        '+2348012345678',
+        'Your code is 123456',
+      );
+    });
+
+    it('should not log the OTP body or full phone number', async () => {
+      const mockRoutes = [
+        {
+          id: '1',
+          countryCode: '+234',
+          providerName: 'twilio',
+          priority: 0,
+          isActive: true,
+        },
+      ];
+
+      mockRepository.find
+        .mockResolvedValueOnce([]) // +2348
+        .mockResolvedValueOnce(mockRoutes); // +234
+
+      const adapter = { send: jest.fn().mockResolvedValue(undefined) };
+      service.registerProvider('twilio', adapter);
+      service.setProviderHealth('twilio', true);
+
+      const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      const errorSpy = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+
+      await service.sendSms('+2348012345678', 'Your code is 123456');
+
+      const logged = [...logSpy.mock.calls, ...errorSpy.mock.calls]
+        .flat()
+        .join(' ');
+
+      expect(logged).not.toContain('123456');
+      expect(logged).not.toContain('+2348012345678');
+
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it('should mark a provider unhealthy after N consecutive failures and skip it until cool-down', async () => {
+      const mockRoutes = [
+        {
+          id: '1',
+          countryCode: '+234',
+          providerName: 'twilio',
+          priority: 0,
+          isActive: true,
+        },
+        {
+          id: '2',
+          countryCode: '+234',
+          providerName: 'infobip',
+          priority: 1,
+          isActive: true,
+        },
+      ];
+
+      const failing = {
+        send: jest.fn().mockRejectedValue(new Error('twilio down')),
+      };
+      const healthy = { send: jest.fn().mockResolvedValue(undefined) };
+
+      service.registerProvider('twilio', failing);
+      service.registerProvider('infobip', healthy);
+      service.setProviderHealth('twilio', true);
+      service.setProviderHealth('infobip', true);
+
+      // Trip the circuit breaker with consecutive failures.
+      for (let i = 0; i < 5; i++) {
+        mockRepository.find
+          .mockResolvedValueOnce([]) // +2348
+          .mockResolvedValueOnce(mockRoutes); // +234
+        await service.sendSms('+2348012345678', 'Your code is 123456');
+      }
+
+      const callsBefore = failing.send.mock.calls.length;
+
+      mockRepository.find
+        .mockResolvedValueOnce([]) // +2348
+        .mockResolvedValueOnce(mockRoutes); // +234
+
+      await service.sendSms('+2348012345678', 'Your code is 123456');
+
+      // Unhealthy provider is skipped, so no additional adapter call.
+      expect(failing.send.mock.calls.length).toBe(callsBefore);
+      expect(healthy.send).toHaveBeenCalled();
+    });
   });
 });

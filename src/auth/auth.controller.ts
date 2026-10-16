@@ -18,6 +18,8 @@ import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { Response } from 'express';
 import { AuthService } from './auth.service';
+import { OAuthCodeService } from './oauth-code.service';
+import { ExchangeOauthCodeDto } from './dto/exchange-oauth-code.dto';
 import { Public } from './decorators/public.decorator';
 import {
   CurrentUser,
@@ -44,6 +46,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
+    private readonly oauthCodeService: OAuthCodeService,
   ) {}
 
   @Public()
@@ -100,6 +103,12 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({
+    default: {
+      ttl: 60 * 1000,
+      limit: Number(process.env.THROTTLE_TWO_FACTOR_LIMIT ?? 5),
+    },
+  })
   @Post('verify-2fa')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -350,6 +359,46 @@ export class AuthController {
     return this.authService.logoutAllDevices(userId, ipAddress, userAgent);
   }
 
+  /** Completes an OAuth callback and redirects with a one-time code, never a token. */
+  private async completeOauthRedirect(
+    result: any,
+    res: Response,
+  ): Promise<Response> {
+    const failureUrl = this.configService.get<string>(
+      'OAUTH_FAILURE_REDIRECT',
+      'http://localhost:3001/login?error=oauth_failed',
+    );
+
+    if (result?.error) {
+      return res.redirect(failureUrl);
+    }
+
+    try {
+      const login = await this.authService.completeOAuthLogin(result.user.id);
+      const code = await this.oauthCodeService.issue({
+        userId: result.user.id,
+        requiresTwoFactor: login.requiresTwoFactor,
+        isNew: Boolean(result.isNew),
+      });
+
+      const redirectUrl = new URL(
+        this.configService.get<string>(
+          'OAUTH_SUCCESS_REDIRECT',
+          'http://localhost:3001/auth/callback',
+        ),
+      );
+      redirectUrl.searchParams.set('code', code);
+      redirectUrl.searchParams.set('isNew', String(Boolean(result.isNew)));
+      if (login.requiresTwoFactor) {
+        redirectUrl.searchParams.set('requiresTwoFactor', 'true');
+      }
+
+      return res.redirect(redirectUrl.toString());
+    } catch (error) {
+      return res.redirect(failureUrl);
+    }
+  }
+
   @Public()
   @Get('google')
   @UseGuards(AuthGuard('google'))
@@ -361,29 +410,7 @@ export class AuthController {
   @UseGuards(AuthGuard('google'))
   @ApiOperation({ summary: 'Google OAuth callback handler' })
   async googleAuthCallback(@Req() req: any, @Res() res: Response) {
-    const result = req.user;
-    if (result?.error) {
-      return res.redirect(
-        this.configService.get<string>(
-          'OAUTH_FAILURE_REDIRECT',
-          'http://localhost:3001/login?error=oauth_failed',
-        ),
-      );
-    }
-
-    const tokens = await this.authService.issueFullAccessToken(result.user.id);
-    const redirectUrl = new URL(
-      this.configService.get<string>(
-        'OAUTH_SUCCESS_REDIRECT',
-        'http://localhost:3001/auth/callback',
-      ),
-    );
-    redirectUrl.searchParams.set('accessToken', tokens.accessToken);
-    redirectUrl.searchParams.set('refreshToken', tokens.refreshToken);
-    redirectUrl.searchParams.set('expiresIn', String(tokens.expiresIn));
-    redirectUrl.searchParams.set('isNew', String(result.isNew));
-
-    return res.redirect(redirectUrl.toString());
+    return this.completeOauthRedirect(req.user, res);
   }
 
   @Public()
@@ -397,29 +424,26 @@ export class AuthController {
   @UseGuards(AuthGuard('github'))
   @ApiOperation({ summary: 'GitHub OAuth callback handler' })
   async githubAuthCallback(@Req() req: any, @Res() res: Response) {
-    const result = req.user;
-    if (result?.error) {
-      return res.redirect(
-        this.configService.get<string>(
-          'OAUTH_FAILURE_REDIRECT',
-          'http://localhost:3001/login?error=oauth_failed',
-        ),
-      );
-    }
+    return this.completeOauthRedirect(req.user, res);
+  }
 
-    const tokens = await this.authService.issueFullAccessToken(result.user.id);
-    const redirectUrl = new URL(
-      this.configService.get<string>(
-        'OAUTH_SUCCESS_REDIRECT',
-        'http://localhost:3001/auth/callback',
-      ),
-    );
-    redirectUrl.searchParams.set('accessToken', tokens.accessToken);
-    redirectUrl.searchParams.set('refreshToken', tokens.refreshToken);
-    redirectUrl.searchParams.set('expiresIn', String(tokens.expiresIn));
-    redirectUrl.searchParams.set('isNew', String(result.isNew));
 
-    return res.redirect(redirectUrl.toString());
+  @Public()
+  @Throttle({
+    default: {
+      ttl: 60 * 1000,
+      limit: Number(process.env.THROTTLE_AUTH_LIMIT ?? 5),
+    },
+  })
+  @Post('oauth/exchange')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Exchange a one-time OAuth authorisation code for tokens',
+  })
+  @ApiResponse({ status: 200, description: 'Tokens issued' })
+  @ApiResponse({ status: 401, description: 'Code unknown, expired or already used' })
+  async exchangeOauthCode(@Body() dto: ExchangeOauthCodeDto) {
+    return this.authService.exchangeOauthCode(dto.code);
   }
 
   @Post('oauth/unlink')

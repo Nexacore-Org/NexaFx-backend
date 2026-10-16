@@ -5,6 +5,7 @@ import {
   ConflictException,
   BadRequestException,
   UnprocessableEntityException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ThrottlerException } from '@nestjs/throttler';
 import { JwtService } from '@nestjs/jwt';
@@ -38,6 +39,7 @@ import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
 import { ReferralsService } from '../referrals/referrals.service';
 import { TwoFactorService } from '../two-factor/two-factor.service';
+import { OAuthCodeService } from './oauth-code.service';
 import { WalletsService } from '../wallets/wallets.service';
 import { OAuthAccount, OAuthProvider } from './entities/oauth-account.entity';
 import { I18nService } from 'nestjs-i18n';
@@ -63,6 +65,7 @@ export class AuthService {
     private readonly i18nService: I18nService,
     private readonly activityFeedService: UnifiedActivityFeedService,
     private readonly gdprService: GdprService,
+    private readonly oauthCodeService: OAuthCodeService,
     @InjectRepository(PasswordResetAttempt)
     private readonly passwordResetAttemptRepository: Repository<PasswordResetAttempt>,
     @InjectRepository(OAuthAccount)
@@ -790,7 +793,119 @@ export class AuthService {
     if (!user || !user.isVerified) {
       throw new UnauthorizedException('Invalid credentials');
     }
+    this.assertAccountUsable(user);
     return this.issueAuthTokens(user.id, user.email, user.role);
+  }
+
+  /**
+   * The post-authentication step shared by password, OTP and OAuth logins.
+   *
+   * OAuth used to call issueFullAccessToken directly, which only checked
+   * isVerified: a 2FA-enabled user got a full session, and suspended,
+   * deactivated or deleted users could still sign in through a provider.
+   */
+  async completeOAuthLogin(userId: string): Promise<{
+    requiresTwoFactor: boolean;
+    tokens: VerifyLoginOtpResponseDto;
+    isNew: boolean;
+  }> {
+    const user = await this.usersService.findById(userId);
+
+    if (!user || !user.isVerified) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    this.assertAccountUsable(user);
+
+    if (user.isTwoFactorEnabled) {
+      const twoFactorToken = this.jwtService.sign(
+        {
+          sub: user.id,
+          email: user.email,
+          role: user.role,
+          authStage: 'partial_auth',
+        },
+        { expiresIn: '5m' },
+      );
+
+      await this.auditLogsService.logAuthEvent(user.id, AuditAction.LOGIN, {
+        method: 'oauth',
+        status: '2fa_required',
+      });
+
+      return {
+        requiresTwoFactor: true,
+        tokens: {
+          accessToken: twoFactorToken,
+          expiresIn: 300,
+        } as VerifyLoginOtpResponseDto,
+        isNew: false,
+      };
+    }
+
+    return {
+      requiresTwoFactor: false,
+      tokens: await this.issueAuthTokens(user.id, user.email, user.role),
+      isNew: false,
+    };
+  }
+
+  /**
+   * Trades the one-time code from an OAuth redirect for tokens.
+   *
+   * The code is consumed on first use, so a leaked redirect URL cannot be
+   * replayed, and a 2FA-enabled user only receives the short-lived
+   * partial_auth token.
+   */
+  async exchangeOauthCode(
+    code: string,
+  ): Promise<VerifyLoginOtpResponseDto & { requiresTwoFactor?: boolean }> {
+    const payload = await this.oauthCodeService.consume(code);
+
+    if (!payload) {
+      throw new UnauthorizedException('Invalid or expired OAuth code');
+    }
+
+    const user = await this.usersService.findById(payload.userId);
+    if (!user || !user.isVerified) {
+      throw new UnauthorizedException('Invalid or expired OAuth code');
+    }
+
+    this.assertAccountUsable(user);
+
+    if (payload.requiresTwoFactor || user.isTwoFactorEnabled) {
+      return {
+        requiresTwoFactor: true,
+        accessToken: this.jwtService.sign(
+          {
+            sub: user.id,
+            email: user.email,
+            role: user.role,
+            authStage: 'partial_auth',
+          },
+          { expiresIn: '5m' },
+        ),
+        expiresIn: 300,
+      } as VerifyLoginOtpResponseDto;
+    }
+
+    return this.issueAuthTokens(user.id, user.email, user.role);
+  }
+
+  private assertAccountUsable(user: {
+    isActive: boolean;
+    isSuspended: boolean;
+    isDeleted: boolean;
+  }): void {
+    if (user.isDeleted) {
+      throw new UnauthorizedException('Account has been deleted');
+    }
+    if (user.isSuspended) {
+      throw new ForbiddenException('Account is suspended');
+    }
+    if (!user.isActive) {
+      throw new ForbiddenException('Account is deactivated');
+    }
   }
 
   getUserIdFromPartialAuth(token: string): string {
@@ -846,6 +961,16 @@ export class AuthService {
     const user = await this.usersService.findByEmail(normalizedEmail);
 
     if (user) {
+      // Linking by email alone hands the account to whoever can present that
+      // address on the provider. Only an already-verified local address may be
+      // attached automatically; anything else has to go through an explicit,
+      // authenticated link.
+      if (!user.isEmailVerified) {
+        throw new ConflictException(
+          'An account with this email already exists but its address is not verified. Sign in with your password and link the provider from your profile.',
+        );
+      }
+
       await this.oauthAccountRepository.save(
         this.oauthAccountRepository.create({
           userId: user.id,

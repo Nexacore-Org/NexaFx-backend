@@ -9,6 +9,7 @@ import {
   Request,
   UnauthorizedException,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -98,6 +99,12 @@ export class TwoFactorController {
     return { message: 'Two-factor authentication disabled' };
   }
 
+  @Throttle({
+    default: {
+      ttl: 60 * 1000,
+      limit: Number(process.env.THROTTLE_TWO_FACTOR_LIMIT ?? 5),
+    },
+  })
   @Post('verify')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -129,6 +136,12 @@ export class TwoFactorController {
     return this.authService.issueFullAccessToken(req.user.userId);
   }
 
+  @Throttle({
+    default: {
+      ttl: 60 * 1000,
+      limit: Number(process.env.THROTTLE_TWO_FACTOR_LIMIT ?? 5),
+    },
+  })
   @Post('recover')
   @HttpCode(HttpStatus.OK)
   @Public()

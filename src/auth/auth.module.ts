@@ -8,7 +8,9 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { GithubStrategy } from './strategies/github.strategy';
+import { OAuthCodeService } from './oauth-code.service';
 import { OtpDeliveryService } from './email/otp-delivery.service';
+import { RedisModule } from '../modules/redis/redis.module';
 import { PasswordResetAttempt } from './entities/password-reset-attempt.entity';
 import { OAuthAccount } from './entities/oauth-account.entity';
 import { UsersModule } from '../users/users.module';
@@ -28,6 +30,7 @@ type JwtExpiryValue = `${number}${'s' | 'm' | 'h' | 'd'}`;
 @Module({
   imports: [
     ConfigModule,
+    RedisModule,
     UsersModule,
     OtpsModule,
     TokensModule,
@@ -70,6 +73,7 @@ type JwtExpiryValue = `${number}${'s' | 'm' | 'h' | 'd'}`;
     GoogleStrategy,
     GithubStrategy,
     OtpDeliveryService,
+    OAuthCodeService,
   ],
   exports: [AuthService, JwtModule],
 })

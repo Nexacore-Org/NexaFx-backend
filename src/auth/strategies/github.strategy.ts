@@ -16,6 +16,9 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
       clientSecret: configService.get<string>('GITHUB_CLIENT_SECRET')!,
       callbackURL: configService.get<string>('GITHUB_CALLBACK_URL')!,
       scope: ['user:email'],
+      // OAuth login-CSRF protection: without a state parameter the callback
+      // accepts a response minted for someone else's authorisation request.
+      state: true,
     });
   }
 
@@ -27,10 +30,25 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
   ): Promise<any> {
     try {
       const rawProfile = profile as any;
-      const email =
-        rawProfile.emails?.[0]?.value ?? rawProfile._json?.email ?? null;
+      const emails: Array<{ value?: string; primary?: boolean; verified?: boolean }> =
+        rawProfile.emails ?? [];
+
+      // emails[0] is whatever GitHub listed first, which may be neither
+      // primary nor verified.
+      const preferred =
+        emails.find((entry) => entry.primary && entry.verified) ??
+        emails.find((entry) => entry.verified) ??
+        null;
+
+      const email = preferred?.value ?? rawProfile._json?.email ?? null;
       if (!email) {
         return done(null, { error: 'No email found in GitHub profile' });
+      }
+
+      if (!preferred && !rawProfile._json?.email) {
+        return done(null, {
+          error: 'No verified email found in GitHub profile',
+        });
       }
 
       const nameParts = (

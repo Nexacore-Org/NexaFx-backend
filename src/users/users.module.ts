@@ -48,6 +48,6 @@ import { TransactionLimitsModule } from '../transactions/transaction-limits.modu
     AccountDeletionService,
     ThrottlerStorageService,
   ],
-  exports: [UsersService, TypeOrmModule],
+  exports: [UsersService, AccountDeletionService, DataExportService, TypeOrmModule],
 })
 export class UsersModule {}

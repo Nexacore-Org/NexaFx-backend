@@ -12,6 +12,7 @@ import { TransactionsService } from '../transactions/services/transaction.servic
 import { StellarService } from '../blockchain/stellar/stellar.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
+import { AccountDeletionService } from '../users/services/account-deletion.service';
 import { CurrencyPairService } from '../currencies/services/currency-pair.service';
 import { LedgerVerificationService } from '../ledger/services/ledger-verification.service';
 import {
@@ -55,6 +56,7 @@ export class ScheduledJobsService {
     private readonly stellarService: StellarService,
     private readonly notificationsService: NotificationsService,
     private readonly usersService: UsersService,
+    private readonly accountDeletionService: AccountDeletionService,
     private readonly rateAlertsService: RateAlertsService,
     private readonly webhookService: WebhookService,
     private readonly dataSource: DataSource,
@@ -81,6 +83,27 @@ export class ScheduledJobsService {
   @Cron(CronExpression.EVERY_MINUTE)
   heartbeat(): void {
     this.logger.log('[Cron] Heartbeat OK');
+  }
+
+  /**
+   * Hard-deletes accounts whose GDPR erasure completed more than 30 days ago.
+   * performHardDelete existed but nothing ever called it, so the deletion the
+   * API promises never actually happened.
+   */
+  @Cron('0 3 * * *')
+  async hardDeleteErasuredAccounts(): Promise<void> {
+    try {
+      const result = await this.accountDeletionService.performHardDelete();
+      if (result.processed > 0) {
+        this.logger.log(
+          `[Scheduled Job] Hard-deleted ${result.deleted} of ${result.processed} completed erasure requests`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `[Scheduled Job] Hard delete failed: ${(error as Error).message}`,
+      );
+    }
   }
 
   /**

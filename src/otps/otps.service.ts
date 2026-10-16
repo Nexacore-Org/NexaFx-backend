@@ -96,7 +96,16 @@ export class OtpsService {
       throw new UnauthorizedException('Invalid OTP code');
     }
 
-    await this.otpRepository.update(otp.id, { usedAt: new Date() });
+    // Conditional consume: two parallel submissions of the same code would
+    // both pass the comparison above and both succeed.
+    const consumed = await this.otpRepository.update(
+      { id: otp.id, usedAt: IsNull() },
+      { usedAt: new Date() },
+    );
+
+    if ((consumed.affected ?? 0) === 0) {
+      throw new UnauthorizedException('Invalid or expired OTP');
+    }
 
     return true;
   }
@@ -135,21 +144,11 @@ export class OtpsService {
   }
 
   private async handleFailedOtpAttempt(user: User): Promise<void> {
-    const lockoutMinutes = this.getLockoutDurationMinutes();
-    const newAttempts = (user.failedLoginAttempts || 0) + 1;
-
-    if (newAttempts >= this.MAX_FAILED_ATTEMPTS) {
-      const lockedUntil = new Date();
-      lockedUntil.setMinutes(lockedUntil.getMinutes() + lockoutMinutes);
-      await this.usersService.updateByUserId(user.id, {
-        failedLoginAttempts: newAttempts,
-        lockedUntil,
-      });
-    } else {
-      await this.usersService.updateByUserId(user.id, {
-        failedLoginAttempts: newAttempts,
-      });
-    }
+    await this.usersService.incrementFailedLoginAttempts(
+      user.id,
+      this.MAX_FAILED_ATTEMPTS,
+      this.getLockoutDurationMinutes(),
+    );
   }
 
   private getLockoutDurationMinutes(): number {

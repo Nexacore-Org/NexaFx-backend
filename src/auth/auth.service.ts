@@ -69,6 +69,33 @@ export class AuthService {
     private readonly oauthAccountRepository: Repository<OAuthAccount>,
   ) {}
 
+  /**
+   * Account lockout helpers.
+   *
+   * Wrong passwords were never counted, so password guessing was limited only
+   * by the per-IP throttle; and the OTP counter was a read-modify-write on a
+   * stale entity, so parallel guesses all wrote the same value.
+   */
+  private getMaxLoginAttempts(): number {
+    const parsed = parseInt(
+      this.configService.get<string>('AUTH_MAX_LOGIN_ATTEMPTS') ?? '5',
+      10,
+    );
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 5;
+  }
+
+  private getLockoutDurationMinutes(): number {
+    const parsed = parseInt(
+      this.configService.get<string>('AUTH_LOCKOUT_DURATION_MINUTES') ?? '15',
+      10,
+    );
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 15;
+  }
+
+  private isLockedOut(user: { lockedUntil: Date | null }): boolean {
+    return !!user.lockedUntil && new Date() < user.lockedUntil;
+  }
+
   async login(
     loginDto: LoginDto,
     ipAddress?: string,
@@ -77,6 +104,21 @@ export class AuthService {
     const user = await this.usersService.findByEmail(loginDto.email);
     const genericMessage =
       'If an account exists with this email, an OTP has been sent.';
+
+    // Locked accounts get the same generic answer as an unknown one, so the
+    // response does not reveal that the address exists.
+    if (user && this.isLockedOut(user)) {
+      await this.simulateProcessingDelay();
+
+      await this.auditLogsService.logAuthEvent(user.id, AuditAction.FAILED_LOGIN, {
+        email: loginDto.email,
+        reason: 'Account locked',
+        ip: ipAddress,
+        device: userAgent,
+      });
+
+      return { message: genericMessage };
+    }
 
     if (!user || !user.isVerified || !user.isActive) {
       await this.simulateProcessingDelay();
@@ -121,6 +163,12 @@ export class AuthService {
     if (!isPasswordValid) {
       // simulateProcessingDelay is NOT needed here as bcrypt.compare was already executed
       // and taking the required time.
+
+      await this.usersService.incrementFailedLoginAttempts(
+        user.id,
+        this.getMaxLoginAttempts(),
+        this.getLockoutDurationMinutes(),
+      );
 
       // Log failed login attempt
       await this.auditLogsService.logAuthEvent(
@@ -171,6 +219,13 @@ export class AuthService {
       );
     }
 
+    if (this.isLockedOut(user)) {
+      await this.simulateProcessingDelay();
+      throw new UnauthorizedException(
+        this.i18nService.translate('auth.INVALID_CREDENTIALS', { lang }),
+      );
+    }
+
     if (!user.password) {
       await this.simulateProcessingDelay();
       throw new UnauthorizedException(
@@ -185,6 +240,24 @@ export class AuthService {
 
     if (!isPasswordValid) {
       await this.simulateProcessingDelay();
+
+      await this.usersService.incrementFailedLoginAttempts(
+        user.id,
+        this.getMaxLoginAttempts(),
+        this.getLockoutDurationMinutes(),
+      );
+
+      await this.auditLogsService.logAuthEvent(
+        user.id,
+        AuditAction.FAILED_LOGIN,
+        {
+          email: loginDto.email,
+          reason: 'Invalid password',
+          ip: ipAddress,
+          device: userAgent,
+        },
+      );
+
       throw new UnauthorizedException(
         this.i18nService.translate('auth.INVALID_CREDENTIALS', { lang }),
       );

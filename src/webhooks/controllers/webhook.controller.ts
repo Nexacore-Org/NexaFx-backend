@@ -75,6 +75,15 @@ export class WebhookController {
     return { success: true };
   }
 
+  @Post(':id/rotate-secret')
+  @ApiOperation({
+    summary:
+      'Rotate the endpoint signing secret; the new secret is returned once',
+  })
+  async rotateSecret(@Request() req, @Param('id') id: string) {
+    return this.webhookService.rotateSecret(req.user.id, id);
+  }
+
   @Get(':id/deliveries')
   async getDeliveries(@Request() req, @Param('id') id: string) {
     return this.webhookService.getDeliveryHistory(id, req.user.id);

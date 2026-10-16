@@ -227,7 +227,7 @@ export class TransactionsService {
 
     let rate: string;
     try {
-      const exchangeRate = await this.exchangeRatesService.getRate(
+      const exchangeRate = await this.exchangeRatesService.getFreshRate(
         currency,
         'USD',
       );
@@ -457,7 +457,7 @@ export class TransactionsService {
 
     let rate: string;
     try {
-      const exchangeRate = await this.exchangeRatesService.getRate(
+      const exchangeRate = await this.exchangeRatesService.getFreshRate(
         currency,
         'USD',
       );

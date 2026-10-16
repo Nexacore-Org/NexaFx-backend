@@ -7,6 +7,7 @@ import {
   Request,
   UseGuards,
   HttpCode,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -28,6 +29,17 @@ import { UserRole } from '../../users/user.entity';
 @Roles(UserRole.SUPER_ADMIN)
 export class TransactionReversalController {
   constructor(private readonly reversalService: TransactionReversalService) {}
+
+  @Get(':id/reversal')
+  @ApiOperation({ summary: 'Get reversal information for a transaction' })
+  @ApiResponse({ status: 200, description: 'Reversal information returned' })
+  @ApiResponse({ status: 404, description: 'Reversal not found' })
+  async getReversalInfo(@Param('id') transactionId: string) {
+    const reversal =
+      await this.reversalService.getReversalInfo(transactionId);
+    if (!reversal) throw new NotFoundException('Reversal not found');
+    return reversal;
+  }
 
   @Post(':id/reversal')
   @HttpCode(200)
@@ -51,6 +63,7 @@ export class TransactionReversalController {
   @ApiResponse({ status: 200, description: 'Reversal completed' })
   @ApiResponse({ status: 404, description: 'No pending reversal found' })
   @ApiResponse({ status: 409, description: 'Reversal not in pending state' })
+  @ApiResponse({ status: 403, description: 'A different admin must confirm' })
   async confirmReversal(
     @Param('id') transactionId: string,
     @Request() req: { user: { userId: string } },

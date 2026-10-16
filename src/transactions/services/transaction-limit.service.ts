@@ -267,7 +267,7 @@ export class TransactionLimitService {
       return amount;
     }
 
-    const rate = await this.exchangeRatesService.getRate(
+    const rate = await this.exchangeRatesService.getFreshRate(
       normalizedCurrency,
       'USD',
     );

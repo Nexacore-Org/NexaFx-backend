@@ -5,6 +5,7 @@ import {
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { ConfigService } from '@nestjs/config';
 import { CurrenciesService } from '../currencies/currencies.service';
 import { ExchangeRatesService } from './exchange-rates.service';
 import {
@@ -37,6 +38,9 @@ describe('ExchangeRatesService', () => {
     save: jest.fn().mockResolvedValue({}),
     find: jest.fn(),
   };
+  const mockConfigService = {
+    get: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -49,6 +53,10 @@ describe('ExchangeRatesService', () => {
         {
           provide: ExchangeRatesProviderClient,
           useValue: mockProviderClient,
+        },
+        {
+          provide: ConfigService,
+          useValue: mockConfigService,
         },
         {
           provide: CACHE_MANAGER,
@@ -156,6 +164,46 @@ describe('ExchangeRatesService', () => {
 
       expect(result.rate).toBe(240);
       expect(result.stale).toBe(true);
+    });
+
+    it('should reject a stale cache older than the configured maximum age', async () => {
+      mockCurrenciesService.validateCurrency.mockResolvedValue(undefined);
+      mockCacheManager.get.mockResolvedValue({
+        from: 'XLM',
+        to: 'NGN',
+        rate: 240,
+        inverseRate: 0.0041,
+        provider: 'coingecko',
+        cachedAt: new Date(Date.now() - 6 * 60 * 1000).toISOString(),
+        expiresAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+      });
+      mockProviderClient.fetchRate.mockRejectedValue(
+        new ExchangeRatesProviderError('API Limit reached'),
+      );
+
+      await expect(service.getRate('XLM', 'NGN')).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+    });
+
+    it('should not allow a stale fallback for financial operations', async () => {
+      mockCurrenciesService.validateCurrency.mockResolvedValue(undefined);
+      mockCacheManager.get.mockResolvedValue({
+        from: 'XLM',
+        to: 'NGN',
+        rate: 240,
+        inverseRate: 0.0041,
+        provider: 'coingecko',
+        cachedAt: new Date(Date.now() - 30 * 1000).toISOString(),
+        expiresAt: new Date(Date.now() - 1000).toISOString(),
+      });
+      mockProviderClient.fetchRate.mockRejectedValue(
+        new ExchangeRatesProviderError('API Limit reached'),
+      );
+
+      await expect(service.getFreshRate('XLM', 'NGN')).rejects.toThrow(
+        ServiceUnavailableException,
+      );
     });
 
     it('should throw ServiceUnavailableException if provider fails and no cache exists', async () => {

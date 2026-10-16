@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { StellarService } from '../src/stellar/stellar.service';
+import { StellarService } from '../src/modules/stellar/stellar.service';
 import { Keypair, Operation } from '@stellar/stellar-sdk';
 
 describe('Stellar Concurrency Test (#783)', () => {

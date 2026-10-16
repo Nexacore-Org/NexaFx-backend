@@ -8,7 +8,7 @@ import {
   seedTestUser,
   setupTestDatabase,
 } from '../helpers/db.helper';
-import { User } from '../../src/user/entities/user.entity';
+import { User } from '../../src/users/user.entity';
 
 describe('QR E2E Tests', () => {
   let app: INestApplication;

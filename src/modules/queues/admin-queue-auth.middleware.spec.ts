@@ -1,117 +1,163 @@
-import { ConfigService } from '@nestjs/config';
-import { UnauthorizedException } from '@nestjs/common';
-import { AdminQueueAuthMiddleware } from './admin-queue-auth.middleware';
-import { Request, Response, NextFunction } from 'express';
+import { createAdminQueueAuthMiddleware } from './admin-queue-auth.middleware';
 
-describe('AdminQueueAuthMiddleware', () => {
-  let middleware: AdminQueueAuthMiddleware;
-  let mockConfigService: ConfigService;
-  let mockReq: Partial<Request>;
-  let mockRes: Partial<Response>;
-  let nextFn: NextFunction;
+describe('createAdminQueueAuthMiddleware', () => {
+  const build = (
+    env: Record<string, string | undefined>,
+    verify: jest.Mock = jest.fn().mockResolvedValue({ role: 'ADMIN' }),
+  ) => {
+    const configService = {
+      get: jest.fn((key: string) => env[key]),
+    };
+    const jwtService = { verifyAsync: verify };
+    const middleware = createAdminQueueAuthMiddleware(
+      jwtService as never,
+      configService as never,
+    );
+    return { middleware, configService, verify };
+  };
 
-  beforeEach(() => {
-    mockConfigService = {
-      get: jest.fn((key: string) => {
-        if (key === 'QUEUE_DASHBOARD_USER') return 'admin';
-        if (key === 'QUEUE_DASHBOARD_PASSWORD') return 'supersecret123';
-        return null;
-      }),
-    } as unknown as ConfigService;
-
-    middleware = new AdminQueueAuthMiddleware(mockConfigService);
-
-    mockRes = {
+  const makeReq = (headers: Record<string, string> = {}) =>
+    ({ headers }) as never;
+  const makeRes = () => {
+    const res = {
       setHeader: jest.fn(),
+      status: jest.fn(),
+      json: jest.fn(),
+    };
+    res.status.mockReturnValue(res);
+    return res as never;
+  };
+
+  describe('basic auth mode', () => {
+    const env = {
+      QUEUE_DASHBOARD_USER: 'ops',
+      QUEUE_DASHBOARD_PASSWORD: 'letmein',
     };
 
-    nextFn = jest.fn();
-  });
+    it('passes valid credentials through', async () => {
+      const { middleware } = build(env);
+      const next = jest.fn();
+      const res = makeRes();
 
-  it('should accept request and call next() when valid credentials provided in Basic Auth header', () => {
-    const validHeader =
-      'Basic ' + Buffer.from('admin:supersecret123').toString('base64');
-    mockReq = {
-      headers: {
-        authorization: validHeader,
-      },
-    };
-
-    middleware.use(mockReq as Request, mockRes as Response, nextFn);
-
-    expect(nextFn).toHaveBeenCalledTimes(1);
-  });
-
-  it('should reject with 401 and set WWW-Authenticate header when Authorization header is missing', () => {
-    mockReq = {
-      headers: {},
-    };
-
-    expect(() => {
-      middleware.use(mockReq as Request, mockRes as Response, nextFn);
-    }).toThrow(UnauthorizedException);
-
-    expect(mockRes.setHeader).toHaveBeenCalledWith(
-      'WWW-Authenticate',
-      'Basic realm="Queue Dashboard"',
-    );
-    expect(nextFn).not.toHaveBeenCalled();
-  });
-
-  it('should reject with 401 when Authorization header does not start with Basic', () => {
-    mockReq = {
-      headers: {
-        authorization: 'Bearer somejwttoken',
-      },
-    };
-
-    expect(() => {
-      middleware.use(mockReq as Request, mockRes as Response, nextFn);
-    }).toThrow(UnauthorizedException);
-
-    expect(nextFn).not.toHaveBeenCalled();
-  });
-
-  it('should reject with 401 when username or password does not match configured credentials', () => {
-    const wrongCredentials =
-      'Basic ' + Buffer.from('admin:wrongpassword').toString('base64');
-    mockReq = {
-      headers: {
-        authorization: wrongCredentials,
-      },
-    };
-
-    expect(() => {
-      middleware.use(mockReq as Request, mockRes as Response, nextFn);
-    }).toThrow(UnauthorizedException);
-
-    expect(nextFn).not.toHaveBeenCalled();
-  });
-
-  it('should never be silently permissive if environment credentials are not configured', () => {
-    const emptyConfigService = {
-      get: jest.fn(() => null),
-    } as unknown as ConfigService;
-
-    const unconfiguredMiddleware = new AdminQueueAuthMiddleware(
-      emptyConfigService,
-    );
-    const validHeader =
-      'Basic ' + Buffer.from('admin:supersecret123').toString('base64');
-    mockReq = {
-      headers: {
-        authorization: validHeader,
-      },
-    };
-
-    expect(() => {
-      unconfiguredMiddleware.use(
-        mockReq as Request,
-        mockRes as Response,
-        nextFn,
+      await middleware(
+        makeReq({
+          authorization: `Basic ${Buffer.from('ops:letmein').toString('base64')}`,
+        }),
+        res,
+        next,
       );
-    }).toThrow(UnauthorizedException);
 
-    expect(nextFn).not.toHaveBeenCalled();
+      expect(next).toHaveBeenCalled();
+    });
+
+    it('rejects a wrong password with 401 and a challenge header', async () => {
+      const { middleware } = build(env);
+      const next = jest.fn();
+      const res = makeRes();
+
+      await middleware(
+        makeReq({
+          authorization: `Basic ${Buffer.from('ops:nope').toString('base64')}`,
+        }),
+        res,
+        next,
+      );
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'WWW-Authenticate',
+        'Basic realm="Queue Dashboard"',
+      );
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+
+    it('rejects a missing authorization header', async () => {
+      const { middleware } = build(env);
+      const next = jest.fn();
+      const res = makeRes();
+
+      await middleware(makeReq(), res, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+  });
+
+  describe('bearer token mode', () => {
+    const env = { JWT_SECRET: 'test-secret' };
+
+    it('accepts an ADMIN token', async () => {
+      const { middleware } = build(env);
+      const next = jest.fn();
+
+      await middleware(
+        makeReq({ authorization: 'Bearer token' }),
+        makeRes(),
+        next,
+      );
+
+      expect(next).toHaveBeenCalled();
+    });
+
+    it('accepts a SUPER_ADMIN token', async () => {
+      const verify = jest.fn().mockResolvedValue({ role: 'SUPER_ADMIN' });
+      const { middleware } = build(env, verify);
+      const next = jest.fn();
+
+      await middleware(
+        makeReq({ authorization: 'Bearer token' }),
+        makeRes(),
+        next,
+      );
+
+      expect(next).toHaveBeenCalled();
+    });
+
+    it('rejects a non-admin role with 403', async () => {
+      const verify = jest.fn().mockResolvedValue({ role: 'USER' });
+      const { middleware } = build(env, verify);
+      const next = jest.fn();
+      const res = makeRes();
+
+      await middleware(makeReq({ authorization: 'Bearer token' }), res, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(403);
+    });
+
+    it('rejects an unparsable token with 401', async () => {
+      const verify = jest.fn().mockRejectedValue(new Error('bad signature'));
+      const { middleware } = build(env, verify);
+      const next = jest.fn();
+      const res = makeRes();
+
+      await middleware(makeReq({ authorization: 'Bearer token' }), res, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+
+    it('rejects a non-bearer header with 401', async () => {
+      const { middleware } = build(env);
+      const next = jest.fn();
+      const res = makeRes();
+
+      await middleware(makeReq({ authorization: 'Basic ops:letmein' }), res, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+
+    it('verifies against the configured secret', async () => {
+      const { middleware, verify } = build(env);
+
+      await middleware(
+        makeReq({ authorization: 'Bearer token' }),
+        makeRes(),
+        jest.fn(),
+      );
+
+      expect(verify).toHaveBeenCalledWith('token', { secret: 'test-secret' });
+    });
   });
 });

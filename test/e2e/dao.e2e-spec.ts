@@ -1,174 +1,212 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { Test, TestingModule } from '@nestjs/testing';
+import { INestApplication } from '@nestjs/common';
+import { DataSource } from 'typeorm';
+import { JwtService } from '@nestjs/jwt';
 import * as request from 'supertest';
-import { AppModule } from '../../src/app.module';
-import { UserRole } from '../../src/auth/enums/user-role.enum';
-import { AuthService } from '../../src/auth/services/auth.service';
-import { UserService } from '../../src/users/services/user.service';
-import { ProposalStatus } from '../../src/dao/enums/proposal-status.enum';
+import { createTestApp } from '../helpers/app.helper';
+import {
+  seedTestUser,
+  setupTestDatabase,
+  teardownTestDatabase,
+  cleanDatabase,
+} from '../helpers/db.helper';
+import { FlagsService } from '../../src/modules/flags/flags.service';
+import { VoteChoice } from '../../src/dao/entities/vote.entity';
 
 /**
  * e2e coverage for the DAO governance write paths.
  *
  * Regression guard for #1305: the controller used to pass `req.user.user`
  * (which JwtStrategy never returns) into ProposalService, so both
- * POST /dao/proposals and POST /dao/proposals/:id/vote crashed with a
- * TypeError (500). The service now loads the User by userId itself.
+ * POST /v1/dao/proposals and POST /v1/dao/proposals/:id/vote crashed with
+ * a TypeError (500). The service now loads the User by userId itself.
  *
  * Regression guard for #1306: votes cast before `votingStartAt` must be
  * rejected with 400, and a duplicate vote for the same proposal must be
  * rejected with 409 (Conflict) rather than surfacing the unique-index
  * violation as a 500.
+ *
+ * Users are seeded straight into the table and a token is minted with the
+ * app's own JwtService: auth.login() is an OTP flow and no longer returns
+ * an access token, so driving the login endpoint here would only test the
+ * auth flow rather than DAO authorization.
  */
 describe('DAO governance (e2e)', () => {
   let app: INestApplication;
-  let authService: AuthService;
-  let userService: UserService;
+  let dataSource: DataSource;
+  let jwt: JwtService;
 
   let adminToken: string;
   let voterToken: string;
   let voterId: string;
 
+  const now = () => new Date();
+  const iso = (offsetMs: number) =>
+    new Date(Date.now() + offsetMs).toISOString();
+
+  const tokenFor = (user: { id: string; email: string; role: string }) =>
+    jwt.sign({ sub: user.id, email: user.email, role: user.role });
+
+  const proposalBody = (overrides: Record<string, unknown> = {}) => ({
+    title: 'Increase treasury allocation',
+    description: 'Allocate more XLM to the community fund.',
+    votingStartAt: iso(-60 * 60 * 1000),
+    votingEndAt: iso(60 * 60 * 1000),
+    quorumPercent: 10,
+    passThresholdPercent: 50,
+    ...overrides,
+  });
+
   beforeAll(async () => {
-    const moduleRef: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleRef.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, transform: true }),
-    );
-    await app.init();
-
-    authService = app.get(AuthService);
-    userService = app.get(UserService);
-
-    const admin = await userService.create({
-      email: 'dao-admin@example.com',
-      password: 'Password123!',
-      role: UserRole.ADMIN,
-    });
-    const voter = await userService.create({
-      email: 'dao-voter@example.com',
-      password: 'Password123!',
-      role: UserRole.USER,
-    });
-    voterId = voter.id;
-
-    // Give the voter an XLM balance so castVote's balance lookup succeeds.
-    await userService.update(voterId, {
-      balances: { XLM: 100 },
-    } as any);
-
-    adminToken = (
-      await authService.login({
-        email: 'dao-admin@example.com',
-        password: 'Password123!',
-      })
-    ).accessToken;
-    voterToken = (
-      await authService.login({
-        email: 'dao-voter@example.com',
-        password: 'Password123!',
-      })
-    ).accessToken;
+    app = await createTestApp();
+    dataSource = app.get(DataSource);
+    jwt = app.get(JwtService);
+    await setupTestDatabase(dataSource);
   });
 
   afterAll(async () => {
     await app.close();
+    await teardownTestDatabase();
   });
 
-  describe('POST /dao/proposals', () => {
+  beforeEach(async () => {
+    await cleanDatabase(dataSource);
+
+    const flags = app.get(FlagsService);
+    await flags.createFlag({
+      key: 'dao_voting',
+      name: 'DAO voting',
+      isEnabled: true,
+      rolloutPercent: 100,
+      environments: ['test', 'development'],
+    });
+
+    const admin = await seedTestUser(dataSource, {
+      email: 'dao-admin@example.com',
+      password: 'Password123!',
+      role: 'ADMIN',
+    });
+    const voter = await seedTestUser(dataSource, {
+      email: 'dao-voter@example.com',
+      password: 'Password123!',
+      role: 'USER',
+    });
+    voterId = voter.id;
+
+    // castVote derives vote weight from the voter's XLM balance.
+    await dataSource
+      .getRepository('users')
+      .update({ id: voterId }, { balances: { XLM: 100 } } as never);
+
+    adminToken = tokenFor({
+      id: admin.id,
+      email: admin.email,
+      role: 'ADMIN',
+    });
+    voterToken = tokenFor({
+      id: voter.id,
+      email: voter.email,
+      role: 'USER',
+    });
+  });
+
+  describe('POST /v1/dao/proposals', () => {
     it('lets an admin create a proposal (201)', async () => {
       const res = await request(app.getHttpServer())
-        .post('/dao/proposals')
+        .post('/v1/dao/proposals')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({
-          title: 'Increase treasury allocation',
-          description: 'Allocate more XLM to the community fund.',
-          status: ProposalStatus.ACTIVE,
-        })
+        .send(proposalBody())
         .expect(201);
 
-      expect(res.body).toHaveProperty('id');
-      expect(res.body.title).toBe('Increase treasury allocation');
+      const body = res.body?.data ?? res.body;
+      expect(body).toHaveProperty('id');
+      expect(body.title).toBe('Increase treasury allocation');
     });
 
     it('rejects a non-admin creating a proposal (403)', async () => {
       await request(app.getHttpServer())
-        .post('/dao/proposals')
+        .post('/v1/dao/proposals')
         .set('Authorization', `Bearer ${voterToken}`)
-        .send({
-          title: 'Unauthorized proposal',
-          description: 'Should not be allowed.',
-        })
+        .send(proposalBody({ title: 'Unauthorized proposal' }))
         .expect(403);
+    });
+
+    it('rejects a proposal missing required fields (400)', async () => {
+      await request(app.getHttpServer())
+        .post('/v1/dao/proposals')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ title: 'Incomplete' })
+        .expect(400);
+    });
+
+    it('rejects an unauthenticated request (401)', async () => {
+      await request(app.getHttpServer())
+        .post('/v1/dao/proposals')
+        .send(proposalBody())
+        .expect(401);
     });
   });
 
-  describe('POST /dao/proposals/:id/vote', () => {
-    it('lets a user with an XLM balance cast a vote (201)', async () => {
-      const created = await request(app.getHttpServer())
-        .post('/dao/proposals')
+  describe('POST /v1/dao/proposals/:id/vote', () => {
+    const createProposal = async () => {
+      const res = await request(app.getHttpServer())
+        .post('/v1/dao/proposals')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({
-          title: 'Fund the docs sprint',
-          description: 'Allocate XLM to documentation work.',
-          status: ProposalStatus.ACTIVE,
-        })
+        .send(proposalBody({ title: `Fund the docs sprint ${now().getTime()}` }))
         .expect(201);
+      return (res.body?.data ?? res.body).id as string;
+    };
+
+    it('lets a user with an XLM balance cast a vote (201)', async () => {
+      const proposalId = await createProposal();
 
       const res = await request(app.getHttpServer())
-        .post(`/dao/proposals/${created.body.id}/vote`)
+        .post(`/v1/dao/proposals/${proposalId}/vote`)
         .set('Authorization', `Bearer ${voterToken}`)
-        .send({ choice: 'for' })
+        .send({ choice: VoteChoice.YES })
         .expect(201);
 
-      expect(res.body).toBeDefined();
+      expect(res.body?.data ?? res.body).toBeDefined();
     });
 
     it('rejects a vote cast before votingStartAt (400)', async () => {
-      const futureStart = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-      const created = await request(app.getHttpServer())
-        .post('/dao/proposals')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({
-          title: 'Future proposal',
-          description: 'Voting has not opened yet.',
-          status: ProposalStatus.ACTIVE,
-          votingStartAt: futureStart,
-        })
-        .expect(201);
+      const proposalId = await createProposal();
+
+      await dataSource
+        .getRepository('proposals')
+        .update(
+          { id: proposalId },
+          { votingStartAt: new Date(Date.now() + 60 * 60 * 1000) } as never,
+        );
 
       await request(app.getHttpServer())
-        .post(`/dao/proposals/${created.body.id}/vote`)
+        .post(`/v1/dao/proposals/${proposalId}/vote`)
         .set('Authorization', `Bearer ${voterToken}`)
-        .send({ choice: 'for' })
+        .send({ choice: VoteChoice.YES })
         .expect(400);
     });
 
     it('rejects a duplicate vote for the same proposal (409)', async () => {
-      const created = await request(app.getHttpServer())
-        .post('/dao/proposals')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({
-          title: 'Duplicate vote guard',
-          description: 'Only one vote per voter is allowed.',
-          status: ProposalStatus.ACTIVE,
-        })
+      const proposalId = await createProposal();
+
+      await request(app.getHttpServer())
+        .post(`/v1/dao/proposals/${proposalId}/vote`)
+        .set('Authorization', `Bearer ${voterToken}`)
+        .send({ choice: VoteChoice.YES })
         .expect(201);
 
       await request(app.getHttpServer())
-        .post(`/dao/proposals/${created.body.id}/vote`)
+        .post(`/v1/dao/proposals/${proposalId}/vote`)
         .set('Authorization', `Bearer ${voterToken}`)
-        .send({ choice: 'for' })
-        .expect(201);
-
-      await request(app.getHttpServer())
-        .post(`/dao/proposals/${created.body.id}/vote`)
-        .set('Authorization', `Bearer ${voterToken}`)
-        .send({ choice: 'against' })
+        .send({ choice: VoteChoice.NO })
         .expect(409);
+    });
+
+    it('rejects a vote on an unknown proposal (404)', async () => {
+      await request(app.getHttpServer())
+        .post('/v1/dao/proposals/00000000-0000-4000-8000-000000000000/vote')
+        .set('Authorization', `Bearer ${voterToken}`)
+        .send({ choice: VoteChoice.YES })
+        .expect(404);
     });
   });
 });

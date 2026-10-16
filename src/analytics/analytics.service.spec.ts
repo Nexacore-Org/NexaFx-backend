@@ -1,5 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { AnalyticsService } from './analytics.service';
 import { TransactionCategory } from './entities/transaction-category.entity';
@@ -9,51 +14,55 @@ import {
   ExportJobStatus,
   ExportFormat,
 } from './entities/report-export-job.entity';
-import {
-  Transaction,
-  TransactionType,
-} from '../../transactions/entities/transaction.entity';
-import Decimal from 'decimal.js';
+import { Transaction } from '../transactions/entities/transaction.entity';
+import { User } from '../users/user.entity';
+import { UsersService } from '../users/users.service';
+import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
 
 describe('AnalyticsService', () => {
   let service: AnalyticsService;
 
   const mockTransactionRepository = {
-    createQueryBuilder: jest.fn(),
+    find: jest.fn(),
     findOne: jest.fn(),
     save: jest.fn(),
+    createQueryBuilder: jest.fn(),
   };
-
   const mockCategoryRepository = {
-    createQueryBuilder: jest.fn(),
-    findOne: jest.fn(),
     find: jest.fn(),
-    create: jest.fn(),
-    save: jest.fn(),
+    findOne: jest.fn(),
+    create: jest.fn((input) => input),
+    save: jest.fn(async (entity) => entity),
   };
-
   const mockBalanceSnapshotRepository = {
-    createQueryBuilder: jest.fn(),
     find: jest.fn(),
-    create: jest.fn(),
-    save: jest.fn(),
-  };
-
-  const mockExportJobRepository = {
-    createQueryBuilder: jest.fn(),
     findOne: jest.fn(),
-    create: jest.fn(),
-    save: jest.fn(),
-  };
-
-  const mockDataSource = {
     createQueryBuilder: jest.fn(),
   };
+  const mockExportJobRepository = {
+    find: jest.fn(),
+    findOne: jest.fn(),
+    create: jest.fn((input) => input),
+    save: jest.fn(async (entity) => entity),
+    update: jest.fn(),
+  };
+  const mockUserRepository = { find: jest.fn(), findOne: jest.fn() };
+  const mockUsersService = { getProfile: jest.fn() };
+  const mockExchangeRatesService = { getRate: jest.fn() };
+  const mockDataSource = { query: jest.fn() };
+
+  const userId = 'user-1';
 
   beforeEach(async () => {
+    jest.clearAllMocks();
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AnalyticsService,
+        {
+          provide: getRepositoryToken(Transaction),
+          useValue: mockTransactionRepository,
+        },
         {
           provide: getRepositoryToken(TransactionCategory),
           useValue: mockCategoryRepository,
@@ -67,537 +76,283 @@ describe('AnalyticsService', () => {
           useValue: mockExportJobRepository,
         },
         {
-          provide: getRepositoryToken(Transaction),
-          useValue: mockTransactionRepository,
+          provide: getRepositoryToken(User),
+          useValue: mockUserRepository,
         },
-        {
-          provide: DataSource,
-          useValue: mockDataSource,
-        },
+        { provide: UsersService, useValue: mockUsersService },
+        { provide: ExchangeRatesService, useValue: mockExchangeRatesService },
+        { provide: DataSource, useValue: mockDataSource },
       ],
     }).compile();
 
     service = module.get<AnalyticsService>(AnalyticsService);
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
+  describe('getCategories', () => {
+    it('returns system categories plus the caller categories', async () => {
+      mockCategoryRepository.find.mockResolvedValue([]);
 
-  describe('getSpendingSummary', () => {
-    it('should aggregate spending by category and date range', async () => {
-      const userId = 'user-1';
-      const query = { startDate: '2024-01-01', endDate: '2024-01-31' };
+      await service.getCategories(userId);
 
-      const categoryQueryBuilder = {
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([
-          {
-            categoryId: 'cat-1',
-            categoryName: 'Food',
-            color: '#EF4444',
-            totalAmount: '150.00000000',
-            transactionCount: 3,
-          },
-          {
-            categoryId: 'cat-2',
-            categoryName: 'Transport',
-            color: '#3B82F6',
-            totalAmount: '50.00000000',
-            transactionCount: 1,
-          },
-        ]),
-      };
-
-      const dailyQueryBuilder = {
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([
-          {
-            date: '2024-01-15',
-            totalAmount: '100.00000000',
-            transactionCount: 2,
-          },
-          {
-            date: '2024-01-20',
-            totalAmount: '100.00000000',
-            transactionCount: 2,
-          },
-        ]),
-      };
-
-      mockDataSource.createQueryBuilder
-        .mockReturnValueOnce(categoryQueryBuilder as any)
-        .mockReturnValueOnce(dailyQueryBuilder as any);
-
-      const result = await service.getSpendingSummary(userId, query);
-
-      expect(result.categories).toHaveLength(2);
-      expect(result.categories[0].categoryName).toBe('Food');
-      expect(result.categories[0].totalAmount).toBe('150.00000000');
-      expect(result.daily).toHaveLength(2);
-      expect(result.totalAmount).toBe('200.00000000');
-      expect(result.totalTransactionCount).toBe(4);
-    });
-
-    it('should scope results to the requesting user and exclude other users transactions', async () => {
-      const userId = 'user-1';
-      const otherUserId = 'user-2';
-      const query = { startDate: '2024-01-01', endDate: '2024-01-31' };
-
-      const categoryQueryBuilder = {
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([
-          {
-            categoryId: 'cat-1',
-            categoryName: 'Food',
-            color: '#EF4444',
-            totalAmount: '150.00000000',
-            transactionCount: 3,
-          },
-        ]),
-      };
-
-      const dailyQueryBuilder = {
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([
-          {
-            date: '2024-01-15',
-            totalAmount: '150.00000000',
-            transactionCount: 3,
-          },
-        ]),
-      };
-
-      mockDataSource.createQueryBuilder
-        .mockReturnValueOnce(categoryQueryBuilder as any)
-        .mockReturnValueOnce(dailyQueryBuilder as any);
-
-      const result = await service.getSpendingSummary(userId, query);
-
-      const categoryWhereCall = categoryQueryBuilder.where.mock.calls.find(
-        (call) => call[0].includes('userId'),
-      );
-      const dailyWhereCall = dailyQueryBuilder.where.mock.calls.find((call) =>
-        call[0].includes('userId'),
-      );
-      expect(categoryWhereCall[1]).toEqual({
-        userId,
-        startDate: new Date('2024-01-01'),
-        endDate: new Date('2024-01-31'),
-        status: 'SUCCESS',
+      expect(mockCategoryRepository.find).toHaveBeenCalledWith({
+        where: [{ isSystem: true }, { userId }],
+        order: { isSystem: 'DESC', name: 'ASC' },
       });
-      expect(dailyWhereCall[1]).toEqual({
-        userId,
-        startDate: new Date('2024-01-01'),
-        endDate: new Date('2024-01-31'),
-        status: 'SUCCESS',
-      });
-      expect(result.totalAmount).toBe('150.00000000');
-    });
-
-    it('should use default date range when dates are not provided', async () => {
-      const userId = 'user-1';
-      const query = {};
-
-      const categoryQueryBuilder = {
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([]),
-      };
-
-      const dailyQueryBuilder = {
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([]),
-      };
-
-      mockDataSource.createQueryBuilder
-        .mockReturnValueOnce(categoryQueryBuilder as any)
-        .mockReturnValueOnce(dailyQueryBuilder as any);
-
-      await service.getSpendingSummary(userId, query);
-
-      const now = new Date();
-      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      const categoryWhereCall = categoryQueryBuilder.where.mock.calls.find(
-        (call) => call[0].includes('userId'),
-      );
-      expect(categoryWhereCall[1].startDate).toBeInstanceOf(Date);
-      expect(categoryWhereCall[1].endDate).toBeInstanceOf(Date);
-      expect(categoryWhereCall[1].startDate.getTime()).toBeLessThanOrEqual(
-        thirtyDaysAgo.getTime() + 1000,
-      );
-    });
-
-    it('should handle uncategorised transactions', async () => {
-      const userId = 'user-1';
-      const query = { startDate: '2024-01-01', endDate: '2024-01-31' };
-
-      const categoryQueryBuilder = {
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([
-          {
-            categoryId: '',
-            categoryName: 'Uncategorised',
-            color: null,
-            totalAmount: '200.00000000',
-            transactionCount: 5,
-          },
-        ]),
-      };
-
-      const dailyQueryBuilder = {
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([]),
-      };
-
-      mockDataSource.createQueryBuilder
-        .mockReturnValueOnce(categoryQueryBuilder as any)
-        .mockReturnValueOnce(dailyQueryBuilder as any);
-
-      const result = await service.getSpendingSummary(userId, query);
-
-      expect(result.categories).toHaveLength(1);
-      expect(result.categories[0].categoryName).toBe('Uncategorised');
-      expect(result.categories[0].color).toBeNull();
-      expect(result.totalAmount).toBe('200.00000000');
     });
   });
 
   describe('createCategory', () => {
-    it('should create a category successfully', async () => {
-      const userId = 'user-1';
-      const dto = { name: 'Groceries', color: 'GREEN' as any };
+    it('creates a personal category with the supplied icon and colour', async () => {
+      await service.createCategory(userId, {
+        name: 'Food',
+        icon: '🍕',
+        color: '#EF4444',
+      });
 
-      mockCategoryRepository.findOne.mockResolvedValue(null);
-      mockCategoryRepository.create.mockReturnValue({
-        id: 'cat-1',
-        userId,
-        name: 'Groceries',
-        color: '#22C55E',
-      } as any);
-      mockCategoryRepository.save.mockResolvedValue({
-        id: 'cat-1',
-        userId,
-        name: 'Groceries',
-        color: '#22C55E',
-        createdAt: new Date(),
-      } as any);
-
-      const result = await service.createCategory(userId, dto);
-
-      expect(result.name).toBe('Groceries');
-      expect(result.userId).toBe(userId);
       expect(mockCategoryRepository.create).toHaveBeenCalledWith({
+        name: 'Food',
+        icon: '🍕',
+        color: '#EF4444',
+        isSystem: false,
         userId,
-        name: 'Groceries',
-        color: '#22C55E',
       });
+      expect(mockCategoryRepository.save).toHaveBeenCalled();
     });
 
-    it('should use default color when color is not provided', async () => {
-      const userId = 'user-1';
-      const dto = { name: 'Groceries' };
+    it('falls back to default icon and colour', async () => {
+      await service.createCategory(userId, { name: 'Food' });
 
-      mockCategoryRepository.findOne.mockResolvedValue(null);
-      mockCategoryRepository.create.mockReturnValue({
-        id: 'cat-1',
-        userId,
-        name: 'Groceries',
-        color: '#6B7280',
-      } as any);
-      mockCategoryRepository.save.mockResolvedValue({
-        id: 'cat-1',
-        userId,
-        name: 'Groceries',
-        color: '#6B7280',
-        createdAt: new Date(),
-      } as any);
-
-      const result = await service.createCategory(userId, dto);
-
-      expect(result.color).toBe('#6B7280');
-      expect(mockCategoryRepository.create).toHaveBeenCalledWith({
-        userId,
-        name: 'Groceries',
-        color: '#6B7280',
-      });
-    });
-
-    it('should reject a category name collision', async () => {
-      const userId = 'user-1';
-      const dto = { name: 'Groceries' };
-
-      mockCategoryRepository.findOne.mockResolvedValue({
-        id: 'cat-1',
-        userId,
-        name: 'Groceries',
-      } as any);
-
-      await expect(service.createCategory(userId, dto)).rejects.toThrow(
-        ConflictException,
+      expect(mockCategoryRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ icon: '📦', color: '#6366f1' }),
       );
-      await expect(service.createCategory(userId, dto)).rejects.toThrow(
-        "Category with name 'Groceries' already exists",
-      );
-      expect(mockCategoryRepository.create).not.toHaveBeenCalled();
-      expect(mockCategoryRepository.save).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('findUserCategories', () => {
-    it('should return all categories for a user', async () => {
-      const userId = 'user-1';
-      const categories = [
-        { id: 'cat-1', userId, name: 'Food', color: '#EF4444' },
-        { id: 'cat-2', userId, name: 'Transport', color: '#3B82F6' },
-      ];
-
-      mockCategoryRepository.find.mockResolvedValue(categories);
-
-      const result = await service.findUserCategories(userId);
-
-      expect(result).toEqual(categories);
-      expect(mockCategoryRepository.find).toHaveBeenCalledWith({
-        where: { userId },
-        order: { createdAt: 'ASC' },
-      });
     });
   });
 
   describe('assignCategory', () => {
-    it('should assign category to transaction successfully', async () => {
-      const userId = 'user-1';
-      const dto = { transactionId: 'tx-1', categoryId: 'cat-1' };
+    const transaction = { id: 'tx-1', userId, metadata: { existing: true } };
 
-      mockTransactionRepository.findOne.mockResolvedValue({
-        id: 'tx-1',
-        userId,
-        metadata: {},
-      } as any);
+    it('writes the category id into the transaction metadata', async () => {
+      mockTransactionRepository.findOne.mockResolvedValue({ ...transaction });
       mockCategoryRepository.findOne.mockResolvedValue({
         id: 'cat-1',
-        userId,
-      } as any);
-      mockTransactionRepository.save.mockResolvedValue({
-        id: 'tx-1',
-        userId,
-        metadata: { categoryId: 'cat-1' },
-      } as any);
+        isSystem: true,
+        userId: null,
+      });
+      mockTransactionRepository.save.mockImplementation(async (tx) => tx);
 
-      const result = await service.assignCategory(userId, dto);
+      const result = await service.assignCategory('tx-1', userId, 'cat-1');
 
-      expect(result.metadata.categoryId).toBe('cat-1');
+      expect(result.metadata).toEqual({
+        existing: true,
+        categoryId: 'cat-1',
+      });
       expect(mockTransactionRepository.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: 'tx-1',
-          metadata: { categoryId: 'cat-1' },
-        }),
+        expect.objectContaining({ id: 'tx-1' }),
       );
     });
 
-    it('should reject assignment to a nonexistent transaction', async () => {
-      const userId = 'user-1';
-      const dto = { transactionId: 'nonexistent-tx', categoryId: 'cat-1' };
-
+    it('rejects an unknown transaction', async () => {
       mockTransactionRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.assignCategory(userId, dto)).rejects.toThrow(
-        NotFoundException,
-      );
-      await expect(service.assignCategory(userId, dto)).rejects.toThrow(
-        'Transaction nonexistent-tx not found',
-      );
-      expect(mockCategoryRepository.findOne).not.toHaveBeenCalled();
+      await expect(
+        service.assignCategory('tx-missing', userId, 'cat-1'),
+      ).rejects.toThrow(NotFoundException);
     });
 
-    it('should reject assignment when transaction belongs to another user', async () => {
-      const userId = 'user-1';
-      const dto = { transactionId: 'tx-1', categoryId: 'cat-1' };
-
+    it('rejects a transaction owned by somebody else', async () => {
       mockTransactionRepository.findOne.mockResolvedValue({
-        id: 'tx-1',
-        userId: 'user-2',
-      } as any);
+        ...transaction,
+        userId: 'someone-else',
+      });
 
-      await expect(service.assignCategory(userId, dto)).rejects.toThrow(
-        BadRequestException,
-      );
-      await expect(service.assignCategory(userId, dto)).rejects.toThrow(
-        'Transaction does not belong to the current user',
-      );
+      await expect(
+        service.assignCategory('tx-1', userId, 'cat-1'),
+      ).rejects.toThrow(ForbiddenException);
     });
 
-    it('should reject assignment to a nonexistent category', async () => {
-      const userId = 'user-1';
-      const dto = { transactionId: 'tx-1', categoryId: 'nonexistent-cat' };
-
-      mockTransactionRepository.findOne.mockResolvedValue({
-        id: 'tx-1',
-        userId,
-      } as any);
+    it('rejects an unknown category', async () => {
+      mockTransactionRepository.findOne.mockResolvedValue({ ...transaction });
       mockCategoryRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.assignCategory(userId, dto)).rejects.toThrow(
-        NotFoundException,
-      );
-      await expect(service.assignCategory(userId, dto)).rejects.toThrow(
-        'Category nonexistent-cat not found',
-      );
+      await expect(
+        service.assignCategory('tx-1', userId, 'cat-missing'),
+      ).rejects.toThrow(NotFoundException);
     });
 
-    it('should reject assignment when category belongs to another user', async () => {
-      const userId = 'user-1';
-      const dto = { transactionId: 'tx-1', categoryId: 'cat-1' };
-
-      mockTransactionRepository.findOne.mockResolvedValue({
-        id: 'tx-1',
-        userId,
-      } as any);
+    it('rejects a personal category owned by somebody else', async () => {
+      mockTransactionRepository.findOne.mockResolvedValue({ ...transaction });
       mockCategoryRepository.findOne.mockResolvedValue({
-        id: 'cat-1',
-        userId: 'user-2',
-      } as any);
+        id: 'cat-2',
+        isSystem: false,
+        userId: 'someone-else',
+      });
 
-      await expect(service.assignCategory(userId, dto)).rejects.toThrow(
-        BadRequestException,
-      );
-      await expect(service.assignCategory(userId, dto)).rejects.toThrow(
-        'Category does not belong to the current user',
-      );
+      await expect(
+        service.assignCategory('tx-1', userId, 'cat-2'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('allows a system category for any user', async () => {
+      mockTransactionRepository.findOne.mockResolvedValue({ ...transaction });
+      mockCategoryRepository.findOne.mockResolvedValue({
+        id: 'cat-3',
+        isSystem: true,
+        userId: null,
+      });
+      mockTransactionRepository.save.mockImplementation(async (tx) => tx);
+
+      await expect(
+        service.assignCategory('tx-1', userId, 'cat-3'),
+      ).resolves.toBeDefined();
     });
   });
 
   describe('createExportJob', () => {
-    it('should create an export job with default format', async () => {
-      const userId = 'user-1';
-
-      mockExportJobRepository.create.mockReturnValue({
-        userId,
-        format: ExportFormat.CSV,
-        status: ExportJobStatus.PENDING,
-      } as any);
-      mockExportJobRepository.save.mockResolvedValue({
+    it('creates a pending CSV job and starts processing', async () => {
+      mockExportJobRepository.save.mockImplementation(async (job) => ({
         id: 'job-1',
+        ...job,
+      }));
+      mockExportJobRepository.update.mockResolvedValue({ affected: 1 });
+
+      const job = await service.createExportJob(
         userId,
-        format: ExportFormat.CSV,
-        status: ExportJobStatus.PENDING,
-        createdAt: new Date(),
-      } as any);
-
-      const result = await service.createExportJob(userId, ExportFormat.CSV);
-
-      expect(result.format).toBe(ExportFormat.CSV);
-      expect(result.status).toBe(ExportJobStatus.PENDING);
-    });
-
-    it('should create an export job with specified format', async () => {
-      const userId = 'user-1';
-
-      mockExportJobRepository.create.mockReturnValue({
-        userId,
-        format: ExportFormat.PDF,
-        status: ExportJobStatus.PENDING,
-      } as any);
-      mockExportJobRepository.save.mockResolvedValue({
-        id: 'job-1',
-        userId,
-        format: ExportFormat.PDF,
-        status: ExportJobStatus.PENDING,
-        createdAt: new Date(),
-      } as any);
-
-      const result = await service.createExportJob(userId, ExportFormat.PDF);
-
-      expect(result.format).toBe(ExportFormat.PDF);
-    });
-  });
-
-  describe('getUserBalanceSnapshots', () => {
-    it('should return up to 90 snapshots ordered by date desc', async () => {
-      const userId = 'user-1';
-      const snapshots = [
-        {
-          id: 'snap-1',
-          userId,
-          balance: '1000.00000000',
-          currency: 'USD',
-          snapshotDate: new Date('2024-01-31'),
-        },
-        {
-          id: 'snap-2',
-          userId,
-          balance: '950.00000000',
-          currency: 'USD',
-          snapshotDate: new Date('2024-01-30'),
-        },
-      ];
-
-      mockBalanceSnapshotRepository.find.mockResolvedValue(snapshots);
-
-      const result = await service.getUserBalanceSnapshots(userId);
-
-      expect(result).toEqual(snapshots);
-      expect(mockBalanceSnapshotRepository.find).toHaveBeenCalledWith({
-        where: { userId },
-        order: { snapshotDate: 'DESC' },
-        take: 90,
-      });
-    });
-  });
-
-  describe('recordBalanceSnapshot', () => {
-    it('should record a balance snapshot', async () => {
-      const userId = 'user-1';
-      const snapshot = {
-        id: 'snap-1',
-        userId,
-        balance: '1000.00000000',
-        currency: 'USD',
-        snapshotDate: new Date(),
-      };
-
-      mockBalanceSnapshotRepository.create.mockReturnValue(snapshot as any);
-      mockBalanceSnapshotRepository.save.mockResolvedValue({
-        ...snapshot,
-        createdAt: new Date(),
-      } as any);
-
-      const result = await service.recordBalanceSnapshot(
-        userId,
-        '1000.00000000',
-        'USD',
+        'csv',
+        '2026-01-01T00:00:00Z',
+        '2026-06-30T23:59:59Z',
       );
 
-      expect(mockBalanceSnapshotRepository.create).toHaveBeenCalledWith({
+      expect(mockExportJobRepository.create).toHaveBeenCalledWith({
         userId,
-        balance: '1000.00000000',
-        currency: 'USD',
-        snapshotDate: expect.any(Date),
+        format: ExportFormat.CSV,
+        fromDate: new Date('2026-01-01T00:00:00Z'),
+        toDate: new Date('2026-06-30T23:59:59Z'),
+        status: ExportJobStatus.PENDING,
       });
-      expect(result.balance).toBe('1000.00000000');
+      expect(job.id).toBe('job-1');
+    });
+
+    it('maps a pdf request onto the PDF format', async () => {
+      mockExportJobRepository.save.mockImplementation(async (job) => job);
+
+      await service.createExportJob(
+        userId,
+        'pdf',
+        '2026-01-01T00:00:00Z',
+        '2026-06-30T23:59:59Z',
+      );
+
+      expect(mockExportJobRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ format: ExportFormat.PDF }),
+      );
+    });
+
+    it('rejects malformed dates', async () => {
+      await expect(
+        service.createExportJob(userId, 'csv', 'not-a-date', 'also-not'),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockExportJobRepository.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getExportJob', () => {
+    it('scopes the lookup to the owner', async () => {
+      const job = { id: 'job-1', userId, status: ExportJobStatus.COMPLETED };
+      mockExportJobRepository.findOne.mockResolvedValue(job);
+
+      await expect(service.getExportJob('job-1', userId)).resolves.toBe(job);
+      expect(mockExportJobRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 'job-1', userId },
+      });
+    });
+
+    it('throws when the job is not visible to the user', async () => {
+      mockExportJobRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.getExportJob('job-1', userId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('getExportFile', () => {
+    const completedJob = {
+      id: 'abcdef12-3456-7890-abcd-ef1234567890',
+      userId,
+      status: ExportJobStatus.COMPLETED,
+      format: ExportFormat.CSV,
+      filename: 'report-abcdef12.csv',
+      fromDate: new Date('2026-01-01T00:00:00Z'),
+      toDate: new Date('2026-06-30T23:59:59Z'),
+    };
+
+    it('refuses to render a job that has not completed', async () => {
+      mockExportJobRepository.findOne.mockResolvedValue({
+        ...completedJob,
+        status: ExportJobStatus.PENDING,
+      });
+
+      await expect(service.getExportFile('abcdef12', userId)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('re-renders a completed CSV export', async () => {
+      mockExportJobRepository.findOne.mockResolvedValue(completedJob);
+      mockTransactionRepository.find.mockResolvedValue([]);
+      mockCategoryRepository.find.mockResolvedValue([]);
+
+      const result = await service.getExportFile('abcdef12', userId);
+
+      expect(mockTransactionRepository.find).toHaveBeenCalledWith({
+        where: {
+          userId,
+          createdAt: expect.anything(),
+        },
+        order: { createdAt: 'ASC' },
+      });
+      expect(result.contentType).toBe('text/csv');
+      expect(result.filename).toBe('report-abcdef12.csv');
+      expect(Buffer.isBuffer(result.buffer)).toBe(true);
+    });
+  });
+
+  describe('getBalanceHistory', () => {
+    it('requests the requested number of days for the user', async () => {
+      mockBalanceSnapshotRepository.find.mockResolvedValue([]);
+
+      await service.getBalanceHistory(userId, 30);
+
+      const args = mockBalanceSnapshotRepository.find.mock.calls[0][0];
+      expect(args.where.userId).toBe(userId);
+      expect(args.order).toEqual({ snapshotDate: 'ASC' });
+    });
+  });
+
+  describe('getLatestSnapshot', () => {
+    it('returns the newest snapshot or null', async () => {
+      mockBalanceSnapshotRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.getLatestSnapshot(userId)).resolves.toBeNull();
+      expect(mockBalanceSnapshotRepository.findOne).toHaveBeenCalledWith({
+        where: { userId },
+        order: { snapshotDate: 'DESC' },
+      });
+    });
+  });
+
+  describe('autoAssignCategory', () => {
+    it('maps transaction types onto system category names', () => {
+      expect(service.autoAssignCategory('SWAP' as any)).toBe('Exchange');
+      expect(service.autoAssignCategory('WITHDRAW' as any)).toBe('Transfers');
+      expect(service.autoAssignCategory('DEPOSIT' as any)).toBe('Transfers');
+      expect(
+        service.autoAssignCategory('DEPOSIT' as any, { source: 'batch' }),
+      ).toBe('Payroll');
+      expect(
+        service.autoAssignCategory('DEPOSIT' as any, { source: 'savings' }),
+      ).toBe('Savings');
+      expect(service.autoAssignCategory('UNKNOWN' as any)).toBe('Other');
     });
   });
 });

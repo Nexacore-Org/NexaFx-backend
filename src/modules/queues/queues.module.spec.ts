@@ -1,55 +1,40 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { ConfigModule } from '@nestjs/config';
-import { MiddlewareConsumer, RequestMethod } from '@nestjs/common';
-import { QueuesModule } from './queues.module';
+import { EMAIL_QUEUE, WEBHOOK_QUEUE, TAX_QUEUE } from './queue.constants';
 import { QueuesDashboardService } from './queues-dashboard.service';
-import { QUEUE_CONNECTION_TOKEN } from './queue.constants';
-import { AdminQueueAuthMiddleware } from './admin-queue-auth.middleware';
+import { QueuesModule } from './queues.module';
 
 describe('QueuesModule', () => {
-  let module: TestingModule;
-  let queuesModule: QueuesModule;
-
-  beforeEach(async () => {
-    module = await Test.createTestingModule({
-      imports: [
-        ConfigModule.forRoot({
-          isGlobal: true,
-          load: [() => ({ REDIS_HOST: 'localhost', REDIS_PORT: 6379 })],
-        }),
-        QueuesModule,
-      ],
-    }).compile();
-
-    queuesModule = module.get<QueuesModule>(QueuesModule);
-  });
-
-  it('should compile the module and provide QueuesDashboardService and QUEUE_CONNECTION_TOKEN', () => {
-    expect(module).toBeDefined();
-    const dashboardService = module.get<QueuesDashboardService>(
-      QueuesDashboardService,
-    );
-    const redisConn = module.get(QUEUE_CONNECTION_TOKEN);
-    expect(dashboardService).toBeDefined();
-    expect(redisConn).toBeDefined();
-    expect(redisConn.host).toBe('localhost');
-  });
-
-  it('should configure AdminQueueAuthMiddleware for admin queues routes', () => {
-    const applyMock = jest.fn().mockReturnThis();
-    const forRoutesMock = jest.fn();
-    applyMock.mockReturnValue({ forRoutes: forRoutesMock });
-
-    const mockConsumer: MiddlewareConsumer = {
-      apply: applyMock,
-    };
-
-    queuesModule.configure(mockConsumer);
-
-    expect(applyMock).toHaveBeenCalledWith(AdminQueueAuthMiddleware);
-    expect(forRoutesMock).toHaveBeenCalledWith({
-      path: 'admin/queues*',
-      method: RequestMethod.ALL,
+  const queueTokens = (): string[] => {
+    const imports: unknown[] = Reflect.getMetadata('imports', QueuesModule) ?? [];
+    return imports.flatMap((module) => {
+      const providers = (module as { providers?: { provide?: unknown }[] })
+        ?.providers;
+      if (!Array.isArray(providers)) return [];
+      return providers
+        .map((provider) => provider?.provide)
+        .filter(
+          (token): token is string =>
+            typeof token === 'string' && token.startsWith('BullQueue_'),
+        );
     });
+  };
+
+  it('provides QueuesDashboardService', () => {
+    const providers: unknown[] = Reflect.getMetadata('providers', QueuesModule);
+    expect(providers).toContain(QueuesDashboardService);
+  });
+
+  it('exports the dashboard service so main.ts can mount the router', () => {
+    const exports: unknown[] = Reflect.getMetadata('exports', QueuesModule);
+    expect(exports).toContain(QueuesDashboardService);
+  });
+
+  it('registers the email, webhook and tax queues', () => {
+    expect(queueTokens()).toEqual(
+      expect.arrayContaining([
+        `BullQueue_${EMAIL_QUEUE}`,
+        `BullQueue_${WEBHOOK_QUEUE}`,
+        `BullQueue_${TAX_QUEUE}`,
+      ]),
+    );
   });
 });

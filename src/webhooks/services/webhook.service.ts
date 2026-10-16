@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, UnauthorizedException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
@@ -95,6 +95,17 @@ export class WebhookService {
     private readonly auditLogsService: AuditLogsService,
   ) {}
 
+  /**
+   * Guards every public method against an undefined/empty userId. Without this
+   * TypeORM 0.3 silently drops the undefined key from where-objects, turning
+   * owner-scoped queries into cross-tenant lookups.
+   */
+  private assertUserId(userId: string): void {
+    if (typeof userId !== 'string' || userId.trim().length === 0) {
+      throw new UnauthorizedException('Authenticated user is required');
+    }
+  }
+
   private async validateWebhookUrl(url: string): Promise<void> {
     let parsed: URL;
     try {
@@ -151,6 +162,7 @@ export class WebhookService {
     events: string[],
     preferredSchemaVersion?: string,
   ): Promise<WebhookEndpoint> {
+    this.assertUserId(userId);
     await this.validateWebhookUrl(url);
 
     if (
@@ -181,12 +193,13 @@ export class WebhookService {
     endpointId: string,
     updates: Partial<WebhookEndpoint>,
   ): Promise<WebhookEndpoint> {
+    this.assertUserId(userId);
     const endpoint = await this.endpointRepo.findOne({
       where: { id: endpointId, userId },
     });
 
     if (!endpoint) {
-      throw new BadRequestException('Webhook endpoint not found');
+      throw new NotFoundException('Webhook endpoint not found');
     }
 
     if (updates.url !== undefined) {
@@ -213,12 +226,13 @@ export class WebhookService {
     userId: string,
     endpointId: string,
   ): Promise<{ secret: string }> {
+    this.assertUserId(userId);
     const endpoint = await this.endpointRepo.findOne({
       where: { id: endpointId, userId },
     });
 
     if (!endpoint) {
-      throw new BadRequestException('Webhook endpoint not found');
+      throw new NotFoundException('Webhook endpoint not found');
     }
 
     const secret = crypto.randomBytes(32).toString('hex');
@@ -236,6 +250,7 @@ export class WebhookService {
     rawTransaction: any,
     userId: string,
   ): Promise<void> {
+    this.assertUserId(userId);
     const endpoints = await this.endpointRepo.find({
       where: { userId, isActive: true },
     });
@@ -275,131 +290,6 @@ export class WebhookService {
   private buildPayload(
     endpoint: WebhookEndpoint,
     event: string,
-    rawTransaction: any,
-    eventId: string,
-    timestamp: string,
-  ): any {
-    if (endpoint.preferredSchemaVersion === '2.0') {
-      return {
-        id: eventId,
-        timestamp,
-        event,
-        schemaVersion: '2.0',
-        data: {
-          transactionId: rawTransaction.id,
-          amount: Number(rawTransaction.amount),
-          currency: rawTransaction.currency,
-          status: String(rawTransaction.status).toLowerCase(),
-          fee: {
-            amount: Number(rawTransaction.feeAmount),
-            currency: rawTransaction.feeCurrency,
-          },
-          stellarTxHash: rawTransaction.txHash,
-        },
-      };
-    }
+ 
 
-    return {
-      id: eventId,
-      timestamp,
-      event,
-      schemaVersion: '1.0',
-      data: rawTransaction,
-    };
-  }
-
-  /**
-   * Signs a delivery body. The signed string is `${timestamp}.${body}` so
-   * consumers can reject replayed requests outside a tolerance window.
-   */
-  private signPayload(secret: string, timestamp: string, body: string): string {
-    return crypto
-      .createHmac('sha256', secret)
-      .update(`${timestamp}.${body}`)
-      .digest('hex');
-  }
-
-  private buildSignatureHeaders(
-    endpoint: WebhookEndpoint,
-    timestamp: string,
-    deliveryId: string,
-    body: string,
-  ): Record<string, string> {
-    const headers: Record<string, string> = {
-      'X-NexaFX-Timestamp': timestamp,
-      'X-NexaFX-Delivery-Id': deliveryId,
-      'X-NexaFX-Signature': this.signPayload(endpoint.secret, timestamp, body),
-    };
-
-    // During the rotation grace window, also emit a signature computed with
-    // the previous secret so consumers can migrate without dropping events.
-    if (endpoint.previousSecret) {
-      headers['X-NexaFX-Signature-Previous'] = this.signPayload(
-        endpoint.previousSecret,
-        timestamp,
-        body,
-      );
-    }
-
-    return headers;
-  }
-
-  async executeDelivery(deliveryId: string): Promise<void> {
-    const delivery = await this.deliveryRepo.findOne({
-      where: { id: deliveryId },
-    });
-
-    if (!delivery) {
-      return;
-    }
-
-    const endpoint = await this.endpointRepo.findOne({
-      where: { id: delivery.endpointId },
-    });
-
-    if (!endpoint || !endpoint.isActive) {
-      return;
-    }
-
-    const payloadString = JSON.stringify(delivery.payload);
-    const timestamp = new Date().toISOString();
-    const deliveryIdHeader = delivery.id;
-
-    const signatureHeaders = this.buildSignatureHeaders(
-      endpoint,
-      timestamp,
-      deliveryIdHeader,
-      payloadString,
-    );
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'User-Agent': 'NexaFX-Webhooks/1.0',
-      'X-NexaFX-Schema-Version': endpoint.preferredSchemaVersion || '1.0',
-      ...signatureHeaders,
-    };
-
-    const agents = createSsrfSafeAgent();
-
-    try {
-      await axios.post(endpoint.url, payloadString, {
-        headers,
-        httpAgent: agents.http,
-        httpsAgent: agents.https,
-        timeout: 10000,
-      });
-
-      delivery.status = 'SUCCESS';
-      delivery.attempts = (delivery.attempts || 0) + 1;
-      await this.deliveryRepo.save(delivery);
-    } catch (error) {
-      this.logger.error(
-        `Webhook delivery ${delivery.id} failed: ${error.message}`,
-      );
-      delivery.status = 'FAILED';
-      delivery.attempts = (delivery.attempts || 0) + 1;
-      await this.deliveryRepo.save(delivery);
-      throw error;
-    }
-  }
-}
+/* … truncated 3440 chars — edit only what you need near the top … */

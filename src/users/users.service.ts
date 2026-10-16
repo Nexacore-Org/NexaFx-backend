@@ -126,7 +126,6 @@ export class UsersService {
     const user = this.userRepository.create({
       email: normalizedEmail,
       password: hashedPassword,
-      passwordHash: hashedPassword ?? undefined,
       firstName: params.firstName || null,
       lastName: params.lastName || null,
       phone: params.phone || null,
@@ -153,6 +152,51 @@ export class UsersService {
     return userWithoutSecrets;
   }
 
+  /**
+   * Increments the failed-attempt counter in the database.
+   *
+   * Read-modify-write on the loaded entity meant N parallel guesses all wrote
+   * the same value and the lockout could be side-stepped by concurrency.
+   * @QueryBuilder...RETURNING keeps the increment atomic and gives back the
+   * value that was stored.
+   */
+  async incrementFailedLoginAttempts(
+    userId: string,
+    maxAttempts: number,
+    lockoutMinutes: number,
+  ): Promise<number> {
+    const result = await this.userRepository
+      .createQueryBuilder()
+      .update(User)
+      .set({ failedLoginAttempts: () => '"failedLoginAttempts" + 1' })
+      .where('id = :userId', { userId })
+      .returning('"failedLoginAttempts"')
+      .execute();
+
+    const attempts = Number(result?.raw?.[0]?.failedLoginAttempts ?? 0);
+
+    if (attempts >= maxAttempts) {
+      const lockedUntil = new Date(
+        Date.now() + lockoutMinutes * 60_000,
+      );
+      await this.userRepository.update(userId, {
+        failedLoginAttempts: 0,
+        lockedUntil,
+      });
+      return 0;
+    }
+
+    return attempts;
+  }
+
+  /** Clears the lockout state after a completed login. */
+  async clearFailedLoginAttempts(userId: string): Promise<void> {
+    await this.userRepository.update(userId, {
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+    });
+  }
+
   async updatePassword(userId: string, newPassword: string): Promise<void> {
     const user = await this.findById(userId);
     if (!user) {
@@ -164,7 +208,6 @@ export class UsersService {
 
     await this.userRepository.update(userId, {
       password: hashedPassword,
-      passwordHash: hashedPassword,
     });
   }
 

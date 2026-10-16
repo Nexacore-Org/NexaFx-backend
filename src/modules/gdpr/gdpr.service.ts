@@ -163,9 +163,6 @@ export class GdprService {
     user.firstName = 'Deleted';
     user.lastName = 'Deleted';
     user.password = null;
-    // passwordHash is NOT NULL, so it is overwritten with a value that cannot
-    // match any password rather than left in place.
-    user.passwordHash = `erased-${user.id}`;
     user.phone = null;
     user.fcmTokens = [];
     user.fcmToken = null;

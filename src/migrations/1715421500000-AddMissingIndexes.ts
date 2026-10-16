@@ -28,9 +28,13 @@ export class AddMissingIndexes1715421500000 implements MigrationInterface {
     await queryRunner.query(
       `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_kyc_user_id ON kyc ("userId")`,
     );
-    await queryRunner.query(
-      `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_otps_user_id ON otps ("userId")`,
-    );
+    // The otps table is created by a later migration; guard so a fresh
+    // migration run does not fail on a table that does not exist yet.
+    if (await queryRunner.hasTable('otps')) {
+      await queryRunner.query(
+        `CREATE INDEX IF NOT EXISTS idx_otps_user_id ON otps ("userId")`,
+      );
+    }
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

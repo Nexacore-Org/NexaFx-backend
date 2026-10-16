@@ -51,6 +51,7 @@ describe('OtpsService - Brute Force Lockout', () => {
 
     mockUsersService = {
       updateByUserId: jest.fn().mockResolvedValue(undefined),
+      incrementFailedLoginAttempts: jest.fn().mockResolvedValue(1),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -125,9 +126,11 @@ describe('OtpsService - Brute Force Lockout', () => {
         service.validateOtp(mockUser(), '000000', OtpType.LOGIN),
       ).rejects.toThrow(UnauthorizedException);
 
-      expect(mockUsersService.updateByUserId).toHaveBeenCalledWith('user-123', {
-        failedLoginAttempts: 1,
-      });
+      // Counting is delegated to an atomic UPDATE ... RETURNING in
+      // UsersService, so parallel attempts cannot overwrite each other.
+      expect(
+        mockUsersService.incrementFailedLoginAttempts,
+      ).toHaveBeenCalledWith('user-123', 5, 15);
     });
 
     it('should set lockedUntil when MAX_FAILED_ATTEMPTS is reached', async () => {
@@ -145,13 +148,9 @@ describe('OtpsService - Brute Force Lockout', () => {
         service.validateOtp(userAtFourthAttempt, '000000', OtpType.LOGIN),
       ).rejects.toThrow(UnauthorizedException);
 
-      expect(mockUsersService.updateByUserId).toHaveBeenCalledWith(
-        'user-123',
-        expect.objectContaining({
-          failedLoginAttempts: 5,
-          lockedUntil: expect.any(Date),
-        }),
-      );
+      expect(
+        mockUsersService.incrementFailedLoginAttempts,
+      ).toHaveBeenCalledWith('user-123', 5, 15);
     });
 
     it('should return 429 on the 6th failed attempt after 5 consecutive failures', async () => {
@@ -163,16 +162,16 @@ describe('OtpsService - Brute Force Lockout', () => {
         expiresAt: new Date(Date.now() + 10 * 60 * 1000),
       });
 
-      // Mutable user object so failedLoginAttempts persists across calls
+      // Mutable user object so the counter persists across calls, standing in
+      // for the atomic UPDATE the real UsersService performs.
       const user = { ...mockUser() };
-      mockUsersService.updateByUserId.mockImplementation(
-        async (userId: string, data: Partial<any>) => {
-          if (data.failedLoginAttempts !== undefined) {
-            user.failedLoginAttempts = data.failedLoginAttempts;
+      mockUsersService.incrementFailedLoginAttempts.mockImplementation(
+        async (userId: string, maxAttempts: number, lockoutMinutes: number) => {
+          user.failedLoginAttempts = (user.failedLoginAttempts ?? 0) + 1;
+          if (user.failedLoginAttempts >= maxAttempts) {
+            user.lockedUntil = new Date(Date.now() + lockoutMinutes * 60_000);
           }
-          if (data.lockedUntil !== undefined) {
-            user.lockedUntil = data.lockedUntil;
-          }
+          return user.failedLoginAttempts;
         },
       );
 
@@ -211,11 +210,9 @@ describe('OtpsService - Brute Force Lockout', () => {
         service.validateOtp(userAtFourthAttempt, '000000', OtpType.LOGIN),
       ).rejects.toThrow(UnauthorizedException);
 
-      const call = mockUsersService.updateByUserId.mock.calls[0];
-      const lockoutDuration =
-        (call[1].lockedUntil.getTime() - Date.now()) / 60000;
-      expect(lockoutDuration).toBeGreaterThan(29);
-      expect(lockoutDuration).toBeLessThan(31);
+      expect(
+        mockUsersService.incrementFailedLoginAttempts,
+      ).toHaveBeenCalledWith('user-123', 5, 30);
     });
   });
 });

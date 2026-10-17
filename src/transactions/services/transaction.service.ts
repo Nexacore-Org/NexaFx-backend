@@ -1811,4 +1811,27 @@ export class TransactionsService {
       confidenceLabel: scores.confidenceLabel,
     });
   }
+  // src/transactions/services/transaction.service.ts
+// (Inside confirmation handler / webhook callback where deposit status becomes SUCCESS)
+
+async confirmDeposit(depositId: string): Promise<void> {
+  const deposit = await this.depositRepository.findOne({ where: { id: depositId } });
+  if (!deposit || deposit.status === 'SUCCESS') return;
+
+  // 1. Mark deposit as successful
+  deposit.status = 'SUCCESS';
+  await this.depositRepository.save(deposit);
+
+  // 2. Trigger referral reward ONLY upon successful deposit confirmation
+  try {
+    await this.referralsService.processReferralReward({
+      userId: deposit.userId,
+      depositId: deposit.id,
+      amount: Number(deposit.amount),
+      currency: deposit.currency,
+    });
+  } catch (error) {
+    this.logger.error(`Failed to process referral reward for deposit ${depositId}: ${error.message}`);
+  }
+}
 }

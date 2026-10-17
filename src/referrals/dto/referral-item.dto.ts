@@ -1,17 +1,19 @@
-import { ReferralStatus } from '../entities/referral.entity';
+// src/referrals/dto/referral-item.dto.ts
+import { ApiProperty } from '@nestjs/swagger';
 
 export class ReferralItemDto {
+  @ApiProperty()
   id: string;
-  status: ReferralStatus;
-  rewardAmount: string | null;
-  rewardCurrency: string | null;
-  rewardedAt: Date | null;
+
+  @ApiProperty({ example: 'j***@d***.com' })
+  maskedEmail: string;
+
+  @ApiProperty({ example: 'John' })
+  firstName: string;
+
+  @ApiProperty()
+  status: string;
+
+  @ApiProperty()
   createdAt: Date;
-  referee: {
-    id: string;
-    email: string;
-    firstName: string | null;
-    lastName: string | null;
-    createdAt: Date;
-  };
 }

@@ -71,4 +71,25 @@ export class TaxEvent {
 
   @CreateDateColumn()
   createdAt: Date;
+
+ 
+
+  @Column()
+  userId: string;
+
+  @Column()
+  transactionId: string;
+
+  @Column()
+  eventType: string;
+
+  @Column({ nullable: true })
+  lotId: string;
+
+  @Column('decimal', { precision: 18, scale: 8 })
+  realizedGainLoss: number;
+
+  @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+  createdAt: Date;
+}
 }

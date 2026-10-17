@@ -39,4 +39,24 @@ export class DistributeRewardDto {
   @IsString()
   @IsNotEmpty()
   currency: string;
+
+
+
+
+  @IsString()
+  @IsOptional()
+  @Matches(/^C[A-Z0-9]{55}$/, { message: 'Invalid Stellar contract ID format.' })
+  contractId?: string;
+
+  @IsString()
+  userId: string;
+
+  @IsPositive({ message: 'Amount must be a positive number.' })
+  @IsNumber({ maxDecimalPlaces: 7 }, { message: 'Amount cannot exceed 7 decimal places.' })
+  amount: number;
+
+  @IsString()
+  @IsIn(['XLM', 'USDC'], { message: 'Unsupported reward currency.' })
+  currency: string;
 }
+

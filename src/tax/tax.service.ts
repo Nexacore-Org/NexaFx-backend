@@ -587,5 +587,56 @@ export class TaxService {
       }
       return csv;
     }
+
+    
+  }
+  // Helper to determine tax year using UTC and jurisdiction rules
+  calculateTaxYear(date: Date, jurisdiction: string = 'STANDARD'): number {
+    const year = date.getUTCFullYear();
+    const month = date.getUTCMonth(); // 0-indexed (0 = Jan, 3 = April, etc.)
+    const day = date.getUTCDate();
+
+    if (jurisdiction === 'UK' || jurisdiction === 'HMRC') {
+      // UK Tax year runs from 6 April to 5 April
+      // If date is before 6 April, it belongs to the previous tax year start
+      if (month < 3 || (month === 3 && day < 6)) {
+        return year - 1;
+      }
+      return year;
+    }
+
+    // Standard calendar year in UTC
+    return year;
+  }
+
+  // Get date range for export based on jurisdiction and target tax year
+  getTaxYearDateRange(taxYear: number, jurisdiction: string = 'STANDARD'): { startDate: Date; endDate: Date } {
+    if (jurisdiction === 'UK' || jurisdiction === 'HMRC') {
+      // UK Tax Year: 6 April [taxYear] to 5 April [taxYear + 1] at 23:59:59.999 UTC
+      return {
+        startDate: new Date(Date.UTC(taxYear, 3, 6, 0, 0, 0, 0)), // April 6
+        endDate: new Date(Date.UTC(taxYear + 1, 3, 5, 23, 59, 59, 999)), // April 5
+      };
+    }
+
+    // Standard calendar year: Jan 1 to Dec 31 UTC
+    return {
+      startDate: new Date(Date.UTC(taxYear, 0, 1, 0, 0, 0, 0)),
+      endDate: new Date(Date.UTC(taxYear, 11, 31, 23, 59, 59, 999)),
+    };
+  }
+
+  async processExportJob(userId: string, taxYear: number, jurisdiction: string): Promise<TaxEvent[]> {
+    const { startDate, endDate } = this.getTaxYearDateRange(taxYear, jurisdiction);
+
+    this.logger.log(`Generating tax export for user ${userId}, jurisdiction ${jurisdiction}, year ${taxYear} [Range: ${startDate.toISOString()} to ${endDate.toISOString()}]`);
+
+    // Query events filtered by exact UTC date range rather than static taxYear column
+    return this.taxEventRepository
+      .createQueryBuilder('event')
+      .where('event.userId = :userId', { userId })
+      .andWhere('event.createdAt >= :startDate', { startDate })
+      .andWhere('event.createdAt <= :endDate', { endDate })
+      .getMany();
   }
 }

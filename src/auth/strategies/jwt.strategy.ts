@@ -1,35 +1,17 @@
-import {
-  Injectable,
-  UnauthorizedException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../../users/users.service';
 import { RedisService } from '../../common/services/redis.service';
+import {
+  validateAuthenticatedUser,
+  type AuthenticatedUser,
+  type JwtPayload,
+} from '../authenticated-user';
 
-export interface JwtPayload {
-  sub: string;
-  email: string;
-  role: string;
-  authStage?: 'partial_auth';
-  // Impersonation fields — only present when isImpersonation === true
-  isImpersonation?: boolean;
-  impersonatedBy?: string;
-  jti?: string;
-}
-
-/** Shape attached to request.user after JWT validation */
-export interface AuthenticatedUser {
-  userId: string;
-  email: string;
-  role: string;
-  authStage?: string;
-  isImpersonation?: boolean;
-  impersonatedBy?: string;
-  jti?: string;
-}
+// Re-exported for backwards compatibility: these types used to live here.
+export type { AuthenticatedUser, JwtPayload };
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -54,31 +36,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload): Promise<AuthenticatedUser> {
-    const user = await this.usersService.findById(payload.sub);
-    if (!user) {
-      throw new UnauthorizedException('User not found');
-    }
-
-    if (user.isSuspended) {
-      throw new ForbiddenException('Account is suspended');
-    }
-
-    if (user.isDeleted) {
-      throw new UnauthorizedException('Account has been deleted');
-    }
-
-    if (!user.isActive) {
-      throw new UnauthorizedException('User account is deactivated');
-    }
-
-    return {
-      userId: user.id,
-      email: user.email,
-      role: payload.isImpersonation ? 'USER' : user.role,
-      authStage: payload.authStage,
-      isImpersonation: payload.isImpersonation ?? false,
-      impersonatedBy: payload.impersonatedBy,
-      jti: payload.jti,
-    };
+    return validateAuthenticatedUser(this.usersService, payload);
   }
 }

@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import type { StringValue } from 'ms';
 import { ExchangeRatesModule } from '../exchange-rates/exchange-rates.module';
+import { UsersModule } from '../users/users.module';
 import { RatesGateway } from './rates.gateway';
 import { WsJwtGuard } from './ws-jwt.guard';
 import { GatewaysController } from './gateways.controller';
@@ -10,6 +11,7 @@ import { GatewaysController } from './gateways.controller';
 @Module({
   imports: [
     ExchangeRatesModule,
+    UsersModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {

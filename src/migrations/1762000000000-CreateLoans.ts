@@ -4,6 +4,24 @@ export class CreateLoans1762000000000 implements MigrationInterface {
   name = 'CreateLoans1762000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
+    // `transactions_type_enum` belongs to the baseline schema, which is not part
+    // of this migration chain, so make sure it exists before extending it.
+    await queryRunner.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_type WHERE typname = 'transactions_type_enum'
+        ) THEN
+          CREATE TYPE "public"."transactions_type_enum" AS ENUM (
+            'DEPOSIT',
+            'WITHDRAW',
+            'SWAP'
+          );
+        END IF;
+      END
+      $$;
+    `);
+
     // Extend transactions type enum with loan types
     await queryRunner.query(`
       ALTER TYPE "public"."transactions_type_enum"

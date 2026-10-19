@@ -3,86 +3,78 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 /**
  * Adds the kycTier column to users and creates the transaction_limits table.
  *
- * TRANSACTION SAFETY NOTES:
- * - CREATE TYPE, ALTER TABLE, CREATE TABLE, and the initial INSERT seed data
- *   are all DDL-safe inside a transaction on PostgreSQL.
- * - Both up() and down() are wrapped in explicit transactions so a partial
- *   failure leaves the schema unchanged.
+ * IDEMPOTENCY NOTES:
+ * - `users.kycTier` and its enum already exist when CreateUsersTable ran first,
+ *   so both the type and the column are created guardedly.
+ * - The data source runs migrations with `migrationsTransactionMode: 'each'`,
+ *   so every statement below is applied atomically without the migration
+ *   opening a transaction of its own (which would fight the runner).
  */
 export class AddKycTierAndTransactionLimits1761000000000 implements MigrationInterface {
   name = 'AddKycTierAndTransactionLimits1761000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.startTransaction();
+    // CreateUsersTable already created this enum for `users.kycTier`.
+    await queryRunner.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_type WHERE typname = 'users_kyctier_enum'
+        ) THEN
+          CREATE TYPE "public"."users_kyctier_enum" AS ENUM (
+            'UNVERIFIED',
+            'BASIC',
+            'ENHANCED',
+            'FULL'
+          );
+        END IF;
+      END
+      $$;
+    `);
 
-    try {
+    if (await queryRunner.hasTable('users')) {
       await queryRunner.query(`
-        CREATE TYPE "public"."users_kyctier_enum" AS ENUM (
-          'UNVERIFIED',
-          'BASIC',
-          'ENHANCED',
-          'FULL'
-        )
+        ALTER TABLE "users"
+        ADD COLUMN IF NOT EXISTS "kycTier" "public"."users_kyctier_enum" NOT NULL DEFAULT 'UNVERIFIED'
       `);
+    }
 
-      if (await queryRunner.hasTable('users')) {
-        await queryRunner.query(`
-          ALTER TABLE "users"
-          ADD COLUMN "kycTier" "public"."users_kyctier_enum" NOT NULL DEFAULT 'UNVERIFIED'
-        `);
-      }
+    await queryRunner.query(`
+      CREATE TABLE IF NOT EXISTS "transaction_limits" (
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
+        "tier" "public"."users_kyctier_enum" NOT NULL,
+        "dailyLimitUsd" numeric(20,8) NOT NULL,
+        "monthlyLimitUsd" numeric(20,8) NOT NULL,
+        "singleTxLimitUsd" numeric(20,8) NOT NULL,
+        "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+        "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+        CONSTRAINT "PK_transaction_limits_id" PRIMARY KEY ("id"),
+        CONSTRAINT "UQ_transaction_limits_tier" UNIQUE ("tier")
+      )
+    `);
 
-      await queryRunner.query(`
-        CREATE TABLE "transaction_limits" (
-          "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
-          "tier" "public"."users_kyctier_enum" NOT NULL,
-          "dailyLimitUsd" numeric(20,8) NOT NULL,
-          "monthlyLimitUsd" numeric(20,8) NOT NULL,
-          "singleTxLimitUsd" numeric(20,8) NOT NULL,
-          "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
-          "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
-          CONSTRAINT "PK_transaction_limits_id" PRIMARY KEY ("id"),
-          CONSTRAINT "UQ_transaction_limits_tier" UNIQUE ("tier")
-        )
-      `);
-
-      // Seed initial tier limits — DML inside the same transaction so it rolls
-      // back atomically if the table creation above fails.
-      await queryRunner.query(`
-        INSERT INTO "transaction_limits" ("tier", "dailyLimitUsd", "monthlyLimitUsd", "singleTxLimitUsd") VALUES
+    // Seed initial tier limits; ON CONFLICT keeps a re-run from duplicating rows.
+    await queryRunner.query(`
+      INSERT INTO "transaction_limits" ("tier", "dailyLimitUsd", "monthlyLimitUsd", "singleTxLimitUsd") VALUES
         ('UNVERIFIED', 100, 1000, 100),
         ('BASIC', 1000, 15000, 1000),
         ('ENHANCED', 10000, 150000, 10000),
         ('FULL', 50000, 500000, 50000)
-      `);
-
-      await queryRunner.commitTransaction();
-    } catch (err) {
-      await queryRunner.rollbackTransaction();
-      throw err;
-    }
+      ON CONFLICT ("tier") DO NOTHING
+    `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.startTransaction();
+    await queryRunner.query('DROP TABLE IF EXISTS "transaction_limits"');
 
-    try {
-      await queryRunner.query('DROP TABLE IF EXISTS "transaction_limits"');
-
-      if (await queryRunner.hasTable('users')) {
-        await queryRunner.query(
-          'ALTER TABLE "users" DROP COLUMN IF EXISTS "kycTier"',
-        );
-      }
-
+    if (await queryRunner.hasTable('users')) {
       await queryRunner.query(
-        'DROP TYPE IF EXISTS "public"."users_kyctier_enum"',
+        'ALTER TABLE "users" DROP COLUMN IF EXISTS "kycTier"',
       );
-
-      await queryRunner.commitTransaction();
-    } catch (err) {
-      await queryRunner.rollbackTransaction();
-      throw err;
     }
+
+    await queryRunner.query(
+      'DROP TYPE IF EXISTS "public"."users_kyctier_enum"',
+    );
   }
 }

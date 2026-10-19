@@ -40,10 +40,22 @@ import { CardsModule } from './cards/cards.module';
 import { GraphQLApiModule } from './graphql/graphql.module';
 import { SuperAdminModule } from './super-admin/super-admin.module';
 import { MaintenanceGuard } from './super-admin/guards/maintenance.guard';
+import { buildThrottlerOptions } from './common/throttler/throttler.config';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      // THROTTLE_TTL is documented in seconds; the factory coerces the env
+      // strings with Number() and converts the window to milliseconds.
+      useFactory: (configService: ConfigService) =>
+        buildThrottlerOptions({
+          THROTTLE_TTL: configService.get<string>('THROTTLE_TTL'),
+          THROTTLE_LIMIT: configService.get<string>('THROTTLE_LIMIT'),
+        }),
+    }),
     SuperAdminModule,
     EscrowModule,
     // DAO module provides Stellar Soroban contract interaction for reward distribution

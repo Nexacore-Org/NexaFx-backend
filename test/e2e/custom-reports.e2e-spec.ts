@@ -169,6 +169,37 @@ describe('Custom Reports E2E Tests (#1100)', () => {
       expect(data).toContain('id,amount,currency,status,createdAt');
     });
 
+    it('returns CSV values for an [id, createdAt] column selection', async () => {
+      const created = await request(app.getHttpServer())
+        .post(`${BASE}/definitions`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          ...validDefinition,
+          name: 'Identifiers Report',
+          columns: ['id', 'createdAt'],
+        })
+        .expect(201);
+      const reportId = payload(created).id;
+
+      await seedTransaction(adminId);
+
+      const res = await request(app.getHttpServer())
+        .get(`${BASE}/definitions/${reportId}/run?format=csv`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      const csv = payload(res) as string;
+      const [header, row] = csv.split('\n');
+
+      expect(header).toBe('id,createdAt');
+      expect(row).toBeDefined();
+      // Every cell must carry a value — the unquoted column selection used to
+      // come back with undefined keys, producing `"",""` rows.
+      expect(row).toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}/);
+      expect(row).not.toBe('"",""');
+      expect(row).not.toMatch(/^,|,$/);
+    });
+
     it('returns 404 for an unknown definition', async () => {
       await request(app.getHttpServer())
         .get(`${BASE}/definitions/${uuidv4()}/run`)

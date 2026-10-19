@@ -9,6 +9,9 @@ import {
 export class AddGdprFields1762000000000 implements MigrationInterface {
   name = 'AddGdprFields1762000000000';
 
+  // NOTE: `users.isActive` is created by CreateUsersTable and intentionally not
+  // repeated here — re-adding it made the migration fail with
+  // `column "isActive" of relation "users" already exists`.
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.addColumns('users', [
       new TableColumn({
@@ -26,11 +29,6 @@ export class AddGdprFields1762000000000 implements MigrationInterface {
         type: 'varchar',
         length: '50',
         isNullable: true,
-      }),
-      new TableColumn({
-        name: 'isActive',
-        type: 'boolean',
-        default: true,
       }),
       new TableColumn({
         name: 'deletedAt',
@@ -109,7 +107,6 @@ export class AddGdprFields1762000000000 implements MigrationInterface {
       'consentGdpr',
       'consentGdprAt',
       'consentGdprVersion',
-      'isActive',
       'deletedAt',
     ]);
   }

@@ -41,6 +41,13 @@ export const AppDataSource = new DataSource({
   url: process.env.DATABASE_URL,
   synchronize: false, // Never auto-sync in CLI
   logging: isDev,
+  // Wrap each migration in its own transaction (instead of all of them in a
+  // single one) so migrations that opt out via `transaction = false` — e.g.
+  // AddMissingIndexes, which needs CREATE INDEX CONCURRENTLY — actually run
+  // outside a transaction block.
+  migrationsTransactionMode: 'each',
+  entities: ['src/**/*.entity.ts'],
+  migrations: ['src/migrations/*.ts'],
   entities,
   migrations,
   extra: {

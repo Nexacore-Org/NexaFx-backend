@@ -12,6 +12,7 @@
 
 import * as path from 'path';
 import * as fs from 'fs';
+import { AddMissingIndexes1715421500000 } from './1715421500000-AddMissingIndexes';
 
 // ---------------------------------------------------------------------------
 // Helpers extracted from validate-migrations.ts (mirrored here for unit testing)
@@ -115,14 +116,14 @@ describe('migration validation logic', () => {
 
     it('should count only .ts files that are not spec files', () => {
       // Point at the real src/migrations directory
-      const migrationsDir = path.resolve(__dirname, '../../migrations');
+      const migrationsDir = path.resolve(__dirname);
       const count = countMigrationFilesInDir(migrationsDir);
       // We have at least 3 migration files (1760, 1761, 1762)
       expect(count).toBeGreaterThanOrEqual(3);
     });
 
     it('should not count .spec.ts files as migrations', () => {
-      const migrationsDir = path.resolve(__dirname, '../../migrations');
+      const migrationsDir = path.resolve(__dirname);
       if (fs.existsSync(migrationsDir)) {
         const count = countMigrationFilesInDir(migrationsDir);
         const specFiles = fs
@@ -279,5 +280,34 @@ describe('migration validation logic', () => {
       const policy = applyRollbackPolicy('production', true);
       expect(policy.requiresManualConfirmation).toBe(false);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #1323 — conflicting migrations
+// ---------------------------------------------------------------------------
+
+describe('AddMissingIndexes1715421500000', () => {
+  const migration = new AddMissingIndexes1715421500000();
+
+  it('declares transaction = false so CREATE INDEX CONCURRENTLY is allowed', () => {
+    expect(migration.transaction).toBe(false);
+  });
+
+  it('does not reference the non-existent `kyc` table', () => {
+    const tables = migration.indexes.map((index) => index.table);
+
+    expect(tables).not.toContain('kyc');
+    expect(tables).toContain('kyc_records');
+  });
+
+  it('keeps the idx_kyc_user_id index name pointing at kyc_records', () => {
+    const kycIndex = migration.indexes.find(
+      (index) => index.name === 'idx_kyc_user_id',
+    );
+
+    expect(kycIndex).toBeDefined();
+    expect(kycIndex?.table).toBe('kyc_records');
+    expect(kycIndex?.columns).toBe('"userId"');
   });
 });

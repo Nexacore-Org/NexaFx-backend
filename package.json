@@ -71,7 +71,7 @@
     "cache-manager": "^5.3.2",
     "cache-manager-ioredis-yet": "^2.1.2",
     "class-transformer": "^0.5.1",
-    "class-validator": "^0.14.1",
+    "class-validator": "^0.15.1",
     "compression": "^1.8.1",
     "dataloader": "^2.2.3",
     "date-fns": "^3.3.1",

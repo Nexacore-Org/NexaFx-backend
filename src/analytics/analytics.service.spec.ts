@@ -19,6 +19,25 @@ import { User } from '../users/user.entity';
 import { UsersService } from '../users/users.service';
 import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
 
+// @nestjs/typeorm ships as ESM-only, which the CommonJS jest runtime cannot
+// load directly without a mock in unit tests.
+jest.mock('@nestjs/typeorm', () => {
+  const { Inject } = require('@nestjs/common');
+  const tokenFor = (entity: { name?: string } | string) =>
+    `${typeof entity === 'string' ? entity : (entity?.name ?? 'Entity')}Repository`;
+  return {
+    InjectRepository: (entity: { name?: string } | string) =>
+      Inject(tokenFor(entity)),
+    getRepositoryToken: tokenFor,
+  };
+});
+jest.mock('../exchange-rates/exchange-rates.service', () => ({
+  ExchangeRatesService: class ExchangeRatesService {},
+}));
+jest.mock('../users/users.service', () => ({
+  UsersService: class UsersService {},
+}));
+
 describe('AnalyticsService', () => {
   let service: AnalyticsService;
 
@@ -314,6 +333,63 @@ describe('AnalyticsService', () => {
       expect(result.contentType).toBe('text/csv');
       expect(result.filename).toBe('report-abcdef12.csv');
       expect(Buffer.isBuffer(result.buffer)).toBe(true);
+    });
+
+    it('neutralizes CSV formula injection in category names and counterparty fields (#1523)', async () => {
+      mockExportJobRepository.findOne.mockResolvedValue(completedJob);
+      mockCategoryRepository.find.mockResolvedValue([
+        {
+          id: 'cat-evil',
+          name: '=HYPERLINK(...)',
+          icon: '+icon',
+          color: '#000000',
+          isSystem: false,
+          userId,
+        },
+      ]);
+      mockTransactionRepository.find.mockResolvedValue([
+        {
+          id: 'tx-1',
+          userId,
+          type: 'WITHDRAW',
+          amount: '50.00',
+          currency: 'USD',
+          status: 'SUCCESS',
+          createdAt: new Date('2026-02-01T00:00:00.000Z'),
+          txHash: '@txhash',
+          feeAmount: '-0.50',
+          metadata: {
+            categoryId: 'cat-evil',
+            counterparty: "=cmd|' /C calc'!A0",
+          },
+        },
+        {
+          id: 'tx-2',
+          userId,
+          type: 'DEPOSIT',
+          amount: '10.00',
+          currency: 'USD',
+          status: 'SUCCESS',
+          createdAt: new Date('2026-02-02T00:00:00.000Z'),
+          txHash: '\r=txhash',
+          feeAmount: '0',
+          metadata: {
+            categoryId: 'cat-evil',
+            counterparty: '\t=SUM(A1:A2)',
+          },
+        },
+      ]);
+
+      const result = await service.getExportFile('abcdef12', userId);
+      const csv = result.buffer.toString('utf-8');
+
+      expect(csv).toContain("'=HYPERLINK(...)");
+      expect(csv).toContain("'+icon");
+      expect(csv).toContain("'=cmd|' /C calc'!A0");
+      expect(csv).toContain("'@txhash");
+      expect(csv).toContain("'-0.50");
+      expect(csv).toContain("'\t=SUM(A1:A2)");
+      expect(csv).toContain("'\r=txhash");
     });
   });
 

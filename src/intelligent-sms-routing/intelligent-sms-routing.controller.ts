@@ -24,7 +24,7 @@ import {
 
 @ApiTags('Intelligent SMS Routing')
 @ApiBearerAuth('access-token')
-@Controller('v2/intelligent-sms-routing')
+@Controller({ path: 'intelligent-sms-routing', version: '2' })
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 export class IntelligentSmsRoutingController {

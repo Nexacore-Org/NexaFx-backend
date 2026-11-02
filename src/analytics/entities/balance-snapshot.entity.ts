@@ -4,12 +4,14 @@ import {
   Column,
   CreateDateColumn,
   Index,
+  Unique,
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
 import { User } from '../../users/user.entity';
 
 @Entity('balance_snapshots')
+@Unique('UQ_balance_snapshots_user_snapshot_date', ['userId', 'snapshotDate'])
 @Index(['userId', 'snapshotDate'])
 export class BalanceSnapshot {
   @PrimaryGeneratedColumn('uuid')

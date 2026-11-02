@@ -1,13 +1,26 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getMessaging, MulticastMessage } from 'firebase-admin/messaging';
+import { User } from '../users/user.entity';
+import {
+  isPrunableFcmErrorCode,
+  maskFcmToken,
+  stringifyFcmData,
+} from './fcm.service';
 
 @Injectable()
 export class FirebaseService {
   private readonly logger = new Logger(FirebaseService.name);
   private initialized = false;
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    @Optional()
+    @InjectRepository(User)
+    private readonly userRepository?: Repository<User>,
+  ) {}
 
   onModuleInit() {
     this.initializeFirebase();
@@ -113,10 +126,10 @@ export class FirebaseService {
     }
 
     try {
-      const mergedData: Record<string, string> = {
+      const mergedData = stringifyFcmData({
         ...(data ?? {}),
         ...(structuredData ?? {}),
-      };
+      });
 
       const message: MulticastMessage = {
         notification: {
@@ -133,17 +146,24 @@ export class FirebaseService {
       const response = await getMessaging().sendEachForMulticast(message);
 
       if (response.failureCount > 0) {
-        const failedTokens: string[] = [];
+        const deadTokens: string[] = [];
         response.responses.forEach((resp, idx) => {
           if (!resp.success) {
-            failedTokens.push(tokens[idx]);
+            const token = tokens[idx];
+            const errorCode = (resp.error as any)?.code;
             this.logger.warn(
-              `Failed to send to token ${tokens[idx]}: ${resp.error?.message}`,
+              `Failed to send to token ${maskFcmToken(token)} (${errorCode ?? 'unknown'}): ${resp.error?.message}`,
             );
+            if (isPrunableFcmErrorCode(errorCode)) {
+              deadTokens.push(token);
+            }
           }
         });
 
-        // In the future, we can clean up these failed tokens from the user's fcmTokens array
+        if (deadTokens.length > 0) {
+          await this.pruneDeadTokens(deadTokens);
+        }
+
         this.logger.log(
           `FCM send complete: ${response.successCount} successful, ${response.failureCount} failed.`,
         );
@@ -160,6 +180,45 @@ export class FirebaseService {
         error,
       );
       // We don't rethrow to avoid blocking main flows since notifications are secondary
+    }
+  }
+
+  private async pruneDeadTokens(deadTokens: string[]): Promise<void> {
+    if (!this.userRepository || deadTokens.length === 0) {
+      return;
+    }
+    const deadSet = new Set(deadTokens);
+    try {
+      if (typeof this.userRepository.find === 'function') {
+        const users = await this.userRepository.find();
+        for (const user of users || []) {
+          const existing = Array.isArray(user.fcmTokens) ? user.fcmTokens : [];
+          const filtered = existing.filter((t) => !deadSet.has(t));
+          const primaryDead = Boolean(
+            user.fcmToken && deadSet.has(user.fcmToken),
+          );
+          if (filtered.length !== existing.length || primaryDead) {
+            user.fcmTokens = filtered;
+            if (primaryDead) {
+              user.fcmToken = filtered[0] ?? null;
+            }
+            const updatePayload: Partial<User> = { fcmTokens: filtered };
+            if (primaryDead) {
+              updatePayload.fcmToken = user.fcmToken;
+            }
+            if (typeof this.userRepository.update === 'function') {
+              await this.userRepository.update(user.id, updatePayload);
+            }
+            if (typeof this.userRepository.save === 'function') {
+              await this.userRepository.save(user);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Failed to prune dead FCM tokens: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 }

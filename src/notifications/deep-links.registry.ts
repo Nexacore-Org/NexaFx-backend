@@ -63,7 +63,7 @@ export function resolveDeepLinkFromData(
   notificationId: string,
 ): string {
   const resourceId =
-    data?.resourceId ?? data?.transactionId ?? undefined;
+    data?.resourceId ?? data?.transactionId ?? data?.relatedId ?? undefined;
   return resolveDeepLink(type, {
     notificationId,
     resourceId: resourceId != null ? String(resourceId) : undefined,
@@ -77,7 +77,7 @@ export function buildFcmData(
   ctx: DeepLinkContext,
   extra?: Record<string, string>,
 ): Record<string, string> {
-  return {
+  const raw: Record<string, string | undefined> = {
     notificationId: ctx.notificationId,
     type,
     deepLink: resolveDeepLink(type, ctx),
@@ -87,4 +87,12 @@ export function buildFcmData(
     timestamp: new Date().toISOString(),
     ...(extra ?? {}),
   };
+
+  const sanitized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (value !== undefined && value !== null) {
+      sanitized[key] = String(value);
+    }
+  }
+  return sanitized;
 }

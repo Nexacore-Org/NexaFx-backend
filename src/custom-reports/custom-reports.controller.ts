@@ -2,17 +2,21 @@ import {
   Controller,
   Post,
   Get,
+  Delete,
   Body,
   Param,
   Query,
+  Res,
   UseGuards,
+  ParseUUIDPipe,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { CustomReportsService } from './custom-reports.service';
-import { ReportEntityTarget } from './entities/custom-report-definition.entity';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { CreateReportDefinitionDto, RunReportQueryDto } from './dto';
 
 @Controller({ path: 'custom-reports', version: '2' })
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -22,26 +26,50 @@ export class CustomReportsController {
 
   @Post('definitions')
   public async createDefinition(
-    @Body('name') name: string,
-    @Body('entity') entity: ReportEntityTarget,
-    @Body('filters') filters: Record<string, any>,
-    @Body('columns') columns: string[],
+    @Body() dto: CreateReportDefinitionDto,
     @CurrentUser() user: any,
   ) {
     return this.reportsService.createDefinition(
-      name,
-      entity,
-      filters,
-      columns,
-      user.userId,
+      dto,
+      user?.userId || user?.id || 'admin',
     );
+  }
+
+  @Get('definitions')
+  public async listDefinitions() {
+    return this.reportsService.listDefinitions();
+  }
+
+  @Get('definitions/:id')
+  public async getDefinition(@Param('id', ParseUUIDPipe) id: string) {
+    return this.reportsService.getDefinition(id);
+  }
+
+  @Delete('definitions/:id')
+  public async deleteDefinition(@Param('id', ParseUUIDPipe) id: string) {
+    return this.reportsService.deleteDefinition(id);
   }
 
   @Get('definitions/:id/run')
   public async runReport(
-    @Param('id') id: string,
-    @Query('format') format: 'json' | 'csv' = 'json',
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: RunReportQueryDto,
+    @Res({ passthrough: true }) res: Response,
   ) {
-    return this.reportsService.runReport(id, format);
+    const format = query?.format || 'json';
+    const result = await this.reportsService.runReport(id, format, {
+      limit: query?.limit,
+      offset: query?.offset,
+    });
+
+    if (format === 'csv') {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="report-${id}.csv"`,
+      );
+    }
+
+    return result;
   }
 }

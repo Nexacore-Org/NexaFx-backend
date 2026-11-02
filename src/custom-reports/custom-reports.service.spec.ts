@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { DataSource, Repository } from 'typeorm';
 import { CustomReportsService } from './custom-reports.service';
 import {
@@ -15,13 +15,18 @@ jest.mock('@nestjs/typeorm', () => ({
 describe('CustomReportsService', () => {
   let service: CustomReportsService;
   let definitionRepository: jest.Mocked<
-    Pick<Repository<CustomReportDefinition>, 'findOne' | 'create' | 'save'>
+    Pick<
+      Repository<CustomReportDefinition>,
+      'findOne' | 'create' | 'save' | 'find' | 'remove'
+    >
   >;
 
   const queryBuilder = {
     from: jest.fn().mockReturnThis(),
     addSelect: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),
+    limit: jest.fn().mockReturnThis(),
+    offset: jest.fn().mockReturnThis(),
     getRawMany: jest.fn(),
   };
 
@@ -49,6 +54,8 @@ describe('CustomReportsService', () => {
       findOne: jest.fn(),
       create: jest.fn(),
       save: jest.fn(),
+      find: jest.fn(),
+      remove: jest.fn(),
     };
     service = new CustomReportsService(
       definitionRepository as unknown as Repository<CustomReportDefinition>,
@@ -129,15 +136,15 @@ describe('CustomReportsService', () => {
       await service.runReport('def-1', 'json');
 
       expect(queryBuilder.from).toHaveBeenCalledWith(
-        'kyc_records',
-        'kyc_records',
+        'kyc_applications',
+        'kyc_applications',
       );
       expect(queryBuilder.addSelect).toHaveBeenCalledWith(
-        '"kyc_records"."reviewedAt"',
+        '"kyc_applications"."reviewedAt"',
         'reviewedAt',
       );
       expect(queryBuilder.addSelect).toHaveBeenCalledWith(
-        '"kyc_records"."userId"',
+        '"kyc_applications"."userId"',
         'userId',
       );
     });
@@ -201,6 +208,157 @@ describe('CustomReportsService', () => {
       const csv = (await service.runReport('def-1', 'csv')) as string;
 
       expect(csv).toBe('id,createdAt');
+    });
+
+    it('neutralizes formula injection characters (=, +, -, @) in CSV cells', async () => {
+      definitionRepository.findOne.mockResolvedValue(
+        makeDefinition({
+          columns: ['id', 'status'],
+        }),
+      );
+      queryBuilder.getRawMany.mockResolvedValue([
+        {
+          id: '=cmd|/c calc!A0',
+          status: '+12345',
+        },
+        {
+          id: '@SUM(1,2)',
+          status: '-danger',
+        },
+      ]);
+
+      const csv = (await service.runReport('def-1', 'csv')) as string;
+      const lines = csv.split('\n');
+
+      expect(lines[1]).toContain("'=cmd|/c calc!A0");
+      expect(lines[1]).toContain("'+12345");
+      expect(lines[2]).toContain("'@SUM(1,2)");
+      expect(lines[2]).toContain("'-danger");
+    });
+  });
+
+  describe('definition management and validation', () => {
+    it('throws BadRequestException when filters is undefined or not an object', async () => {
+      await expect(
+        service.createDefinition('Report', ReportEntityTarget.USERS, undefined as any, ['id'], 'admin-1'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      await expect(
+        service.createDefinition({
+          name: 'Report',
+          entity: ReportEntityTarget.USERS,
+          filters: null as any,
+          columns: ['id'],
+        }, 'admin-1'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('throws BadRequestException when columns is not an array or empty', async () => {
+      await expect(
+        service.createDefinition('Report', ReportEntityTarget.USERS, {}, undefined as any, 'admin-1'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      await expect(
+        service.createDefinition('Report', ReportEntityTarget.USERS, {}, [], 'admin-1'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('successfully creates definition with valid input', async () => {
+      const mockCreated = makeDefinition({ name: 'Custom Def' });
+      definitionRepository.create.mockReturnValue(mockCreated as any);
+      definitionRepository.save.mockResolvedValue(mockCreated);
+
+      const result = await service.createDefinition({
+        name: 'Custom Def',
+        entity: ReportEntityTarget.USERS,
+        filters: { role: 'ADMIN' },
+        columns: ['id', 'email'],
+      }, 'admin-1');
+
+      expect(definitionRepository.create).toHaveBeenCalledWith({
+        name: 'Custom Def',
+        entity: ReportEntityTarget.USERS,
+        filters: { role: 'ADMIN' },
+        columns: ['id', 'email'],
+        createdBy: 'admin-1',
+      });
+      expect(result.name).toBe('Custom Def');
+    });
+
+    it('listDefinitions returns definitions ordered by createdAt DESC', async () => {
+      const mockList = [makeDefinition({ id: 'def-1' }), makeDefinition({ id: 'def-2' })];
+      definitionRepository.find.mockResolvedValue(mockList);
+
+      const res = await service.listDefinitions();
+
+      expect(definitionRepository.find).toHaveBeenCalledWith({
+        order: { createdAt: 'DESC' },
+      });
+      expect(res).toEqual(mockList);
+    });
+
+    it('getDefinition returns the definition by id', async () => {
+      const mockDef = makeDefinition({ id: 'def-1' });
+      definitionRepository.findOne.mockResolvedValue(mockDef);
+
+      const res = await service.getDefinition('def-1');
+
+      expect(definitionRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 'def-1' },
+      });
+      expect(res).toEqual(mockDef);
+    });
+
+    it('getDefinition throws NotFoundException when definition is not found', async () => {
+      definitionRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.getDefinition('def-missing')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('deleteDefinition removes the definition by id', async () => {
+      const mockDef = makeDefinition({ id: 'def-1' });
+      definitionRepository.findOne.mockResolvedValue(mockDef);
+      definitionRepository.remove.mockResolvedValue(mockDef);
+
+      const res = await service.deleteDefinition('def-1');
+
+      expect(definitionRepository.remove).toHaveBeenCalledWith(mockDef);
+      expect(res).toEqual({ deleted: true, id: 'def-1' });
+    });
+  });
+
+  describe('bounding and pagination', () => {
+    it('applies row cap and offset to query builder', async () => {
+      definitionRepository.findOne.mockResolvedValue(makeDefinition());
+      queryBuilder.getRawMany.mockResolvedValue([]);
+
+      await service.runReport('def-1', 'json', { limit: 50, offset: 25 });
+
+      expect(queryBuilder.limit).toHaveBeenCalledWith(50);
+      expect(queryBuilder.offset).toHaveBeenCalledWith(25);
+    });
+
+    it('bounds limit to MAX_ROW_CAP when requested limit exceeds cap', async () => {
+      definitionRepository.findOne.mockResolvedValue(makeDefinition());
+      queryBuilder.getRawMany.mockResolvedValue([]);
+
+      await service.runReport('def-1', 'json', { limit: 999999, offset: 0 });
+
+      expect(queryBuilder.limit).toHaveBeenCalledWith(CustomReportsService.MAX_ROW_CAP);
+    });
+
+    it('never returns more than MAX_ROW_CAP even if raw query returns more', async () => {
+      definitionRepository.findOne.mockResolvedValue(makeDefinition());
+      const hugeData = Array.from({ length: 1500 }, (_, i) => ({
+        id: `row-${i}`,
+      }));
+      queryBuilder.getRawMany.mockResolvedValue(hugeData);
+
+      const rows = (await service.runReport('def-1', 'json')) as any[];
+
+      expect(rows.length).toBe(CustomReportsService.MAX_ROW_CAP);
     });
   });
 

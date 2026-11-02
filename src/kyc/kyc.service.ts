@@ -115,82 +115,29 @@ export class KycService {
     const documents: Record<string, { s3Key: string; mimeType: string }> = {};
     const storagePath = `kyc/${userId}`;
 
-    if (targetTier === UserKycTier.STANDARD) {
-      if (!files.governmentIdFront) {
-        throw new BadRequestException(
-          'Government ID front is required for STANDARD tier.',
-        );
-      }
-      if (!files.selfie) {
-        throw new BadRequestException('Selfie is required for STANDARD tier.');
-      }
+    const uploadedKeys: string[] = [];
+    try {
+      await this.uploadTierDocuments(
+        targetTier,
+        files,
+        storagePath,
+        documents,
+        uploadedKeys,
+      );
 
-      await scanBuffer(files.governmentIdFront.buffer);
-      await scanBuffer(files.selfie.buffer);
+      const newKyc = this.kycRepository.create({
+        userId,
+        targetTier,
+        documents,
+        status: KycStatus.PENDING,
+        submittedAt: new Date(),
+      });
 
-      documents['governmentIdFront'] = {
-        s3Key: await this.storageService.upload(
-          files.governmentIdFront,
-          storagePath,
-        ),
-        mimeType: files.governmentIdFront.mimetype,
-      };
-
-      if (files.governmentIdBack) {
-        documents['governmentIdBack'] = {
-          s3Key: await this.storageService.upload(
-            files.governmentIdBack,
-            storagePath,
-          ),
-          mimeType: files.governmentIdBack.mimetype,
-        };
-      }
-
-      documents['selfie'] = {
-        s3Key: await this.storageService.upload(files.selfie, storagePath),
-        mimeType: files.selfie.mimetype,
-      };
+      await this.kycRepository.save(newKyc);
+    } catch (error) {
+      await this.deleteStorageKeysBestEffort(uploadedKeys);
+      throw error;
     }
-
-    if (targetTier === UserKycTier.ENHANCED) {
-      if (!files.proofOfAddress) {
-        throw new BadRequestException(
-          'Proof of Address is required for ENHANCED tier.',
-        );
-      }
-      if (!files.videoSelfie) {
-        throw new BadRequestException(
-          'Video Selfie is required for ENHANCED tier.',
-        );
-      }
-
-      await scanBuffer(files.proofOfAddress.buffer);
-      await scanBuffer(files.videoSelfie.buffer);
-      await validateSelfieVideo(files.videoSelfie.buffer);
-
-      documents['proofOfAddress'] = {
-        s3Key: await this.storageService.upload(
-          files.proofOfAddress,
-          storagePath,
-        ),
-        mimeType: files.proofOfAddress.mimetype,
-      };
-
-      documents['videoSelfie'] = {
-        s3Key: await this.storageService.upload(files.videoSelfie, storagePath),
-        mimeType: files.videoSelfie.mimetype,
-      };
-    }
-
-    const newKyc = this.kycRepository.create({
-      userId,
-      targetTier,
-      documents,
-      status: KycStatus.PENDING,
-      submittedAt: new Date(),
-    });
-
-    await this.kycRepository.save(newKyc);
 
     return {
       message: 'KYC submitted successfully',
@@ -249,94 +196,52 @@ export class KycService {
       const documents: Record<string, { s3Key: string; mimeType: string }> = {};
       const storagePath = `kyc/${userId}`;
 
-      if (targetTier === UserKycTier.STANDARD) {
-        if (!files.governmentIdFront) {
-          throw new BadRequestException(
-            'Government ID front is required for STANDARD tier.',
-          );
-        }
-        if (!files.selfie) {
-          throw new BadRequestException(
-            'Selfie is required for STANDARD tier.',
-          );
-        }
+      const uploadedKeys: string[] = [];
+      let replacedKeys: string[] = [];
 
-        await scanBuffer(files.governmentIdFront.buffer);
-        await scanBuffer(files.selfie.buffer);
+      try {
+        await this.uploadTierDocuments(
+          targetTier,
+          files,
+          storagePath,
+          documents,
+          uploadedKeys,
+        );
 
-        documents['governmentIdFront'] = {
-          s3Key: await this.storageService.upload(
-            files.governmentIdFront,
-            storagePath,
-          ),
-          mimeType: files.governmentIdFront.mimetype,
-        };
+        const previousDocuments = existingKyc.documents ?? {};
+        replacedKeys = Object.entries(documents)
+          .map(([docType, newDoc]) => {
+            const oldKey = previousDocuments[docType]?.s3Key;
+            return oldKey && oldKey !== newDoc.s3Key ? oldKey : null;
+          })
+          .filter((key): key is string => Boolean(key));
 
-        if (files.governmentIdBack) {
-          documents['governmentIdBack'] = {
-            s3Key: await this.storageService.upload(
-              files.governmentIdBack,
-              storagePath,
-            ),
-            mimeType: files.governmentIdBack.mimetype,
-          };
-        }
+        existingKyc.status = KycStatus.PENDING;
+        // Merge instead of replace: a resubmission must never drop the documents
+        // an approval for the stored tier relies on (ID and selfie).
+        existingKyc.documents = { ...previousDocuments, ...documents };
+        existingKyc.rejectionReason = null;
+        existingKyc.reviewedBy = null;
+        existingKyc.reviewedAt = null;
+        existingKyc.submittedAt = new Date();
 
-        documents['selfie'] = {
-          s3Key: await this.storageService.upload(files.selfie, storagePath),
-          mimeType: files.selfie.mimetype,
-        };
+        await manager.save(existingKyc);
+      } catch (error) {
+        await this.deleteStorageKeysBestEffort(uploadedKeys);
+        throw error;
       }
-
-      if (targetTier === UserKycTier.ENHANCED) {
-        if (!files.proofOfAddress) {
-          throw new BadRequestException(
-            'Proof of Address is required for ENHANCED tier.',
-          );
-        }
-        if (!files.videoSelfie) {
-          throw new BadRequestException(
-            'Video Selfie is required for ENHANCED tier.',
-          );
-        }
-
-        await scanBuffer(files.proofOfAddress.buffer);
-        await scanBuffer(files.videoSelfie.buffer);
-        await validateSelfieVideo(files.videoSelfie.buffer);
-
-        documents['proofOfAddress'] = {
-          s3Key: await this.storageService.upload(
-            files.proofOfAddress,
-            storagePath,
-          ),
-          mimeType: files.proofOfAddress.mimetype,
-        };
-
-        documents['videoSelfie'] = {
-          s3Key: await this.storageService.upload(
-            files.videoSelfie,
-            storagePath,
-          ),
-          mimeType: files.videoSelfie.mimetype,
-        };
-      }
-
-      existingKyc.status = KycStatus.PENDING;
-      // Merge instead of replace: a resubmission must never drop the documents
-      // an approval for the stored tier relies on (ID and selfie).
-      existingKyc.documents = { ...existingKyc.documents, ...documents };
-      existingKyc.rejectionReason = null;
-      existingKyc.reviewedBy = null;
-      existingKyc.reviewedAt = null;
-      existingKyc.submittedAt = new Date();
-
-      await manager.save(existingKyc);
 
       return {
-        message: 'KYC resubmitted successfully',
-        status: existingKyc.status,
-        targetTier: existingKyc.targetTier,
+        response: {
+          message: 'KYC resubmitted successfully',
+          status: existingKyc.status,
+          targetTier: existingKyc.targetTier,
+        },
+        replacedKeys,
       };
+    }).then(async ({ response, replacedKeys }) => {
+      await this.deleteStorageKeysBestEffort(replacedKeys);
+      return response;
     });
   }
 
@@ -668,6 +573,118 @@ export class KycService {
             ? 'KYC resubmission requested successfully'
             : 'KYC rejected successfully',
       };
+    });
+  }
+
+  private async uploadTierDocuments(
+    targetTier: UserKycTier.STANDARD | UserKycTier.ENHANCED,
+    files: DocumentFiles,
+    storagePath: string,
+    documents: Record<string, { s3Key: string; mimeType: string }>,
+    uploadedKeys: string[],
+  ): Promise<void> {
+    if (targetTier === UserKycTier.STANDARD) {
+      if (!files.governmentIdFront) {
+        throw new BadRequestException(
+          'Government ID front is required for STANDARD tier.',
+        );
+      }
+      if (!files.selfie) {
+        throw new BadRequestException('Selfie is required for STANDARD tier.');
+      }
+
+      await scanBuffer(files.governmentIdFront.buffer);
+      await scanBuffer(files.selfie.buffer);
+
+      const frontKey = await this.storageService.upload(
+        files.governmentIdFront,
+        storagePath,
+      );
+      uploadedKeys.push(frontKey);
+      documents['governmentIdFront'] = {
+        s3Key: frontKey,
+        mimeType: files.governmentIdFront.mimetype,
+      };
+
+      if (files.governmentIdBack) {
+        const backKey = await this.storageService.upload(
+          files.governmentIdBack,
+          storagePath,
+        );
+        uploadedKeys.push(backKey);
+        documents['governmentIdBack'] = {
+          s3Key: backKey,
+          mimeType: files.governmentIdBack.mimetype,
+        };
+      }
+
+      const selfieKey = await this.storageService.upload(
+        files.selfie,
+        storagePath,
+      );
+      uploadedKeys.push(selfieKey);
+      documents['selfie'] = {
+        s3Key: selfieKey,
+        mimeType: files.selfie.mimetype,
+      };
+    }
+
+    if (targetTier === UserKycTier.ENHANCED) {
+      if (!files.proofOfAddress) {
+        throw new BadRequestException(
+          'Proof of Address is required for ENHANCED tier.',
+        );
+      }
+      if (!files.videoSelfie) {
+        throw new BadRequestException(
+          'Video Selfie is required for ENHANCED tier.',
+        );
+      }
+
+      await scanBuffer(files.proofOfAddress.buffer);
+      await scanBuffer(files.videoSelfie.buffer);
+      await validateSelfieVideo(files.videoSelfie.buffer);
+
+      const poaKey = await this.storageService.upload(
+        files.proofOfAddress,
+        storagePath,
+      );
+      uploadedKeys.push(poaKey);
+      documents['proofOfAddress'] = {
+        s3Key: poaKey,
+        mimeType: files.proofOfAddress.mimetype,
+      };
+
+      const videoKey = await this.storageService.upload(
+        files.videoSelfie,
+        storagePath,
+      );
+      uploadedKeys.push(videoKey);
+      documents['videoSelfie'] = {
+        s3Key: videoKey,
+        mimeType: files.videoSelfie.mimetype,
+      };
+    }
+  }
+
+  private async deleteStorageKeysBestEffort(keys: string[]): Promise<void> {
+    if (keys.length === 0) {
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      keys.map((key) => this.storageService.delete(key)),
+    );
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        const reason =
+          result.reason instanceof Error
+            ? result.reason.message
+            : String(result.reason);
+        this.logger.error(
+          `Failed to delete orphaned KYC storage key ${keys[index]}: ${reason}`,
+        );
+      }
     });
   }
 }

@@ -1,4 +1,21 @@
+jest.mock('@nestjs/config', () => ({
+  ConfigService: class ConfigService {
+    get = jest.fn();
+  },
+}));
+jest.mock('../../users/users.service', () => ({
+  UsersService: class UsersService {},
+}));
+jest.mock('typeorm', () => ({
+  Repository: class Repository {},
+}));
+
+import { UnauthorizedException } from '@nestjs/common';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 import { RedisService } from './redis.service';
+import { RedisThrottlerStorage } from './redis-throttler.storage';
+import { JwtStrategy } from '../../auth/strategies/jwt.strategy';
 import { createMockRedisClient } from '../../../test/mocks/factories';
 
 describe('RedisService', () => {
@@ -71,6 +88,30 @@ describe('RedisService', () => {
       expect(count).toBe(5);
       expect(mockClient.incr).toHaveBeenCalledWith('k1');
     });
+
+    it('scans keys and deletes patterns via SCAN without issuing KEYS (#1527)', async () => {
+      expect(
+        existsSync(join(__dirname, '../../common/services/redis.service.ts')),
+      ).toBe(false);
+      expect(
+        readFileSync(join(__dirname, 'redis.service.ts'), 'utf8'),
+      ).not.toMatch(/this\.client\.keys\s*\(/);
+
+      mockClient.scan
+        .mockResolvedValueOnce(['42', ['nexafx:imp:1', 'nexafx:imp:2']])
+        .mockResolvedValueOnce(['0', ['nexafx:imp:3']]);
+      expect(await service.keys('nexafx:imp:*')).toEqual([
+        'nexafx:imp:1',
+        'nexafx:imp:2',
+        'nexafx:imp:3',
+      ]);
+
+      mockClient.scan
+        .mockResolvedValueOnce(['17', ['cache:1', 'cache:2']])
+        .mockResolvedValueOnce(['0', []]);
+      await service.delPattern('cache:*');
+      expect(mockClient.del).toHaveBeenCalledWith('cache:1', 'cache:2');
+    });
   });
 
   describe('JSON Serialization Helpers', () => {
@@ -132,6 +173,69 @@ describe('RedisService', () => {
       expect(await unconfiguredService.expire('k', 60)).toBe(false);
       expect(await unconfiguredService.ttl('k')).toBe(-2);
       expect(await unconfiguredService.incr('k')).toBe(0);
+      expect(await unconfiguredService.keys('k:*')).toEqual([]);
+    });
+
+    it('completes JwtStrategy.validate within configured timeout and degrades RedisThrottlerStorage when Redis is down', async () => {
+      const stopped = {
+        ...createMockRedisClient(),
+        status: 'wait',
+        connect: jest.fn(() => new Promise<void>(() => {})),
+      };
+      const cfg = {
+        get: jest.fn((k: string) =>
+          k === 'REDIS_CONNECT_TIMEOUT_MS' ? 40 : 'test-secret',
+        ),
+      };
+      const users = {
+        findById: jest.fn().mockResolvedValue({
+          id: 'u1',
+          email: 'u1@example.com',
+          role: 'USER',
+          isSuspended: false,
+          isDeleted: false,
+          isActive: true,
+        }),
+      };
+
+      const degraded = new RedisService(stopped as any, cfg as any);
+      const strategy = new JwtStrategy(cfg as any, users as any, degraded);
+
+      const start = Date.now();
+      const user = await strategy.validate({
+        sub: 'u1',
+        email: 'u1@example.com',
+        role: 'USER',
+        jti: 'jti-1',
+      });
+      expect(Date.now() - start).toBeLessThan(400);
+      expect(user.userId).toBe('u1');
+
+      mockClient.get.mockResolvedValueOnce('true');
+      const liveStrategy = new JwtStrategy(cfg as any, users as any, service);
+      await expect(
+        liveStrategy.validate({
+          sub: 'u1',
+          email: 'u1@example.com',
+          role: 'USER',
+          jti: 'revoked',
+        }),
+      ).rejects.toThrow(UnauthorizedException);
+
+      mockClient.eval.mockResolvedValueOnce([2, 30_000]);
+      const readyStorage = new RedisThrottlerStorage(mockClient as any);
+      expect(
+        (await readyStorage.increment('user:u1', 60_000, 5)).totalHits,
+      ).toBe(2);
+
+      const fallbackStorage = new RedisThrottlerStorage(stopped as any);
+      expect(
+        (await fallbackStorage.increment('user:u2', 60_000, 1)).isBlocked,
+      ).toBe(false);
+      expect(
+        (await fallbackStorage.increment('user:u2', 60_000, 1)).isBlocked,
+      ).toBe(true);
+      fallbackStorage.onApplicationShutdown();
     });
   });
 

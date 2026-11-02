@@ -10,7 +10,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
 import { UsersService } from '../../users/users.service';
-import { RedisService } from '../../common/services/redis.service';
+import { RedisService } from '../../modules/redis/redis.service';
 import { AuditLogsService } from '../../audit-logs/audit-logs.service';
 import { AuditAction } from '../../audit-logs/enums/audit-action.enum';
 import { UserRole } from '../../users/user.entity';
@@ -255,7 +255,7 @@ export class ImpersonationService {
   // ---------------------------------------------------------------------------
 
   /**
-   * Lists Redis keys matching a pattern using RedisService.keys().
+   * Lists Redis keys matching a pattern using non-blocking SCAN via RedisService.
    */
   private async scanKeys(pattern: string): Promise<string[]> {
     try {

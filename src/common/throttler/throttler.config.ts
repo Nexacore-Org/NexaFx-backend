@@ -1,4 +1,4 @@
-import { ThrottlerModuleOptions } from '@nestjs/throttler';
+import { ThrottlerModuleOptions, ThrottlerStorage } from '@nestjs/throttler';
 
 /** Documented default rate-limit window (README / .env.example): 60 seconds. */
 export const DEFAULT_THROTTLE_TTL_SECONDS = 60;
@@ -42,6 +42,7 @@ function parsePositiveInt(value: unknown, fallback: number): number {
  */
 export function buildThrottlerOptions(
   env: ThrottleEnv = process.env,
+  storage?: ThrottlerStorage,
 ): ThrottlerModuleOptions {
   const ttlSeconds = parsePositiveInt(
     env.THROTTLE_TTL,
@@ -49,10 +50,19 @@ export function buildThrottlerOptions(
   );
   const limit = parsePositiveInt(env.THROTTLE_LIMIT, DEFAULT_THROTTLE_LIMIT);
 
-  return [
+  const throttlers = [
     {
       ttl: ttlSeconds * 1000,
       limit,
     },
   ];
+
+  if (storage) {
+    return {
+      throttlers,
+      storage,
+    };
+  }
+
+  return throttlers;
 }

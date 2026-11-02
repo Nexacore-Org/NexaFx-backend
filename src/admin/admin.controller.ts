@@ -45,7 +45,7 @@ import { Response } from 'express';
 import { AdminAuditLogsQueryDto } from './dto/admin-audit-logs-query.dto';
 import { AdminAuditLogsExportQueryDto } from './dto/admin-audit-logs-export-query.dto';
 import { UserKycTier } from '../users/user.entity';
-import { RedisService } from '../common/services/redis.service';
+import { RedisService } from '../modules/redis/redis.service';
 
 @ApiTags('Admin')
 @ApiBearerAuth()

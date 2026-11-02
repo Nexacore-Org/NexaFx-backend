@@ -12,7 +12,7 @@ import {
 } from './exchange-rates.service';
 import { Public } from '../auth/decorators/public.decorator';
 import { CurrenciesService } from '../currencies/currencies.service';
-import { RedisService } from '../common/services/redis.service';
+import { RedisService } from '../modules/redis/redis.service';
 
 @ApiTags('Exchange Rates')
 @Controller('exchange-rates')

@@ -1,9 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../../users/users.service';
-import { RedisService } from '../../common/services/redis.service';
+import { RedisService } from '../../modules/redis/redis.service';
 import {
   validateAuthenticatedUser,
   type AuthenticatedUser,
@@ -36,6 +36,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload): Promise<AuthenticatedUser> {
+    if (payload?.jti && typeof this.redisService?.get === 'function') {
+      const revoked = await this.redisService.get<boolean>(
+        `nexafx:jwt:revoked:${payload.jti}`,
+      );
+      if (revoked) {
+        throw new UnauthorizedException('Token has been revoked');
+      }
+    }
+
     return validateAuthenticatedUser(this.usersService, payload);
   }
 }

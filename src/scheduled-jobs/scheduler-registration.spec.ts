@@ -24,7 +24,7 @@ import { WebhookService } from '../webhooks/services/webhook.service';
 import { CurrencyPairService } from '../currencies/services/currency-pair.service';
 import { ProposalService } from '../dao/services/proposal.service';
 import { LedgerVerificationService } from '../ledger/services/ledger-verification.service';
-import { RedisService } from '../common/services/redis.service';
+import { RedisService } from '../modules/redis/redis.service';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { SanctionsService } from '../sanctions/sanctions.service';
 import { LoansService } from '../loans/loans.service';

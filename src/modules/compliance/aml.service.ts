@@ -28,61 +28,88 @@ export class AmlService {
   ) {}
 
   async enqueue(transactionId: string): Promise<void> {
-    await this.amlQueue.add('check', { transactionId });
+    await this.amlQueue.add(
+      'check',
+      { transactionId },
+      { jobId: `aml-${transactionId}` },
+    );
   }
 
-  async evaluate(transaction: Transaction): Promise<string | null> {
+  async evaluate(transaction: Transaction): Promise<string[]> {
     const config = await this.getConfig();
     const amountUsd = Number(transaction.amount);
+    const matchedRules: string[] = [];
 
-    if (amountUsd > config.largeTxThresholdUsd) {
+    if (
+      config.largeTxThresholdUsd != null &&
+      amountUsd > Number(config.largeTxThresholdUsd)
+    ) {
       this.logger.log(
         `Rule triggered: large_transaction for tx ${transaction.id}`,
       );
-      return 'large_transaction';
+      matchedRules.push('large_transaction');
     }
 
-    const accountAgeDays = await this.getAccountAgeDays(transaction.userId);
     if (
-      accountAgeDays < config.newAccountAgeDays &&
-      amountUsd > config.newAccountLargeTxThresholdUsd
+      config.newAccountAgeDays != null &&
+      config.newAccountLargeTxThresholdUsd != null
     ) {
-      this.logger.log(
-        `Rule triggered: new_account_large_tx for tx ${transaction.id}`,
-      );
-      return 'new_account_large_tx';
-    }
-
-    const recentCount = await this.countUserTxInPeriod(
-      transaction.userId,
-      config.rapidMovementWindowMinutes * 60,
-    );
-    if (recentCount >= config.rapidMovementCount) {
-      this.logger.log(
-        `Rule triggered: rapid_movement for tx ${transaction.id}`,
-      );
-      return 'rapid_movement';
-    }
-
-    if (await this.checkRoundTrip(transaction, config.roundTripWindowMinutes)) {
-      this.logger.log(`Rule triggered: round_trip for tx ${transaction.id}`);
-      return 'round_trip';
+      const accountAgeDays = await this.getAccountAgeDays(transaction.userId);
+      if (
+        accountAgeDays < Number(config.newAccountAgeDays) &&
+        amountUsd > Number(config.newAccountLargeTxThresholdUsd)
+      ) {
+        this.logger.log(
+          `Rule triggered: new_account_large_tx for tx ${transaction.id}`,
+        );
+        matchedRules.push('new_account_large_tx');
+      }
     }
 
     if (
-      await this.checkStructuring(
+      config.rapidMovementWindowMinutes != null &&
+      config.rapidMovementCount != null
+    ) {
+      const recentCount = await this.countUserTxInPeriod(
+        transaction.userId,
+        Number(config.rapidMovementWindowMinutes) * 60,
+      );
+      if (recentCount >= Number(config.rapidMovementCount)) {
+        this.logger.log(
+          `Rule triggered: rapid_movement for tx ${transaction.id}`,
+        );
+        matchedRules.push('rapid_movement');
+      }
+    }
+
+    if (
+      config.roundTripWindowMinutes != null &&
+      (await this.checkRoundTrip(
+        transaction,
+        Number(config.roundTripWindowMinutes),
+      ))
+    ) {
+      this.logger.log(`Rule triggered: round_trip for tx ${transaction.id}`);
+      matchedRules.push('round_trip');
+    }
+
+    if (
+      config.largeTxThresholdUsd != null &&
+      config.structuringCount != null &&
+      config.structuringWindowHours != null &&
+      (await this.checkStructuring(
         transaction.userId,
         amountUsd,
-        config.largeTxThresholdUsd,
-        config.structuringCount,
-        config.structuringWindowHours,
-      )
+        Number(config.largeTxThresholdUsd),
+        Number(config.structuringCount),
+        Number(config.structuringWindowHours),
+      ))
     ) {
       this.logger.log(`Rule triggered: structuring for tx ${transaction.id}`);
-      return 'structuring';
+      matchedRules.push('structuring');
     }
 
-    return null;
+    return matchedRules;
   }
 
   private async getConfig(): Promise<AmlConfig> {

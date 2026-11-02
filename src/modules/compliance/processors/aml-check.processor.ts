@@ -30,12 +30,20 @@ export class AmlCheckProcessor extends WorkerHost {
       this.logger.warn(`Transaction ${transactionId} not found`);
       return;
     }
-    const violatedRule = await this.amlService.evaluate(tx);
-    if (violatedRule) {
-      await this.flagService.createFlag(tx, violatedRule);
-      this.logger.log(
-        `Created flag for transaction ${transactionId} (rule: ${violatedRule})`,
-      );
+    const evaluated = await this.amlService.evaluate(tx);
+    const violatedRules = Array.isArray(evaluated)
+      ? evaluated
+      : evaluated
+        ? [evaluated]
+        : [];
+
+    if (violatedRules.length > 0) {
+      for (const rule of violatedRules) {
+        await this.flagService.createFlag(tx, rule);
+        this.logger.log(
+          `Created flag for transaction ${transactionId} (rule: ${rule})`,
+        );
+      }
     } else {
       this.logger.log(`Transaction ${transactionId} passed AML checks`);
     }

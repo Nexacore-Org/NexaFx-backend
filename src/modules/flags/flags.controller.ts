@@ -1,16 +1,19 @@
 import {
-  Controller,
-  Get,
-  Post,
-  Patch,
-  Delete,
+  BadRequestException,
   Body,
+  Controller,
+  Delete,
+  Get,
   Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
   Query,
-  UseGuards,
   Request,
+  UseGuards,
 } from '@nestjs/common';
 import { FlagsService } from './flags.service';
+import { CreateFeatureFlagDto, UpdateFeatureFlagDto } from './dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
@@ -36,22 +39,64 @@ export class FlagsController {
   @Post('admin/flags')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
-  async createFlag(@Body() body: any) {
-    return this.flagsService.createFlag(body);
+  async createFlag(@Body() body: CreateFeatureFlagDto, @Request() req?: any) {
+    if (
+      body &&
+      body.rolloutPercent !== undefined &&
+      (typeof body.rolloutPercent !== 'number' ||
+        !Number.isInteger(body.rolloutPercent) ||
+        body.rolloutPercent < 0 ||
+        body.rolloutPercent > 100)
+    ) {
+      throw new BadRequestException(
+        'rolloutPercent must be an integer between 0 and 100',
+      );
+    }
+    const actorId = req?.user?.userId;
+    return actorId
+      ? this.flagsService.createFlag(body, actorId)
+      : this.flagsService.createFlag(body);
   }
 
   @Patch('admin/flags/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
-  async updateFlag(@Param('id') id: string, @Body() body: any) {
-    return this.flagsService.updateFlag(id, body);
+  async updateFlag(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateFeatureFlagDto,
+    @Request() req?: any,
+  ) {
+    if (
+      body &&
+      body.rolloutPercent !== undefined &&
+      (typeof body.rolloutPercent !== 'number' ||
+        !Number.isInteger(body.rolloutPercent) ||
+        body.rolloutPercent < 0 ||
+        body.rolloutPercent > 100)
+    ) {
+      throw new BadRequestException(
+        'rolloutPercent must be an integer between 0 and 100',
+      );
+    }
+    const actorId = req?.user?.userId;
+    return actorId
+      ? this.flagsService.updateFlag(id, body, actorId)
+      : this.flagsService.updateFlag(id, body);
   }
 
   @Delete('admin/flags/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
-  async deleteFlag(@Param('id') id: string) {
-    await this.flagsService.deleteFlag(id);
+  async deleteFlag(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req?: any,
+  ) {
+    const actorId = req?.user?.userId;
+    if (actorId) {
+      await this.flagsService.deleteFlag(id, actorId);
+    } else {
+      await this.flagsService.deleteFlag(id);
+    }
     return { success: true };
   }
 
@@ -59,9 +104,18 @@ export class FlagsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   async checkFlagForUser(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Query('userId') targetUserId: string,
   ) {
+    if (typeof this.flagsService.checkFlagForUser === 'function') {
+      return this.flagsService.checkFlagForUser(id, targetUserId);
+    }
+    if (typeof this.flagsService.findById === 'function') {
+      const flag = await this.flagsService.findById(id);
+      if (!flag) return { enabled: false };
+      const enabled = await this.flagsService.isEnabled(flag.key, targetUserId);
+      return { enabled };
+    }
     const flags = await this.flagsService.listFlags();
     const flag = flags.find((f) => f.id === id);
     if (!flag) return { enabled: false };

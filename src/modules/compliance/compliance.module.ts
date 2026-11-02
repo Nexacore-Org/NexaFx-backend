@@ -12,6 +12,7 @@ import { Sar } from './entities/sar.entity';
 import { AmlConfig } from './entities/aml-config.entity';
 import { Transaction } from '../../transactions/entities/transaction.entity';
 import { User } from '../../users/user.entity';
+import { ExchangeRatesModule } from '../../exchange-rates/exchange-rates.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { User } from '../../users/user.entity';
       Transaction,
       User,
     ]),
+    ExchangeRatesModule,
   ],
   providers: [
     AmlService,

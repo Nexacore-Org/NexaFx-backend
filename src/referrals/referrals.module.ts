@@ -5,13 +5,14 @@ import { ReferralsController } from './referrals.controller';
 import { Referral } from './entities/referral.entity';
 import { User } from '../users/user.entity';
 import { Transaction } from '../transactions/entities/transaction.entity';
+import { LedgerEntry } from '../ledger/entities/ledger-entry.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { WebhooksModule } from '../webhooks/webhooks.module';
 import { UnifiedActivityFeedModule } from '../unified-activity-feed/unified-activity-feed.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Referral, User, Transaction]),
+    TypeOrmModule.forFeature([Referral, User, Transaction, LedgerEntry]),
     NotificationsModule,
     WebhooksModule,
     UnifiedActivityFeedModule,

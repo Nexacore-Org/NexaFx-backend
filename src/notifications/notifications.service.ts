@@ -4,7 +4,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
-import { Repository, In } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Notification, NotificationType } from './entities/notification.entity';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { resolveDeepLink, buildFcmData } from './deep-links.registry';
@@ -13,7 +13,13 @@ import { User } from '../users/user.entity';
 import { FCMService } from '../firebase/fcm.service';
 import { ConfigService } from '@nestjs/config';
 import { MailService } from '../modules/mail/mail.service';
-import { NotificationsGateway } from './notifications.gateway';
+import {
+  NOTIFICATION_EVENT,
+  NOTIFICATION_SOCKET_EVENT,
+  NotificationsGateway,
+} from './notifications.gateway';
+
+export { NOTIFICATION_EVENT, NOTIFICATION_SOCKET_EVENT };
 
 @Injectable()
 export class NotificationsService {
@@ -182,7 +188,11 @@ export class NotificationsService {
    */
   private emitToUser(notification: Notification): void {
     try {
-      this.notificationsGateway.sendToUser(notification.userId, notification);
+      this.notificationsGateway.sendToUser(
+        notification.userId,
+        NOTIFICATION_EVENT,
+        notification,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to emit real-time notification for user ${notification.userId}: ${error instanceof Error ? error.message : String(error)}`,

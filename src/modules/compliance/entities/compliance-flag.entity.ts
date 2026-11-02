@@ -19,6 +19,9 @@ export enum ComplianceFlagStatus {
 
 @Index(['userId', 'status'])
 @Index(['rule', 'createdAt'])
+@Index('UQ_compliance_flags_transactionId_rule', ['transactionId', 'rule'], {
+  unique: true,
+})
 @Entity('compliance_flags')
 export class ComplianceFlag {
   @PrimaryGeneratedColumn('uuid')

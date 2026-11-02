@@ -8,6 +8,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { UseGuards, Logger } from '@nestjs/common';
 import { WsJwtGuard } from './ws-jwt.guard';
+import { buildWsCorsOptions } from './ws-cors';
 
 interface ConnectedUser {
   socketId: string;
@@ -16,10 +17,7 @@ interface ConnectedUser {
 
 @WebSocketGateway({
   namespace: '/messages',
-  cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3001',
-    credentials: true,
-  },
+  cors: buildWsCorsOptions(),
 })
 @UseGuards(WsJwtGuard)
 export class MessagingGateway

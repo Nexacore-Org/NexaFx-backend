@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule, ThrottlerStorageService } from '@nestjs/throttler';
 import { User } from './user.entity';
@@ -38,7 +38,7 @@ import { TransactionLimitsModule } from '../transactions/transaction-limits.modu
     BlockchainModule,
     ExchangeRatesModule,
     TokensModule,
-    NotificationsModule,
+    forwardRef(() => NotificationsModule),
     TransactionLimitsModule,
   ],
   controllers: [UsersController, UsersAdminController],

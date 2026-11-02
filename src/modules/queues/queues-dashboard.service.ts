@@ -1,11 +1,10 @@
-import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Injectable, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
-import { EMAIL_QUEUE, WEBHOOK_QUEUE } from './queue.constants';
+import { EMAIL_QUEUE, WEBHOOK_QUEUE, TAX_QUEUE } from './queue.constants';
 
 @Injectable()
 export class QueuesDashboardService {
@@ -14,11 +13,19 @@ export class QueuesDashboardService {
   constructor(
     @InjectQueue(EMAIL_QUEUE) emailQueue: Queue,
     @InjectQueue(WEBHOOK_QUEUE) webhookQueue: Queue,
+    @Optional() @InjectQueue(TAX_QUEUE) taxQueue?: Queue,
   ) {
     this.serverAdapter.setBasePath('/admin/queues');
+    const queues = [
+      new BullMQAdapter(emailQueue),
+      new BullMQAdapter(webhookQueue),
+      ...(taxQueue ? [new BullMQAdapter(taxQueue)] : []),
+    ];
     createBullBoard({
-      queues: [new BullMQAdapter(emailQueue), new BullMQAdapter(webhookQueue)],
-      serverAdapter: this.serverAdapter,
+      queues,
+      serverAdapter: this.serverAdapter as unknown as Parameters<
+        typeof createBullBoard
+      >[0]['serverAdapter'],
     });
   }
 

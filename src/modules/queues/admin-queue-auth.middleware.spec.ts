@@ -3,7 +3,10 @@ import { createAdminQueueAuthMiddleware } from './admin-queue-auth.middleware';
 describe('createAdminQueueAuthMiddleware', () => {
   const build = (
     env: Record<string, string | undefined>,
-    verify: jest.Mock = jest.fn().mockResolvedValue({ role: 'ADMIN' }),
+    verify: jest.Mock = jest
+      .fn()
+      .mockResolvedValue({ sub: 'admin-1', role: 'ADMIN' }),
+    usersService?: { findById: jest.Mock },
   ) => {
     const configService = {
       get: jest.fn((key: string) => env[key]),
@@ -12,6 +15,7 @@ describe('createAdminQueueAuthMiddleware', () => {
     const middleware = createAdminQueueAuthMiddleware(
       jwtService as never,
       configService as never,
+      usersService as never,
     );
     return { middleware, configService, verify };
   };
@@ -27,6 +31,13 @@ describe('createAdminQueueAuthMiddleware', () => {
     res.status.mockReturnValue(res);
     return res as never;
   };
+
+  describe('startup configuration validation', () => {
+    it('refuses to start when JWT_SECRET is unset and basic auth is not configured', () => {
+      expect(() => build({})).toThrow(/JWT_SECRET/);
+      expect(() => build({ JWT_SECRET: '   ' })).toThrow(/JWT_SECRET/);
+    });
+  });
 
   describe('basic auth mode', () => {
     const env = {
@@ -100,7 +111,9 @@ describe('createAdminQueueAuthMiddleware', () => {
     });
 
     it('accepts a SUPER_ADMIN token', async () => {
-      const verify = jest.fn().mockResolvedValue({ role: 'SUPER_ADMIN' });
+      const verify = jest
+        .fn()
+        .mockResolvedValue({ sub: 'super-1', role: 'SUPER_ADMIN' });
       const { middleware } = build(env, verify);
       const next = jest.fn();
 
@@ -114,7 +127,9 @@ describe('createAdminQueueAuthMiddleware', () => {
     });
 
     it('rejects a non-admin role with 403', async () => {
-      const verify = jest.fn().mockResolvedValue({ role: 'USER' });
+      const verify = jest
+        .fn()
+        .mockResolvedValue({ sub: 'user-1', role: 'USER' });
       const { middleware } = build(env, verify);
       const next = jest.fn();
       const res = makeRes();
@@ -123,6 +138,91 @@ describe('createAdminQueueAuthMiddleware', () => {
 
       expect(next).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(403);
+    });
+
+    it('rejects a partial_auth token with 401', async () => {
+      const verify = jest.fn().mockResolvedValue({
+        sub: 'admin-1',
+        role: 'ADMIN',
+        authStage: 'partial_auth',
+      });
+      const { middleware } = build(env, verify);
+      const next = jest.fn();
+      const res = makeRes();
+
+      await middleware(makeReq({ authorization: 'Bearer token' }), res, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+
+    it('rejects an impersonation token with 401', async () => {
+      const verify = jest.fn().mockResolvedValue({
+        sub: 'admin-1',
+        role: 'ADMIN',
+        isImpersonation: true,
+      });
+      const { middleware } = build(env, verify);
+      const next = jest.fn();
+      const res = makeRes();
+
+      await middleware(makeReq({ authorization: 'Bearer token' }), res, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+
+    it('re-checks admin status via UsersService and rejects suspended or demoted admins', async () => {
+      const verify = jest
+        .fn()
+        .mockResolvedValue({ sub: 'admin-1', role: 'ADMIN' });
+      const usersService = {
+        findById: jest
+          .fn()
+          .mockResolvedValueOnce({
+            id: 'admin-1',
+            role: 'ADMIN',
+            isSuspended: true,
+            isDeleted: false,
+            isActive: true,
+          })
+          .mockResolvedValueOnce({
+            id: 'admin-1',
+            role: 'USER',
+            isSuspended: false,
+            isDeleted: false,
+            isActive: true,
+          })
+          .mockResolvedValueOnce({
+            id: 'admin-1',
+            role: 'ADMIN',
+            isSuspended: false,
+            isDeleted: false,
+            isActive: true,
+          }),
+      };
+
+      const { middleware } = build(env, verify, usersService);
+
+      // 1. Suspended admin -> 401
+      const next1 = jest.fn();
+      const res1 = makeRes();
+      await middleware(makeReq({ authorization: 'Bearer token' }), res1, next1);
+      expect(next1).not.toHaveBeenCalled();
+      expect(res1.status).toHaveBeenCalledWith(401);
+
+      // 2. Demoted admin (role: USER in DB) -> 403
+      const next2 = jest.fn();
+      const res2 = makeRes();
+      await middleware(makeReq({ authorization: 'Bearer token' }), res2, next2);
+      expect(next2).not.toHaveBeenCalled();
+      expect(res2.status).toHaveBeenCalledWith(403);
+
+      // 3. Active admin -> passes through
+      const next3 = jest.fn();
+      const res3 = makeRes();
+      await middleware(makeReq({ authorization: 'Bearer token' }), res3, next3);
+      expect(next3).toHaveBeenCalled();
     });
 
     it('rejects an unparsable token with 401', async () => {
@@ -142,7 +242,11 @@ describe('createAdminQueueAuthMiddleware', () => {
       const next = jest.fn();
       const res = makeRes();
 
-      await middleware(makeReq({ authorization: 'Basic ops:letmein' }), res, next);
+      await middleware(
+        makeReq({ authorization: 'Basic ops:letmein' }),
+        res,
+        next,
+      );
 
       expect(next).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(401);

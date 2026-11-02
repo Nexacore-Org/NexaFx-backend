@@ -1,11 +1,20 @@
 import { Request, Response, NextFunction } from 'express';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import type { UsersService } from '../../users/users.service';
 
 interface JwtPayload {
   sub: string;
   role: string;
+  authStage?: string;
+  partial_auth?: boolean;
+  isImpersonation?: boolean;
+  impersonation?: boolean;
+  isSuspended?: boolean;
+  isDeleted?: boolean;
+  isActive?: boolean;
 }
+
 const ADMIN_ROLES = new Set(['ADMIN', 'SUPER_ADMIN']);
 
 function timingSafeEqual(a: string, b: string): boolean {
@@ -43,7 +52,23 @@ function parseBasicAuth(
 export function createAdminQueueAuthMiddleware(
   jwtService: JwtService,
   configService: ConfigService,
+  usersService?: Pick<UsersService, 'findById'>,
 ) {
+  const initDashboardUser = configService.get<string>('QUEUE_DASHBOARD_USER');
+  const initDashboardPassword = configService.get<string>(
+    'QUEUE_DASHBOARD_PASSWORD',
+  );
+  const initJwtSecret = configService.get<string>('JWT_SECRET');
+
+  if (
+    !(initDashboardUser && initDashboardPassword) &&
+    (!initJwtSecret || initJwtSecret.trim().length === 0)
+  ) {
+    throw new Error(
+      'Queue dashboard requires JWT_SECRET (or QUEUE_DASHBOARD_USER and QUEUE_DASHBOARD_PASSWORD) to be configured',
+    );
+  }
+
   return async (req: Request, res: Response, next: NextFunction) => {
     const dashboardUser = configService.get<string>('QUEUE_DASHBOARD_USER');
     const dashboardPassword = configService.get<string>(
@@ -76,13 +101,67 @@ export function createAdminQueueAuthMiddleware(
     }
 
     const token = authHeader.slice(7);
-    const secret =
-      configService.get<string>('JWT_SECRET') ?? 'dev-access-secret';
+    const secret = configService.get<string>('JWT_SECRET');
+    if (!secret || secret.trim().length === 0) {
+      res
+        .status(503)
+        .json({ message: 'Queue dashboard authentication is not configured' });
+      return;
+    }
 
     try {
       const payload = await jwtService.verifyAsync<JwtPayload>(token, {
         secret,
       });
+
+      if (
+        payload.authStage === 'partial_auth' ||
+        payload.partial_auth ||
+        payload.isImpersonation ||
+        payload.impersonation
+      ) {
+        res.status(401).json({
+          message: 'Partial-auth and impersonation tokens are not allowed',
+        });
+        return;
+      }
+
+      if (
+        payload.isDeleted ||
+        payload.isActive === false ||
+        payload.isSuspended
+      ) {
+        res
+          .status(401)
+          .json({ message: 'Admin account is suspended or inactive' });
+        return;
+      }
+
+      if (usersService) {
+        if (!payload.sub) {
+          res.status(401).json({ message: 'Invalid token payload' });
+          return;
+        }
+        const user = await usersService.findById(payload.sub);
+        if (
+          !user ||
+          user.isDeleted ||
+          user.isActive === false ||
+          user.isSuspended
+        ) {
+          res
+            .status(401)
+            .json({ message: 'Admin account is suspended or inactive' });
+          return;
+        }
+        if (!ADMIN_ROLES.has(user.role)) {
+          res.status(403).json({ message: 'Insufficient permissions' });
+          return;
+        }
+        next();
+        return;
+      }
+
       if (!ADMIN_ROLES.has(payload.role)) {
         res.status(403).json({ message: 'Insufficient permissions' });
         return;

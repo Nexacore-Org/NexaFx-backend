@@ -36,16 +36,32 @@ describe('redisConnectionFromUrl', () => {
     expect(connection.password).toBeUndefined();
   });
 
-  it('decodes percent-encoded passwords', () => {
+  it('decodes percent-encoded usernames and passwords', () => {
     const connection = redisConnectionFromUrl(
-      'redis://user:p%40ss%3Aword@cache.internal:6379/0',
+      'redis://user%40domain:p%40ss%3Aword@cache.internal:6379/0',
     );
 
+    expect(connection.username).toBe('user@domain');
     expect(connection.password).toBe('p@ss:word');
   });
 
+  it('enables TLS when the rediss:// scheme is used', () => {
+    const connection = redisConnectionFromUrl(
+      'rediss://nexafx:p%40ss%3Aword@cache.internal:6380/2',
+    );
+
+    expect(connection.host).toBe('cache.internal');
+    expect(connection.port).toBe(6380);
+    expect(connection.username).toBe('nexafx');
+    expect(connection.password).toBe('p@ss:word');
+    expect(connection.db).toBe(2);
+    expect(connection.tls).toEqual({});
+  });
+
   it('always disables per-request retries so bull can handle reconnects', () => {
-    expect(redisConnectionFromUrl('redis://cache.internal:6379/0')
-      .maxRetriesPerRequest).toBeNull();
+    expect(
+      redisConnectionFromUrl('redis://cache.internal:6379/0')
+        .maxRetriesPerRequest,
+    ).toBeNull();
   });
 });

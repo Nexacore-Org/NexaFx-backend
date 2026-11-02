@@ -19,6 +19,7 @@ import helmet from 'helmet';
 import { JwtService } from '@nestjs/jwt';
 import { createAdminQueueAuthMiddleware } from './modules/queues/admin-queue-auth.middleware';
 import { QueuesDashboardService } from './modules/queues/queues-dashboard.service';
+import { UsersService } from './users/users.service';
 import { join } from 'path';
 import * as compression from 'compression';
 import { Request, Response, NextFunction } from 'express';
@@ -90,11 +91,12 @@ async function bootstrap() {
     .filter(Boolean);
 
   const jwtService = app.get(JwtService);
+  const usersService = app.get(UsersService);
   const queuesDashboard = app.get(QueuesDashboardService);
 
   app.use(
     '/admin/queues',
-    createAdminQueueAuthMiddleware(jwtService, configService),
+    createAdminQueueAuthMiddleware(jwtService, configService, usersService),
     queuesDashboard.getRouter(),
   );
 

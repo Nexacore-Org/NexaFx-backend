@@ -11,14 +11,21 @@ import Redis from 'ioredis';
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private client: Redis;
   private readonly logger = new Logger(RedisService.name);
+  private readonly memoryFallback = new Map<
+    string,
+    { value: string; expiresAt?: number }
+  >();
 
   constructor(private readonly configService: ConfigService) {}
 
   onModuleInit() {
     const redisUrl =
       this.configService.get<string>('REDIS_URL') || 'redis://localhost:6379';
+    const isTest = this.configService.get<string>('NODE_ENV') === 'test';
     this.client = new Redis(redisUrl, {
-      maxRetriesPerRequest: null,
+      maxRetriesPerRequest: isTest ? 1 : null,
+      lazyConnect: isTest,
+      enableOfflineQueue: !isTest,
     });
 
     this.client.on('connect', () => {
@@ -32,28 +39,53 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleDestroy() {
     if (this.client) {
-      await this.client.quit();
+      await this.client.quit().catch(() => undefined);
     }
+  }
+
+  private getFromMemory<T>(key: string): T | null {
+    const entry = this.memoryFallback.get(key);
+    if (!entry) return null;
+    if (entry.expiresAt && Date.now() > entry.expiresAt) {
+      this.memoryFallback.delete(key);
+      return null;
+    }
+    return JSON.parse(entry.value) as T;
   }
 
   async get<T>(key: string): Promise<T | null> {
     try {
-      const data = await this.client.get(key);
-      if (!data) return null;
-      return JSON.parse(data) as T;
+      if (
+        this.client &&
+        (!('status' in this.client) || this.client.status === 'ready')
+      ) {
+        const data = await this.client.get(key);
+        if (!data) return this.getFromMemory<T>(key);
+        return JSON.parse(data) as T;
+      }
+      return this.getFromMemory<T>(key);
     } catch (error) {
       this.logger.error(`Error getting key ${key} from Redis`, error);
-      return null;
+      return this.getFromMemory<T>(key);
     }
   }
 
   async set(key: string, value: any, ttlSeconds?: number): Promise<void> {
+    const serialized = JSON.stringify(value);
+    this.memoryFallback.set(key, {
+      value: serialized,
+      expiresAt: ttlSeconds ? Date.now() + ttlSeconds * 1000 : undefined,
+    });
     try {
-      const serialized = JSON.stringify(value);
-      if (ttlSeconds) {
-        await this.client.set(key, serialized, 'EX', ttlSeconds);
-      } else {
-        await this.client.set(key, serialized);
+      if (
+        this.client &&
+        (!('status' in this.client) || this.client.status === 'ready')
+      ) {
+        if (ttlSeconds) {
+          await this.client.set(key, serialized, 'EX', ttlSeconds);
+        } else {
+          await this.client.set(key, serialized);
+        }
       }
     } catch (error) {
       this.logger.error(`Error setting key ${key} in Redis`, error);
@@ -61,8 +93,14 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async del(key: string): Promise<void> {
+    this.memoryFallback.delete(key);
     try {
-      await this.client.del(key);
+      if (
+        this.client &&
+        (!('status' in this.client) || this.client.status === 'ready')
+      ) {
+        await this.client.del(key);
+      }
     } catch (error) {
       this.logger.error(`Error deleting key ${key} from Redis`, error);
     }
@@ -70,9 +108,17 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   async delPattern(pattern: string): Promise<void> {
     try {
-      const keys = await this.client.keys(pattern);
-      if (keys.length > 0) {
-        await this.client.del(...keys);
+      const matchedKeys = await this.scan(pattern);
+      if (matchedKeys.length > 0) {
+        for (const k of matchedKeys) {
+          this.memoryFallback.delete(k);
+        }
+        if (
+          this.client &&
+          (!('status' in this.client) || this.client.status === 'ready')
+        ) {
+          await this.client.del(...matchedKeys);
+        }
       }
     } catch (error) {
       this.logger.error(`Error deleting pattern ${pattern} from Redis`, error);
@@ -80,16 +126,61 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Returns all keys matching a glob-style pattern.
-   * Use with care — avoid on very large keyspaces.
-   * Safe for admin-scoped patterns like `nexafx:impersonation:admin:<id>:*`.
+   * Non-blocking cursor-based iteration over keys matching a glob pattern.
+   * Uses Redis SCAN instead of blocking KEYS.
+   */
+  async scan(pattern: string, count = 100): Promise<string[]> {
+    const found = new Set<string>();
+    const regex = new RegExp(
+      '^' +
+        pattern
+          .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+          .replace(/\*/g, '.*')
+          .replace(/\?/g, '.') +
+        '$',
+    );
+
+    for (const [k, entry] of this.memoryFallback.entries()) {
+      if (entry.expiresAt && Date.now() > entry.expiresAt) {
+        this.memoryFallback.delete(k);
+        continue;
+      }
+      if (regex.test(k)) {
+        found.add(k);
+      }
+    }
+
+    try {
+      if (
+        this.client &&
+        (!('status' in this.client) || this.client.status === 'ready')
+      ) {
+        let cursor = '0';
+        do {
+          const [nextCursor, batch] = await this.client.scan(
+            cursor,
+            'MATCH',
+            pattern,
+            'COUNT',
+            count,
+          );
+          cursor = nextCursor;
+          for (const key of batch) {
+            found.add(key);
+          }
+        } while (cursor !== '0');
+      }
+    } catch (error) {
+      this.logger.error(`Error scanning keys for pattern ${pattern}`, error);
+    }
+
+    return Array.from(found);
+  }
+
+  /**
+   * Alias for scan() retained for backwards compatibility without using blocking KEYS.
    */
   async keys(pattern: string): Promise<string[]> {
-    try {
-      return await this.client.keys(pattern);
-    } catch (error) {
-      this.logger.error(`Error listing keys for pattern ${pattern}`, error);
-      return [];
-    }
+    return this.scan(pattern);
   }
 }

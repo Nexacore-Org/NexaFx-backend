@@ -1,11 +1,77 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import {
-  INestApplication,
-  HttpStatus,
-  ValidationPipe,
+  BadRequestException,
+  NotFoundException,
   UnprocessableEntityException,
+  UnauthorizedException,
 } from '@nestjs/common';
-import * as request from 'supertest';
+
+jest.mock('@nestjs/typeorm', () => ({
+  InjectRepository: () => () => {},
+  getRepositoryToken: (entity: any) => `${entity?.name ?? 'Entity'}Repository`,
+  TypeOrmModule: { forFeature: () => ({}) },
+}));
+
+jest.mock('@nestjs/swagger', () => {
+  const noop = () => () => {};
+  return {
+    ApiTags: noop,
+    ApiOperation: noop,
+    ApiResponse: noop,
+    ApiBearerAuth: noop,
+    ApiBody: noop,
+    ApiParam: noop,
+    ApiQuery: noop,
+    ApiProperty: noop,
+    ApiPropertyOptional: noop,
+    PartialType: (cls: any) => cls,
+    OmitType: (cls: any) => cls,
+    PickType: (cls: any) => cls,
+  };
+});
+
+jest.mock('@nestjs/config', () => ({
+  ConfigService: class {},
+  ConfigModule: { forRoot: () => ({}) },
+}));
+
+jest.mock('@nestjs/passport', () => ({
+  PassportStrategy: () =>
+    class {
+      constructor(..._args: any[]) {}
+    },
+  AuthGuard: () =>
+    class {
+      canActivate() {
+        return true;
+      }
+    },
+}));
+
+jest.mock('../../common/guards/jwt-auth.guard', () => ({
+  JwtAuthGuard: class {
+    canActivate() {
+      return true;
+    }
+  },
+}));
+
+jest.mock('../../auth/guards/roles.guard', () => ({
+  RolesGuard: class {
+    canActivate() {
+      return true;
+    }
+  },
+}));
+
+jest.mock('../../users/users.service', () => ({
+  UsersService: class {},
+}));
+
+jest.mock('../../audit-logs/audit-logs.service', () => ({
+  AuditLogsService: class {},
+}));
+
 import { ImpersonationController } from './impersonation.controller';
 import { ImpersonationService } from './impersonation.service';
 import { UsersService } from '../../users/users.service';
@@ -14,12 +80,11 @@ import { AuditLogsService } from '../../audit-logs/audit-logs.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UserRole } from '../../users/user.entity';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../../auth/guards/roles.guard';
-import { ExecutionContext } from '@nestjs/common';
+import { validateAuthenticatedUser } from '../../auth/authenticated-user';
+import { JwtStrategy } from '../../auth/strategies/jwt.strategy';
 
-describe('Impersonation (Controller & Service)', () => {
-  let app: INestApplication;
+describe('Impersonation (Controller, Service & JWT Validation)', () => {
+  let controller: ImpersonationController;
   let impersonationService: ImpersonationService;
 
   const mockUsersService = {
@@ -30,6 +95,7 @@ describe('Impersonation (Controller & Service)', () => {
     get: jest.fn(),
     set: jest.fn(),
     del: jest.fn(),
+    scan: jest.fn(),
     keys: jest.fn(),
   };
 
@@ -49,32 +115,6 @@ describe('Impersonation (Controller & Service)', () => {
     }),
   };
 
-  // Mock Authentication Guards for route testing
-  const mockJwtAuthGuard = {
-    canActivate: (context: ExecutionContext) => {
-      const req = context.switchToHttp().getRequest();
-      // Emulate authenticated admin by default
-      req.user = {
-        userId: 'admin-123',
-        email: 'admin@nexafx.com',
-        role: UserRole.ADMIN,
-        isImpersonation: false,
-      };
-      return true;
-    },
-  };
-
-  const mockRolesGuard = {
-    canActivate: (context: ExecutionContext) => {
-      const req = context.switchToHttp().getRequest();
-      const user = req.user;
-      return (
-        user &&
-        (user.role === UserRole.ADMIN || user.role === UserRole.SUPER_ADMIN)
-      );
-    },
-  };
-
   beforeAll(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({
       controllers: [ImpersonationController],
@@ -86,22 +126,13 @@ describe('Impersonation (Controller & Service)', () => {
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
       ],
-    })
-      .overrideGuard(JwtAuthGuard)
-      .useValue(mockJwtAuthGuard)
-      .overrideGuard(RolesGuard)
-      .useValue(mockRolesGuard)
-      .compile();
+    }).compile();
 
+    controller = moduleRef.get<ImpersonationController>(
+      ImpersonationController,
+    );
     impersonationService =
       moduleRef.get<ImpersonationService>(ImpersonationService);
-    app = moduleRef.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe());
-    await app.init();
-  });
-
-  afterAll(async () => {
-    await app.close();
   });
 
   beforeEach(() => {
@@ -167,36 +198,41 @@ describe('Impersonation (Controller & Service)', () => {
       });
 
       const uuid = '550e8400-e29b-41d4-a716-446655440000';
-      await request(app.getHttpServer())
-        .post(`/admin/impersonate/${uuid}`)
-        .expect(HttpStatus.OK)
-        .expect((res) => {
-          expect(res.body.impersonationToken).toBe('mock-jwt-token');
-        });
+      const res = await controller.impersonate(
+        {
+          userId: 'admin-123',
+          email: 'admin@nexafx.com',
+          role: UserRole.ADMIN,
+          isImpersonation: false,
+        },
+        uuid,
+        {},
+      );
+      expect(res.impersonationToken).toBe('mock-jwt-token');
     });
 
     it('POST /admin/impersonate/end invalidates Redis entries and logs event', async () => {
-      // Setup req.user to act as impersonated user for this test
-      jest
-        .spyOn(mockJwtAuthGuard, 'canActivate')
-        .mockImplementationOnce((context: ExecutionContext) => {
-          const req = context.switchToHttp().getRequest();
-          req.user = {
-            userId: 'user-456',
-            jti: 'session-jti-uuid',
-            role: UserRole.USER,
-            isImpersonation: true,
-            impersonatedBy: 'admin-123',
-          };
-          return true;
-        });
+      mockRedisService.get.mockResolvedValueOnce({
+        jti: 'session-jti-uuid',
+        targetUserId: 'user-456',
+        targetUserEmail: 'user@nexafx.com',
+        adminId: 'admin-123',
+        startedAt: new Date().toISOString(),
+        expiresAt: new Date().toISOString(),
+      });
 
-      await request(app.getHttpServer())
-        .post('/admin/impersonate/end')
-        .expect(HttpStatus.OK)
-        .expect((res) => {
-          expect(res.body.message).toBe('Impersonation session ended');
-        });
+      const res = await controller.endImpersonate(
+        {
+          userId: 'user-456',
+          email: 'user@nexafx.com',
+          jti: 'session-jti-uuid',
+          role: UserRole.USER,
+          isImpersonation: true,
+          impersonatedBy: 'admin-123',
+        },
+        {},
+      );
+      expect(res.message).toBe('Impersonation session ended');
 
       expect(mockRedisService.del).toHaveBeenCalledWith(
         'nexafx:impersonation:user-456:session-jti-uuid',
@@ -215,8 +251,46 @@ describe('Impersonation (Controller & Service)', () => {
       );
     });
 
-    it('GET /admin/impersonation/active returns active sessions from admin index', async () => {
-      mockRedisService.keys.mockResolvedValueOnce([
+    it('POST /admin/impersonate/end with a regular access token throws BadRequestException (400) and writes no audit row', async () => {
+      await expect(
+        controller.endImpersonate(
+          {
+            userId: 'admin-123',
+            email: 'admin@nexafx.com',
+            role: UserRole.ADMIN,
+            isImpersonation: false,
+          },
+          {},
+        ),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockRedisService.del).not.toHaveBeenCalled();
+      expect(mockAuditLogsService.log).not.toHaveBeenCalled();
+    });
+
+    it('POST /admin/impersonate/end throws NotFoundException (404) when the Redis session does not exist and writes no audit row', async () => {
+      mockRedisService.get.mockResolvedValueOnce(null);
+
+      await expect(
+        controller.endImpersonate(
+          {
+            userId: 'user-456',
+            email: 'user@nexafx.com',
+            jti: 'expired-jti',
+            role: UserRole.USER,
+            isImpersonation: true,
+            impersonatedBy: 'admin-123',
+          },
+          {},
+        ),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(mockRedisService.del).not.toHaveBeenCalled();
+      expect(mockAuditLogsService.log).not.toHaveBeenCalled();
+    });
+
+    it('GET /admin/impersonation/active uses Redis SCAN instead of KEYS', async () => {
+      mockRedisService.scan.mockResolvedValueOnce([
         'nexafx:impersonation:admin:admin-123:session-jti-uuid',
       ]);
       mockRedisService.get.mockResolvedValueOnce({
@@ -228,13 +302,172 @@ describe('Impersonation (Controller & Service)', () => {
         expiresAt: new Date().toISOString(),
       });
 
-      await request(app.getHttpServer())
-        .get('/admin/impersonation/active')
-        .expect(HttpStatus.OK)
-        .expect((res) => {
-          expect(res.body.total).toBe(1);
-          expect(res.body.sessions[0].targetUserId).toBe('user-456');
+      const res = await controller.getActiveSessions({
+        userId: 'admin-123',
+        email: 'admin@nexafx.com',
+        role: UserRole.ADMIN,
+      });
+
+      expect(res.total).toBe(1);
+      expect(res.sessions[0].targetUserId).toBe('user-456');
+      expect(mockRedisService.scan).toHaveBeenCalledWith(
+        'nexafx:impersonation:admin:admin-123:*',
+      );
+      expect(mockRedisService.keys).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('JWT Impersonation Session Validation (#1488)', () => {
+    const activeTargetUser = {
+      id: 'user-456',
+      email: 'user@nexafx.com',
+      role: UserRole.USER,
+      isActive: true,
+      isSuspended: false,
+      isDeleted: false,
+    };
+
+    const activeAdminUser = {
+      id: 'admin-123',
+      email: 'admin@nexafx.com',
+      role: UserRole.ADMIN,
+      isActive: true,
+      isSuspended: false,
+      isDeleted: false,
+    };
+
+    const payload = {
+      sub: 'user-456',
+      email: 'user@nexafx.com',
+      role: UserRole.USER,
+      isImpersonation: true,
+      impersonatedBy: 'admin-123',
+      jti: 'session-jti-uuid',
+    };
+
+    it('accepts an active impersonation token when Redis session and admin are valid', async () => {
+      mockUsersService.findById
+        .mockResolvedValueOnce(activeTargetUser)
+        .mockResolvedValueOnce(activeAdminUser);
+      mockRedisService.get.mockResolvedValueOnce({
+        adminId: 'admin-123',
+        targetUserId: 'user-456',
+        jti: 'session-jti-uuid',
+      });
+
+      const strategy = new JwtStrategy(
+        mockConfigService as unknown as ConfigService,
+        mockUsersService as unknown as UsersService,
+        mockRedisService as unknown as RedisService,
+        impersonationService,
+      );
+
+      const user = await strategy.validate(payload);
+      expect(user).toMatchObject({
+        userId: 'user-456',
+        role: 'USER',
+        isImpersonation: true,
+        impersonatedBy: 'admin-123',
+        jti: 'session-jti-uuid',
+      });
+    });
+
+    it('rejects the impersonation token with 401 after endImpersonation removes the Redis session', async () => {
+      mockRedisService.get.mockResolvedValueOnce({
+        adminId: 'admin-123',
+        targetUserId: 'user-456',
+        jti: 'session-jti-uuid',
+      });
+      await impersonationService.endImpersonation(
+        'user-456',
+        'session-jti-uuid',
+        'admin-123',
+      );
+
+      mockUsersService.findById.mockResolvedValueOnce(activeTargetUser);
+      mockRedisService.get.mockResolvedValueOnce(null);
+
+      await expect(
+        validateAuthenticatedUser(
+          mockUsersService as unknown as UsersService,
+          payload,
+          impersonationService,
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('rejects the impersonation token with 401 after Redis session expires', async () => {
+      mockUsersService.findById.mockResolvedValueOnce(activeTargetUser);
+      mockRedisService.get.mockResolvedValueOnce(null);
+
+      await expect(
+        validateAuthenticatedUser(
+          mockUsersService as unknown as UsersService,
+          payload,
+          impersonationService,
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('rejects the impersonation token with 401 when session adminId does not match impersonatedBy', async () => {
+      mockUsersService.findById.mockResolvedValueOnce(activeTargetUser);
+      mockRedisService.get.mockResolvedValueOnce({
+        adminId: 'other-admin-999',
+        targetUserId: 'user-456',
+        jti: 'session-jti-uuid',
+      });
+
+      await expect(
+        validateAuthenticatedUser(
+          mockUsersService as unknown as UsersService,
+          payload,
+          impersonationService,
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('rejects the impersonation token with 401 when the impersonating admin is demoted to USER', async () => {
+      mockUsersService.findById
+        .mockResolvedValueOnce(activeTargetUser)
+        .mockResolvedValueOnce({
+          ...activeAdminUser,
+          role: UserRole.USER,
         });
+      mockRedisService.get.mockResolvedValueOnce({
+        adminId: 'admin-123',
+        targetUserId: 'user-456',
+        jti: 'session-jti-uuid',
+      });
+
+      await expect(
+        validateAuthenticatedUser(
+          mockUsersService as unknown as UsersService,
+          payload,
+          impersonationService,
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('rejects the impersonation token with 401 when the impersonating admin is suspended or deleted', async () => {
+      mockUsersService.findById
+        .mockResolvedValueOnce(activeTargetUser)
+        .mockResolvedValueOnce({
+          ...activeAdminUser,
+          isSuspended: true,
+        });
+      mockRedisService.get.mockResolvedValueOnce({
+        adminId: 'admin-123',
+        targetUserId: 'user-456',
+        jti: 'session-jti-uuid',
+      });
+
+      await expect(
+        validateAuthenticatedUser(
+          mockUsersService as unknown as UsersService,
+          payload,
+          impersonationService,
+        ),
+      ).rejects.toThrow(UnauthorizedException);
     });
   });
 });

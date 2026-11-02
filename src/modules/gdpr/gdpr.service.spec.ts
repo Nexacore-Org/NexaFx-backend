@@ -6,13 +6,42 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+
+jest.mock('@nestjs/typeorm', () => {
+  const { Inject } = require('@nestjs/common');
+  const getRepositoryToken = (entity: any) =>
+    `${entity?.name ?? 'Entity'}Repository`;
+  return {
+    InjectRepository: (entity: any) => Inject(getRepositoryToken(entity)),
+    getRepositoryToken,
+  };
+});
+
+jest.mock('@nestjs/config', () => ({
+  ConfigService: class ConfigService {},
+}));
+
+jest.mock('@nestjs/schedule', () => ({
+  Cron: () => () => undefined,
+  CronExpression: { EVERY_DAY_AT_MIDNIGHT: '0 0 * * *' },
+}));
+
+jest.mock('@nestjs/bullmq', () => {
+  const { Inject } = require('@nestjs/common');
+  return {
+    InjectQueue: (name: string) => Inject(`BullQueue_${name}`),
+  };
+});
+
+jest.mock('bcrypt');
+
 import { GdprService } from './gdpr.service';
 import { GdprConsent } from './entities/gdpr-consent.entity';
 import { ErasureAuditLog } from './entities/erasure-audit-log.entity';
 import { STORAGE_SERVICE_TOKEN } from '../storage/storage.service';
 
-jest.mock('bcrypt');
 const mockedBcrypt = bcrypt as jest.Mocked<typeof bcrypt>;
 
 // Lightweight entity stubs so getRepositoryToken resolves without importing the whole graph
@@ -56,6 +85,11 @@ describe('GdprService', () => {
   let expenseRepo: ReturnType<typeof mockRepo>;
   let storageService: { delete: jest.Mock };
   let exportQueue: { add: jest.Mock; getJobs: jest.Mock };
+  let dataSource: {
+    transaction: jest.Mock;
+    committedOps: Array<{ repo: string; op: string; args: unknown[] }>;
+    rolledBack: boolean;
+  };
 
   beforeEach(async () => {
     consentRepo = mockRepo();
@@ -74,6 +108,65 @@ describe('GdprService', () => {
     exportQueue = {
       add: jest.fn().mockResolvedValue({ id: 'job-1' }),
       getJobs: jest.fn().mockResolvedValue([]),
+    };
+
+    const repoByName: Record<string, ReturnType<typeof mockRepo>> = {
+      GdprConsent: consentRepo,
+      User: userRepo,
+      Transaction: txRepo,
+      KYCApplication: kycRepo,
+      Notification: notificationRepo,
+      RateAlert: rateAlertRepo,
+      WebhookEndpoint: webhookEndpointRepo,
+      WebhookDelivery: webhookDeliveryRepo,
+      AuditLog: auditLogRepo,
+      RefreshToken: refreshTokenRepo,
+      ErasureAuditLog: erasureAuditRepo,
+      Expense: expenseRepo,
+    };
+
+    dataSource = {
+      committedOps: [],
+      rolledBack: false,
+      transaction: jest.fn(async (cb: (manager: any) => Promise<any>) => {
+        const stagedOps: Array<{ repo: string; op: string; args: unknown[] }> =
+          [];
+        const manager = {
+          getRepository: (entity: any) => {
+            const name = entity?.name ?? String(entity);
+            const base = repoByName[name];
+            if (!base) return undefined;
+            return {
+              ...base,
+              save: async (...args: unknown[]) => {
+                const res = await base.save(...args);
+                stagedOps.push({ repo: name, op: 'save', args });
+                return res;
+              },
+              update: async (...args: unknown[]) => {
+                const res = await base.update(...args);
+                stagedOps.push({ repo: name, op: 'update', args });
+                return res;
+              },
+              delete: async (...args: unknown[]) => {
+                const res = await base.delete(...args);
+                stagedOps.push({ repo: name, op: 'delete', args });
+                return res;
+              },
+            };
+          },
+        };
+
+        try {
+          const result = await cb(manager);
+          dataSource.committedOps.push(...stagedOps);
+          return result;
+        } catch (err) {
+          dataSource.rolledBack = true;
+          dataSource.committedOps = [];
+          throw err;
+        }
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -112,6 +205,10 @@ describe('GdprService', () => {
           provide: ConfigService,
           useValue: { get: jest.fn().mockReturnValue('1.0.0') },
         },
+        {
+          provide: DataSource,
+          useValue: dataSource,
+        },
       ],
     }).compile();
 
@@ -149,11 +246,17 @@ describe('GdprService', () => {
       lastName: 'Smith',
       password: 'hashed',
       twoFactorSecret: 'secret',
+      pendingTwoFactorSecret: 'pending-totp-seed',
+      isTwoFactorEnabled: true,
+      walletSecretKeyEncrypted: 'encrypted-custodial-key',
+      walletPublicKey: 'GABC1234567890',
+      balances: {},
       isActive: true,
+      isDeleted: false,
       deletedAt: null,
     };
 
-    it('anonymises PII and creates ErasureAuditLog', async () => {
+    it('anonymises PII, clears pendingTwoFactorSecret and custodial wallet secret, anonymises consent IP/UA, and creates ErasureAuditLog atomically', async () => {
       userRepo.findOne.mockResolvedValue({ ...baseUser });
       mockedBcrypt.compare.mockResolvedValue(true as never);
       txRepo.count.mockResolvedValue(0);
@@ -163,18 +266,78 @@ describe('GdprService', () => {
       const result = await service.eraseUser('user-1', 'password');
 
       expect(result.status).toBe('erased');
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
       expect(userRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({
           email: 'deleted-user-1@nexafx.deleted',
           firstName: 'Deleted',
           lastName: 'Deleted',
           password: null,
+          twoFactorSecret: null,
+          pendingTwoFactorSecret: null,
+          isTwoFactorEnabled: false,
+          walletSecretKeyEncrypted: null,
+          walletPublicKey: null,
           isActive: false,
+          isDeleted: true,
         }),
+      );
+      expect(consentRepo.update).toHaveBeenCalledWith(
+        { userId: 'user-1' },
+        { ipAddress: null, userAgent: null },
       );
       expect(erasureAuditRepo.create).toHaveBeenCalled();
       expect(erasureAuditRepo.save).toHaveBeenCalled();
       expect(auditLogRepo.save).toHaveBeenCalled();
+      expect(dataSource.committedOps.length).toBeGreaterThan(0);
+    });
+
+    it('rolls back all DB changes and persists nothing when a mid-sequence write throws', async () => {
+      const userRecord = { ...baseUser };
+      userRepo.findOne.mockResolvedValue(userRecord);
+      mockedBcrypt.compare.mockResolvedValue(true as never);
+      txRepo.count.mockResolvedValue(0);
+      kycRepo.find.mockResolvedValue([]);
+      expenseRepo.find.mockResolvedValue([]);
+
+      // Simulate a failure mid-way through the erasure sequence
+      notificationRepo.delete.mockRejectedValueOnce(
+        new Error('mid-sequence DB failure'),
+      );
+
+      await expect(service.eraseUser('user-1', 'password')).rejects.toThrow(
+        'mid-sequence DB failure',
+      );
+
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(dataSource.rolledBack).toBe(true);
+      expect(dataSource.committedOps).toHaveLength(0);
+      expect(rateAlertRepo.delete).not.toHaveBeenCalled();
+      expect(webhookEndpointRepo.delete).not.toHaveBeenCalled();
+      expect(auditLogRepo.save).not.toHaveBeenCalled();
+      expect(erasureAuditRepo.save).not.toHaveBeenCalled();
+      // User record state is rolled back
+      expect(userRecord.email).toBe('alice@example.com');
+      expect(userRecord.pendingTwoFactorSecret).toBe('pending-totp-seed');
+      expect(userRecord.walletSecretKeyEncrypted).toBe(
+        'encrypted-custodial-key',
+      );
+      expect(userRecord.isDeleted).toBe(false);
+    });
+
+    it('rejects erasure when custodial wallet still holds positive unswept funds', async () => {
+      userRepo.findOne.mockResolvedValue({
+        ...baseUser,
+        balances: { USD: 50 },
+      });
+      mockedBcrypt.compare.mockResolvedValue(true as never);
+      txRepo.count.mockResolvedValue(0);
+
+      await expect(service.eraseUser('user-1', 'password')).rejects.toThrow(
+        UnprocessableEntityException,
+      );
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(userRepo.save).not.toHaveBeenCalled();
     });
 
     it('rejects invalid password', async () => {

@@ -5,9 +5,18 @@ import {
   UnprocessableEntityException,
   NotFoundException,
   Logger,
+  Optional,
+  Inject,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan } from 'typeorm';
+import {
+  Repository,
+  LessThan,
+  DataSource,
+  EntityManager,
+  EntityTarget,
+  ObjectLiteral,
+} from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import * as bcrypt from 'bcrypt';
 import { GdprConsent } from './entities/gdpr-consent.entity';
@@ -31,7 +40,6 @@ import {
   STORAGE_SERVICE_TOKEN,
   StorageService,
 } from '../../modules/storage/storage.service';
-import { Inject } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
@@ -69,7 +77,40 @@ export class GdprService {
     private readonly storageService: StorageService,
     @InjectQueue('gdpr-export') private readonly exportQueue: Queue,
     private readonly configService: ConfigService,
+    @Optional()
+    private readonly dataSource?: DataSource,
   ) {}
+
+  private resolveRepo<T extends ObjectLiteral>(
+    manager: EntityManager | undefined,
+    entity: EntityTarget<T>,
+    fallback: Repository<T>,
+  ): Repository<T> {
+    if (manager && typeof manager.getRepository === 'function') {
+      const repo = manager.getRepository(entity);
+      if (repo) {
+        return repo;
+      }
+    }
+    return fallback;
+  }
+
+  private async runInTransaction<T>(
+    work: (manager?: EntityManager) => Promise<T>,
+  ): Promise<T> {
+    if (this.dataSource && typeof this.dataSource.transaction === 'function') {
+      return this.dataSource.transaction((manager) => work(manager));
+    }
+    if (
+      this.userRepository.manager &&
+      typeof this.userRepository.manager.transaction === 'function'
+    ) {
+      return this.userRepository.manager.transaction((manager) =>
+        work(manager),
+      );
+    }
+    return work(undefined);
+  }
 
   async recordConsent(
     userId: string,
@@ -116,6 +157,15 @@ export class GdprService {
       );
     }
 
+    const hasRemainingCustodialFunds = Object.values(user.balances ?? {}).some(
+      (balance) => Number(balance) > 0,
+    );
+    if (hasRemainingCustodialFunds) {
+      throw new UnprocessableEntityException(
+        'Cannot erase account with remaining custodial wallet balance; sweep funds first',
+      );
+    }
+
     // Collect all S3 keys to delete BEFORE any DB writes
     const keysToDelete: string[] = [];
     const failedDeletions: string[] = [];
@@ -141,7 +191,7 @@ export class GdprService {
     const userAny = user as any;
     if (userAny.profilePhotoKey) keysToDelete.push(userAny.profilePhotoKey);
 
-    // Attempt S3 deletions — never block erasure on failure
+    // Attempt S3 deletions — never block erasure on failure, reported in erasure log
     if (keysToDelete.length > 0) {
       const results = await Promise.allSettled(
         keysToDelete.map((key) => this.storageService.delete(key)),
@@ -158,70 +208,122 @@ export class GdprService {
       });
     }
 
-    // Anonymise user (including the personal data that used to survive erasure)
-    user.email = `deleted-${user.id}@nexafx.deleted`;
-    user.firstName = 'Deleted';
-    user.lastName = 'Deleted';
-    user.password = null;
-    user.phone = null;
-    user.fcmTokens = [];
-    user.fcmToken = null;
-    user.stripeCardholderId = null;
-    user.referralCode = `erased-${user.id}`;
-    user.twoFactorSecret = null;
-    user.isActive = false;
-    user.isDeleted = true;
-    user.deletedAt = new Date();
-    await this.userRepository.save(user);
+    const userSnapshot = { ...user };
 
-    // Clear refresh tokens
-    await this.refreshTokenRepository.update(
-      { userId },
-      { revokedAt: new Date() },
-    );
+    try {
+      await this.runInTransaction(async (manager) => {
+        const userRepo = this.resolveRepo(manager, User, this.userRepository);
+        const consentRepo = this.resolveRepo(
+          manager,
+          GdprConsent,
+          this.gdprConsentRepository,
+        );
+        const refreshTokenRepo = this.resolveRepo(
+          manager,
+          RefreshToken,
+          this.refreshTokenRepository,
+        );
+        const kycRepo = this.resolveRepo(
+          manager,
+          KYCApplication,
+          this.kycApplicationRepository,
+        );
+        const notificationRepo = this.resolveRepo(
+          manager,
+          Notification,
+          this.notificationRepository,
+        );
+        const rateAlertRepo = this.resolveRepo(
+          manager,
+          RateAlert,
+          this.rateAlertRepository,
+        );
+        const webhookEndpointRepo = this.resolveRepo(
+          manager,
+          WebhookEndpoint,
+          this.webhookEndpointRepository,
+        );
+        const auditLogRepo = this.resolveRepo(
+          manager,
+          AuditLog,
+          this.auditLogRepository,
+        );
+        const erasureAuditRepo = this.resolveRepo(
+          manager,
+          ErasureAuditLog,
+          this.erasureAuditLogRepository,
+        );
 
-    // Drop the document keys, then the applications themselves.
-    if (kycApplications.length > 0) {
-      await this.kycApplicationRepository.update(
-        { userId },
-        { documents: {} },
-      );
+        // Anonymise user (including secrets and wallet credentials)
+        user.email = `deleted-${user.id}@nexafx.deleted`;
+        user.firstName = 'Deleted';
+        user.lastName = 'Deleted';
+        user.password = null;
+        user.phone = null;
+        user.fcmTokens = [];
+        user.fcmToken = null;
+        user.stripeCardholderId = null;
+        user.referralCode = `erased-${user.id}`;
+        user.twoFactorSecret = null;
+        user.pendingTwoFactorSecret = null;
+        user.isTwoFactorEnabled = false;
+        user.walletSecretKeyEncrypted = null as any;
+        user.walletPublicKey = null as any;
+        user.balances = {};
+        user.isActive = false;
+        user.isDeleted = true;
+        user.deletedAt = new Date();
+        await userRepo.save(user);
+
+        // Anonymise GDPR consent IP and user agent history
+        await consentRepo.update(
+          { userId },
+          { ipAddress: null, userAgent: null },
+        );
+
+        // Clear refresh tokens
+        await refreshTokenRepo.update({ userId }, { revokedAt: new Date() });
+
+        // Drop the document keys, then the applications themselves.
+        if (kycApplications.length > 0) {
+          await kycRepo.update({ userId }, { documents: {} });
+        }
+        await kycRepo.delete({ userId });
+
+        // Delete non-financial records
+        await notificationRepo.delete({ userId });
+        await rateAlertRepo.delete({ userId });
+        await webhookEndpointRepo.delete({ userId });
+
+        // Log erasure event
+        const auditLog = auditLogRepo.create({
+          actorId: userId,
+          action: 'gdpr.erasure',
+          resourceType: AuditEntityType.USER,
+          resourceId: userId,
+          status: AuditLogStatus.SUCCESS,
+          metadata: {
+            reason,
+            filesDeleted: keysToDelete.length - failedDeletions.length,
+            failedDeletions,
+          },
+          ipAddress: '0.0.0.0',
+          userAgent: 'Anonymised',
+        });
+        await auditLogRepo.save(auditLog);
+
+        // Create ErasureAuditLog
+        const erasureLog = erasureAuditRepo.create({
+          userId,
+          filesDeleted: keysToDelete.length - failedDeletions.length,
+          failedDeletions,
+        });
+        await erasureAuditRepo.save(erasureLog);
+      });
+    } catch (error) {
+      Object.assign(user, userSnapshot);
+      throw error;
     }
-    await this.kycApplicationRepository.delete({ userId });
-
-    // Delete non-financial records
-    await this.notificationRepository.delete({ userId });
-    await this.rateAlertRepository.delete({ userId });
-    await this.webhookEndpointRepository.delete({ userId });
-
-    // Log erasure event
-    // Write the mapped columns: userId/entity/entityId are accessors rather
-    // than columns, so Repository.create dropped them and left resourceType and
-    // status (both NOT NULL) unset, failing the insert after the account had
-    // already been anonymised.
-    const auditLog = this.auditLogRepository.create({
-      actorId: userId,
-      action: 'gdpr.erasure',
-      resourceType: AuditEntityType.USER,
-      resourceId: userId,
-      status: AuditLogStatus.SUCCESS,
-      metadata: {
-        reason,
-        filesDeleted: keysToDelete.length - failedDeletions.length,
-        failedDeletions,
-      },
-      ipAddress: '0.0.0.0',
-      userAgent: 'Anonymised',
-    });
-    await this.auditLogRepository.save(auditLog);
-
-    // Create ErasureAuditLog
-    const erasureLog = this.erasureAuditLogRepository.create({
-      userId,
-      filesDeleted: keysToDelete.length - failedDeletions.length,
-      failedDeletions,
-    });
-    await this.erasureAuditLogRepository.save(erasureLog);
 
     if (failedDeletions.length > 0) {
       this.logger.error(

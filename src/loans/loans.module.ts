@@ -7,6 +7,7 @@ import { CreditScoringService } from './credit-scoring.service';
 import { LoansService } from './loans.service';
 import { LoansController } from './loans.controller';
 import { UsersModule } from '../users/users.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { Transaction } from '../transactions/entities/transaction.entity';
 
 @Module({
@@ -18,6 +19,7 @@ import { Transaction } from '../transactions/entities/transaction.entity';
       Transaction,
     ]),
     UsersModule,
+    NotificationsModule,
   ],
   controllers: [LoansController],
   providers: [LoansService, CreditScoringService],

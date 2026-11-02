@@ -11,12 +11,24 @@ import { DataSource, Repository } from 'typeorm';
 import { StellarService } from '../blockchain/stellar/stellar.service';
 import { EncryptionService } from '../common/services/encryption.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/entities/notification.entity';
 import { UsersService } from '../users/users.service';
 import { WalletsService } from '../wallets/wallets.service';
 import { Escrow, EscrowStatus } from './entities/escrow.entity';
 import { CreateEscrowDto } from './dto/create-escrow.dto';
 import { AdminResolveEscrowDto } from './dto/admin-resolve-escrow.dto';
 import { EscrowQueryDto } from './dto/escrow-query.dto';
+
+const ESCROW_NOTIFICATION_TYPE_BY_STATUS: Record<
+  EscrowStatus,
+  NotificationType
+> = {
+  [EscrowStatus.PENDING]: NotificationType.ESCROW_CREATED,
+  [EscrowStatus.FUNDED]: NotificationType.ESCROW_FUNDED,
+  [EscrowStatus.RELEASED]: NotificationType.ESCROW_RELEASED,
+  [EscrowStatus.DISPUTED]: NotificationType.ESCROW_DISPUTED,
+  [EscrowStatus.REFUNDED]: NotificationType.ESCROW_REFUNDED,
+};
 
 @Injectable()
 export class EscrowService {
@@ -397,10 +409,11 @@ export class EscrowService {
     message: string,
   ): Promise<void> {
     const metadata = { escrowId: escrow.id, status: escrow.status };
+    const type = ESCROW_NOTIFICATION_TYPE_BY_STATUS[escrow.status];
     await Promise.all([
       this.notificationsService.create({
         userId: escrow.senderId,
-        type: 1 as any,
+        type,
         title: 'Escrow Update',
         message,
         metadata,
@@ -408,7 +421,7 @@ export class EscrowService {
       }),
       this.notificationsService.create({
         userId: escrow.recipientId,
-        type: 1 as any,
+        type,
         title: 'Escrow Update',
         message,
         metadata,

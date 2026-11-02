@@ -18,31 +18,38 @@ import { TransactionsModule } from '../transactions/transaction.module';
 import { ExchangeRatesModule } from '../exchange-rates/exchange-rates.module';
 import { CurrenciesModule } from '../currencies/currencies.module';
 
+export function createGraphQLConfig(
+  configService: Pick<ConfigService, 'get'>,
+): ApolloDriverConfig {
+  const nodeEnv = configService.get<string>('NODE_ENV') ?? process.env.NODE_ENV;
+  const isProduction = nodeEnv === 'production';
+
+  return {
+    autoSchemaFile: isProduction
+      ? true
+      : join(process.cwd(), 'src/graphql/schema.gql'),
+    playground: !isProduction,
+    introspection: !isProduction,
+    validationRules: [
+      depthLimit(5),
+      createComplexityRule({
+        estimators: [
+          fieldExtensionsEstimator(),
+          simpleEstimator({ defaultComplexity: 1 }),
+        ],
+        maximumComplexity: 50,
+      }),
+    ],
+    context: ({ req }: { req: Express.Request }) => ({ req }),
+  };
+}
+
 @Module({
   imports: [
     GraphQLModule.forRootAsync<ApolloDriverConfig>({
       driver: ApolloDriver,
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => {
-        const isProduction =
-          configService.get<string>('NODE_ENV') === 'production';
-        return {
-          autoSchemaFile: join(process.cwd(), 'src/graphql/schema.gql'),
-          playground: !isProduction,
-          introspection: !isProduction,
-          validationRules: [
-            depthLimit(5),
-            createComplexityRule({
-              estimators: [
-                fieldExtensionsEstimator(),
-                simpleEstimator({ defaultComplexity: 1 }),
-              ],
-              maximumComplexity: 50,
-            }),
-          ],
-          context: ({ req }: { req: Express.Request }) => ({ req }),
-        };
-      },
+      useFactory: createGraphQLConfig,
       inject: [ConfigService],
     }),
     UsersModule,

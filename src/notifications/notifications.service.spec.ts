@@ -3,23 +3,39 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { NotificationsService } from './notifications.service';
 import { Notification, NotificationType } from './entities/notification.entity';
+import {
+  NotificationDigestMode,
+  NotificationPreference,
+} from './entities/notification-preference.entity';
+import { NotificationPreferenceService } from './services/notification-preference.service';
 import { User } from '../users/user.entity';
 import { FCMService } from '../firebase/fcm.service';
 import { ConfigService } from '@nestjs/config';
 import { NotFoundException } from '@nestjs/common';
+import { MailService } from '../modules/mail/mail.service';
+import { NotificationsGateway } from './notifications.gateway';
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
+  let preferenceService: NotificationPreferenceService;
   let notificationRepo: jest.Mocked<Repository<Notification>>;
+  let preferenceRepo: {
+    create: jest.Mock;
+    createQueryBuilder: jest.Mock;
+    findOne: jest.Mock;
+    find: jest.Mock;
+    update: jest.Mock;
+  };
   let userRepo: jest.Mocked<Repository<User>>;
   let fcmService: jest.Mocked<FCMService>;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let configService: jest.Mocked<ConfigService>;
+  let mailService: { enqueueEmail: jest.Mock };
+  let gateway: { sendToUser: jest.Mock };
 
   const mockNotification: Notification = {
     id: '550e8400-e29b-41d4-a716-446655440000',
     userId: 'user-123',
-    type: NotificationType.SYSTEM,
+    type: NotificationType.KYC_APPROVED,
     title: 'Test Notification',
     body: 'This is a test notification',
     isRead: false,
@@ -27,7 +43,6 @@ describe('NotificationsService', () => {
     readAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
-    readAt: undefined,
     searchVector: null,
     user: {} as any,
   };
@@ -37,12 +52,24 @@ describe('NotificationsService', () => {
     email: 'test@example.com',
     fcmToken: 'mock-fcm-token',
     fcmTokens: ['mock-fcm-token'],
-    notificationPreferences: {
-      email: true,
-      push: true,
-      types: { TRANSACTION: true, KYC: true, RATE_ALERT: true },
-    },
   } as any;
+
+  const makePreference = (
+    notificationType: NotificationType,
+    overrides: Partial<NotificationPreference> = {},
+  ): NotificationPreference =>
+    ({
+      id: 'pref-1',
+      userId: 'user-123',
+      notificationType,
+      emailEnabled: true,
+      pushEnabled: true,
+      inAppEnabled: true,
+      digestMode: NotificationDigestMode.IMMEDIATE,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    }) as NotificationPreference;
 
   beforeEach(async () => {
     const mockNotificationRepo = {
@@ -52,6 +79,24 @@ describe('NotificationsService', () => {
       findOne: jest.fn().mockResolvedValue(mockNotification),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
       count: jest.fn().mockResolvedValue(1),
+    };
+
+    preferenceRepo = {
+      create: jest.fn().mockImplementation((dto) => dto),
+      createQueryBuilder: jest.fn(() => ({
+        insert: jest.fn().mockReturnThis(),
+        into: jest.fn().mockReturnThis(),
+        values: jest.fn().mockReturnThis(),
+        orIgnore: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue(undefined),
+      })),
+      findOne: jest
+        .fn()
+        .mockImplementation(({ where }) =>
+          Promise.resolve(makePreference(where.notificationType)),
+        ),
+      find: jest.fn().mockResolvedValue([]),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
 
     const mockUserRepo = {
@@ -64,17 +109,31 @@ describe('NotificationsService', () => {
 
     const mockConfigService = {
       get: jest.fn().mockImplementation((key) => {
-        if (key === 'SKIP_EMAIL_SENDING') return 'true';
+        if (key === 'SKIP_EMAIL_SENDING') return 'false';
+        if (key === 'JWT_SECRET') return 'test-secret';
         return null;
       }),
+    };
+
+    mailService = {
+      enqueueEmail: jest.fn().mockResolvedValue(undefined),
+    };
+
+    gateway = {
+      sendToUser: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         NotificationsService,
+        NotificationPreferenceService,
         {
           provide: getRepositoryToken(Notification),
           useValue: mockNotificationRepo,
+        },
+        {
+          provide: getRepositoryToken(NotificationPreference),
+          useValue: preferenceRepo,
         },
         {
           provide: getRepositoryToken(User),
@@ -88,10 +147,21 @@ describe('NotificationsService', () => {
           provide: ConfigService,
           useValue: mockConfigService,
         },
+        {
+          provide: MailService,
+          useValue: mailService,
+        },
+        {
+          provide: NotificationsGateway,
+          useValue: gateway,
+        },
       ],
     }).compile();
 
     service = module.get<NotificationsService>(NotificationsService);
+    preferenceService = module.get<NotificationPreferenceService>(
+      NotificationPreferenceService,
+    );
     notificationRepo = module.get(getRepositoryToken(Notification));
     userRepo = module.get(getRepositoryToken(User));
     fcmService = module.get(FCMService);
@@ -106,7 +176,7 @@ describe('NotificationsService', () => {
     it('should create and save a notification', async () => {
       const result = await service.create(
         'user-123',
-        NotificationType.SYSTEM,
+        NotificationType.KYC_APPROVED,
         'Title',
         'Body',
       );
@@ -116,43 +186,125 @@ describe('NotificationsService', () => {
     });
   });
 
-  describe('dispatch', () => {
-    it('should dispatch, saving and calling sendPush when preferences are enabled', async () => {
+  describe('dispatch (#1512)', () => {
+    it('gates in-app, push, and email on isChannelEnabled and batches the preference lookup into one query', async () => {
+      const isChannelEnabledSpy = jest.spyOn(
+        preferenceService,
+        'isChannelEnabled',
+      );
+
       const result = await service.dispatch(
         'user-123',
-        NotificationType.KYC,
+        NotificationType.KYC_APPROVED,
         'KYC Approved',
         'Your KYC has been approved',
       );
 
-      expect(notificationRepo.save).toHaveBeenCalled();
-      expect(fcmService.sendPush).toHaveBeenCalledWith(
+      expect(isChannelEnabledSpy).toHaveBeenCalledWith(
         'user-123',
-        'KYC Approved',
-        'Your KYC has been approved',
-        undefined,
+        NotificationType.KYC_APPROVED,
+        'inApp',
       );
+      expect(isChannelEnabledSpy).toHaveBeenCalledWith(
+        'user-123',
+        NotificationType.KYC_APPROVED,
+        'push',
+      );
+      expect(isChannelEnabledSpy).toHaveBeenCalledWith(
+        'user-123',
+        NotificationType.KYC_APPROVED,
+        'email',
+      );
+      expect(preferenceRepo.findOne).toHaveBeenCalledTimes(1);
+      expect(notificationRepo.save).toHaveBeenCalledTimes(1);
+      expect(fcmService.sendPush).toHaveBeenCalledTimes(1);
+      expect(mailService.enqueueEmail).toHaveBeenCalledTimes(1);
       expect(result).toBeDefined();
     });
 
-    it('should not send push if push preference is disabled', async () => {
-      userRepo.findOne.mockResolvedValue({
-        ...mockUser,
-        notificationPreferences: {
-          email: true,
-          push: false,
-          types: { TRANSACTION: true, KYC: true, RATE_ALERT: true },
-        },
-      });
+    it('does not enqueue an email when emailEnabled=false for RATE_ALERT_TRIGGERED', async () => {
+      preferenceRepo.findOne.mockResolvedValue(
+        makePreference(NotificationType.RATE_ALERT_TRIGGERED, {
+          emailEnabled: false,
+          pushEnabled: true,
+          inAppEnabled: true,
+        }),
+      );
 
       await service.dispatch(
         'user-123',
-        NotificationType.KYC,
+        NotificationType.RATE_ALERT_TRIGGERED,
+        'Rate Alert',
+        'USD/NGN crossed threshold',
+      );
+
+      expect(notificationRepo.save).toHaveBeenCalledTimes(1);
+      expect(fcmService.sendPush).toHaveBeenCalledTimes(1);
+      expect(mailService.enqueueEmail).not.toHaveBeenCalled();
+    });
+
+    it('does not send push when pushEnabled=false', async () => {
+      preferenceRepo.findOne.mockResolvedValue(
+        makePreference(NotificationType.KYC_APPROVED, {
+          emailEnabled: true,
+          pushEnabled: false,
+          inAppEnabled: true,
+        }),
+      );
+
+      await service.dispatch(
+        'user-123',
+        NotificationType.KYC_APPROVED,
         'KYC Approved',
         'Your KYC has been approved',
       );
 
+      expect(notificationRepo.save).toHaveBeenCalledTimes(1);
       expect(fcmService.sendPush).not.toHaveBeenCalled();
+      expect(mailService.enqueueEmail).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not save an in-app record when inAppEnabled=false', async () => {
+      preferenceRepo.findOne.mockResolvedValue(
+        makePreference(NotificationType.RATE_ALERT_TRIGGERED, {
+          emailEnabled: true,
+          pushEnabled: true,
+          inAppEnabled: false,
+        }),
+      );
+
+      await service.dispatch(
+        'user-123',
+        NotificationType.RATE_ALERT_TRIGGERED,
+        'Rate Alert',
+        'USD/NGN crossed threshold',
+      );
+
+      expect(notificationRepo.save).not.toHaveBeenCalled();
+      expect(gateway.sendToUser).not.toHaveBeenCalled();
+      expect(fcmService.sendPush).toHaveBeenCalledTimes(1);
+      expect(mailService.enqueueEmail).toHaveBeenCalledTimes(1);
+    });
+
+    it('delivers TRANSACTION notifications across all channels regardless of preferences', async () => {
+      preferenceRepo.findOne.mockResolvedValue(
+        makePreference(NotificationType.TRANSACTION, {
+          emailEnabled: false,
+          pushEnabled: false,
+          inAppEnabled: false,
+        }),
+      );
+
+      await service.dispatch(
+        'user-123',
+        NotificationType.TRANSACTION,
+        'Transfer Completed',
+        'Your transfer has settled',
+      );
+
+      expect(notificationRepo.save).toHaveBeenCalledTimes(1);
+      expect(fcmService.sendPush).toHaveBeenCalledTimes(1);
+      expect(mailService.enqueueEmail).toHaveBeenCalledTimes(1);
     });
   });
 

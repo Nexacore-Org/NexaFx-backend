@@ -27,6 +27,11 @@ const UNSUBSCRIBE_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class NotificationPreferenceService {
+  private readonly inFlightPreferences = new Map<
+    string,
+    Promise<NotificationPreference>
+  >();
+
   constructor(
     @InjectRepository(NotificationPreference)
     private readonly preferenceRepository: Repository<NotificationPreference>,
@@ -85,6 +90,23 @@ export class NotificationPreferenceService {
   }
 
   async getPreference(
+    userId: string,
+    notificationType: NotificationType,
+  ): Promise<NotificationPreference> {
+    const key = `${userId}:${notificationType}`;
+    const inFlight = this.inFlightPreferences.get(key);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const lookup = this.loadPreference(userId, notificationType).finally(() => {
+      this.inFlightPreferences.delete(key);
+    });
+    this.inFlightPreferences.set(key, lookup);
+    return lookup;
+  }
+
+  private async loadPreference(
     userId: string,
     notificationType: NotificationType,
   ): Promise<NotificationPreference> {

@@ -1,5 +1,17 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  Optional,
+} from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { ConfigService } from '@nestjs/config';
+import { Queue } from 'bullmq';
 import Redis from 'ioredis';
+import { EMAIL_QUEUE } from '../../modules/queues/queue.constants';
+import { REDIS_CLIENT } from '../../modules/redis/redis.constants';
+import { DEFAULT_REDIS_URL } from './redis-health.indicator';
 
 export interface BullMQHealthResult {
   status: 'up' | 'down' | 'not_configured';
@@ -10,76 +22,127 @@ export interface BullMQHealthResult {
 /**
  * BullMQ health indicator.
  *
- * BullMQ queues run on top of Redis.  Rather than importing every
- * queue definition, this indicator pings the Redis instance that
- * backs the queues (configured via `BULLMQ_REDIS_URL`, falling back
- * to `REDIS_URL`).  A reachable Redis means the queue transport is
- * alive; a deep queue is *not* the same failure mode as a broken
- * connection.
+ * Reuses the existing BullMQ queue Redis connection (or the shared
+ * `REDIS_CLIENT`) rather than opening a brand-new ioredis connection
+ * on every probe. Defaults to `redis://localhost:6379` when
+ * `BULLMQ_REDIS_URL` and `REDIS_URL` are unset, consistent with
+ * `QueuesModule`.
  */
 @Injectable()
-export class BullMQHealthIndicator {
+export class BullMQHealthIndicator implements OnModuleDestroy {
   private readonly logger = new Logger(BullMQHealthIndicator.name);
   private readonly timeoutMs: number;
+  private sharedFallbackClient: Redis | null = null;
 
-  constructor() {
+  constructor(
+    @Optional()
+    @InjectQueue(EMAIL_QUEUE)
+    private readonly emailQueue?: Queue,
+    @Optional()
+    @Inject(REDIS_CLIENT)
+    private readonly redisClient?: Redis,
+    @Optional()
+    private readonly configService?: ConfigService,
+  ) {
     this.timeoutMs = parseInt(
       process.env.HEALTH_BULLMQ_TIMEOUT_MS ?? '3000',
       10,
     );
   }
 
-  async isHealthy(): Promise<BullMQHealthResult> {
-    const redisUrl = process.env.BULLMQ_REDIS_URL ?? process.env.REDIS_URL;
-
-    if (!redisUrl) {
-      return {
-        status: 'not_configured',
-        message:
-          'BULLMQ_REDIS_URL and REDIS_URL not set — skipping BullMQ health check',
-      };
+  private async resolveClient(): Promise<{
+    ping: () => Promise<string>;
+    connect?: () => Promise<unknown>;
+    status?: string;
+  }> {
+    if (this.emailQueue && this.emailQueue.client) {
+      const queueClient = await this.emailQueue.client;
+      if (queueClient && typeof queueClient.ping === 'function') {
+        return queueClient as unknown as {
+          ping: () => Promise<string>;
+          connect?: () => Promise<unknown>;
+          status?: string;
+        };
+      }
     }
 
-    let client: Redis | null = null;
+    const bullmqUrl =
+      this.configService?.get<string>('BULLMQ_REDIS_URL') ??
+      process.env.BULLMQ_REDIS_URL;
 
-    try {
-      client = new Redis(redisUrl, {
+    if (!bullmqUrl && this.redisClient) {
+      return this.redisClient;
+    }
+
+    if (!this.sharedFallbackClient) {
+      const redisUrl =
+        bullmqUrl ??
+        this.configService?.get<string>('REDIS_URL') ??
+        process.env.REDIS_URL ??
+        DEFAULT_REDIS_URL;
+
+      this.sharedFallbackClient = new Redis(redisUrl, {
         connectTimeout: this.timeoutMs,
         enableReadyCheck: true,
+        enableOfflineQueue: false,
         maxRetriesPerRequest: 0,
         lazyConnect: true,
       });
 
-      const start = Date.now();
-      await Promise.race([
-        client.connect(),
-        new Promise<never>((_, reject) =>
-          setTimeout(
-            () =>
-              reject(
-                new Error(
-                  `BullMQ Redis connection timed out after ${this.timeoutMs}ms`,
-                ),
-              ),
-            this.timeoutMs,
-          ),
-        ),
-      ]);
+      this.sharedFallbackClient.on('error', (err) => {
+        this.logger.warn(`BullMQ health client error: ${err.message}`);
+      });
+    }
 
-      const pong = await Promise.race([
-        client.ping(),
-        new Promise<never>((_, reject) =>
-          setTimeout(
-            () =>
-              reject(
-                new Error(
-                  `BullMQ Redis PING timed out after ${this.timeoutMs}ms`,
-                ),
-              ),
+    return this.sharedFallbackClient;
+  }
+
+  private async runWithTimeout<T>(
+    operation: () => Promise<T>,
+    timeoutMessage: string,
+  ): Promise<T> {
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      return await Promise.race([
+        operation(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(timeoutMessage)),
             this.timeoutMs,
-          ),
-        ),
+          );
+        }),
       ]);
+    } finally {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    }
+  }
+
+  async isHealthy(): Promise<BullMQHealthResult> {
+    try {
+      const start = Date.now();
+      const client = await this.runWithTimeout(
+        () => this.resolveClient(),
+        `BullMQ Redis connection timed out after ${this.timeoutMs}ms`,
+      );
+
+      if (
+        typeof client.connect === 'function' &&
+        (client.status === 'wait' ||
+          client.status === 'end' ||
+          client.status === 'close')
+      ) {
+        await this.runWithTimeout(
+          () => client.connect!(),
+          `BullMQ Redis connection timed out after ${this.timeoutMs}ms`,
+        );
+      }
+
+      const pong = await this.runWithTimeout(
+        () => client.ping(),
+        `BullMQ Redis PING timed out after ${this.timeoutMs}ms`,
+      );
 
       const responseTimeMs = Date.now() - start;
 
@@ -98,13 +161,17 @@ export class BullMQHealthIndicator {
         status: 'down',
         message: error.message,
       };
-    } finally {
-      if (client) {
-        try {
-          await client.quit();
-        } catch {
-          // Ignore errors during cleanup
-        }
+    }
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    if (this.sharedFallbackClient) {
+      try {
+        await this.sharedFallbackClient.quit();
+      } catch {
+        // Ignore cleanup errors
+      } finally {
+        this.sharedFallbackClient = null;
       }
     }
   }

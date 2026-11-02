@@ -1,5 +1,15 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  Optional,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
+import { REDIS_CLIENT } from '../../modules/redis/redis.constants';
+
+export const DEFAULT_REDIS_URL = 'redis://localhost:6379';
 
 export interface RedisHealthResult {
   status: 'up' | 'down' | 'not_configured';
@@ -8,70 +18,98 @@ export interface RedisHealthResult {
 }
 
 @Injectable()
-export class RedisHealthIndicator {
+export class RedisHealthIndicator implements OnModuleDestroy {
   private readonly logger = new Logger(RedisHealthIndicator.name);
   private readonly timeoutMs: number;
+  private sharedFallbackClient: Redis | null = null;
 
-  constructor() {
+  constructor(
+    @Optional()
+    @Inject(REDIS_CLIENT)
+    private readonly redisClient?: Redis,
+    @Optional()
+    private readonly configService?: ConfigService,
+  ) {
     this.timeoutMs = parseInt(
       process.env.HEALTH_REDIS_TIMEOUT_MS ?? '3000',
       10,
     );
   }
 
-  /**
-   * Pings Redis with a short timeout.
-   *
-   * If `REDIS_URL` is not configured the check returns `not_configured`
-   * so that the readiness probe is not tripped by an intentionally
-   * absent Redis deployment.
-   */
-  async isHealthy(): Promise<RedisHealthResult> {
-    const redisUrl = process.env.REDIS_URL;
-
-    if (!redisUrl) {
-      return {
-        status: 'not_configured',
-        message: 'REDIS_URL not set — skipping Redis health check',
-      };
+  private getClient(): Redis {
+    if (this.redisClient) {
+      return this.redisClient;
     }
 
-    let client: Redis | null = null;
+    if (!this.sharedFallbackClient) {
+      const redisUrl =
+        this.configService?.get<string>('REDIS_URL') ??
+        process.env.REDIS_URL ??
+        DEFAULT_REDIS_URL;
 
-    try {
-      client = new Redis(redisUrl, {
+      this.sharedFallbackClient = new Redis(redisUrl, {
         connectTimeout: this.timeoutMs,
         enableReadyCheck: true,
+        enableOfflineQueue: false,
         maxRetriesPerRequest: 0,
         lazyConnect: true,
       });
 
-      const start = Date.now();
-      await Promise.race([
-        client.connect(),
-        new Promise<never>((_, reject) =>
-          setTimeout(
-            () =>
-              reject(
-                new Error(`Redis PING timed out after ${this.timeoutMs}ms`),
-              ),
-            this.timeoutMs,
-          ),
-        ),
-      ]);
+      this.sharedFallbackClient.on('error', (err) => {
+        this.logger.warn(`Redis health client error: ${err.message}`);
+      });
+    }
 
-      const pong = await Promise.race([
-        client.ping(),
-        new Promise<never>((_, reject) =>
-          setTimeout(
-            () =>
-              reject(
-                new Error(`Redis PING timed out after ${this.timeoutMs}ms`),
-              ),
+    return this.sharedFallbackClient;
+  }
+
+  private async runWithTimeout<T>(
+    operation: () => Promise<T>,
+    timeoutMessage: string,
+  ): Promise<T> {
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      return await Promise.race([
+        operation(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(timeoutMessage)),
             this.timeoutMs,
-          ),
-        ),
+          );
+        }),
       ]);
+    } finally {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    }
+  }
+
+  /**
+   * Pings Redis via the shared REDIS_CLIENT connection with a short timeout.
+   * Defaults to redis://localhost:6379 when REDIS_URL is unset, matching
+   * RedisModule and QueuesModule.
+   */
+  async isHealthy(): Promise<RedisHealthResult> {
+    try {
+      const client = this.getClient();
+      const start = Date.now();
+
+      const status = (client as { status?: string }).status;
+      if (
+        typeof client.connect === 'function' &&
+        (status === 'wait' || status === 'end' || status === 'close')
+      ) {
+        await this.runWithTimeout(
+          () => client.connect(),
+          `Redis connection timed out after ${this.timeoutMs}ms`,
+        );
+      }
+
+      const pong = await this.runWithTimeout(
+        () => client.ping(),
+        `Redis PING timed out after ${this.timeoutMs}ms`,
+      );
 
       const responseTimeMs = Date.now() - start;
 
@@ -90,13 +128,17 @@ export class RedisHealthIndicator {
         status: 'down',
         message: error.message,
       };
-    } finally {
-      if (client) {
-        try {
-          await client.quit();
-        } catch {
-          // Ignore errors during cleanup
-        }
+    }
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    if (this.sharedFallbackClient) {
+      try {
+        await this.sharedFallbackClient.quit();
+      } catch {
+        // Ignore cleanup errors
+      } finally {
+        this.sharedFallbackClient = null;
       }
     }
   }

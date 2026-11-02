@@ -5,7 +5,11 @@ import { KycScreening, ScreeningStatus } from './entities/kyc-screening.entity';
 import { User } from '../users/user.entity';
 import { OpenSanctionsProvider } from './providers/open-sanctions.provider';
 import { OfacProvider } from './providers/ofac.provider';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 
 describe('SanctionsService', () => {
   let service: SanctionsService;
@@ -99,6 +103,18 @@ describe('SanctionsService', () => {
       });
       const screening = await service.screenUser('user1');
       expect(screening.status).toBe(ScreeningStatus.CLEAR);
+    });
+
+    it('should throw 422 UnprocessableEntityException when user has no name on file', async () => {
+      (service as any).userRepo.findOne.mockResolvedValue({
+        id: 'user1',
+        firstName: null,
+        lastName: '   ',
+      });
+
+      await expect(service.screenUser('user1')).rejects.toThrow(
+        UnprocessableEntityException,
+      );
     });
   });
 

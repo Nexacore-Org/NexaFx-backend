@@ -3,6 +3,7 @@ import {
   Logger,
   NotFoundException,
   ForbiddenException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -47,7 +48,9 @@ export class SanctionsService {
       .trim();
 
     if (!fullName) {
-      throw new ForbiddenException('Cannot screen a user with no name on file');
+      throw new UnprocessableEntityException(
+        'Cannot screen applicant: firstName or lastName must be set on the user profile before KYC approval.',
+      );
     }
 
     // Date of birth and nationality are not collected anywhere yet.

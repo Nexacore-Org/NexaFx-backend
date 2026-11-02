@@ -3,8 +3,9 @@ import {
   NotFoundException,
   BadRequestException,
   Logger,
+  Optional,
 } from '@nestjs/common';
-import { Repository, In } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Notification, NotificationType } from './entities/notification.entity';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { resolveDeepLink, buildFcmData } from './deep-links.registry';
@@ -14,6 +15,7 @@ import { FCMService } from '../firebase/fcm.service';
 import { ConfigService } from '@nestjs/config';
 import { MailService } from '../modules/mail/mail.service';
 import { NotificationsGateway } from './notifications.gateway';
+import { NotificationPreferenceService } from './services/notification-preference.service';
 
 @Injectable()
 export class NotificationsService {
@@ -26,8 +28,12 @@ export class NotificationsService {
     private readonly userRepository: Repository<User>,
     private readonly fcmService: FCMService,
     private readonly configService: ConfigService,
-    private readonly mailService: MailService,
-    private readonly notificationsGateway: NotificationsGateway,
+    @Optional()
+    private readonly mailService?: MailService,
+    @Optional()
+    private readonly notificationsGateway?: NotificationsGateway,
+    @Optional()
+    private readonly notificationPreferenceService?: NotificationPreferenceService,
   ) {}
 
   async create(dto: CreateNotificationDto): Promise<Notification>;
@@ -164,7 +170,7 @@ export class NotificationsService {
 
       // 4. Send email if email preference is enabled (opt-in based on user preferences)
       if (prefs.email === true && user.email) {
-        await this.sendEmail(user.email, title, body);
+        await this.sendEmail(user.email, title, body, userId, type);
       }
     } catch (error) {
       // Catch and log dispatch errors to ensure main flows are not blocked
@@ -182,7 +188,11 @@ export class NotificationsService {
    */
   private emitToUser(notification: Notification): void {
     try {
-      this.notificationsGateway.sendToUser(notification.userId, notification);
+      this.notificationsGateway?.sendToUser(
+        notification.userId,
+        'notification',
+        notification,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to emit real-time notification for user ${notification.userId}: ${error instanceof Error ? error.message : String(error)}`,
@@ -271,10 +281,23 @@ export class NotificationsService {
       .replace(/'/g, '&#39;');
   }
 
+  private buildUnsubscribeUrl(token: string): string {
+    const baseUrl = (
+      this.configService.get<string>('APP_URL') ||
+      this.configService.get<string>('BACKEND_URL') ||
+      this.configService.get<string>('API_URL') ||
+      this.configService.get<string>('FRONTEND_URL') ||
+      'http://localhost:3000'
+    ).replace(/\/+$/, '');
+    return `${baseUrl}/v1/notifications/unsubscribe?token=${encodeURIComponent(token)}`;
+  }
+
   private async sendEmail(
     to: string,
     subject: string,
     body: string,
+    userId?: string,
+    type: NotificationType = NotificationType.SYSTEM,
   ): Promise<void> {
     const skipEmail = this.configService.get<string>('SKIP_EMAIL_SENDING');
 
@@ -288,21 +311,48 @@ export class NotificationsService {
     const safeSubject = this.escapeHtml(subject);
     const safeBody = this.escapeHtml(body);
 
+    const token =
+      this.notificationPreferenceService?.generateUnsubscribeToken(
+        userId ?? to,
+        type,
+      ) ?? null;
+    const unsubscribeUrl = token ? this.buildUnsubscribeUrl(token) : null;
+    const safeUnsubscribeUrl = unsubscribeUrl
+      ? this.escapeHtml(unsubscribeUrl)
+      : null;
+
+    const unsubscribeFooterHtml = safeUnsubscribeUrl
+      ? `<p style="font-size: 12px; color: #999; text-align: center;"><a href="${safeUnsubscribeUrl}" style="color: #999;">Unsubscribe from these emails</a></p>`
+      : '';
+
     const html = `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 5px;">
         <h2 style="color: #333;">${safeSubject}</h2>
         <p style="font-size: 16px; color: #555; line-height: 1.5;">${safeBody}</p>
         <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
         <p style="font-size: 12px; color: #999; text-align: center;">This is an automated notification from NexaFX.</p>
+        ${unsubscribeFooterHtml}
       </div>
     `;
 
+    const text = unsubscribeUrl
+      ? `${body}\n\nUnsubscribe: ${unsubscribeUrl}`
+      : body;
+
+    const headers: Record<string, string> | undefined = unsubscribeUrl
+      ? {
+          'List-Unsubscribe': `<${unsubscribeUrl}>`,
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        }
+      : undefined;
+
     try {
-      await this.mailService.enqueueEmail({
+      await this.mailService?.enqueueEmail({
         to,
         subject,
         html,
-        text: body,
+        text,
+        ...(headers ? { headers } : {}),
       });
     } catch (error) {
       this.logger.error(

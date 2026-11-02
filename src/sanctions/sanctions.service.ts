@@ -3,6 +3,8 @@ import {
   Logger,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -15,9 +17,16 @@ import { User, UserKycTier } from '../users/user.entity';
 import { OpenSanctionsProvider } from './providers/open-sanctions.provider';
 import { OfacProvider } from './providers/ofac.provider';
 import { WatchlistMatch } from './interfaces/watchlist-provider.interface';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { AuditEntityType } from '../audit-logs/enums/audit-entity-type.enum';
 
 const SCORE_WARNING_THRESHOLD = 30;
 const SCORE_BLOCK_THRESHOLD = 70;
+
+export enum UserScreeningStatus {
+  VERIFIED = 'VERIFIED',
+  UNDER_REVIEW = 'UNDER_REVIEW',
+}
 
 @Injectable()
 export class SanctionsService {
@@ -30,9 +39,24 @@ export class SanctionsService {
     private readonly userRepo: Repository<User>,
     private readonly openSanctions: OpenSanctionsProvider,
     private readonly ofac: OfacProvider,
+    @Optional()
+    private readonly auditLogsService?: AuditLogsService,
   ) {}
 
-  async screenUser(userId: string): Promise<KycScreening> {
+  static toUserFacingScreening(screening: KycScreening | null | undefined): {
+    status: UserScreeningStatus;
+    updatedAt: Date | null;
+  } {
+    return {
+      status:
+        screening?.status === ScreeningStatus.CLEAR
+          ? UserScreeningStatus.VERIFIED
+          : UserScreeningStatus.UNDER_REVIEW,
+      updatedAt: screening?.overriddenAt ?? screening?.createdAt ?? null,
+    };
+  }
+
+  async screenUser(userId: string, actorId?: string): Promise<KycScreening> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException(`User ${userId} not found`);
@@ -79,24 +103,50 @@ export class SanctionsService {
       ? ScreeningStatus.ERROR
       : this.resolveStatus(topScore);
 
-    const screening = this.screeningRepo.create({
-      userId,
-      fullName,
-      dateOfBirth: null,
-      nationality: null,
-      score: topScore,
-      status,
-      provider,
-      matches: matches as unknown as object[],
-    });
+    const screening =
+      this.screeningRepo.create({
+        userId,
+        fullName,
+        dateOfBirth: null,
+        nationality: null,
+        score: topScore,
+        status,
+        provider,
+        matches: matches as unknown as object[],
+      }) ??
+      ({
+        userId,
+        fullName,
+        dateOfBirth: null,
+        nationality: null,
+        score: topScore,
+        status,
+        provider,
+        matches: matches as unknown as object[],
+      } as KycScreening);
 
-    await this.screeningRepo.save(screening);
+    const saved = (await this.screeningRepo.save(screening)) ?? screening;
+
+    await this.recordAuditLog({
+      actorId: actorId ?? userId,
+      userId,
+      targetId: userId,
+      action: 'SANCTIONS_SCREEN_USER',
+      entityId: saved.id,
+      metadata: {
+        userId,
+        status: saved.status,
+        score: saved.score,
+        provider: saved.provider,
+        triggeredBy: actorId ?? 'SYSTEM',
+      },
+    });
 
     this.logger.log(
       `Screened user ${userId}: score=${topScore} status=${status} provider=${provider} failed=${providerFailed}`,
     );
 
-    return screening;
+    return saved;
   }
 
   async getLatestScreening(userId: string): Promise<KycScreening | null> {
@@ -106,11 +156,34 @@ export class SanctionsService {
     });
   }
 
+  async getUserScreeningStatus(userId: string): Promise<{
+    status: UserScreeningStatus;
+    updatedAt: Date | null;
+  }> {
+    const screening = await this.getLatestScreening(userId);
+    return SanctionsService.toUserFacingScreening(screening);
+  }
+
   async listScreenings(
     status?: ScreeningStatus,
     page = 1,
     limit = 20,
   ): Promise<{ data: KycScreening[]; total: number }> {
+    if (
+      status !== undefined &&
+      !Object.values(ScreeningStatus).includes(status)
+    ) {
+      throw new BadRequestException(`Invalid screening status: ${status}`);
+    }
+    if (!Number.isInteger(page) || page < 1) {
+      throw new BadRequestException('page must be an integer >= 1');
+    }
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new BadRequestException(
+        'limit must be an integer between 1 and 100',
+      );
+    }
+
     const qb = this.screeningRepo
       .createQueryBuilder('s')
       .leftJoinAndSelect('s.user', 'user')
@@ -143,12 +216,34 @@ export class SanctionsService {
       throw new ForbiddenException('Screening is already CLEAR');
     }
 
+    if (screening.status === ScreeningStatus.ERROR) {
+      throw new BadRequestException(
+        'Cannot override an ERROR screening; run a successful re-screen first',
+      );
+    }
+
+    const previousStatus = screening.status;
     screening.status = ScreeningStatus.CLEAR;
     screening.overriddenBy = adminUserId;
     screening.overrideReason = reason;
     screening.overriddenAt = new Date();
 
     await this.screeningRepo.save(screening);
+
+    await this.recordAuditLog({
+      actorId: adminUserId,
+      userId: screening.userId,
+      targetId: screening.userId,
+      action: 'SANCTIONS_SCREENING_OVERRIDE',
+      entityId: screening.id,
+      metadata: {
+        screeningId: screening.id,
+        previousStatus,
+        newStatus: ScreeningStatus.CLEAR,
+        reason,
+        overriddenBy: adminUserId,
+      },
+    });
 
     this.logger.log(
       `Screening ${screeningId} overridden by ${adminUserId}: ${reason}`,
@@ -200,5 +295,41 @@ export class SanctionsService {
     if (score >= SCORE_BLOCK_THRESHOLD) return ScreeningStatus.BLOCKED;
     if (score >= SCORE_WARNING_THRESHOLD) return ScreeningStatus.WARNING;
     return ScreeningStatus.CLEAR;
+  }
+
+  private async recordAuditLog(payload: {
+    actorId?: string;
+    userId?: string;
+    targetId?: string;
+    action: string;
+    entityId?: string;
+    metadata?: Record<string, any>;
+  }): Promise<void> {
+    if (!this.auditLogsService) {
+      return;
+    }
+    if (typeof this.auditLogsService.createLog === 'function') {
+      await this.auditLogsService.createLog({
+        actorId: payload.actorId,
+        userId: payload.userId ?? payload.actorId,
+        targetId: payload.targetId,
+        action: payload.action,
+        entity: AuditEntityType.USER,
+        resourceType: 'KycScreening',
+        entityId: payload.entityId,
+        resourceId: payload.entityId,
+        status: 'SUCCESS',
+        metadata: payload.metadata,
+      });
+    } else if (typeof this.auditLogsService.log === 'function') {
+      await this.auditLogsService.log(
+        payload.actorId ?? null,
+        payload.action,
+        'KycScreening',
+        payload.entityId ?? null,
+        'SUCCESS',
+        payload.metadata,
+      );
+    }
   }
 }

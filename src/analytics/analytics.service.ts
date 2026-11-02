@@ -1,13 +1,12 @@
 import {
   Injectable,
   NotFoundException,
-  ConflictException,
   BadRequestException,
   Logger,
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, In, Between, MoreThanOrEqual } from 'typeorm';
+import { Repository, DataSource, Between, MoreThanOrEqual } from 'typeorm';
 import Decimal from 'decimal.js';
 import * as fastCsv from 'fast-csv';
 import * as PDFDocument from 'pdfkit';
@@ -33,25 +32,27 @@ export interface CategoryBreakdown {
   categoryName: string;
   icon: string;
   color: string;
-  amount: number;
+  amount: string;
   count: number;
   percentage: number;
 }
 
 export interface MonthlySummary {
-  totalSent: number;
-  totalReceived: number;
-  netFlow: number;
+  totalSent: string;
+  totalReceived: string;
+  netFlow: string;
   currency: string;
+  unconvertedCurrencies: string[];
   breakdown: CategoryBreakdown[];
   topTransactions: any[];
 }
 
 export interface TrendDataPoint {
   month: string;
-  sent: number;
-  received: number;
-  net: number;
+  sent: string;
+  received: string;
+  net: string;
+  unconvertedCurrencies?: string[];
 }
 
 export interface BalanceDataPoint {
@@ -89,6 +90,20 @@ export class AnalyticsService {
     private readonly exchangeRatesService: ExchangeRatesService,
     private readonly dataSource: DataSource,
   ) {}
+
+  private isSentTransaction(tx: Transaction): boolean {
+    return (
+      tx.status === TransactionStatus.SUCCESS &&
+      (tx.type === TransactionType.WITHDRAW || tx.type === TransactionType.SWAP)
+    );
+  }
+
+  private isReceivedTransaction(tx: Transaction): boolean {
+    return (
+      tx.status === TransactionStatus.SUCCESS &&
+      tx.type === TransactionType.DEPOSIT
+    );
+  }
 
   async getSystemCategories(): Promise<TransactionCategory[]> {
     return this.categoryRepository.find({ where: { isSystem: true } });
@@ -149,8 +164,8 @@ export class AnalyticsService {
     year: number,
     month: number,
   ): Promise<MonthlySummary> {
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+    const startDate = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
+    const endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
 
     const transactions = await this.transactionRepository.find({
       where: {
@@ -161,60 +176,65 @@ export class AnalyticsService {
 
     if (transactions.length === 0) {
       return {
-        totalSent: 0,
-        totalReceived: 0,
-        netFlow: 0,
+        totalSent: '0',
+        totalReceived: '0',
+        netFlow: '0',
         currency: 'USD',
+        unconvertedCurrencies: [],
         breakdown: [],
         topTransactions: [],
       };
     }
 
     const currency = await this.resolveCurrency(transactions);
-    const converted = await this.convertAllToCurrency(transactions, currency);
-
-    const sentTxs = transactions.filter(
-      (t) =>
-        t.type === TransactionType.WITHDRAW &&
-        t.status === TransactionStatus.SUCCESS,
-    );
-    const receivedTxs = transactions.filter(
-      (t) =>
-        t.type === TransactionType.DEPOSIT &&
-        t.status === TransactionStatus.SUCCESS,
+    const { rates, unconvertedCurrencies } = await this.convertAllToCurrency(
+      transactions,
+      currency,
     );
 
-    const totalSent = sentTxs.reduce(
-      (sum, t) => sum + this.getConvertedAmount(t, converted),
-      0,
-    );
-    const totalReceived = receivedTxs.reduce(
-      (sum, t) => sum + this.getConvertedAmount(t, converted),
-      0,
-    );
+    let totalSentDec = new Decimal(0);
+    let totalReceivedDec = new Decimal(0);
 
-    const categories = await this.categoryRepository.find();
+    for (const tx of transactions) {
+      const convertedAmount = this.getConvertedAmountDecimal(tx, rates);
+      if (!convertedAmount) continue;
+
+      if (this.isSentTransaction(tx)) {
+        totalSentDec = totalSentDec.plus(convertedAmount);
+      } else if (this.isReceivedTransaction(tx)) {
+        totalReceivedDec = totalReceivedDec.plus(convertedAmount);
+      }
+    }
+
+    const categories = (await this.categoryRepository.find()) || [];
     const categoryMap = new Map(categories.map((c) => [c.id, c]));
 
     const categoryBuckets = new Map<
       string,
-      { amount: number; count: number }
+      { amount: Decimal; count: number }
     >();
     for (const tx of transactions) {
       if (tx.status !== TransactionStatus.SUCCESS) continue;
+      const convertedAmount = this.getConvertedAmountDecimal(tx, rates);
+      if (!convertedAmount) continue;
+
       const catId = tx.metadata?.categoryId || null;
-      const bucket = categoryBuckets.get(catId) || { amount: 0, count: 0 };
-      bucket.amount += this.getConvertedAmount(tx, converted);
+      const bucket = categoryBuckets.get(catId) || {
+        amount: new Decimal(0),
+        count: 0,
+      };
+      bucket.amount = bucket.amount.plus(convertedAmount);
       bucket.count += 1;
       categoryBuckets.set(catId, bucket);
     }
 
     const totalSuccessAmount = Array.from(categoryBuckets.values()).reduce(
-      (s, b) => s + b.amount,
-      0,
+      (s, b) => s.plus(b.amount),
+      new Decimal(0),
     );
 
     const breakdown: CategoryBreakdown[] = Array.from(categoryBuckets.entries())
+      .sort((a, b) => b[1].amount.comparedTo(a[1].amount))
       .map(([catId, { amount, count }]) => {
         const cat = catId ? categoryMap.get(catId) : null;
         return {
@@ -222,28 +242,34 @@ export class AnalyticsService {
           categoryName: cat?.name || 'Uncategorized',
           icon: cat?.icon || '📦',
           color: cat?.color || '#9ca3af',
-          amount,
+          amount: amount.toString(),
           count,
-          percentage:
-            totalSuccessAmount > 0 ? (amount / totalSuccessAmount) * 100 : 0,
+          percentage: totalSuccessAmount.gt(0)
+            ? amount.div(totalSuccessAmount).times(100).toNumber()
+            : 0,
         };
-      })
-      .sort((a, b) => b.amount - a.amount);
+      });
 
-    const topTransactions = transactions
+    const convertibleSuccessTxs = transactions
       .filter((t) => t.status === TransactionStatus.SUCCESS)
-      .sort(
-        (a, b) =>
-          this.getConvertedAmount(b, converted) -
-          this.getConvertedAmount(a, converted),
-      )
-      .slice(0, 5)
       .map((t) => ({
+        tx: t,
+        convertedAmount: this.getConvertedAmountDecimal(t, rates),
+      }))
+      .filter(
+        (item): item is { tx: Transaction; convertedAmount: Decimal } =>
+          item.convertedAmount !== null,
+      );
+
+    const topTransactions = convertibleSuccessTxs
+      .sort((a, b) => b.convertedAmount.comparedTo(a.convertedAmount))
+      .slice(0, 5)
+      .map(({ tx: t, convertedAmount }) => ({
         id: t.id,
         type: t.type,
-        amount: t.amount,
+        amount: String(t.amount),
         currency: t.currency,
-        convertedAmount: this.getConvertedAmount(t, converted),
+        convertedAmount: convertedAmount.toString(),
         convertedCurrency: currency,
         status: t.status,
         createdAt: t.createdAt,
@@ -253,19 +279,30 @@ export class AnalyticsService {
       }));
 
     return {
-      totalSent,
-      totalReceived,
-      netFlow: totalReceived - totalSent,
+      totalSent: totalSentDec.toString(),
+      totalReceived: totalReceivedDec.toString(),
+      netFlow: totalReceivedDec.minus(totalSentDec).toString(),
       currency,
+      unconvertedCurrencies,
       breakdown,
       topTransactions,
     };
   }
 
-  async getTrends(userId: string, months: number): Promise<TrendDataPoint[]> {
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setMonth(startDate.getMonth() - months);
+  async getTrends(
+    userId: string,
+    months: number,
+    referenceDate: Date = new Date(),
+  ): Promise<TrendDataPoint[]> {
+    const refYear = referenceDate.getUTCFullYear();
+    const refMonth = referenceDate.getUTCMonth();
+
+    const startDate = new Date(
+      Date.UTC(refYear, refMonth - (months - 1), 1, 0, 0, 0, 0),
+    );
+    const endDate = new Date(
+      Date.UTC(refYear, refMonth + 1, 0, 23, 59, 59, 999),
+    );
 
     const transactions = await this.transactionRepository.find({
       where: {
@@ -275,40 +312,48 @@ export class AnalyticsService {
     });
 
     const currency = await this.resolveCurrency(transactions);
-    const converted = await this.convertAllToCurrency(transactions, currency);
+    const { rates, unconvertedCurrencies } = await this.convertAllToCurrency(
+      transactions,
+      currency,
+    );
 
-    const monthBuckets = new Map<string, { sent: number; received: number }>();
+    const monthBuckets = new Map<
+      string,
+      { sent: Decimal; received: Decimal }
+    >();
     for (let i = 0; i < months; i++) {
-      const d = new Date();
-      d.setMonth(d.getMonth() - i);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      monthBuckets.set(key, { sent: 0, received: 0 });
+      const d = new Date(Date.UTC(refYear, refMonth - i, 1));
+      const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+      monthBuckets.set(key, {
+        sent: new Decimal(0),
+        received: new Decimal(0),
+      });
     }
 
     for (const tx of transactions) {
       if (tx.status !== TransactionStatus.SUCCESS) continue;
       const d = new Date(tx.createdAt);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
       const bucket = monthBuckets.get(key);
       if (!bucket) continue;
 
-      const amount = this.getConvertedAmount(tx, converted);
-      if (
-        tx.type === TransactionType.WITHDRAW ||
-        tx.type === TransactionType.SWAP
-      ) {
-        bucket.sent += amount;
-      } else if (tx.type === TransactionType.DEPOSIT) {
-        bucket.received += amount;
+      const amount = this.getConvertedAmountDecimal(tx, rates);
+      if (!amount) continue;
+
+      if (this.isSentTransaction(tx)) {
+        bucket.sent = bucket.sent.plus(amount);
+      } else if (this.isReceivedTransaction(tx)) {
+        bucket.received = bucket.received.plus(amount);
       }
     }
 
     return Array.from(monthBuckets.entries())
       .map(([month, { sent, received }]) => ({
         month,
-        sent,
-        received,
-        net: received - sent,
+        sent: sent.toString(),
+        received: received.toString(),
+        net: received.minus(sent).toString(),
+        unconvertedCurrencies,
       }))
       .sort((a, b) => a.month.localeCompare(b.month));
   }
@@ -332,6 +377,13 @@ export class AnalyticsService {
       date: s.snapshotDate,
       balances: s.balances,
     }));
+  }
+
+  async getLatestSnapshot(userId: string): Promise<BalanceSnapshot | null> {
+    return this.balanceSnapshotRepository.findOne({
+      where: { userId },
+      order: { snapshotDate: 'DESC' },
+    });
   }
 
   async recordBalanceSnapshot(userId: string): Promise<void> {
@@ -516,53 +568,53 @@ export class AnalyticsService {
       const successful = transactions.filter(
         (t) => t.status === TransactionStatus.SUCCESS,
       );
-      const deposits = successful.filter(
-        (t) => t.type === TransactionType.DEPOSIT,
-      );
-      const withdrawals = successful.filter(
-        (t) => t.type === TransactionType.WITHDRAW,
-      );
+      const deposits = successful.filter((t) => this.isReceivedTransaction(t));
+      const withdrawals = successful.filter((t) => this.isSentTransaction(t));
 
       const totalDeposits = deposits.reduce(
-        (s, t) => s + parseFloat(t.amount),
-        0,
+        (s, t) => s.plus(new Decimal(String(t.amount))),
+        new Decimal(0),
       );
       const totalWithdrawals = withdrawals.reduce(
-        (s, t) => s + parseFloat(t.amount),
-        0,
+        (s, t) => s.plus(new Decimal(String(t.amount))),
+        new Decimal(0),
       );
 
       doc.fontSize(14).text('Monthly Summary', { underline: true });
       doc.fontSize(10);
       doc.text(`Total Received: ${totalDeposits.toFixed(2)}`);
       doc.text(`Total Sent: ${totalWithdrawals.toFixed(2)}`);
-      doc.text(`Net Flow: ${(totalDeposits - totalWithdrawals).toFixed(2)}`);
+      doc.text(`Net Flow: ${totalDeposits.minus(totalWithdrawals).toFixed(2)}`);
       doc.moveDown();
 
       const categoryBuckets = new Map<
         string,
-        { amount: number; count: number }
+        { amount: Decimal; count: number }
       >();
       for (const tx of successful) {
         const catId = tx.metadata?.categoryId || 'uncategorized';
-        const b = categoryBuckets.get(catId) || { amount: 0, count: 0 };
-        b.amount += parseFloat(tx.amount);
+        const b = categoryBuckets.get(catId) || {
+          amount: new Decimal(0),
+          count: 0,
+        };
+        b.amount = b.amount.plus(new Decimal(String(tx.amount)));
         b.count += 1;
         categoryBuckets.set(catId, b);
       }
 
       doc.fontSize(14).text('Category Breakdown', { underline: true });
       const totalAmount = Array.from(categoryBuckets.values()).reduce(
-        (s, b) => s + b.amount,
-        0,
+        (s, b) => s.plus(b.amount),
+        new Decimal(0),
       );
 
       let y = doc.y;
       for (const [catId, { amount, count }] of categoryBuckets) {
         const cat = categoryMap.get(catId === 'uncategorized' ? '' : catId);
         const name = cat?.name || 'Uncategorized';
-        const pct =
-          totalAmount > 0 ? ((amount / totalAmount) * 100).toFixed(1) : '0';
+        const pct = totalAmount.gt(0)
+          ? amount.div(totalAmount).times(100).toFixed(1)
+          : '0';
         doc
           .fontSize(10)
           .text(
@@ -607,33 +659,55 @@ export class AnalyticsService {
   private async convertAllToCurrency(
     transactions: Transaction[],
     targetCurrency: string,
-  ): Promise<Map<string, number>> {
-    const rates = new Map<string, number>();
+  ): Promise<{
+    rates: Map<string, Decimal>;
+    unconvertedCurrencies: string[];
+  }> {
+    const rates = new Map<string, Decimal>();
+    const unconverted = new Set<string>();
     const currencies = new Set(transactions.map((t) => t.currency));
+
     for (const curr of currencies) {
+      if (!curr) continue;
       if (curr === targetCurrency) {
-        rates.set(curr, 1);
+        rates.set(curr, new Decimal(1));
       } else {
         try {
           const rate = await this.exchangeRatesService.getRate(
             curr,
             targetCurrency,
           );
-          rates.set(curr, rate.rate);
+          if (
+            rate &&
+            rate.rate !== undefined &&
+            rate.rate !== null &&
+            Number(rate.rate) > 0
+          ) {
+            rates.set(curr, new Decimal(String(rate.rate)));
+          } else {
+            unconverted.add(curr);
+          }
         } catch {
-          rates.set(curr, 1);
+          unconverted.add(curr);
         }
       }
     }
-    return rates;
+
+    return {
+      rates,
+      unconvertedCurrencies: Array.from(unconverted).sort(),
+    };
   }
 
-  private getConvertedAmount(
+  private getConvertedAmountDecimal(
     tx: Transaction,
-    rates: Map<string, number>,
-  ): number {
-    const rate = rates.get(tx.currency) || 1;
-    return parseFloat(tx.amount) * rate;
+    rates: Map<string, Decimal>,
+  ): Decimal | null {
+    const rate = rates.get(tx.currency);
+    if (!rate) {
+      return null;
+    }
+    return new Decimal(String(tx.amount)).times(rate);
   }
 
   autoAssignCategory(txType: TransactionType, metadata?: any): string | null {

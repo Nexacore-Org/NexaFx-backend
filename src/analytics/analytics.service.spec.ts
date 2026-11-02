@@ -1,11 +1,30 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
 import {
   BadRequestException,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+
+jest.mock('@nestjs/typeorm', () => {
+  const { Inject } = require('@nestjs/common');
+  const getRepositoryToken = (entity: any) =>
+    `${entity?.name ?? 'Entity'}Repository`;
+  return {
+    InjectRepository: (entity: any) => Inject(getRepositoryToken(entity)),
+    getRepositoryToken,
+  };
+});
+
+jest.mock('../users/users.service', () => ({
+  UsersService: class UsersService {},
+}));
+
+jest.mock('../exchange-rates/exchange-rates.service', () => ({
+  ExchangeRatesService: class ExchangeRatesService {},
+}));
+
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { AnalyticsService } from './analytics.service';
 import { TransactionCategory } from './entities/transaction-category.entity';
 import { BalanceSnapshot } from './entities/balance-snapshot.entity';
@@ -14,7 +33,11 @@ import {
   ExportJobStatus,
   ExportFormat,
 } from './entities/report-export-job.entity';
-import { Transaction } from '../transactions/entities/transaction.entity';
+import {
+  Transaction,
+  TransactionType,
+  TransactionStatus,
+} from '../transactions/entities/transaction.entity';
 import { User } from '../users/user.entity';
 import { UsersService } from '../users/users.service';
 import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
@@ -47,7 +70,7 @@ describe('AnalyticsService', () => {
     update: jest.fn(),
   };
   const mockUserRepository = { find: jest.fn(), findOne: jest.fn() };
-  const mockUsersService = { getProfile: jest.fn() };
+  const mockUsersService = { getProfile: jest.fn(), findById: jest.fn() };
   const mockExchangeRatesService = { getRate: jest.fn() };
   const mockDataSource = { query: jest.fn() };
 
@@ -204,6 +227,125 @@ describe('AnalyticsService', () => {
       await expect(
         service.assignCategory('tx-1', userId, 'cat-3'),
       ).resolves.toBeDefined();
+    });
+  });
+
+  describe('getMonthlySummary & getTrends (#1521)', () => {
+    it('computes 0.1 + 0.2 style sums exactly with Decimal and serializes amounts as strings', async () => {
+      mockCategoryRepository.find.mockResolvedValue([]);
+      mockTransactionRepository.find.mockResolvedValue([
+        {
+          id: 'tx-1',
+          userId,
+          type: TransactionType.WITHDRAW,
+          status: TransactionStatus.SUCCESS,
+          amount: '0.1',
+          currency: 'USD',
+          createdAt: new Date(Date.UTC(2026, 5, 10, 12, 0, 0)),
+        },
+        {
+          id: 'tx-2',
+          userId,
+          type: TransactionType.WITHDRAW,
+          status: TransactionStatus.SUCCESS,
+          amount: '0.2',
+          currency: 'USD',
+          createdAt: new Date(Date.UTC(2026, 5, 11, 12, 0, 0)),
+        },
+      ]);
+
+      const summary = await service.getMonthlySummary(userId, 2026, 6);
+
+      expect(summary.totalSent).toBe('0.3');
+      expect(summary.totalReceived).toBe('0');
+      expect(summary.netFlow).toBe('-0.3');
+      expect(summary.breakdown[0].amount).toBe('0.3');
+    });
+
+    it('excludes transactions whose rate lookup fails (e.g. NGN->USD) instead of using rate 1 and reports unconvertedCurrencies', async () => {
+      mockCategoryRepository.find.mockResolvedValue([]);
+      mockExchangeRatesService.getRate.mockRejectedValue(
+        new Error('Rate unavailable for NGN/USD'),
+      );
+      mockTransactionRepository.find.mockResolvedValue([
+        {
+          id: 'tx-usd',
+          userId,
+          type: TransactionType.WITHDRAW,
+          status: TransactionStatus.SUCCESS,
+          amount: '100',
+          currency: 'USD',
+          createdAt: new Date(Date.UTC(2026, 5, 5, 10, 0, 0)),
+        },
+        {
+          id: 'tx-ngn',
+          userId,
+          type: TransactionType.WITHDRAW,
+          status: TransactionStatus.SUCCESS,
+          amount: '1500000',
+          currency: 'NGN',
+          createdAt: new Date(Date.UTC(2026, 5, 6, 10, 0, 0)),
+        },
+      ]);
+
+      const summary = await service.getMonthlySummary(userId, 2026, 6);
+
+      expect(summary.currency).toBe('USD');
+      expect(summary.totalSent).toBe('100');
+      expect(summary.unconvertedCurrencies).toEqual(['NGN']);
+      expect(summary.topTransactions).toHaveLength(1);
+      expect(summary.topTransactions[0].id).toBe('tx-usd');
+    });
+
+    it('uses UTC month boundaries and produces identical sent/received/net totals between getMonthlySummary and getTrends (counting both WITHDRAW and SWAP as sent)', async () => {
+      mockCategoryRepository.find.mockResolvedValue([]);
+      const juneTxs = [
+        {
+          id: 'tx-withdraw',
+          userId,
+          type: TransactionType.WITHDRAW,
+          status: TransactionStatus.SUCCESS,
+          amount: '50.25',
+          currency: 'USD',
+          createdAt: new Date(Date.UTC(2026, 5, 1, 0, 0, 0, 0)),
+        },
+        {
+          id: 'tx-swap',
+          userId,
+          type: TransactionType.SWAP,
+          status: TransactionStatus.SUCCESS,
+          amount: '29.75',
+          currency: 'USD',
+          createdAt: new Date(Date.UTC(2026, 5, 15, 12, 0, 0, 0)),
+        },
+        {
+          id: 'tx-deposit',
+          userId,
+          type: TransactionType.DEPOSIT,
+          status: TransactionStatus.SUCCESS,
+          amount: '200.50',
+          currency: 'USD',
+          createdAt: new Date(Date.UTC(2026, 5, 30, 23, 59, 59, 999)),
+        },
+      ];
+      mockTransactionRepository.find.mockResolvedValue(juneTxs);
+
+      const summary = await service.getMonthlySummary(userId, 2026, 6);
+      const trends = await service.getTrends(
+        userId,
+        1,
+        new Date(Date.UTC(2026, 5, 20)),
+      );
+
+      expect(summary.totalSent).toBe('80');
+      expect(summary.totalReceived).toBe('200.5');
+      expect(summary.netFlow).toBe('120.5');
+
+      expect(trends).toHaveLength(1);
+      expect(trends[0].month).toBe('2026-06');
+      expect(trends[0].sent).toBe(summary.totalSent);
+      expect(trends[0].received).toBe(summary.totalReceived);
+      expect(trends[0].net).toBe(summary.netFlow);
     });
   });
 

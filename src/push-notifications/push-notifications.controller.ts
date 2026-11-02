@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
   UseInterceptors,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -150,81 +151,6 @@ export class PushNotificationsController {
     return this.pushNotificationsService.listBroadcasts(query);
   }
 
-  @Get(':id')
-  @Roles(UserRole.ADMIN)
-  @ApiOperation({
-    summary: 'Get a specific broadcast by ID',
-    description:
-      'Retrieves detailed information about a single broadcast notification',
-  })
-  @ApiParam({
-    name: 'id',
-    type: String,
-    format: 'uuid',
-    description: 'Broadcast ID',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Broadcast details',
-    type: BroadcastResponseDto,
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Broadcast not found',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'Forbidden - Admin role required',
-  })
-  async getBroadcast(@Param('id') id: string): Promise<BroadcastResponseDto> {
-    return this.pushNotificationsService.getBroadcastById(id);
-  }
-
-  @Patch(':id/deactivate')
-  @Roles(UserRole.ADMIN)
-  @ApiOperation({
-    summary: 'Deactivate a single broadcast',
-    description:
-      'Changes the status of a broadcast from ACTIVE to INACTIVE. This prevents it from being delivered again but preserves the record.',
-  })
-  @ApiParam({
-    name: 'id',
-    type: String,
-    format: 'uuid',
-    description: 'Broadcast ID',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Broadcast deactivated successfully',
-    type: BroadcastResponseDto,
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Broadcast not found',
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Broadcast is already inactive or invalid request',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'Forbidden - Admin role required',
-  })
-  async deactivateBroadcast(
-    @Param('id') id: string,
-    @CurrentUser() user: CurrentUserPayload,
-  ): Promise<BroadcastResponseDto> {
-    return this.pushNotificationsService.deactivateBroadcast(id, user.userId);
-  }
-
   @Patch('bulk/deactivate')
   @Roles(UserRole.ADMIN)
   @ApiOperation({
@@ -267,5 +193,82 @@ export class PushNotificationsController {
       bulkDeactivateDto.ids,
       user.userId,
     );
+  }
+
+  @Get(':id')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Get a specific broadcast by ID',
+    description:
+      'Retrieves detailed information about a single broadcast notification',
+  })
+  @ApiParam({
+    name: 'id',
+    type: String,
+    format: 'uuid',
+    description: 'Broadcast ID',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Broadcast details',
+    type: BroadcastResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Broadcast not found',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Admin role required',
+  })
+  async getBroadcast(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<BroadcastResponseDto> {
+    return this.pushNotificationsService.getBroadcastById(id);
+  }
+
+  @Patch(':id/deactivate')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Deactivate a single broadcast',
+    description:
+      'Changes the status of a broadcast from ACTIVE to INACTIVE. This prevents it from being delivered again but preserves the record.',
+  })
+  @ApiParam({
+    name: 'id',
+    type: String,
+    format: 'uuid',
+    description: 'Broadcast ID',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Broadcast deactivated successfully',
+    type: BroadcastResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Broadcast not found',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Broadcast is already inactive or invalid request',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Admin role required',
+  })
+  async deactivateBroadcast(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: CurrentUserPayload,
+  ): Promise<BroadcastResponseDto> {
+    return this.pushNotificationsService.deactivateBroadcast(id, user.userId);
   }
 }

@@ -90,6 +90,68 @@ export class NotificationsService {
   }
 
   /**
+   * Bulk-create notifications using a single insert statement.
+   */
+  async createMany(dtos: CreateNotificationDto[]): Promise<Notification[]> {
+    if (!dtos || dtos.length === 0) {
+      return [];
+    }
+
+    try {
+      const entities = dtos.map((dto) => {
+        const deepLink =
+          dto.actionUrl ??
+          resolveDeepLink(dto.type, {
+            notificationId: '',
+            resourceId: (dto as any).relatedId,
+          });
+        const metadata = dto.metadata || {};
+        const mergedData = { ...metadata, actionUrl: deepLink };
+        return this.notificationRepository.create({
+          userId: dto.userId,
+          type: dto.type,
+          title: dto.title,
+          body: dto.message || '',
+          data: mergedData,
+        });
+      });
+
+      if (
+        typeof this.notificationRepository.createQueryBuilder === 'function'
+      ) {
+        const qb = this.notificationRepository.createQueryBuilder();
+        if (qb && typeof qb.insert === 'function') {
+          const result = await qb
+            .insert()
+            .into(Notification)
+            .values(entities)
+            .returning('*')
+            .execute();
+          const inserted = (result?.generatedMaps ||
+            result?.raw ||
+            entities) as Notification[];
+          for (const item of inserted) {
+            if (item?.userId) {
+              this.emitToUser(item);
+            }
+          }
+          return inserted;
+        }
+      }
+
+      const saved = await this.notificationRepository.save(entities);
+      const savedArray = Array.isArray(saved) ? saved : [saved];
+      for (const item of savedArray) {
+        this.emitToUser(item);
+      }
+      return savedArray;
+    } catch (error) {
+      this.logger.error('Failed to bulk create notifications', error);
+      throw new BadRequestException('Failed to bulk create notifications');
+    }
+  }
+
+  /**
    * Resolve a deep link for a notification type + data payload and store it
    * under data.actionUrl so clients (and FCM) can navigate to the right screen.
    */

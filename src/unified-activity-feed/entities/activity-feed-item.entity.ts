@@ -15,6 +15,7 @@ export enum ActivityFeedType {
 }
 
 @Entity('activity_feed_items')
+@Index('IDX_ACTIVITY_USER_CREATED_ID', ['userId', 'createdAt', 'id'])
 export class ActivityFeedItem {
   @PrimaryGeneratedColumn('uuid')
   id: string;

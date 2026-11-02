@@ -12,6 +12,7 @@ import { Server, Socket } from 'socket.io';
 import { UseGuards, Logger } from '@nestjs/common';
 import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
 import { WsJwtGuard } from './ws-jwt.guard';
+import { buildWsCorsOptions } from './ws-cors';
 
 // #700: connection/subscription limits for the public rate feed.
 const MAX_CONNECTIONS = Number(process.env.RATE_WS_MAX_CONNECTIONS ?? 500);
@@ -19,10 +20,7 @@ const MAX_SUBSCRIPTIONS_PER_CONNECTION = 5;
 
 @WebSocketGateway({
   namespace: '/rates',
-  cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3001',
-    credentials: true,
-  },
+  cors: buildWsCorsOptions(),
 })
 @UseGuards(WsJwtGuard)
 export class RatesGateway

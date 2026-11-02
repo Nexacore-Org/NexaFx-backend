@@ -1,22 +1,47 @@
+jest.mock('axios');
+jest.mock('dns', () => ({
+  ...jest.requireActual('dns'),
+  lookup: jest.fn(),
+}));
+
 import { Test, TestingModule } from '@nestjs/testing';
-import { WebhookService } from './webhook.service';
+import {
+  WebhookService,
+  createSsrfSafeAgent,
+  toSafeWebhookSnapshot,
+} from './webhook.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { WebhookEndpoint } from '../entities/webhook-endpoint.entity';
 import { WebhookDelivery } from '../entities/webhook-delivery.entity';
 import { BadRequestException } from '@nestjs/common';
 import { AuditLogsService } from '../../audit-logs/audit-logs.service';
 import axios from 'axios';
+import * as crypto from 'crypto';
+import * as dns from 'dns';
 
-jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
+const mockedDnsLookup = dns.lookup as unknown as jest.Mock;
 
 describe('WebhookService', () => {
   let service: WebhookService;
   let endpointRepo: any;
   let deliveryRepo: any;
+  let webhookQueue: { add: jest.Mock };
   let auditLogsService: any;
 
   beforeEach(async () => {
+    mockedDnsLookup.mockImplementation(
+      (hostname: any, options: any, cb?: any) => {
+        const callback = typeof options === 'function' ? options : cb;
+        const all = typeof options === 'object' && options?.all;
+        if (all) {
+          callback(null, [{ address: '93.184.216.34', family: 4 }]);
+        } else {
+          callback(null, '93.184.216.34', 4);
+        }
+      },
+    );
+
     auditLogsService = { log: jest.fn().mockResolvedValue(undefined) };
 
     endpointRepo = {
@@ -28,7 +53,7 @@ describe('WebhookService', () => {
         ),
       find: jest.fn(),
       findOne: jest.fn(),
-      delete: jest.fn(),
+      delete: jest.fn().mockResolvedValue({ affected: 1 }),
     };
 
     deliveryRepo = {
@@ -40,6 +65,10 @@ describe('WebhookService', () => {
         ),
       find: jest.fn(),
       findOne: jest.fn(),
+    };
+
+    webhookQueue = {
+      add: jest.fn().mockResolvedValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -55,9 +84,7 @@ describe('WebhookService', () => {
         },
         {
           provide: 'BullQueue_webhook-queue',
-          useValue: {
-            add: jest.fn(),
-          },
+          useValue: webhookQueue,
         },
         {
           provide: AuditLogsService,
@@ -173,6 +200,73 @@ describe('WebhookService', () => {
     });
   });
 
+  describe('listEndpoints, deleteEndpoint, getDeliveryHistory', () => {
+    it('lists endpoints for the authenticated user', async () => {
+      endpointRepo.find.mockResolvedValue([{ id: 'ep-1', userId: 'user1' }]);
+      const res = await service.listEndpoints('user1');
+      expect(res).toEqual([{ id: 'ep-1', userId: 'user1' }]);
+      expect(endpointRepo.find).toHaveBeenCalledWith({
+        where: { userId: 'user1' },
+        order: { createdAt: 'DESC' },
+      });
+    });
+
+    it('deletes an endpoint scoped by userId', async () => {
+      await service.deleteEndpoint('user1', 'ep-1');
+      expect(endpointRepo.delete).toHaveBeenCalledWith({
+        id: 'ep-1',
+        userId: 'user1',
+      });
+    });
+
+    it('throws BadRequestException when getting delivery history for unknown endpoint', async () => {
+      endpointRepo.findOne.mockResolvedValue(null);
+      await expect(
+        service.getDeliveryHistory('ep-missing', 'user1'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('returns delivery history for an owned endpoint', async () => {
+      endpointRepo.findOne.mockResolvedValue({ id: 'ep-1', userId: 'user1' });
+      deliveryRepo.find.mockResolvedValue([
+        { id: 'del-1', endpointId: 'ep-1' },
+      ]);
+
+      const history = await service.getDeliveryHistory('ep-1', 'user1');
+      expect(history).toEqual([{ id: 'del-1', endpointId: 'ep-1' }]);
+      expect(deliveryRepo.find).toHaveBeenCalledWith({
+        where: { endpointId: 'ep-1' },
+        order: { createdAt: 'DESC' },
+        take: 50,
+      });
+    });
+  });
+
+  describe('rotateSecret', () => {
+    it('rotates the secret and sets previousSecret and previousSecretExpiresAt', async () => {
+      const endpointRecord: any = {
+        id: 'ep-1',
+        userId: 'user1',
+        url: 'https://test.com',
+        secret: 'old-secret',
+        previousSecret: null,
+        previousSecretExpiresAt: null,
+      };
+      endpointRepo.findOne.mockResolvedValue(endpointRecord);
+
+      const { secret } = await service.rotateSecret('user1', 'ep-1');
+
+      expect(secret).toBeDefined();
+      expect(secret).not.toBe('old-secret');
+      expect(endpointRecord.previousSecret).toBe('old-secret');
+      expect(endpointRecord.previousSecretExpiresAt).toBeInstanceOf(Date);
+      expect(endpointRecord.previousSecretExpiresAt.getTime()).toBeGreaterThan(
+        Date.now(),
+      );
+      expect(endpointRecord).not.toHaveProperty('secretRotatedAt');
+    });
+  });
+
   describe('dispatch', () => {
     const rawTransaction = {
       id: 'tx-1',
@@ -265,9 +359,44 @@ describe('WebhookService', () => {
       expect(first.id).toBe(second.id);
       expect(first.timestamp).toBe(second.timestamp);
     });
+
+    it('should enqueue only { deliveryId } and never put secret, url, or payload in Redis job data', async () => {
+      endpointRepo.find.mockResolvedValue([
+        {
+          id: 'ep-1',
+          url: 'https://one.com',
+          events: ['*'],
+          secret: 'super-secret-signing-key',
+          isActive: true,
+          preferredSchemaVersion: '2.0',
+        },
+      ]);
+
+      await service.dispatch('transaction.completed', rawTransaction, 'user1');
+
+      expect(webhookQueue.add).toHaveBeenCalledTimes(1);
+      const [jobName, jobData] = webhookQueue.add.mock.calls[0];
+      expect(jobName).toBe('deliver');
+      expect(jobData).toEqual({ deliveryId: 'delivery-id' });
+      expect(jobData).not.toHaveProperty('secret');
+      expect(jobData).not.toHaveProperty('url');
+      expect(jobData).not.toHaveProperty('payload');
+    });
+
+    it('strips loaded user relations and sensitive columns before transforming', () => {
+      const safe = toSafeWebhookSnapshot({
+        id: 'tx-1',
+        amount: '10.00',
+        user: { id: 'u1', passwordHash: 'hash' },
+        passwordHash: 'leaked',
+        walletSecretKeyEncrypted: 'enc-key',
+      });
+
+      expect(safe).toEqual({ id: 'tx-1', amount: '10.00' });
+    });
   });
 
-  describe('executeDelivery schema headers', () => {
+  describe('executeDelivery signing, SSRF agent, and schema headers', () => {
     const delivery = (schemaVersion: string) => ({
       id: 'delivery-1',
       endpointId: '1',
@@ -276,13 +405,19 @@ describe('WebhookService', () => {
       attemptCount: 0,
     });
 
-    const endpoint = (preferredSchemaVersion: string) => ({
+    const endpoint = (
+      preferredSchemaVersion: string,
+      overrides: Record<string, any> = {},
+    ) => ({
       id: '1',
       userId: 'user1',
       url: 'https://test.com',
       secret: 'test-secret',
+      previousSecret: null,
+      previousSecretExpiresAt: null,
       isActive: true,
       preferredSchemaVersion,
+      ...overrides,
     });
 
     beforeEach(() => {
@@ -375,6 +510,152 @@ describe('WebhookService', () => {
 
       expect(mockedAxios.post).toHaveBeenCalled();
       expect(deliveryRepo.save).toHaveBeenCalled();
+    });
+
+    it('signs payload with X-NexaFX-Timestamp, X-NexaFX-Signature, and X-NexaFX-Signature-V2, and includes X-NexaFX-Signature-V2-Previous during rotation grace window', async () => {
+      const del = delivery('2.0');
+      const ep = endpoint('2.0', {
+        secret: 'current-secret',
+        previousSecret: 'prior-secret',
+        previousSecretExpiresAt: new Date(Date.now() + 60_000),
+      });
+
+      await service.executeDelivery(del as any, ep as any);
+
+      const config = mockedAxios.post.mock.calls[0][2] as any;
+      const headers = config.headers;
+      const ts = headers['X-NexaFX-Timestamp'];
+      const rawBody = JSON.stringify(del.payload);
+
+      expect(ts).toMatch(/^\d+$/);
+      expect(headers['X-NexaFX-Signature']).toBe(
+        crypto.createHmac('sha256', 'current-secret').update(rawBody).digest('hex'),
+      );
+      expect(headers['X-NexaFX-Signature-V2']).toBe(
+        crypto
+          .createHmac('sha256', 'current-secret')
+          .update(`${ts}.${rawBody}`)
+          .digest('hex'),
+      );
+      expect(headers['X-NexaFX-Signature-V2-Previous']).toBe(
+        crypto
+          .createHmac('sha256', 'prior-secret')
+          .update(`${ts}.${rawBody}`)
+          .digest('hex'),
+      );
+      expect(config.httpAgent).toBeDefined();
+      expect(config.httpsAgent).toBeDefined();
+    });
+
+    it('omits X-NexaFX-Signature-V2-Previous after previousSecretExpiresAt has elapsed', async () => {
+      const del = delivery('2.0');
+      const ep = endpoint('2.0', {
+        secret: 'current-secret',
+        previousSecret: 'expired-secret',
+        previousSecretExpiresAt: new Date(Date.now() - 60_000),
+      });
+
+      await service.executeDelivery(del as any, ep as any);
+
+      const { headers } = mockedAxios.post.mock.calls[0][2] as any;
+      expect(headers['X-NexaFX-Signature-V2']).toBeDefined();
+      expect(headers['X-NexaFX-Signature-V2-Previous']).toBeUndefined();
+    });
+
+    it('rejects SSRF connections to 127.0.0.1 at connect time via createSsrfSafeAgent', async () => {
+      mockedDnsLookup.mockImplementationOnce(
+        (_host: any, _opts: any, cb: any) => {
+          cb(null, [{ address: '127.0.0.1', family: 4 }]);
+        },
+      );
+
+      const agents = createSsrfSafeAgent();
+      const lookup = (agents.https as any).options.lookup;
+
+      await expect(
+        new Promise((resolve, reject) => {
+          lookup('rebind.attacker.example', {}, (err: Error | null, addr: string) => {
+            if (err) reject(err);
+            else resolve(addr);
+          });
+        }),
+      ).rejects.toThrow(/Blocked address resolved/);
+    });
+  });
+
+  describe('processDeliveryJob and processRetries', () => {
+    it('loads delivery and endpoint from database and executes delivery', async () => {
+      const del = {
+        id: 'del-10',
+        endpointId: 'ep-10',
+        eventType: 'transaction.completed',
+        payload: {
+          schemaVersion: '2.0',
+          event: 'transaction.completed',
+          data: {},
+        },
+        attemptCount: 0,
+        deliveredAt: null,
+      };
+      const ep = {
+        id: 'ep-10',
+        userId: 'user1',
+        url: 'https://test.com',
+        secret: 'sec-10',
+        isActive: true,
+        preferredSchemaVersion: '2.0',
+      };
+
+      deliveryRepo.findOne.mockResolvedValue(del);
+      endpointRepo.findOne.mockResolvedValue(ep);
+      mockedAxios.post.mockResolvedValue({ status: 200, data: 'OK' });
+
+      await service.processDeliveryJob('del-10');
+
+      expect(mockedAxios.post).toHaveBeenCalledTimes(1);
+      expect(del.deliveredAt).toBeInstanceOf(Date);
+      expect(del.attemptCount).toBe(1);
+      expect(deliveryRepo.save).toHaveBeenCalledWith(del);
+    });
+
+    it('schedules nextRetryAt on failure and processRetries re-enqueues due deliveries', async () => {
+      const del: any = {
+        id: 'del-fail',
+        endpointId: 'ep-10',
+        eventType: 'transaction.completed',
+        payload: {
+          schemaVersion: '2.0',
+          event: 'transaction.completed',
+          data: {},
+        },
+        attemptCount: 0,
+        deliveredAt: null,
+        nextRetryAt: null,
+      };
+      const ep = {
+        id: 'ep-10',
+        userId: 'user1',
+        url: 'https://test.com',
+        secret: 'sec-10',
+        isActive: true,
+        preferredSchemaVersion: '2.0',
+      };
+
+      mockedAxios.post.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+
+      await service.executeDelivery(del, ep as any);
+
+      expect(del.attemptCount).toBe(1);
+      expect(del.deliveredAt).toBeNull();
+      expect(del.nextRetryAt).toBeInstanceOf(Date);
+
+      deliveryRepo.find.mockResolvedValueOnce([del]);
+      await service.processRetries();
+
+      expect(del.nextRetryAt).toBeNull();
+      expect(webhookQueue.add).toHaveBeenCalledWith('deliver', {
+        deliveryId: 'del-fail',
+      });
     });
   });
 

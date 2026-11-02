@@ -10,6 +10,8 @@ process.env.DATABASE_URL =
   'postgresql://postgres:postgres@localhost:5432/nexafx_test';
 process.env.REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret-for-e2e';
+process.env.STORAGE_SIGNING_SECRET =
+  process.env.STORAGE_SIGNING_SECRET || 'test-storage-signing-secret-for-e2e';
 process.env.STRIPE_SECRET_KEY =
   process.env.STRIPE_SECRET_KEY || 'sk_test_dummy';
 process.env.STRIPE_CARDS_WEBHOOK_SECRET =

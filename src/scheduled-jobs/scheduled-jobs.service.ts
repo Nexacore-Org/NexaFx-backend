@@ -369,23 +369,11 @@ export class ScheduledJobsService {
   }
 
   /**
-   * Sync wallet balances from Stellar into User.balances snapshot every 5 minutes
+   * Sync wallet balances from Stellar into User.balances snapshot
+   * Note: Removed @Cron to avoid duplicate runs with syncWalletBalances (every 10m) (#1522).
    */
-  @Cron(CronExpression.EVERY_5_MINUTES)
   async syncWalletBalancesSnapshot(): Promise<void> {
-    this.logger.log('[Scheduled Job] Starting wallet balances snapshot sync');
-
-    try {
-      const result = await this.usersService.syncWalletBalanceSnapshots();
-      this.logger.log(
-        `[Scheduled Job] Wallet snapshot sync completed (${result.updated}/${result.processed} users updated)`,
-      );
-    } catch (error) {
-      this.logger.error(
-        '[Scheduled Job] Fatal error in wallet balances snapshot sync:',
-        error,
-      );
-    }
+    return this.syncWalletBalances();
   }
 
   /**
@@ -398,9 +386,8 @@ export class ScheduledJobsService {
     );
 
     try {
-      const count = await (
-        this.analyticsService as any
-      ).recordBalanceSnapshotsForAllUsers();
+      const count =
+        await this.analyticsService.recordBalanceSnapshotsForAllUsers();
       this.logger.log(
         `[Scheduled Job] Balance snapshots recorded for ${count} users`,
       );

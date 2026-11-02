@@ -339,33 +339,28 @@ export class AnalyticsService {
     if (!user) return;
 
     const today = new Date().toISOString().split('T')[0];
-    const existing = await this.balanceSnapshotRepository.findOne({
-      where: { userId, snapshotDate: today },
-    });
-    if (existing) return;
-
-    const snapshot = this.balanceSnapshotRepository.create({
-      userId,
-      balances: user.balances || {},
-      snapshotDate: today,
-    });
-    await this.balanceSnapshotRepository.save(snapshot);
+    await this.dataSource.query(
+      `INSERT INTO balance_snapshots (id, user_id, balances, snapshot_date, created_at)
+       VALUES (uuid_generate_v4(), $1, $2, $3, NOW())
+       ON CONFLICT (user_id, snapshot_date) DO NOTHING;`,
+      [userId, JSON.stringify(user.balances || {}), today],
+    );
   }
 
   async recordBalanceSnapshotsForAllUsers(): Promise<number> {
-    const users = await this.userRepository.find({ select: ['id'] });
-    let count = 0;
-    for (const user of users) {
-      try {
-        await this.recordBalanceSnapshot(user.id);
-        count++;
-      } catch (err) {
-        this.logger.error(
-          `Failed to record balance snapshot for user ${user.id}: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-    }
-    return count;
+    const rawResult = await this.dataSource.query(
+      `INSERT INTO balance_snapshots (id, user_id, balances, snapshot_date, created_at)
+       SELECT 
+         uuid_generate_v4(), 
+         u.id, 
+         COALESCE(u.balances, '{}'::jsonb), 
+         CURRENT_DATE, 
+         NOW()
+       FROM users u
+       ON CONFLICT (user_id, snapshot_date) DO NOTHING
+       RETURNING id;`,
+    );
+    return Array.isArray(rawResult) ? rawResult.length : 0;
   }
 
   async createExportJob(

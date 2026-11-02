@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { StorageService } from './storage.service';
+import { StorageService, resolveValidatedStorageType } from './storage.service';
 import {
   S3Client,
   PutObjectCommand,
@@ -7,8 +7,7 @@ import {
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { v4 as uuidv4 } from 'uuid';
-import * as path from 'path';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class S3StorageService implements StorageService {
@@ -30,9 +29,8 @@ export class S3StorageService implements StorageService {
   async upload(file: Express.Multer.File, pathParam: string): Promise<string> {
     const env = process.env.NODE_ENV || 'development';
 
-    // Secure naming
-    const fileExt = path.extname(file.originalname).toLowerCase();
-    const safeFilename = `${uuidv4()}${fileExt}`;
+    const { mimeType, extension } = await resolveValidatedStorageType(file);
+    const safeFilename = `${crypto.randomUUID()}${extension}`;
     const relativeKey = `${env}/${pathParam}/${safeFilename}`.replace(
       /\\/g,
       '/',
@@ -47,7 +45,7 @@ export class S3StorageService implements StorageService {
         Bucket: this.bucketName,
         Key: relativeKey,
         Body: file.buffer,
-        ContentType: file.mimetype,
+        ContentType: mimeType,
       }),
     );
 

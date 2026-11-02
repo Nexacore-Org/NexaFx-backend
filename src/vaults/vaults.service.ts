@@ -13,7 +13,11 @@ import { VaultTransaction } from './entities/vault-transaction.entity';
 import { VaultStatus } from './enum/vault-status.enum';
 import { VaultTransactionType } from './enum/vault-transaction-type.enum';
 import { AutoDepositFrequency } from './enum/auto-deposit-frequency.enum';
-import { CreateVaultDto } from './dto/create-vault.dto';
+import {
+  CreateVaultDto,
+  MAX_VAULT_TERM_DAYS,
+  SUPPORTED_VAULT_CURRENCIES,
+} from './dto/create-vault.dto';
 import { VaultResponseDto } from './dto/vault-response.dto';
 import { UsersService } from '../users/users.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -39,18 +43,89 @@ export class VaultsService {
     userId: string,
     dto: CreateVaultDto,
   ): Promise<VaultResponseDto> {
+    const name = typeof dto?.name === 'string' ? dto.name.trim() : '';
+    if (!name || name.length > 255) {
+      throw new BadRequestException(
+        'Vault name must be between 1 and 255 characters',
+      );
+    }
+
+    const currency =
+      typeof dto?.currency === 'string'
+        ? dto.currency.trim().toUpperCase()
+        : '';
+    if (
+      !currency ||
+      !(SUPPORTED_VAULT_CURRENCIES as readonly string[]).includes(currency)
+    ) {
+      throw new BadRequestException(
+        `Unsupported currency: ${dto?.currency}. Supported currencies: ${SUPPORTED_VAULT_CURRENCIES.join(', ')}`,
+      );
+    }
+
+    if (
+      typeof dto?.targetAmount !== 'number' ||
+      !Number.isFinite(dto.targetAmount) ||
+      dto.targetAmount <= 0
+    ) {
+      throw new BadRequestException('targetAmount must be greater than 0');
+    }
+
+    const unlockDate = new Date(dto?.unlockAt);
+    const nowMs = Date.now();
+    if (Number.isNaN(unlockDate.getTime()) || unlockDate.getTime() <= nowMs) {
+      throw new BadRequestException('unlockAt must be a future date');
+    }
+
+    const maxUnlockMs = nowMs + MAX_VAULT_TERM_DAYS * 24 * 60 * 60 * 1000;
+    if (unlockDate.getTime() > maxUnlockMs) {
+      throw new BadRequestException(
+        `unlockAt cannot exceed maximum term of ${MAX_VAULT_TERM_DAYS} days`,
+      );
+    }
+
+    const hasAutoAmount =
+      dto.autoDepositAmount !== undefined && dto.autoDepositAmount !== null;
+    const hasAutoFrequency =
+      dto.autoDepositFrequency !== undefined &&
+      dto.autoDepositFrequency !== null;
+
+    if (hasAutoAmount !== hasAutoFrequency) {
+      throw new BadRequestException(
+        'Both autoDepositAmount and autoDepositFrequency must be provided together',
+      );
+    }
+
+    if (
+      hasAutoAmount &&
+      (typeof dto.autoDepositAmount !== 'number' ||
+        !Number.isFinite(dto.autoDepositAmount) ||
+        dto.autoDepositAmount <= 0)
+    ) {
+      throw new BadRequestException('autoDepositAmount must be greater than 0');
+    }
+
+    if (
+      hasAutoFrequency &&
+      !Object.values(AutoDepositFrequency).includes(dto.autoDepositFrequency!)
+    ) {
+      throw new BadRequestException('Invalid autoDepositFrequency');
+    }
+
     const interestRate =
       this.configService.get<string>('VAULT_INTEREST_RATE') ?? '0.05';
 
     const vault = this.vaultRepository.create({
       userId,
-      name: dto.name,
-      currency: dto.currency,
+      name,
+      currency,
       targetAmount: dto.targetAmount.toString(),
-      unlockAt: new Date(dto.unlockAt),
+      unlockAt: unlockDate,
       annualInterestRate: interestRate,
-      autoDepositAmount: dto.autoDepositAmount?.toString() ?? null,
-      autoDepositFrequency: dto.autoDepositFrequency ?? null,
+      autoDepositAmount: hasAutoAmount
+        ? dto.autoDepositAmount!.toString()
+        : null,
+      autoDepositFrequency: hasAutoFrequency ? dto.autoDepositFrequency! : null,
     });
 
     const saved = await this.vaultRepository.save(vault);
@@ -414,6 +489,9 @@ export class VaultsService {
     const now = new Date();
     const dayOfWeek = now.getUTCDay();
     const dayOfMonth = now.getUTCDate();
+    const startOfUtcDay = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
 
     const autoDepositVaults = await this.vaultRepository.find({
       where: {
@@ -424,6 +502,12 @@ export class VaultsService {
     });
 
     const filteredVaults = autoDepositVaults.filter((v) => {
+      if (
+        v.lastAutoDepositAt &&
+        new Date(v.lastAutoDepositAt).getTime() >= startOfUtcDay.getTime()
+      ) {
+        return false;
+      }
       if (v.autoDepositFrequency === AutoDepositFrequency.DAILY) return true;
       if (v.autoDepositFrequency === AutoDepositFrequency.WEEKLY)
         return dayOfWeek === 1;
@@ -437,15 +521,103 @@ export class VaultsService {
       try {
         if (!vault.autoDepositAmount) continue;
         const amount = parseFloat(vault.autoDepositAmount);
+        if (!Number.isFinite(amount) || amount <= 0) continue;
 
-        const user = await this.usersService.findById(vault.userId);
-        if (!user) continue;
+        const outcome = await this.dataSource.transaction(async (manager) => {
+          const vaultRepo = manager.getRepository(SavingsVault);
+          const txRepo = manager.getRepository(VaultTransaction);
+          const userRepo = manager.getRepository(User);
 
-        const currentBalance = parseFloat(
-          user.balances?.[vault.currency]?.toString() ?? '0',
-        );
+          const lockedVault = await vaultRepo.findOne({
+            where: { id: vault.id },
+            lock: { mode: 'pessimistic_write' },
+          });
+          if (!lockedVault || lockedVault.status !== VaultStatus.ACTIVE) {
+            return { status: 'skipped' as const };
+          }
 
-        if (currentBalance < amount) {
+          if (
+            lockedVault.lastAutoDepositAt &&
+            new Date(lockedVault.lastAutoDepositAt).getTime() >=
+              startOfUtcDay.getTime()
+          ) {
+            return { status: 'already_processed' as const };
+          }
+
+          if (typeof vaultRepo.createQueryBuilder === 'function') {
+            const qb = vaultRepo.createQueryBuilder();
+            if (qb && typeof qb.update === 'function') {
+              const claimResult = await qb
+                .update(SavingsVault)
+                .set({ lastAutoDepositAt: now })
+                .where(
+                  'id = :id AND ("lastAutoDepositAt" IS NULL OR "lastAutoDepositAt" < :startOfUtcDay)',
+                  { id: lockedVault.id, startOfUtcDay },
+                )
+                .execute();
+              if (claimResult && claimResult.affected === 0) {
+                return { status: 'already_processed' as const };
+              }
+            }
+          }
+
+          const lockedUser =
+            typeof userRepo?.findOne === 'function'
+              ? await userRepo.findOne({
+                  where: { id: lockedVault.userId },
+                  lock: { mode: 'pessimistic_write' },
+                })
+              : await this.usersService.findById(lockedVault.userId);
+
+          if (!lockedUser) {
+            return { status: 'user_not_found' as const };
+          }
+
+          const currentBalance = parseFloat(
+            lockedUser.balances?.[lockedVault.currency]?.toString() ?? '0',
+          );
+
+          if (currentBalance < amount) {
+            if (typeof vaultRepo.createQueryBuilder === 'function') {
+              const qb = vaultRepo.createQueryBuilder();
+              if (qb && typeof qb.update === 'function') {
+                await qb
+                  .update(SavingsVault)
+                  .set({ lastAutoDepositAt: vault.lastAutoDepositAt ?? null })
+                  .where('id = :id', { id: lockedVault.id })
+                  .execute();
+              }
+            }
+            return { status: 'insufficient_balance' as const };
+          }
+
+          const balBefore = parseFloat(lockedVault.currentBalance);
+          const balAfter = balBefore + amount;
+          lockedVault.currentBalance = balAfter.toString();
+          lockedVault.lastAutoDepositAt = now;
+          await vaultRepo.save(lockedVault);
+
+          const tx = txRepo.create({
+            vaultId: lockedVault.id,
+            type: VaultTransactionType.DEPOSIT,
+            amount: amount.toString(),
+            balanceBefore: balBefore.toString(),
+            balanceAfter: balAfter.toString(),
+            note: `Auto-deposit (${lockedVault.autoDepositFrequency ?? vault.autoDepositFrequency})`,
+          });
+          await txRepo.save(tx);
+
+          const newBalances = { ...(lockedUser.balances ?? {}) };
+          newBalances[lockedVault.currency] = currentBalance - amount;
+          lockedUser.balances = newBalances;
+          await userRepo.update(lockedVault.userId, {
+            balances: newBalances,
+          });
+
+          return { status: 'deposited' as const };
+        });
+
+        if (outcome?.status === 'insufficient_balance') {
           await this.notificationsService.create({
             userId: vault.userId,
             type: NotificationType.SECURITY_ALERT,
@@ -464,39 +636,10 @@ export class VaultsService {
           continue;
         }
 
-        await this.dataSource.transaction(async (manager) => {
-          const vaultRepo = manager.getRepository(SavingsVault);
-          const txRepo = manager.getRepository(VaultTransaction);
-
-          const lockedVault = await vaultRepo.findOne({
-            where: { id: vault.id },
-            lock: { mode: 'pessimistic_write' },
-          });
-          if (!lockedVault) return;
-
-          const balBefore = parseFloat(lockedVault.currentBalance);
-          const balAfter = balBefore + amount;
-          lockedVault.currentBalance = balAfter.toString();
-          await vaultRepo.save(lockedVault);
-
-          const tx = txRepo.create({
-            vaultId: lockedVault.id,
-            type: VaultTransactionType.DEPOSIT,
-            amount: amount.toString(),
-            balanceBefore: balBefore.toString(),
-            balanceAfter: balAfter.toString(),
-            note: `Auto-deposit (${vault.autoDepositFrequency})`,
-          });
-          await txRepo.save(tx);
-
-          const newBalances = { ...user.balances };
-          newBalances[lockedVault.currency] = currentBalance - amount;
-          await manager.getRepository(User).update(lockedVault.userId, {
-            balances: newBalances,
-          });
-        });
-
-        processedCount++;
+        if (outcome?.status === 'deposited') {
+          vault.lastAutoDepositAt = now;
+          processedCount++;
+        }
       } catch (error) {
         this.logger.error(
           `Auto-deposit failed for vault ${vault.id}: ${error instanceof Error ? error.message : String(error)}`,
@@ -547,6 +690,7 @@ export class VaultsService {
       earlyWithdrawalPenaltyPercent: vault.earlyWithdrawalPenaltyPercent,
       autoDepositAmount: vault.autoDepositAmount,
       autoDepositFrequency: vault.autoDepositFrequency,
+      lastAutoDepositAt: vault.lastAutoDepositAt ?? null,
       progressPercent: parseFloat(progressPercent.toFixed(2)),
       maturedAt: vault.maturedAt,
       closedAt: vault.closedAt,

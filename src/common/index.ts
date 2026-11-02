@@ -17,5 +17,8 @@ export * from './services/pagination.service';
 export * from './services/date.service';
 export * from './services/encryption.service';
 
+// Utils
+export * from './utils/csv.util';
+
 // Module
 export * from './common.module';

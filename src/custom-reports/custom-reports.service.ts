@@ -9,6 +9,7 @@ import {
   CustomReportDefinition,
   ReportEntityTarget,
 } from './entities/custom-report-definition.entity';
+import { sanitizeSpreadsheetCell, toCsvRow } from '../common/utils/csv.util';
 
 @Injectable()
 export class CustomReportsService {
@@ -145,10 +146,8 @@ export class CustomReportsService {
     columns: string[],
     rows: Record<string, unknown>[],
   ): string {
-    const header = columns.join(',');
-    const body = rows.map((row) =>
-      columns.map((col) => JSON.stringify(row[col] ?? '')).join(','),
-    );
+    const header = columns.map((col) => sanitizeSpreadsheetCell(col)).join(',');
+    const body = rows.map((row) => toCsvRow(columns.map((col) => row[col])));
     return [header, ...body].join('\n');
   }
 }

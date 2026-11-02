@@ -202,6 +202,55 @@ describe('CustomReportsService', () => {
 
       expect(csv).toBe('id,createdAt');
     });
+
+    it.each([
+      ['=HYPERLINK("http://evil.example","steal")'],
+      ["+cmd|' /C calc'!A0"],
+      ['-2+3+cmd'],
+      ['@SUM(1+1)*cmd'],
+      ['\t=1+1'],
+      ['\r=1+1'],
+    ])(
+      'neutralizes CSV formula injection in cell values starting with %p (#1523)',
+      async (maliciousEmail) => {
+        definitionRepository.findOne.mockResolvedValue(
+          makeDefinition({
+            entity: ReportEntityTarget.USERS,
+            columns: ['id', 'email'],
+          }),
+        );
+        queryBuilder.getRawMany.mockResolvedValue([
+          {
+            id: 'user-1',
+            email: maliciousEmail,
+          },
+        ]);
+
+        const csv = (await service.runReport('def-users', 'csv')) as string;
+        const expectedEscaped = `"'${maliciousEmail.replace(/"/g, '""')}"`;
+        expect(csv).toContain(expectedEscaped);
+      },
+    );
+
+    it('escapes embedded double quotes, commas, and newlines in RFC 4180 format (#1523)', async () => {
+      definitionRepository.findOne.mockResolvedValue(
+        makeDefinition({
+          entity: ReportEntityTarget.USERS,
+          columns: ['id', 'email'],
+        }),
+      );
+      queryBuilder.getRawMany.mockResolvedValue([
+        {
+          id: 'user-quote-newline',
+          email: ' "quoted",value\nsecond-line@example.com',
+        },
+      ]);
+
+      const csv = (await service.runReport('def-users', 'csv')) as string;
+      expect(csv).toBe(
+        'id,email\n"user-quote-newline"," ""quoted"",value\nsecond-line@example.com"',
+      );
+    });
   });
 
   describe('allowlist', () => {

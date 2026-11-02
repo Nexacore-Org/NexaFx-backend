@@ -11,6 +11,7 @@ import { Repository, DataSource, In, Between, MoreThanOrEqual } from 'typeorm';
 import Decimal from 'decimal.js';
 import * as fastCsv from 'fast-csv';
 import * as PDFDocument from 'pdfkit';
+import { sanitizeSpreadsheetCell } from '../common/utils/csv.util';
 
 import {
   Transaction,
@@ -334,6 +335,13 @@ export class AnalyticsService {
     }));
   }
 
+  async getLatestSnapshot(userId: string): Promise<BalanceSnapshot | null> {
+    return this.balanceSnapshotRepository.findOne({
+      where: { userId },
+      order: { snapshotDate: 'DESC' },
+    });
+  }
+
   async recordBalanceSnapshot(userId: string): Promise<void> {
     const user = await this.usersService.findById(userId);
     if (!user) return;
@@ -470,17 +478,19 @@ export class AnalyticsService {
         const catId = tx.metadata?.categoryId;
         const cat = catId ? categoryMap.get(catId) : null;
         csvStream.write({
-          id: tx.id,
-          type: tx.type,
-          amount: tx.amount,
-          currency: tx.currency,
-          status: tx.status,
-          category: cat?.name || 'Uncategorized',
-          categoryIcon: cat?.icon || '',
-          counterparty: tx.metadata?.counterparty || '',
+          id: sanitizeSpreadsheetCell(tx.id),
+          type: sanitizeSpreadsheetCell(tx.type),
+          amount: sanitizeSpreadsheetCell(tx.amount),
+          currency: sanitizeSpreadsheetCell(tx.currency),
+          status: sanitizeSpreadsheetCell(tx.status),
+          category: sanitizeSpreadsheetCell(cat?.name || 'Uncategorized'),
+          categoryIcon: sanitizeSpreadsheetCell(cat?.icon || ''),
+          counterparty: sanitizeSpreadsheetCell(
+            tx.metadata?.counterparty || '',
+          ),
           date: tx.createdAt.toISOString(),
-          txHash: tx.txHash || '',
-          fee: tx.feeAmount || '0',
+          txHash: sanitizeSpreadsheetCell(tx.txHash || ''),
+          fee: sanitizeSpreadsheetCell(tx.feeAmount || '0'),
         });
       }
       csvStream.end();

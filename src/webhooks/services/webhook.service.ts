@@ -1,8 +1,13 @@
-import { Injectable, BadRequestException, NotFoundException, UnauthorizedException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  UnauthorizedException,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { InjectQueue } from '@nestjs/bull';
-import { Queue } from 'bull';
+import { IsNull, LessThan, LessThanOrEqual, Repository } from 'typeorm';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import axios from 'axios';
 import * as crypto from 'crypto';
 import * as dns from 'dns';
@@ -12,10 +17,22 @@ import * as ipaddr from 'ipaddr.js';
 import { WebhookEndpoint } from '../entities/webhook-endpoint.entity';
 import { WebhookDelivery } from '../entities/webhook-delivery.entity';
 import { AuditLogsService } from '../../audit-logs/audit-logs.service';
+import {
+  WebhookSchemaTransformer,
+  WEBHOOK_SCHEMA_VERSIONS,
+  buildSchemaHeaders,
+  isDeprecatedSchemaVersion,
+  isSupportedSchemaVersion,
+  resolveSchemaVersion,
+} from '../../modules/webhooks/schemas';
 
 const BLOCKED_HOSTNAMES = /^(localhost|127\.0\.0\.1|0\.0\.0\.0|::1)$/i;
 
-const SUPPORTED_SCHEMA_VERSIONS = ['1.0', '2.0'];
+const SUPPORTED_SCHEMA_VERSIONS: readonly string[] = WEBHOOK_SCHEMA_VERSIONS;
+
+export const SECRET_ROTATION_GRACE_MS = 24 * 60 * 60 * 1000;
+export const MAX_DELIVERY_ATTEMPTS = 5;
+export const RETRY_BASE_DELAY_MS = 5000;
 
 /**
  * Ranges that must never be reachable from the webhook worker.
@@ -88,7 +105,11 @@ export function toSafeWebhookSnapshot(data: any): any {
       continue;
     }
     const value = data[key];
-    if (value !== null && typeof value === 'object' && !(value instanceof Date)) {
+    if (
+      value !== null &&
+      typeof value === 'object' &&
+      !(value instanceof Date)
+    ) {
       // Drop any remaining nested object/array (unloaded or unexpected
       // relations) rather than risk serialising credential material.
       continue;
@@ -99,10 +120,13 @@ export function toSafeWebhookSnapshot(data: any): any {
   return snapshot;
 }
 
-function isBlockedAddress(address: string): boolean {
+export function isBlockedAddress(address: string): boolean {
   try {
     let parsed = ipaddr.parse(address);
-    if (parsed.kind() === 'ipv6' && (parsed as ipaddr.IPv6).isIPv4MappedAddress()) {
+    if (
+      parsed.kind() === 'ipv6' &&
+      (parsed as ipaddr.IPv6).isIPv4MappedAddress()
+    ) {
       parsed = (parsed as ipaddr.IPv6).toIPv4Address();
     }
     return BLOCKED_IP_RANGES.includes(parsed.range());
@@ -117,7 +141,7 @@ function isBlockedAddress(address: string): boolean {
  * before it is used for the connection. This pins the validated IP to the
  * actual socket, preventing DNS rebinding between validation and connect.
  */
-function createSsrfSafeAgent(): { http: http.Agent; https: https.Agent } {
+export function createSsrfSafeAgent(): { http: http.Agent; https: https.Agent } {
   const lookup: http.AgentOptions['lookup'] = (hostname, options, callback) => {
     dns.lookup(hostname, { all: true }, (err, addresses) => {
       if (err) {
@@ -135,7 +159,11 @@ function createSsrfSafeAgent(): { http: http.Agent; https: https.Agent } {
       }
       const first = list[0];
       if (!first) {
-        return callback(new Error(`No address resolved for host ${hostname}`), '', 0);
+        return callback(
+          new Error(`No address resolved for host ${hostname}`),
+          '',
+          0,
+        );
       }
       return callback(null, first.address, first.family);
     });
@@ -193,22 +221,26 @@ export class WebhookService {
     // If the host is already an IP literal, validate it directly.
     if (ipaddr.isValid(hostname)) {
       if (isBlockedAddress(hostname)) {
-        throw new BadRequestException('Webhook URL points to a blocked address');
+        throw new BadRequestException(
+          'Webhook URL points to a blocked address',
+        );
       }
       return;
     }
 
     // Otherwise resolve the hostname and reject if any address is unsafe.
-    const addresses = await new Promise<dns.LookupAddress[]>((resolve, reject) => {
-      dns.lookup(hostname, { all: true }, (err, result) => {
-        if (err) {
-          return reject(
-            new BadRequestException('Webhook URL host could not be resolved'),
-          );
-        }
-        resolve(Array.isArray(result) ? result : [result]);
-      });
-    });
+    const addresses = await new Promise<dns.LookupAddress[]>(
+      (resolve, reject) => {
+        dns.lookup(hostname, { all: true }, (err, result) => {
+          if (err) {
+            return reject(
+              new BadRequestException('Webhook URL host could not be resolved'),
+            );
+          }
+          resolve(Array.isArray(result) ? result : [result]);
+        });
+      },
+    );
 
     if (addresses.length === 0) {
       throw new BadRequestException('Webhook URL host could not be resolved');
@@ -216,7 +248,9 @@ export class WebhookService {
 
     for (const entry of addresses) {
       if (isBlockedAddress(entry.address)) {
-        throw new BadRequestException('Webhook URL points to a blocked address');
+        throw new BadRequestException(
+          'Webhook URL points to a blocked address',
+        );
       }
     }
   }
@@ -264,7 +298,7 @@ export class WebhookService {
     });
 
     if (!endpoint) {
-      throw new NotFoundException('Webhook endpoint not found');
+      throw new BadRequestException('Webhook endpoint not found');
     }
 
     if (updates.url !== undefined) {
@@ -282,10 +316,23 @@ export class WebhookService {
     return this.endpointRepo.save(endpoint);
   }
 
+  async listEndpoints(userId: string): Promise<WebhookEndpoint[]> {
+    this.assertUserId(userId);
+    return this.endpointRepo.find({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async deleteEndpoint(userId: string, endpointId: string): Promise<void> {
+    this.assertUserId(userId);
+    await this.endpointRepo.delete({ id: endpointId, userId });
+  }
+
   /**
    * Rotates the signing secret for an endpoint. The new secret is returned
-   * exactly once; the previous secret is retained (hashed) so in-flight
-   * consumers can still verify deliveries during the grace window.
+   * exactly once; the previous secret is retained until `previousSecretExpiresAt`
+   * so in-flight consumers can still verify deliveries during the grace window.
    */
   async rotateSecret(
     userId: string,
@@ -297,17 +344,92 @@ export class WebhookService {
     });
 
     if (!endpoint) {
-      throw new NotFoundException('Webhook endpoint not found');
+      throw new BadRequestException('Webhook endpoint not found');
     }
 
     const secret = crypto.randomBytes(32).toString('hex');
     endpoint.previousSecret = endpoint.secret;
-    endpoint.secretRotatedAt = new Date();
+    endpoint.previousSecretExpiresAt = new Date(
+      Date.now() + SECRET_ROTATION_GRACE_MS,
+    );
     endpoint.secret = secret;
 
     await this.endpointRepo.save(endpoint);
 
     return { secret };
+  }
+
+  async getDeliveryHistory(
+    endpointId: string,
+    userId: string,
+  ): Promise<WebhookDelivery[]> {
+    this.assertUserId(userId);
+    const endpoint = await this.endpointRepo.findOne({
+      where: { id: endpointId, userId },
+    });
+
+    if (!endpoint) {
+      throw new BadRequestException('Webhook endpoint not found');
+    }
+
+    return this.deliveryRepo.find({
+      where: { endpointId: endpoint.id },
+      order: { createdAt: 'DESC' },
+      take: 50,
+    });
+  }
+
+  async testEndpoint(endpointId: string, userId: string): Promise<void> {
+    this.assertUserId(userId);
+    const endpoint = await this.endpointRepo.findOne({
+      where: { id: endpointId, userId },
+    });
+
+    if (!endpoint) {
+      throw new BadRequestException('Webhook endpoint not found');
+    }
+
+    const schemaVersion = resolveSchemaVersion(endpoint.preferredSchemaVersion);
+    const delivery = this.deliveryRepo.create({
+      endpointId: endpoint.id,
+      eventType: 'ping',
+      payload: {
+        id: crypto.randomUUID(),
+        event: 'ping',
+        schemaVersion,
+        timestamp: new Date().toISOString(),
+        data: { message: 'NexaFX webhook test ping' },
+      },
+      attemptCount: 0,
+    });
+
+    const savedDelivery = await this.deliveryRepo.save(delivery);
+    await this.executeDelivery(savedDelivery, endpoint);
+  }
+
+  async redeliver(
+    endpointId: string,
+    deliveryId: string,
+    userId: string,
+  ): Promise<void> {
+    this.assertUserId(userId);
+    const endpoint = await this.endpointRepo.findOne({
+      where: { id: endpointId, userId },
+    });
+
+    if (!endpoint) {
+      throw new BadRequestException('Webhook endpoint not found');
+    }
+
+    const delivery = await this.deliveryRepo.findOne({
+      where: { id: deliveryId, endpointId: endpoint.id },
+    });
+
+    if (!delivery) {
+      throw new BadRequestException('Webhook delivery not found');
+    }
+
+    await this.executeDelivery(delivery, endpoint);
   }
 
   async dispatch(
@@ -334,36 +456,192 @@ export class WebhookService {
         continue;
       }
 
-      const payload = {
-        event,
-        eventId,
-        timestamp,
-        data: transaction,
-      };
+      const payload = WebhookSchemaTransformer.hasVersionedSchema(event)
+        ? WebhookSchemaTransformer.transform(
+            event,
+            transaction,
+            endpoint.preferredSchemaVersion,
+            { id: eventId, timestamp },
+          )
+        : {
+            id: eventId,
+            event,
+            schemaVersion: resolveSchemaVersion(
+              endpoint.preferredSchemaVersion,
+            ),
+            timestamp,
+            data: transaction,
+          };
 
       const delivery = this.deliveryRepo.create({
         endpointId: endpoint.id,
-        event,
+        eventType: event,
         payload,
-        status: 'pending',
+        attemptCount: 0,
       });
 
-      await this.deliveryRepo.save(delivery);
+      const savedDelivery = await this.deliveryRepo.save(delivery);
 
-      await this.webhookQueue.add(
-        'deliver',
-        {
-          deliveryId: delivery.id,
-          endpointId: endpoint.id,
-          url: endpoint.url,
-          secret: endpoint.secret,
-          payload,
-        },
-        {
-          attempts: 5,
-          backoff: { type: 'exponential', delay: 5000 },
-        },
+      // Enqueue only the deliveryId so signing secrets and payloads are never
+      // persisted in Redis and secret rotations take effect on in-flight jobs.
+      await this.webhookQueue.add('deliver', {
+        deliveryId: savedDelivery.id,
+      });
+    }
+  }
+
+  async processDeliveryJob(deliveryId: string): Promise<void> {
+    const delivery = await this.deliveryRepo.findOne({
+      where: { id: deliveryId },
+    });
+
+    if (!delivery || delivery.deliveredAt) {
+      return;
+    }
+
+    const endpoint = await this.endpointRepo.findOne({
+      where: { id: delivery.endpointId },
+    });
+
+    if (!endpoint || !endpoint.isActive) {
+      return;
+    }
+
+    await this.executeDelivery(delivery, endpoint);
+  }
+
+  async executeDelivery(
+    delivery: WebhookDelivery,
+    endpoint: WebhookEndpoint,
+  ): Promise<void> {
+    const schemaVersion = isSupportedSchemaVersion(
+      delivery.payload?.schemaVersion,
+    )
+      ? delivery.payload.schemaVersion
+      : resolveSchemaVersion(endpoint.preferredSchemaVersion);
+
+    const schemaHeaders = buildSchemaHeaders(schemaVersion);
+
+    if (isDeprecatedSchemaVersion(schemaVersion)) {
+      try {
+        await this.auditLogsService.log(
+          endpoint.userId,
+          'webhook.deprecated_schema_used',
+          'WEBHOOK_ENDPOINT',
+          endpoint.id,
+          'SUCCESS',
+          {
+            schemaVersion,
+            eventType: delivery.eventType,
+            deliveryId: delivery.id,
+          },
+        );
+      } catch (err: any) {
+        this.logger.warn(
+          `Failed to log deprecated schema usage for endpoint ${endpoint.id}: ${err?.message ?? err}`,
+        );
+      }
+    }
+
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const rawBody =
+      typeof delivery.payload === 'string'
+        ? delivery.payload
+        : JSON.stringify(delivery.payload ?? {});
+
+    const signature = crypto
+      .createHmac('sha256', endpoint.secret)
+      .update(rawBody)
+      .digest('hex');
+
+    const signatureV2 = crypto
+      .createHmac('sha256', endpoint.secret)
+      .update(`${timestamp}.${rawBody}`)
+      .digest('hex');
+
+    const previousSecretActive =
+      Boolean(endpoint.previousSecret) &&
+      (!endpoint.previousSecretExpiresAt ||
+        new Date(endpoint.previousSecretExpiresAt).getTime() > Date.now());
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-NexaFX-Event': delivery.eventType,
+      'X-NexaFX-Delivery-Id': delivery.id,
+      'X-NexaFX-Timestamp': timestamp,
+      'X-NexaFX-Signature': signature,
+      'X-NexaFX-Signature-V2': signatureV2,
+      ...(previousSecretActive
+        ? {
+            'X-NexaFX-Signature-V2-Previous': crypto
+              .createHmac('sha256', endpoint.previousSecret!)
+              .update(`${timestamp}.${rawBody}`)
+              .digest('hex'),
+          }
+        : {}),
+      ...schemaHeaders,
+    };
+
+    const agents = createSsrfSafeAgent();
+
+    try {
+      const response = await axios.post(endpoint.url, delivery.payload, {
+        headers,
+        timeout: 10000,
+        httpAgent: agents.http,
+        httpsAgent: agents.https,
+      });
+
+      delivery.attemptCount = (delivery.attemptCount ?? 0) + 1;
+      delivery.responseStatus = response.status;
+      delivery.responseBody =
+        typeof response.data === 'string'
+          ? response.data
+          : JSON.stringify(response.data ?? '');
+      delivery.deliveredAt = new Date();
+      delivery.nextRetryAt = null as any;
+
+      await this.deliveryRepo.save(delivery);
+    } catch (error: any) {
+      delivery.attemptCount = (delivery.attemptCount ?? 0) + 1;
+      delivery.responseStatus = error?.response?.status ?? null;
+      delivery.responseBody =
+        typeof error?.response?.data === 'string'
+          ? error.response.data
+          : error?.message ?? 'Webhook delivery failed';
+
+      if (delivery.attemptCount < MAX_DELIVERY_ATTEMPTS) {
+        const backoffMs =
+          RETRY_BASE_DELAY_MS * Math.pow(2, delivery.attemptCount - 1);
+        delivery.nextRetryAt = new Date(Date.now() + backoffMs);
+      } else {
+        delivery.nextRetryAt = null as any;
+      }
+
+      await this.deliveryRepo.save(delivery);
+      this.logger.warn(
+        `Webhook delivery ${delivery.id} to ${endpoint.url} failed (attempt ${delivery.attemptCount}/${MAX_DELIVERY_ATTEMPTS}): ${delivery.responseBody}`,
       );
+    }
+  }
+
+  async processRetries(): Promise<void> {
+    const dueDeliveries = await this.deliveryRepo.find({
+      where: {
+        deliveredAt: IsNull(),
+        nextRetryAt: LessThanOrEqual(new Date()),
+        attemptCount: LessThan(MAX_DELIVERY_ATTEMPTS),
+      },
+      order: { nextRetryAt: 'ASC' },
+      take: 50,
+    });
+
+    for (const delivery of dueDeliveries) {
+      delivery.nextRetryAt = null as any;
+      await this.deliveryRepo.save(delivery);
+      await this.webhookQueue.add('deliver', {
+        deliveryId: delivery.id,
+      });
     }
   }
 }

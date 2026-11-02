@@ -2,13 +2,13 @@ import {
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
-  ForbiddenException,
+  BadRequestException,
   Logger,
   InternalServerErrorException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { UsersService } from '../../users/users.service';
 import { RedisService } from '../../common/services/redis.service';
 import { AuditLogsService } from '../../audit-logs/audit-logs.service';
@@ -64,7 +64,7 @@ export class ImpersonationService {
     targetUserId: string,
     request?: unknown,
   ): Promise<{ impersonationToken: string; expiresAt: string }> {
-    // 1. Verify admin is not currently impersonating (nested impersonation)
+    // 1. Verify admin exists
     const adminUser = await this.usersService.findById(adminId);
     if (!adminUser) {
       throw new NotFoundException('Admin user not found');
@@ -93,7 +93,7 @@ export class ImpersonationService {
     const ttlSeconds = expiryMinutes * 60;
 
     // 5. Build unique token id
-    const jti = uuidv4();
+    const jti = randomUUID();
     const now = new Date();
     const expiresAt = new Date(now.getTime() + ttlSeconds * 1000);
 
@@ -184,6 +184,20 @@ export class ImpersonationService {
     adminId: string,
     request?: unknown,
   ): Promise<{ message: string }> {
+    if (!targetUserId || !jti || !adminId) {
+      throw new BadRequestException(
+        'Cannot end impersonation: token is not an impersonation session',
+      );
+    }
+
+    const existingSession = await this.validateSession(targetUserId, jti);
+    if (
+      !existingSession ||
+      (existingSession.adminId && existingSession.adminId !== adminId)
+    ) {
+      throw new NotFoundException('Active impersonation session not found');
+    }
+
     // Remove the main session key
     await this.redisService.del(sessionKey(targetUserId, jti));
 
@@ -255,11 +269,14 @@ export class ImpersonationService {
   // ---------------------------------------------------------------------------
 
   /**
-   * Lists Redis keys matching a pattern using RedisService.keys().
+   * Lists Redis keys matching a pattern using non-blocking RedisService.scan().
    */
   private async scanKeys(pattern: string): Promise<string[]> {
     try {
-      return await this.redisService.keys(pattern);
+      if (typeof this.redisService.scan === 'function') {
+        return await this.redisService.scan(pattern);
+      }
+      return [];
     } catch {
       this.logger.warn('Could not scan Redis keys for pattern: ' + pattern);
       return [];

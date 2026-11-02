@@ -8,6 +8,7 @@ import {
   HttpCode,
   HttpStatus,
   ParseUUIDPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -26,7 +27,6 @@ import {
   ImpersonationResponseDto,
   ActiveImpersonationSessionsDto,
 } from './dto/impersonation.dto';
-import { Audit } from '../../common/decorators/audit.decorator';
 
 @ApiTags('Admin Impersonation')
 @ApiBearerAuth('access-token')
@@ -49,14 +49,16 @@ export class ImpersonationController {
     @CurrentUser() user: CurrentUserPayload,
     @Req() req: any,
   ): Promise<{ message: string }> {
-    // End impersonation requires a valid impersonation session
-    const targetUserId = user.userId;
-    const jti = user.jti || '';
-    const adminId = user.impersonatedBy || '';
+    if (!user?.isImpersonation || !user.jti || !user.impersonatedBy) {
+      throw new BadRequestException(
+        'Cannot end impersonation: current token is not an impersonation session',
+      );
+    }
+
     return this.impersonationService.endImpersonation(
-      targetUserId,
-      jti,
-      adminId,
+      user.userId,
+      user.jti,
+      user.impersonatedBy,
       req,
     );
   }

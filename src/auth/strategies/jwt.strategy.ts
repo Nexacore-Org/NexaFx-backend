@@ -1,12 +1,14 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../../users/users.service';
 import { RedisService } from '../../common/services/redis.service';
+import { ImpersonationService } from '../../admin/impersonation/impersonation.service';
 import {
   validateAuthenticatedUser,
   type AuthenticatedUser,
+  type ImpersonationSessionLookup,
   type JwtPayload,
 } from '../authenticated-user';
 
@@ -19,6 +21,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly configService: ConfigService,
     private readonly usersService: UsersService,
     private readonly redisService: RedisService,
+    @Optional()
+    private readonly impersonationService?: ImpersonationService,
   ) {
     const secret = configService.get<string>('JWT_SECRET');
     const isProduction = configService.get<string>('NODE_ENV') === 'production';
@@ -36,6 +40,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload): Promise<AuthenticatedUser> {
-    return validateAuthenticatedUser(this.usersService, payload);
+    const sessionLookup: ImpersonationSessionLookup = {
+      validateSession: async (targetUserId: string, jti: string) => {
+        if (this.impersonationService?.validateSession) {
+          return this.impersonationService.validateSession(targetUserId, jti);
+        }
+        return this.redisService.get<{ adminId: string }>(
+          `nexafx:impersonation:${targetUserId}:${jti}`,
+        );
+      },
+    };
+
+    return validateAuthenticatedUser(this.usersService, payload, sessionLookup);
   }
 }

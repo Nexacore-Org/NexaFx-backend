@@ -149,7 +149,6 @@ export class RateAlertsService {
           fromCurrency,
           toCurrency,
         );
-        // @ts-ignore - Pre-existing type issue
         rateByPair.set(pair, new Decimal(String(rateResult.rate)));
       } catch (error) {
         const errorMessage =
@@ -180,8 +179,10 @@ export class RateAlertsService {
         continue;
       }
 
-      await this.triggerAlert(alert, currentRate);
-      triggered += 1;
+      const claimed = await this.triggerAlert(alert, currentRate);
+      if (claimed) {
+        triggered += 1;
+      }
     }
 
     return {
@@ -205,9 +206,23 @@ export class RateAlertsService {
   private async triggerAlert(
     alert: RateAlert,
     currentRate: Decimal,
-  ): Promise<void> {
-    const currentRateNum = currentRate.toNumber();
+  ): Promise<boolean> {
     const now = new Date();
+
+    // Atomically deactivate only if still active BEFORE dispatching notifications,
+    // preventing duplicate notifications when multiple scheduler instances race.
+    const updateResult = await this.rateAlertsRepository
+      .createQueryBuilder()
+      .update(RateAlert)
+      .set({ isActive: false, triggeredAt: now })
+      .where('id = :id AND "isActive" = true', { id: alert.id })
+      .execute();
+
+    if (!updateResult.affected || updateResult.affected === 0) {
+      return false;
+    }
+
+    const currentRateNum = currentRate.toNumber();
 
     await this.notificationsService.dispatch(
       alert.userId,
@@ -238,15 +253,6 @@ export class RateAlertsService {
         ),
       );
 
-    // Atomically deactivate only if still active, preventing a double-trigger
-    // when multiple scheduler instances evaluate the same alert concurrently.
-    await this.rateAlertsRepository
-      .createQueryBuilder()
-      .update(RateAlert)
-      .set({ isActive: false, triggeredAt: now })
-      .where('id = :id AND "isActive" = true', { id: alert.id })
-      .execute();
-
     await this.auditLogsService.logSystemEvent(
       AuditAction.RATE_ALERT_TRIGGERED,
       alert.id,
@@ -267,6 +273,8 @@ export class RateAlertsService {
       .catch((err) =>
         this.logger.error(`Webhook dispatch failed: ${err.message}`),
       );
+
+    return true;
   }
 
   private async reactivateRecurringAlerts(): Promise<number> {
@@ -292,51 +300,7 @@ export class RateAlertsService {
 
     return recurringAlerts.length;
   }
-// src/rate-alerts/rate-alerts.service.ts
-// (Locate and update the triggerAlert method roughly as follows:)
 
-async triggerAlert(alertId: string, currentRate: number): Promise<boolean> {
-  // 1. Perform the atomic claim FIRST using a conditional update
-  const updateResult = await this.rateAlertRepository.update(
-    { id: alertId, isActive: true }, // Ensures it hasn't already been triggered in this window
-    { isActive: false, lastTriggeredAt: new Date() }
-  );
-
-  // If affected is 0, another scheduler instance already claimed and triggered this alert
-  if (!updateResult.affected || updateResult.affected === 0) {
-    return false;
-  }
-
-  // 2. Only proceed with notifications, feed items, audit logs, and webhooks AFTER a successful claim
-  try {
-    const alert = await this.rateAlertRepository.findOne({ where: { id: alertId } });
-    if (!alert) return false;
-
-    // Dispatch notification
-    await this.notificationsService.dispatch({
-      recipientId: alert.userId,
-      channel: alert.notificationChannel || 'EMAIL',
-      payload: {
-        title: 'Rate Alert Triggered',
-        message: `Your rate alert for ${alert.currencyPair} has been triggered at rate ${currentRate}`,
-      },
-    });
-
-    // Append unified activity feed
-    await this.activityFeedService.append({
-      userId: alert.userId,
-      type: 'RATE_ALERT',
-      title: 'Rate Alert Triggered',
-      description: `Target rate reached for ${alert.currencyPair}`,
-    });
-
-    return true;
-  } catch (error) {
-    this.logger.error(`Failed to dispatch notifications for rate alert ${alertId}: ${error.message}`);
-    // Optional: rollback or handle failure state if required by business logic
-    throw error;
-  }
-}
   private toResponseDto(alert: RateAlert): RateAlertResponseDto {
     return {
       id: alert.id,

@@ -5,6 +5,7 @@ import type { StringValue } from 'ms';
 import { ExchangeRatesModule } from '../exchange-rates/exchange-rates.module';
 import { UsersModule } from '../users/users.module';
 import { RatesGateway } from './rates.gateway';
+import { MessagingGateway } from './messaging.gateway';
 import { WsJwtGuard } from './ws-jwt.guard';
 import { GatewaysController } from './gateways.controller';
 
@@ -35,6 +36,7 @@ import { GatewaysController } from './gateways.controller';
     }),
   ],
   controllers: [GatewaysController],
-  providers: [RatesGateway, WsJwtGuard],
+  providers: [RatesGateway, MessagingGateway, WsJwtGuard],
+  exports: [RatesGateway, MessagingGateway],
 })
 export class GatewaysModule {}

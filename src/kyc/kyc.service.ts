@@ -58,7 +58,35 @@ export class KycService {
     private readonly sanctionsService?: SanctionsService,
   ) {}
 
+  private isUniquePendingViolation(error: unknown): boolean {
+    if (!error || typeof error !== 'object') {
+      return false;
+    }
+    const err = error as {
+      code?: string;
+      driverError?: { code?: string };
+    };
+    return err.code === '23505' || err.driverError?.code === '23505';
+  }
+
   async applyForKyc(
+    userId: string,
+    targetTier: UserKycTier.STANDARD | UserKycTier.ENHANCED,
+    files: DocumentFiles,
+  ) {
+    try {
+      return await this.executeApplyForKyc(userId, targetTier, files);
+    } catch (error) {
+      if (this.isUniquePendingViolation(error)) {
+        throw new ConflictException(
+          'You already have a KYC submission under review.',
+        );
+      }
+      throw error;
+    }
+  }
+
+  private async executeApplyForKyc(
     userId: string,
     targetTier: UserKycTier.STANDARD | UserKycTier.ENHANCED,
     files: DocumentFiles,
@@ -107,7 +135,7 @@ export class KycService {
     });
 
     if (existingActiveKyc) {
-      throw new BadRequestException(
+      throw new ConflictException(
         'You already have a KYC submission under review.',
       );
     }
@@ -208,6 +236,7 @@ export class KycService {
     return this.dataSource.transaction(async (manager) => {
       const existingKyc = await manager.findOne(KYCApplication, {
         where: { id: applicationId, userId },
+        lock: { mode: 'pessimistic_write' },
       });
 
       if (
@@ -476,6 +505,7 @@ export class KycService {
     return this.dataSource.transaction(async (manager) => {
       const kyc = await manager.findOne(KYCApplication, {
         where: { id: kycId },
+        lock: { mode: 'pessimistic_write' },
       });
 
       if (!kyc) throw new NotFoundException('KYC application not found');
@@ -574,6 +604,7 @@ export class KycService {
     return this.dataSource.transaction(async (manager) => {
       const kyc = await manager.findOne(KYCApplication, {
         where: { id: kycId },
+        lock: { mode: 'pessimistic_write' },
       });
 
       if (!kyc) throw new BadRequestException('KYC application not found');

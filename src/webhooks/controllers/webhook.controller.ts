@@ -6,13 +6,18 @@ import {
   Delete,
   Body,
   Param,
+  ParseUUIDPipe,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { WebhookService } from '../services/webhook.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { CurrentUserPayload } from '../../common/interfaces/current-user-payload.interface';
+import {
+  CurrentUser,
+  CurrentUserPayload,
+} from '../../auth/decorators/current-user.decorator';
+import { CreateWebhookEndpointDto } from '../dto/create-webhook-endpoint.dto';
 import { UpdateWebhookEndpointDto } from '../dto/update-webhook-endpoint.dto';
 import { WEBHOOK_SCHEMA_VERSION_REGISTRY } from '../../modules/webhooks/schemas';
 
@@ -24,14 +29,27 @@ import { WEBHOOK_SCHEMA_VERSION_REGISTRY } from '../../modules/webhooks/schemas'
 export class WebhookController {
   constructor(private readonly webhookService: WebhookService) {}
 
+  private resolveUserId(
+    user:
+      | CurrentUserPayload
+      | { id?: string; user?: { id?: string; userId?: string } },
+  ): string {
+    return (
+      (user as CurrentUserPayload)?.userId ??
+      (user as { id?: string })?.id ??
+      (user as { user?: { userId?: string; id?: string } })?.user?.userId ??
+      (user as { user?: { id?: string } })?.user?.id ??
+      ''
+    );
+  }
+
   @Post()
   async create(
     @CurrentUser() user: CurrentUserPayload,
-    @Body()
-    body: { url: string; events: string[]; preferredSchemaVersion?: string },
+    @Body() body: CreateWebhookEndpointDto,
   ) {
     return this.webhookService.createEndpoint(
-      user.userId,
+      this.resolveUserId(user),
       body.url,
       body.events,
       body.preferredSchemaVersion,
@@ -40,7 +58,9 @@ export class WebhookController {
 
   @Get()
   async list(@CurrentUser() user: CurrentUserPayload) {
-    const endpoints = await this.webhookService.listEndpoints(user.userId);
+    const endpoints = await this.webhookService.listEndpoints(
+      this.resolveUserId(user),
+    );
     return endpoints.map(({ secret, ...rest }) => rest);
   }
 
@@ -59,11 +79,11 @@ export class WebhookController {
   })
   async update(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() body: UpdateWebhookEndpointDto,
   ) {
     const { secret, ...rest } = await this.webhookService.updateEndpoint(
-      user.userId,
+      this.resolveUserId(user),
       id,
       body,
     );
@@ -73,9 +93,9 @@ export class WebhookController {
   @Delete(':id')
   async remove(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ) {
-    await this.webhookService.deleteEndpoint(user.userId, id);
+    await this.webhookService.deleteEndpoint(this.resolveUserId(user), id);
     return { success: true };
   }
 
@@ -86,35 +106,50 @@ export class WebhookController {
   })
   async rotateSecret(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.webhookService.rotateSecret(user.userId, id);
+    return this.webhookService.rotateSecret(this.resolveUserId(user), id);
   }
 
   @Get(':id/deliveries')
   async getDeliveries(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.webhookService.getDeliveryHistory(id, user.userId);
+    const userId = this.resolveUserId(user);
+    if (page !== undefined || limit !== undefined) {
+      return this.webhookService.getDeliveryHistory(
+        id,
+        userId,
+        page !== undefined ? Number(page) : undefined,
+        limit !== undefined ? Number(limit) : undefined,
+      );
+    }
+    return this.webhookService.getDeliveryHistory(id, userId);
   }
 
   @Post(':id/test')
   async testEndpoint(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ) {
-    await this.webhookService.testEndpoint(id, user.userId);
+    await this.webhookService.testEndpoint(id, this.resolveUserId(user));
     return { success: true };
   }
 
   @Post(':id/redeliver/:deliveryId')
   async redeliver(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
-    @Param('deliveryId') deliveryId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('deliveryId', ParseUUIDPipe) deliveryId: string,
   ) {
-    await this.webhookService.redeliver(id, deliveryId, user.userId);
+    await this.webhookService.redeliver(
+      id,
+      deliveryId,
+      this.resolveUserId(user),
+    );
     return { success: true };
   }
 }

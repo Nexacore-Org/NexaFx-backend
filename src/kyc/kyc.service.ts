@@ -3,9 +3,9 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ServiceUnavailableException,
   Logger,
   Inject,
-  Optional,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -54,8 +54,7 @@ export class KycService {
     @Inject(STORAGE_SERVICE_TOKEN)
     private readonly storageService: StorageService,
     private readonly activityFeedService: UnifiedActivityFeedService,
-    @Optional()
-    private readonly sanctionsService?: SanctionsService,
+    private readonly sanctionsService: SanctionsService,
   ) {}
 
   async applyForKyc(
@@ -473,6 +472,72 @@ export class KycService {
   }
 
   async approveKyc(kycId: string, reviewerId: string) {
+    if (!this.sanctionsService) {
+      throw new ServiceUnavailableException(
+        'Approval refused: sanctions screening service is unavailable.',
+      );
+    }
+
+    const pendingKyc = await this.kycRepository.findOne({
+      where: { id: kycId },
+    });
+
+    if (!pendingKyc) throw new NotFoundException('KYC application not found');
+
+    if (pendingKyc.status !== KycStatus.PENDING) {
+      throw new BadRequestException('Only pending submissions can be approved');
+    }
+
+    const applicant = await this.userRepository.findOne({
+      where: { id: pendingKyc.userId },
+    });
+    if (!applicant) throw new NotFoundException('User not found');
+
+    // Run sanctions screening outside the DB transaction so outbound HTTP calls
+    // to OpenSanctions/OFAC never hold a database transaction or row lock open.
+    const latestScreening =
+      typeof this.sanctionsService.getLatestScreening === 'function'
+        ? await this.sanctionsService.getLatestScreening(applicant.id)
+        : null;
+
+    const isOverriddenClear =
+      latestScreening?.status === ScreeningStatus.CLEAR &&
+      Boolean(latestScreening.overriddenBy);
+
+    const screening = isOverriddenClear
+      ? latestScreening
+      : await this.sanctionsService.screenUser(applicant.id);
+
+    if (!screening) {
+      throw new ServiceUnavailableException(
+        'Approval refused: sanctions screening did not return a result.',
+      );
+    }
+
+    if (screening.status === ScreeningStatus.BLOCKED) {
+      throw new ConflictException(
+        'Approval refused: this applicant is blocked by sanctions screening.',
+      );
+    }
+
+    if (screening.status === ScreeningStatus.WARNING) {
+      throw new ConflictException(
+        'Approval refused: sanctions screening returned WARNING and requires manual compliance review or override.',
+      );
+    }
+
+    if (screening.status === ScreeningStatus.ERROR) {
+      throw new ServiceUnavailableException(
+        'Approval refused: sanctions screening failed due to a provider error. Please retry once providers recover.',
+      );
+    }
+
+    if (screening.status !== ScreeningStatus.CLEAR) {
+      throw new ConflictException(
+        `Approval refused: sanctions screening status is ${String(screening.status)}.`,
+      );
+    }
+
     return this.dataSource.transaction(async (manager) => {
       const kyc = await manager.findOne(KYCApplication, {
         where: { id: kycId },
@@ -488,15 +553,6 @@ export class KycService {
 
       const user = await manager.findOne(User, { where: { id: kyc.userId } });
       if (!user) throw new NotFoundException('User not found');
-
-      // Screen before the tier is granted: a sanctions hit has to block the
-      // approval instead of being recorded after the user already has access.
-      const screening = await this.sanctionsService?.screenUser(user.id);
-      if (screening?.status === ScreeningStatus.BLOCKED) {
-        throw new ConflictException(
-          'Approval refused: this applicant is blocked by sanctions screening.',
-        );
-      }
 
       kyc.status = KycStatus.APPROVED;
       kyc.reviewedBy = reviewerId;

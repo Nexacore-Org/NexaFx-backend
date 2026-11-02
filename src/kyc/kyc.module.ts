@@ -9,7 +9,6 @@ import { KycGuard } from '../common/guards/kyc.guard';
 import { User } from '../users/user.entity';
 import { WebhooksModule } from '../webhooks/webhooks.module';
 import { StorageModule } from '../modules/storage/storage.module';
-import { forwardRef } from '@nestjs/common';
 import { SanctionsModule } from '../sanctions/sanctions.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { UnifiedActivityFeedModule } from '../unified-activity-feed/unified-activity-feed.module';
@@ -23,7 +22,7 @@ import { UnifiedActivityFeedModule } from '../unified-activity-feed/unified-acti
       limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB for video selfies
     }),
     StorageModule,
-    forwardRef(() => SanctionsModule),
+    SanctionsModule,
     UnifiedActivityFeedModule,
   ],
   controllers: [KycController],

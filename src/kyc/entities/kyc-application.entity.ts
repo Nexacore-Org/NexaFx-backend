@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { User } from '../../users/user.entity';
 import { UserKycTier } from '../../users/enums/user-kyc-tier.enum';
@@ -18,6 +19,10 @@ export enum KycStatus {
 }
 
 @Entity('kyc_applications')
+@Index('UQ_kyc_applications_user_pending', ['userId'], {
+  unique: true,
+  where: `"status" = 'PENDING'`,
+})
 export class KYCApplication {
   @PrimaryGeneratedColumn('uuid')
   id: string;

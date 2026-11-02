@@ -13,6 +13,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import { AddMissingIndexes1715421500000 } from './1715421500000-AddMissingIndexes';
+import { CreateWebhookPushAndSmsTables1769000000000 } from './1769000000000-CreateWebhookPushAndSmsTables';
 
 // ---------------------------------------------------------------------------
 // Helpers extracted from validate-migrations.ts (mirrored here for unit testing)
@@ -309,5 +310,58 @@ describe('AddMissingIndexes1715421500000', () => {
     expect(kycIndex).toBeDefined();
     expect(kycIndex?.table).toBe('kyc_records');
     expect(kycIndex?.columns).toBe('"userId"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #1510 / #1292 — webhook_endpoints, webhook_deliveries, push_notifications, sms_provider_routes
+// ---------------------------------------------------------------------------
+
+describe('CreateWebhookPushAndSmsTables1769000000000 (#1510)', () => {
+  it('creates webhook_endpoints, webhook_deliveries, push_notifications, and sms_provider_routes on an empty DB and drops them cleanly in down()', async () => {
+    const migration = new CreateWebhookPushAndSmsTables1769000000000();
+    const queries: string[] = [];
+    const queryRunner = {
+      hasTable: jest.fn().mockResolvedValue(false),
+      query: jest.fn(async (sql: string) => {
+        queries.push(sql);
+      }),
+    };
+
+    await migration.up(queryRunner as any);
+
+    const combinedUp = queries.join('\n');
+    expect(combinedUp).toContain(
+      'CREATE TABLE IF NOT EXISTS "webhook_endpoints"',
+    );
+    expect(combinedUp).toContain('"previousSecret"');
+    expect(combinedUp).toContain('"previousSecretExpiresAt"');
+    expect(combinedUp).toContain('"preferredSchemaVersion"');
+
+    expect(combinedUp).toContain(
+      'CREATE TABLE IF NOT EXISTS "webhook_deliveries"',
+    );
+    expect(combinedUp).toContain('IDX_webhook_deliveries_endpointId');
+    expect(combinedUp).toContain('IDX_webhook_deliveries_nextRetryAt');
+
+    expect(combinedUp).toContain(
+      'CREATE TABLE IF NOT EXISTS "push_notifications"',
+    );
+    expect(combinedUp).toContain('IDX_push_notifications_status_createdAt');
+
+    expect(combinedUp).toContain(
+      'CREATE TABLE IF NOT EXISTS "sms_provider_routes"',
+    );
+    expect(combinedUp).toContain('IDX_sms_provider_routes_countryCode');
+
+    queries.length = 0;
+    await migration.down(queryRunner as any);
+    const combinedDown = queries.join('\n');
+    expect(combinedDown).toContain(
+      'DROP TABLE IF EXISTS "sms_provider_routes"',
+    );
+    expect(combinedDown).toContain('DROP TABLE IF EXISTS "push_notifications"');
+    expect(combinedDown).toContain('DROP TABLE IF EXISTS "webhook_deliveries"');
+    expect(combinedDown).toContain('DROP TABLE IF EXISTS "webhook_endpoints"');
   });
 });

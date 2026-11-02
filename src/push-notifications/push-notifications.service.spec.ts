@@ -1,8 +1,40 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 
-// Mock firebase.service before any module imports that transitively load it
+jest.mock('@nestjs/typeorm', () => {
+  const { Inject } = require('@nestjs/common');
+  const getRepositoryToken = (entity: any) =>
+    `${entity?.name ?? 'Entity'}Repository`;
+  return {
+    InjectRepository: (entity: any) => Inject(getRepositoryToken(entity)),
+    getRepositoryToken,
+  };
+});
+
+jest.mock('@nestjs/bullmq', () => {
+  const { Inject } = require('@nestjs/common');
+  const getQueueToken = (name: string) => `BullQueue_${name}`;
+  return {
+    InjectQueue: (name: string) => Inject(getQueueToken(name)),
+    getQueueToken,
+  };
+});
+
+jest.mock('@nestjs/swagger', () => {
+  const noop = () => () => undefined;
+  return {
+    ApiProperty: noop,
+    ApiPropertyOptional: noop,
+    ApiTags: noop,
+    ApiOperation: noop,
+    ApiResponse: noop,
+    ApiBearerAuth: noop,
+    ApiBody: noop,
+    ApiQuery: noop,
+    ApiParam: noop,
+  };
+});
+
 jest.mock('../firebase/firebase.service', () => ({
   FirebaseService: class {
     sendToTokens = jest.fn().mockResolvedValue(undefined);
@@ -10,6 +42,19 @@ jest.mock('../firebase/firebase.service', () => ({
   },
 }));
 
+jest.mock('../notifications/notifications.service', () => ({
+  NotificationsService: class NotificationsService {},
+}));
+
+jest.mock('../users/users.service', () => ({
+  UsersService: class UsersService {},
+}));
+
+jest.mock('../audit-logs/audit-logs.service', () => ({
+  AuditLogsService: class AuditLogsService {},
+}));
+
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { PushNotificationsService } from './push-notifications.service';
 import {
   PushNotification,
@@ -33,12 +78,14 @@ const mockPushNotificationRepo = () => ({
 
 const mockNotificationsService = () => ({
   create: jest.fn().mockResolvedValue({}),
+  createMany: jest.fn().mockResolvedValue([]),
   dispatch: jest.fn().mockResolvedValue(undefined),
 });
 
 const mockUsersService = () => ({
   findByEmail: jest.fn(),
   findById: jest.fn(),
+  findActiveUsersForBroadcast: jest.fn().mockResolvedValue([]),
 });
 
 const mockAuditLogsService = () => ({
@@ -100,19 +147,19 @@ describe('PushNotificationsService', () => {
 
   // ─── createBroadcast() ─────────────────────────────────────────────────────
   describe('createBroadcast()', () => {
-    it('creates broadcast, sends individual notifications, and logs audit', async () => {
+    it('creates broadcast, fans out via findActiveUsersForBroadcast and createMany, and logs audit', async () => {
       const activeUsers = [
         { id: 'user-1', fcmTokens: ['token-1'] },
         { id: 'user-2', fcmTokens: [] },
       ];
-      // The service calls (this.usersService as any).findAllActive — patch it directly
-      (service as any).usersService.findAllActive = jest
-        .fn()
-        .mockResolvedValue(activeUsers);
+      usersService.findActiveUsersForBroadcast.mockResolvedValueOnce(
+        activeUsers,
+      );
 
-      const broadcast = makeBroadcast({ recipientCount: 2 });
+      const broadcast = makeBroadcast({ recipientCount: 0 });
       pushRepo.create.mockReturnValue(broadcast);
       pushRepo.save.mockResolvedValue(broadcast);
+      pushRepo.update.mockResolvedValue({ affected: 1 });
 
       const result = await service.createBroadcast('admin-1', {
         title: 'Test Broadcast',
@@ -128,19 +175,32 @@ describe('PushNotificationsService', () => {
         }),
       );
       expect(pushRepo.save).toHaveBeenCalledTimes(1);
+      expect(usersService.findActiveUsersForBroadcast).toHaveBeenCalledWith(
+        null,
+        500,
+      );
+      expect(notificationsService.createMany).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ userId: 'user-1' }),
+          expect.objectContaining({ userId: 'user-2' }),
+        ]),
+      );
+      expect(pushRepo.update).toHaveBeenCalledWith('broadcast-1', {
+        recipientCount: 2,
+      });
       expect(auditLogsService.createLog).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 'admin-1',
           action: 'CREATE_BROADCAST',
+          metadata: expect.objectContaining({ recipientCount: 2 }),
         }),
       );
       expect(result.id).toBe('broadcast-1');
+      expect(result.recipientCount).toBe(2);
     });
 
     it('creates broadcast with zero recipients when no active users', async () => {
-      (service as any).usersService.findAllActive = jest
-        .fn()
-        .mockResolvedValue([]);
+      usersService.findActiveUsersForBroadcast.mockResolvedValue([]);
 
       const broadcast = makeBroadcast({ recipientCount: 0 });
       pushRepo.create.mockReturnValue(broadcast);
@@ -152,18 +212,16 @@ describe('PushNotificationsService', () => {
       });
 
       expect(notificationsService.create).not.toHaveBeenCalled();
+      expect(notificationsService.createMany).not.toHaveBeenCalled();
       expect(firebaseService.sendToTokens).not.toHaveBeenCalled();
       expect(result).toBeDefined();
     });
 
     it('does not call sendToTokens when no FCM tokens available', async () => {
-      const activeUsers = [
-        { id: 'user-1', fcmTokens: [] },
-        { id: 'user-2' }, // no fcmTokens property
-      ];
-      (service as any).usersService.findAllActive = jest
-        .fn()
-        .mockResolvedValue(activeUsers);
+      const activeUsers = [{ id: 'user-1', fcmTokens: [] }, { id: 'user-2' }];
+      usersService.findActiveUsersForBroadcast.mockResolvedValueOnce(
+        activeUsers,
+      );
 
       const broadcast = makeBroadcast({ recipientCount: 2 });
       pushRepo.create.mockReturnValue(broadcast);
@@ -178,9 +236,7 @@ describe('PushNotificationsService', () => {
     });
 
     it('wraps unexpected errors in BadRequestException', async () => {
-      (service as any).usersService.findAllActive = jest
-        .fn()
-        .mockResolvedValue([]);
+      usersService.findActiveUsersForBroadcast.mockResolvedValue([]);
       pushRepo.create.mockReturnValue(makeBroadcast());
       pushRepo.save.mockRejectedValue(new Error('DB connection lost'));
 
@@ -303,8 +359,8 @@ describe('PushNotificationsService', () => {
       });
 
       pushRepo.findOne
-        .mockResolvedValueOnce(active) // first findOne to check existence
-        .mockResolvedValueOnce(inactive); // second findOne to return updated
+        .mockResolvedValueOnce(active)
+        .mockResolvedValueOnce(inactive);
       pushRepo.update.mockResolvedValue({ affected: 1 });
 
       const result = await service.deactivateBroadcast(
@@ -361,7 +417,7 @@ describe('PushNotificationsService', () => {
     });
 
     it('throws BadRequestException when only some broadcasts are found', async () => {
-      pushRepo.find.mockResolvedValue([makeBroadcast()]); // 1 found, 2 requested
+      pushRepo.find.mockResolvedValue([makeBroadcast()]);
 
       await expect(
         service.bulkDeactivate(['id-1', 'id-2'], 'admin-1'),

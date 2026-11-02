@@ -1,4 +1,84 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { PATH_METADATA } from '@nestjs/common/constants';
+
+jest.mock('@nestjs/typeorm', () => ({
+  InjectRepository: () => () => {},
+  getRepositoryToken: (entity: any) => `${entity?.name ?? 'Entity'}Repository`,
+  TypeOrmModule: { forFeature: () => ({}) },
+}));
+
+jest.mock('@nestjs/bullmq', () => ({
+  InjectQueue: () => () => {},
+  getQueueToken: (name: string) => `BullQueue_${name}`,
+  BullModule: { registerQueue: () => ({}) },
+}));
+
+jest.mock('@nestjs/config', () => ({
+  ConfigService: class {},
+  ConfigModule: { forRoot: () => ({}) },
+}));
+
+jest.mock('../users/users.service', () => ({
+  UsersService: class {},
+}));
+
+jest.mock('../notifications/notifications.service', () => ({
+  NotificationsService: class {},
+}));
+
+jest.mock('@nestjs/swagger', () => {
+  const noop = () => () => {};
+  return {
+    ApiTags: noop,
+    ApiOperation: noop,
+    ApiResponse: noop,
+    ApiBearerAuth: noop,
+    ApiBody: noop,
+    ApiParam: noop,
+    ApiQuery: noop,
+    ApiProperty: noop,
+    ApiPropertyOptional: noop,
+    PartialType: (cls: any) => cls,
+    OmitType: (cls: any) => cls,
+    PickType: (cls: any) => cls,
+  };
+});
+
+jest.mock('../common/guards/jwt-auth.guard', () => ({
+  JwtAuthGuard: class {
+    canActivate() {
+      return true;
+    }
+  },
+}));
+
+jest.mock('../auth/guards/roles.guard', () => ({
+  RolesGuard: class {
+    canActivate() {
+      return true;
+    }
+  },
+}));
+
+jest.mock('../common', () => ({
+  AuditAction: {
+    CREATE_BROADCAST: 'CREATE_BROADCAST',
+    DEACTIVATE_BROADCAST: 'DEACTIVATE_BROADCAST',
+    BULK_DEACTIVATE_BROADCASTS: 'BULK_DEACTIVATE_BROADCASTS',
+  },
+  AuditLogsService: class {},
+  TransformResponseInterceptor: class {
+    intercept(_ctx: any, next: any) {
+      return next.handle();
+    }
+  },
+  AuditLogInterceptor: class {
+    intercept(_ctx: any, next: any) {
+      return next.handle();
+    }
+  },
+  AuditLog: () => () => {},
+}));
 
 // Mock firebase.service before any module imports that transitively load it
 jest.mock('../firebase/firebase.service', () => ({
@@ -159,6 +239,25 @@ describe('PushNotificationsController', () => {
 
       expect(pushService.bulkDeactivate).toHaveBeenCalledWith(ids, 'admin-1');
       expect(result).toEqual({ deactivated: 3 });
+    });
+
+    it('declares bulk/deactivate route before :id/deactivate so it is not shadowed', () => {
+      const methodNames = Object.getOwnPropertyNames(
+        PushNotificationsController.prototype,
+      );
+      const bulkIdx = methodNames.indexOf('bulkDeactivate');
+      const deactivateIdx = methodNames.indexOf('deactivateBroadcast');
+      const getIdx = methodNames.indexOf('getBroadcast');
+
+      expect(bulkIdx).toBeGreaterThan(-1);
+      expect(bulkIdx).toBeLessThan(deactivateIdx);
+      expect(bulkIdx).toBeLessThan(getIdx);
+      expect(
+        Reflect.getMetadata(
+          PATH_METADATA,
+          PushNotificationsController.prototype.bulkDeactivate,
+        ),
+      ).toBe('bulk/deactivate');
     });
   });
 });

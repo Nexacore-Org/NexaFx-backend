@@ -176,9 +176,7 @@ export class UsersService {
     const attempts = Number(result?.raw?.[0]?.failedLoginAttempts ?? 0);
 
     if (attempts >= maxAttempts) {
-      const lockedUntil = new Date(
-        Date.now() + lockoutMinutes * 60_000,
-      );
+      const lockedUntil = new Date(Date.now() + lockoutMinutes * 60_000);
       await this.userRepository.update(userId, {
         failedLoginAttempts: 0,
         lockedUntil,
@@ -689,5 +687,33 @@ export class UsersService {
       user.fcmTokens = [...currentTokens, fcmToken];
     }
     await this.userRepository.save(user);
+  }
+
+  /**
+   * Fetch active, verified, non-suspended, non-deleted users for broadcast fan-out
+   * using keyset pagination on `id` (with numeric offset fallback).
+   */
+  async findActiveUsersForBroadcast(
+    cursor?: string | number | null,
+    limit = 500,
+  ): Promise<Pick<User, 'id' | 'fcmTokens'>[]> {
+    const safeLimit = Math.max(1, Math.min(limit, 1000));
+    const qb = this.userRepository
+      .createQueryBuilder('user')
+      .select(['user.id', 'user.fcmTokens'])
+      .where('user.isActive = :isActive', { isActive: true })
+      .andWhere('user.isVerified = :isVerified', { isVerified: true })
+      .andWhere('user.isSuspended = :isSuspended', { isSuspended: false })
+      .andWhere('user.isDeleted = :isDeleted', { isDeleted: false })
+      .orderBy('user.id', 'ASC')
+      .take(safeLimit);
+
+    if (typeof cursor === 'string' && cursor.trim().length > 0) {
+      qb.andWhere('user.id > :cursor', { cursor: cursor.trim() });
+    } else if (typeof cursor === 'number' && cursor > 0) {
+      qb.skip(cursor);
+    }
+
+    return qb.getMany();
   }
 }

@@ -9,7 +9,7 @@ import {
   setupTestDatabase,
 } from '../helpers/db.helper';
 
-describe('Escrow Lifecycle E2E Tests (#965)', () => {
+describe('Escrow Lifecycle E2E Tests (#965, #1487)', () => {
   let app: INestApplication;
   let dataSource: DataSource;
   let senderToken: string;
@@ -53,7 +53,7 @@ describe('Escrow Lifecycle E2E Tests (#965)', () => {
 
     senderToken = senderResponse.body.accessToken;
     const senderResult = await dataSource.query(
-      `SELECT id FROM "user" WHERE email = $1`,
+      `SELECT id FROM "users" WHERE email = $1`,
       [senderEmail],
     );
     senderId = senderResult[0].id;
@@ -80,13 +80,13 @@ describe('Escrow Lifecycle E2E Tests (#965)', () => {
 
     recipientToken = recipientResponse.body.accessToken;
     const recipientResult = await dataSource.query(
-      `SELECT id FROM "user" WHERE email = $1`,
+      `SELECT id FROM "users" WHERE email = $1`,
       [recipientEmail],
     );
     recipientId = recipientResult[0].id;
 
     // Give sender some balance
-    await dataSource.query(`UPDATE "user" SET balances = $1 WHERE id = $2`, [
+    await dataSource.query(`UPDATE "users" SET balances = $1 WHERE id = $2`, [
       JSON.stringify({ XLM: 1000 }),
       senderId,
     ]);
@@ -136,8 +136,8 @@ describe('Escrow Lifecycle E2E Tests (#965)', () => {
       expect(response.body.amount).toBe('100.00000000');
     });
 
-    it('rejects escrow with non-existent recipient', async () => {
-      await request(app.getHttpServer())
+    it('rejects escrow with non-existent, suspended, or unverified recipient with indistinguishable 400 response (#1487)', async () => {
+      const unknownRes = await request(app.getHttpServer())
         .post('/escrow')
         .set('Authorization', `Bearer ${senderToken}`)
         .send({
@@ -148,7 +148,88 @@ describe('Escrow Lifecycle E2E Tests (#965)', () => {
           description: 'Test',
           releaseCondition: 'Test',
         })
-        .expect(404);
+        .expect(400);
+
+      await dataSource.query(
+        `UPDATE "users" SET "isSuspended" = true WHERE id = $1`,
+        [recipientId],
+      );
+
+      const suspendedRes = await request(app.getHttpServer())
+        .post('/escrow')
+        .set('Authorization', `Bearer ${senderToken}`)
+        .send({
+          recipientEmail: 'recipient-escrow@example.com',
+          amount: 100,
+          currency: 'XLM',
+          title: 'Test',
+          description: 'Test',
+          releaseCondition: 'Test',
+        })
+        .expect(400);
+
+      expect(suspendedRes.body.message).toEqual(unknownRes.body.message);
+
+      const unverifiedUser = await seedTestUser(dataSource, {
+        email: 'unverified-recipient@example.com',
+        isVerified: false,
+      });
+
+      const unverifiedRes = await request(app.getHttpServer())
+        .post('/escrow')
+        .set('Authorization', `Bearer ${senderToken}`)
+        .send({
+          recipientEmail: unverifiedUser.email,
+          amount: 100,
+          currency: 'XLM',
+          title: 'Test',
+          description: 'Test',
+          releaseCondition: 'Test',
+        })
+        .expect(400);
+
+      expect(unverifiedRes.body.message).toEqual(unknownRes.body.message);
+    });
+  });
+
+  describe('Cancelling a pending escrow (#1487)', () => {
+    let escrowId: string;
+
+    beforeEach(async () => {
+      const createResponse = await request(app.getHttpServer())
+        .post('/escrow')
+        .set('Authorization', `Bearer ${senderToken}`)
+        .send({
+          recipientEmail: 'recipient-escrow@example.com',
+          amount: 50,
+          currency: 'XLM',
+          title: 'Cancelable escrow',
+          description: 'For cancel testing',
+          releaseCondition: 'Complete work',
+        })
+        .expect(201);
+      escrowId = createResponse.body.id;
+    });
+
+    it('allows the sender to cancel a PENDING escrow', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/escrow/${escrowId}/cancel`)
+        .set('Authorization', `Bearer ${senderToken}`)
+        .expect(200);
+
+      expect(res.body.status).toBe('CANCELLED');
+    });
+
+    it('forbids recipient or third party from cancelling a PENDING escrow', async () => {
+      await request(app.getHttpServer())
+        .post(`/escrow/${escrowId}/cancel`)
+        .set('Authorization', `Bearer ${recipientToken}`)
+        .expect(403);
+
+      await request(app.getHttpServer())
+        .post(`/escrow/${escrowId}/cancel`)
+        .set('Authorization', `Bearer ${thirdPartyToken}`)
+        .expect(403);
     });
   });
 
@@ -296,8 +377,7 @@ describe('Escrow Lifecycle E2E Tests (#965)', () => {
     });
 
     it('users can only see escrows they are party to', async () => {
-      // Create escrow between sender and recipient
-      const createResponse = await request(app.getHttpServer())
+      await request(app.getHttpServer())
         .post('/escrow')
         .set('Authorization', `Bearer ${senderToken}`)
         .send({
@@ -309,7 +389,6 @@ describe('Escrow Lifecycle E2E Tests (#965)', () => {
           releaseCondition: 'Deliver',
         });
 
-      // Sender can see their escrows
       const senderEscrows = await request(app.getHttpServer())
         .get('/escrow')
         .set('Authorization', `Bearer ${senderToken}`)
@@ -317,7 +396,6 @@ describe('Escrow Lifecycle E2E Tests (#965)', () => {
 
       expect(senderEscrows.body.length).toBeGreaterThan(0);
 
-      // Recipient can also see escrows they are in
       const recipientEscrows = await request(app.getHttpServer())
         .get('/escrow')
         .set('Authorization', `Bearer ${recipientToken}`)
@@ -325,7 +403,6 @@ describe('Escrow Lifecycle E2E Tests (#965)', () => {
 
       expect(recipientEscrows.body.length).toBeGreaterThan(0);
 
-      // Third party sees no escrows
       const thirdEscrows = await request(app.getHttpServer())
         .get('/escrow')
         .set('Authorization', `Bearer ${thirdPartyToken}`)

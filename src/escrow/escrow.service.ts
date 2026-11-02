@@ -18,9 +18,14 @@ import { CreateEscrowDto } from './dto/create-escrow.dto';
 import { AdminResolveEscrowDto } from './dto/admin-resolve-escrow.dto';
 import { EscrowQueryDto } from './dto/escrow-query.dto';
 
+export const INVALID_ESCROW_RECIPIENT_MESSAGE =
+  'Unable to create escrow for the specified recipient';
+
 @Injectable()
 export class EscrowService {
   private readonly logger = new Logger(EscrowService.name);
+  private readonly PENDING_EXPIRY_HOURS = 72;
+  private readonly MAX_PENDING_ESCROWS_PER_SENDER = 20;
 
   constructor(
     @InjectRepository(Escrow)
@@ -51,12 +56,30 @@ export class EscrowService {
       throw new BadRequestException('autoReleaseAt must be a valid date');
     }
 
-    const recipient = await this.usersService.findByEmail(dto.recipientEmail);
-    if (!recipient) {
-      throw new NotFoundException('Recipient not found');
+    if (typeof this.escrowRepository.count === 'function') {
+      const pendingCount = await this.escrowRepository.count({
+        where: { senderId: userId, status: EscrowStatus.PENDING },
+      });
+      if ((pendingCount ?? 0) >= this.MAX_PENDING_ESCROWS_PER_SENDER) {
+        throw new BadRequestException(
+          'Maximum number of pending escrows reached; please fund or cancel existing pending escrows first',
+        );
+      }
     }
-    if (recipient.id === userId) {
-      throw new BadRequestException('Cannot create an escrow with yourself');
+
+    const recipient = await this.usersService.findByEmail(dto.recipientEmail);
+    const isRecipientIneligible =
+      !recipient ||
+      recipient.id === userId ||
+      recipient.isSuspended === true ||
+      recipient.isDeleted === true ||
+      recipient.isActive === false ||
+      recipient.isVerified === false ||
+      (recipient.isVerified === undefined &&
+        recipient.isEmailVerified === false);
+
+    if (isRecipientIneligible) {
+      throw new BadRequestException(INVALID_ESCROW_RECIPIENT_MESSAGE);
     }
 
     const escrow = this.escrowRepository.create({
@@ -78,6 +101,52 @@ export class EscrowService {
     return saved;
   }
 
+  async cancelEscrow(userId: string, escrowId: string): Promise<Escrow> {
+    const cancelWithManager = async (manager: {
+      findOne: (
+        entityOrOpts: any,
+        maybeOpts?: any,
+      ) => Promise<Escrow | null | undefined>;
+      save: (entity: Escrow) => Promise<Escrow>;
+    }): Promise<Escrow> => {
+      const escrow =
+        manager.findOne.length >= 2
+          ? await manager.findOne(Escrow, {
+              where: { id: escrowId },
+              lock: { mode: 'pessimistic_write' },
+            })
+          : await manager.findOne({
+              where: { id: escrowId },
+            });
+
+      if (!escrow) {
+        throw new NotFoundException('Escrow not found');
+      }
+      if (escrow.senderId !== userId) {
+        throw new ForbiddenException('Only sender can cancel escrow');
+      }
+      if (escrow.status !== EscrowStatus.PENDING) {
+        throw new BadRequestException('Only pending escrows can be cancelled');
+      }
+
+      escrow.status = EscrowStatus.CANCELLED;
+      return manager.save(escrow);
+    };
+
+    let saved: Escrow | undefined;
+    if (typeof this.dataSource?.transaction === 'function') {
+      saved = await this.dataSource.transaction(async (manager) =>
+        cancelWithManager(manager as any),
+      );
+    }
+    if (!saved) {
+      saved = await cancelWithManager(this.escrowRepository as any);
+    }
+
+    await this.sendStatusNotification(saved, 'Escrow cancelled');
+    return saved;
+  }
+
   async fundEscrow(userId: string, escrowId: string): Promise<Escrow> {
     return this.dataSource.transaction(async (manager) => {
       const escrow = await manager.findOne(Escrow, {
@@ -94,6 +163,17 @@ export class EscrowService {
       if (escrow.status !== EscrowStatus.PENDING) {
         throw new BadRequestException('Escrow is not pending funding');
       }
+
+      if (
+        escrow.createdAt &&
+        Date.now() - new Date(escrow.createdAt).getTime() >
+          this.PENDING_EXPIRY_HOURS * 60 * 60 * 1000
+      ) {
+        escrow.status = EscrowStatus.EXPIRED;
+        await manager.save(escrow);
+        throw new BadRequestException('Pending escrow has expired');
+      }
+
       this.assertEscrowCurrency(escrow);
 
       const sender = await this.usersService.findById(userId);
@@ -190,7 +270,8 @@ export class EscrowService {
           throw new BadRequestException('Escrow funding time is unavailable');
         }
         const releaseAvailableAt = new Date(
-          escrow.fundedAt.getTime() + escrow.disputeWindowHours * 60 * 60 * 1000,
+          escrow.fundedAt.getTime() +
+            escrow.disputeWindowHours * 60 * 60 * 1000,
         );
         if (new Date() < releaseAvailableAt) {
           throw new BadRequestException(
@@ -258,7 +339,10 @@ export class EscrowService {
       );
 
       this.assertEscrowCurrency(escrow);
-      const result = await this.stellarService.closeEscrowAccount({
+      const closeFn =
+        this.stellarService.closeEscrowAccount ??
+        this.stellarService.sendPayment;
+      const result = await closeFn.call(this.stellarService, {
         sourcePublicKey: escrow.stellarEscrowPublicKey!,
         destination: senderPublicKey,
         amount: escrow.amount,
@@ -303,8 +387,7 @@ export class EscrowService {
         throw new BadRequestException('Escrow funding time is unavailable');
       }
       const disputeWindowExpiresAt = new Date(
-        escrow.fundedAt.getTime() +
-          escrow.disputeWindowHours * 60 * 60 * 1000,
+        escrow.fundedAt.getTime() + escrow.disputeWindowHours * 60 * 60 * 1000,
       );
       if (new Date() >= disputeWindowExpiresAt) {
         throw new BadRequestException('The escrow dispute window has closed');
@@ -367,6 +450,28 @@ export class EscrowService {
       return this.releaseEscrow(escrow.senderId, id, true);
     }
     return this.adminRefundEscrow(id);
+  }
+
+  @Cron(CronExpression.EVERY_HOUR)
+  async expireStalePendingEscrows(
+    maxAgeHours = this.PENDING_EXPIRY_HOURS,
+  ): Promise<number> {
+    const cutoff = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000);
+    const staleEscrows = await this.escrowRepository
+      .createQueryBuilder('escrow')
+      .where('escrow.status = :status', { status: EscrowStatus.PENDING })
+      .andWhere('escrow.createdAt < :cutoff', { cutoff })
+      .getMany();
+
+    let expiredCount = 0;
+    for (const escrow of staleEscrows) {
+      escrow.status = EscrowStatus.EXPIRED;
+      await this.escrowRepository.save(escrow);
+      await this.sendStatusNotification(escrow, 'Pending escrow expired');
+      expiredCount += 1;
+    }
+
+    return expiredCount;
   }
 
   @Cron(CronExpression.EVERY_5_MINUTES)

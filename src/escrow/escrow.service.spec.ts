@@ -1,3 +1,61 @@
+jest.mock('@nestjs/typeorm', () => {
+  const { Inject } = require('@nestjs/common');
+  const getRepositoryToken = (entity: any) =>
+    `${typeof entity === 'function' ? entity.name : String(entity)}Repository`;
+  return {
+    InjectRepository: (entity: any) => Inject(getRepositoryToken(entity)),
+    getRepositoryToken,
+    TypeOrmModule: { forFeature: () => ({}), forRoot: () => ({}) },
+  };
+});
+
+jest.mock('@stellar/stellar-sdk', () => ({
+  StrKey: { isValidEd25519PublicKey: () => true },
+  Keypair: { random: () => ({ publicKey: () => 'G...', secret: () => 'S...' }) },
+  Asset: { native: () => ({}) },
+  Horizon: { Server: class Server {} },
+  Networks: { TESTNET: 'TESTNET', PUBLIC: 'PUBLIC' },
+  TransactionBuilder: class TransactionBuilder {},
+  Operation: {},
+  BASE_FEE: '100',
+}));
+
+jest.mock('@nestjs/schedule', () => ({
+  Cron: () => () => {},
+  CronExpression: { EVERY_5_MINUTES: '*/5 * * * *', EVERY_HOUR: '0 * * * *' },
+}));
+
+jest.mock('@nestjs/swagger', () => ({
+  ApiProperty: () => () => {},
+  ApiPropertyOptional: () => () => {},
+  ApiTags: () => () => {},
+  ApiOperation: () => () => {},
+  ApiResponse: () => () => {},
+  ApiBearerAuth: () => () => {},
+}));
+
+jest.mock('@nestjs/config', () => ({
+  ConfigService: class ConfigService {},
+}));
+
+jest.mock('@nestjs/websockets', () => ({
+  WebSocketGateway: () => () => {},
+  WebSocketServer: () => () => {},
+  SubscribeMessage: () => () => {},
+}));
+
+jest.mock('../firebase/fcm.service', () => ({
+  FCMService: class FCMService {},
+}));
+
+jest.mock('../modules/mail/mail.service', () => ({
+  MailService: class MailService {},
+}));
+
+jest.mock('../notifications/notifications.gateway', () => ({
+  NotificationsGateway: class NotificationsGateway {},
+}));
+
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -8,6 +66,7 @@ import { WalletsService } from '../wallets/wallets.service';
 import { StellarService } from '../blockchain/stellar/stellar.service';
 import { EncryptionService } from '../common/services/encryption.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/entities/notification.entity';
 import {
   NotFoundException,
   BadRequestException,
@@ -146,6 +205,21 @@ describe('EscrowService', () => {
       expect(result).toEqual(mockEscrow);
       expect(stellarService.generateWallet).not.toHaveBeenCalled();
       expect(usersService.updateByUserId).not.toHaveBeenCalled();
+      expect(notificationsService.create).toHaveBeenCalledTimes(2);
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'sender-id',
+          type: NotificationType.ESCROW_CREATED,
+          relatedId: 'escrow-id',
+        }),
+      );
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'recipient-id',
+          type: NotificationType.ESCROW_CREATED,
+          relatedId: 'escrow-id',
+        }),
+      );
     });
 
     it('rejects self-escrow', async () => {
@@ -239,6 +313,21 @@ describe('EscrowService', () => {
           balances: { XLM: 10 },
         }),
       );
+      expect(notificationsService.create).toHaveBeenCalledTimes(2);
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'sender-id',
+          type: NotificationType.ESCROW_FUNDED,
+          relatedId: 'escrow-id',
+        }),
+      );
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'recipient-id',
+          type: NotificationType.ESCROW_FUNDED,
+          relatedId: 'escrow-id',
+        }),
+      );
     });
 
     it('throws if escrow not found', async () => {
@@ -274,6 +363,20 @@ describe('EscrowService', () => {
       const result = await service.disputeEscrow('sender-id', 'escrow-id');
 
       expect(result.status).toBe(EscrowStatus.DISPUTED);
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'sender-id',
+          type: NotificationType.ESCROW_DISPUTED,
+          relatedId: 'escrow-id',
+        }),
+      );
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'recipient-id',
+          type: NotificationType.ESCROW_DISPUTED,
+          relatedId: 'escrow-id',
+        }),
+      );
     });
 
     it('throws if escrow not funded', async () => {
@@ -367,9 +470,9 @@ describe('EscrowService', () => {
         balances: { XLM: 0 },
       } as any);
       usersService.updateByUserId.mockResolvedValue(undefined);
-      stellarService.sendPayment.mockResolvedValue({
+      stellarService.closeEscrowAccount.mockResolvedValue({
         hash: 'refund-tx',
-      });
+      } as any);
 
       const result = await service.resolveEscrow('escrow-id', {
         outcome: 'refund',
@@ -377,6 +480,82 @@ describe('EscrowService', () => {
 
       expect(result.status).toBe(EscrowStatus.REFUNDED);
       expect(result.refundTxHash).toBe('refund-tx');
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'sender-id',
+          type: NotificationType.ESCROW_REFUNDED,
+          relatedId: 'escrow-id',
+        }),
+      );
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'recipient-id',
+          type: NotificationType.ESCROW_REFUNDED,
+          relatedId: 'escrow-id',
+        }),
+      );
+    });
+
+    it('admin release resolution emits ESCROW_RELEASED to both parties', async () => {
+      escrowRepository.findOne.mockResolvedValue({
+        ...mockEscrow,
+        status: EscrowStatus.FUNDED,
+        stellarEscrowPublicKey: 'escrow-pub',
+        stellarEscrowSecretEncrypted: 'encrypted-escrow-secret',
+        senderId: 'sender-id',
+        recipientId: 'recipient-id',
+      });
+
+      dataSource.transaction.mockImplementation(async (_options, fn?) => {
+        const callback = typeof _options === 'function' ? _options : fn;
+        return callback({
+          findOne: jest.fn().mockResolvedValue({
+            ...mockEscrow,
+            status: EscrowStatus.FUNDED,
+            stellarEscrowPublicKey: 'escrow-pub',
+            stellarEscrowSecretEncrypted: 'encrypted-escrow-secret',
+            senderId: 'sender-id',
+            recipientId: 'recipient-id',
+          }),
+          save: jest
+            .fn()
+            .mockImplementation((entity) => Promise.resolve(entity)),
+        } as any);
+      });
+
+      walletsService.resolveWalletForTransaction.mockResolvedValue({
+        publicKey: 'recipient-pub',
+        encryptedSecretKey: 'encrypted-key',
+      } as any);
+      encryptionService.decrypt.mockReturnValue('escrow-secret');
+      usersService.findById.mockResolvedValue({
+        id: 'recipient-id',
+        balances: { XLM: 0 },
+      } as any);
+      usersService.updateByUserId.mockResolvedValue(undefined);
+      stellarService.closeEscrowAccount.mockResolvedValue({
+        hash: 'release-tx',
+      } as any);
+
+      const result = await service.resolveEscrow('escrow-id', {
+        outcome: 'release',
+      } as any);
+
+      expect(result.status).toBe(EscrowStatus.RELEASED);
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'sender-id',
+          type: NotificationType.ESCROW_RELEASED,
+          relatedId: 'escrow-id',
+        }),
+      );
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'recipient-id',
+          type: NotificationType.ESCROW_RELEASED,
+          relatedId: 'escrow-id',
+        }),
+      );
     });
   });
 

@@ -4,6 +4,7 @@ import {
   NotFoundException,
   ForbiddenException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -21,6 +22,9 @@ import {
 } from '../modules/compliance/entities/compliance-flag.entity';
 import { CreditScoringService } from './credit-scoring.service';
 import { UsersService } from '../users/users.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/entities/notification.entity';
+import { CreateNotificationDto } from '../notifications/dto/create-notification.dto';
 import {
   ApplyLoanDto,
   RepayLoanDto,
@@ -60,6 +64,8 @@ export class LoansService {
     private readonly creditScoringService: CreditScoringService,
     private readonly usersService: UsersService,
     private readonly dataSource: DataSource,
+    @Optional()
+    private readonly notificationsService?: NotificationsService,
   ) {}
 
   async applyForLoan(
@@ -88,7 +94,22 @@ export class LoansService {
         creditScore,
         rejectionReason: `Credit score ${creditScore} is below minimum required score of ${MIN_CREDIT_SCORE}`,
       });
-      return this.loanRepo.save(rejected);
+      const saved = await this.loanRepo.save(rejected);
+      await this.sendLoanNotification({
+        userId,
+        type: NotificationType.LOAN_REJECTED,
+        title: 'Loan Application Rejected',
+        message:
+          saved.rejectionReason ??
+          'Your loan application did not meet credit score requirements.',
+        relatedId: saved.id,
+        metadata: {
+          loanId: saved.id,
+          creditScore,
+          reason: saved.rejectionReason,
+        },
+      });
+      return saved;
     }
 
     const application = this.loanRepo.create({
@@ -396,10 +417,25 @@ export class LoansService {
 
       await queryRunner.commitTransaction();
 
-      return queryRunner.manager.findOne(LoanApplication, {
+      const approvedLoan = (await queryRunner.manager.findOne(LoanApplication, {
         where: { id: loanId },
         relations: ['repayments'],
-      }) as Promise<LoanApplication>;
+      })) as LoanApplication;
+
+      await this.sendLoanNotification({
+        userId: loan.userId,
+        type: NotificationType.LOAN_APPROVED,
+        title: 'Loan Approved',
+        message: `Your loan application for ${dto.approvedAmount} ${loan.currency} has been approved and disbursed.`,
+        relatedId: loan.id,
+        metadata: {
+          loanId: loan.id,
+          approvedAmount: dto.approvedAmount.toFixed(8),
+          currency: loan.currency,
+        },
+      });
+
+      return approvedLoan;
     } catch (err) {
       await queryRunner.rollbackTransaction();
       throw err;
@@ -422,7 +458,19 @@ export class LoansService {
     loan.status = LoanStatus.REJECTED;
     loan.reviewedBy = adminId;
     loan.rejectionReason = dto.reason ?? 'Application rejected by admin';
-    return this.loanRepo.save(loan);
+    const saved = await this.loanRepo.save(loan);
+    await this.sendLoanNotification({
+      userId: saved.userId,
+      type: NotificationType.LOAN_REJECTED,
+      title: 'Loan Application Rejected',
+      message: `Your loan application has been rejected: ${saved.rejectionReason}`,
+      relatedId: saved.id,
+      metadata: {
+        loanId: saved.id,
+        reason: saved.rejectionReason,
+      },
+    });
+    return saved;
   }
 
   // ── Cron-called methods ────────────────────────────────────────────────────
@@ -494,6 +542,20 @@ export class LoansService {
           .toFixed(8);
         repayment.lastPenaltyAppliedAt = now;
         await this.repaymentRepo.save(repayment);
+
+        await this.sendLoanNotification({
+          userId: repayment.loan.userId,
+          type: NotificationType.LOAN_OVERDUE,
+          title: 'Overdue Loan Penalty Applied',
+          message: `An overdue penalty of ${dailyPenalty.toFixed(8)} ${repayment.loan.currency} was applied to your loan repayment. Total due is now ${repayment.totalDue} ${repayment.loan.currency}.`,
+          relatedId: repayment.loan.id,
+          metadata: {
+            loanId: repayment.loan.id,
+            repaymentId: repayment.id,
+            penaltyAmount: repayment.penaltyAmount,
+            totalDue: repayment.totalDue,
+          },
+        });
 
         // After 7 days: default the loan
         if (overdueSince >= DEFAULT_AFTER_OVERDUE_DAYS) {
@@ -571,6 +633,20 @@ export class LoansService {
     const loan = repayment.loan;
     if (loan.status !== LoanStatus.ACTIVE) return;
 
+    await this.sendLoanNotification({
+      userId: loan.userId,
+      type: NotificationType.LOAN_REPAYMENT_DUE,
+      title: 'Loan Repayment Due',
+      message: `Your loan repayment of ${repayment.totalDue} ${loan.currency} is due on ${repayment.dueDate}.`,
+      relatedId: loan.id,
+      metadata: {
+        loanId: loan.id,
+        repaymentId: repayment.id,
+        dueDate: repayment.dueDate,
+        totalDue: repayment.totalDue,
+      },
+    });
+
     const user = await this.usersService.findById(loan.userId);
     if (!user) return;
 
@@ -582,6 +658,18 @@ export class LoansService {
       // Mark overdue on insufficient balance
       repayment.status = RepaymentStatus.OVERDUE;
       await this.repaymentRepo.save(repayment);
+      await this.sendLoanNotification({
+        userId: loan.userId,
+        type: NotificationType.LOAN_OVERDUE,
+        title: 'Loan Repayment Overdue',
+        message: `Your loan repayment of ${amountDue.toFixed(8)} ${loan.currency} is overdue due to insufficient wallet balance.`,
+        relatedId: loan.id,
+        metadata: {
+          loanId: loan.id,
+          repaymentId: repayment.id,
+          amountDue: amountDue.toFixed(8),
+        },
+      });
       this.logger.warn(
         `Repayment ${repayment.id} marked OVERDUE — insufficient balance`,
       );
@@ -611,6 +699,18 @@ export class LoansService {
         await queryRunner.rollbackTransaction();
         repayment.status = RepaymentStatus.OVERDUE;
         await this.repaymentRepo.save(repayment);
+        await this.sendLoanNotification({
+          userId: loan.userId,
+          type: NotificationType.LOAN_OVERDUE,
+          title: 'Loan Repayment Overdue',
+          message: `Your loan repayment of ${amountDue.toFixed(8)} ${loan.currency} is overdue due to insufficient wallet balance.`,
+          relatedId: loan.id,
+          metadata: {
+            loanId: loan.id,
+            repaymentId: repayment.id,
+            amountDue: amountDue.toFixed(8),
+          },
+        });
         this.logger.warn(
           `Repayment ${repayment.id} marked OVERDUE — insufficient balance`,
         );
@@ -708,5 +808,30 @@ export class LoansService {
     );
 
     this.logger.warn(`Loan ${loan.id} defaulted for user ${loan.userId}`);
+
+    await this.sendLoanNotification({
+      userId: loan.userId,
+      type: NotificationType.LOAN_DEFAULTED,
+      title: 'Loan Defaulted',
+      message: `Your loan ${loan.id} has defaulted after ${DEFAULT_AFTER_OVERDUE_DAYS} days overdue.`,
+      relatedId: loan.id,
+      metadata: {
+        loanId: loan.id,
+        overdueDays: DEFAULT_AFTER_OVERDUE_DAYS,
+      },
+    });
+  }
+
+  private async sendLoanNotification(
+    dto: CreateNotificationDto,
+  ): Promise<void> {
+    if (!this.notificationsService) return;
+    try {
+      await this.notificationsService.create(dto);
+    } catch (err) {
+      this.logger.warn(
+        `Loan notification failed for user ${dto.userId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 }

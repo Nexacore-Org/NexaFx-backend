@@ -24,18 +24,32 @@ const registry: Partial<Record<NotificationType, DeepLinkBuilder>> = {
   [NotificationType.KYC_REJECTED]: () => `${SCHEME}kyc/status`,
   [NotificationType.RATE_ALERT_TRIGGERED]: (c) =>
     `${SCHEME}rates/alerts/${c.resourceId ?? ''}`,
+  [NotificationType.ESCROW_CREATED]: (c) =>
+    `${SCHEME}escrow/${c.resourceId ?? ''}`,
   [NotificationType.ESCROW_FUNDED]: (c) =>
     `${SCHEME}escrow/${c.resourceId ?? ''}`,
   [NotificationType.ESCROW_RELEASED]: (c) =>
     `${SCHEME}escrow/${c.resourceId ?? ''}`,
   [NotificationType.ESCROW_DISPUTED]: (c) =>
     `${SCHEME}escrow/${c.resourceId ?? ''}`,
+  [NotificationType.ESCROW_REFUNDED]: (c) =>
+    `${SCHEME}escrow/${c.resourceId ?? ''}`,
   [NotificationType.VAULT_MATURITY]: (c) =>
+    `${SCHEME}vaults/${c.resourceId ?? ''}`,
+  [NotificationType.VAULT_AUTO_DEPOSIT_SKIPPED]: (c) =>
     `${SCHEME}vaults/${c.resourceId ?? ''}`,
   [NotificationType.SUPPORT_TICKET_UPDATE]: (c) =>
     `${SCHEME}support/tickets/${c.resourceId ?? ''}`,
   [NotificationType.SECURITY_ALERT]: () => `${SCHEME}security/alerts`,
+  [NotificationType.LOAN_APPROVED]: (c) =>
+    `${SCHEME}loans/${c.resourceId ?? ''}`,
+  [NotificationType.LOAN_REJECTED]: (c) =>
+    `${SCHEME}loans/${c.resourceId ?? ''}`,
   [NotificationType.LOAN_REPAYMENT_DUE]: (c) =>
+    `${SCHEME}loans/${c.resourceId ?? ''}`,
+  [NotificationType.LOAN_OVERDUE]: (c) =>
+    `${SCHEME}loans/${c.resourceId ?? ''}`,
+  [NotificationType.LOAN_DEFAULTED]: (c) =>
     `${SCHEME}loans/${c.resourceId ?? ''}`,
   [NotificationType.STAKING_UNLOCK]: (c) =>
     `${SCHEME}staking/${c.resourceId ?? ''}`,

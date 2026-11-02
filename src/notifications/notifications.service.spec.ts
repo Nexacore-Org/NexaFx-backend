@@ -2,11 +2,16 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { NotificationsService } from './notifications.service';
-import { Notification, NotificationType } from './entities/notification.entity';
+import {
+  Notification,
+  NotificationType,
+} from './entities/notification.entity';
 import { User } from '../users/user.entity';
 import { FCMService } from '../firebase/fcm.service';
 import { ConfigService } from '@nestjs/config';
 import { NotFoundException } from '@nestjs/common';
+import { MailService } from '../modules/mail/mail.service';
+import { NotificationsGateway } from './notifications.gateway';
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
@@ -24,10 +29,9 @@ describe('NotificationsService', () => {
     body: 'This is a test notification',
     isRead: false,
     data: {},
-    readAt: null,
+    readAt: null as any,
     createdAt: new Date(),
     updatedAt: new Date(),
-    readAt: undefined,
     searchVector: null,
     user: {} as any,
   };
@@ -47,7 +51,11 @@ describe('NotificationsService', () => {
   beforeEach(async () => {
     const mockNotificationRepo = {
       create: jest.fn().mockImplementation((dto) => dto),
-      save: jest.fn().mockResolvedValue(mockNotification),
+      save: jest.fn().mockImplementation(async (entity) => ({
+        ...mockNotification,
+        ...entity,
+        id: mockNotification.id,
+      })),
       findAndCount: jest.fn().mockResolvedValue([[mockNotification], 1]),
       findOne: jest.fn().mockResolvedValue(mockNotification),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
@@ -69,6 +77,14 @@ describe('NotificationsService', () => {
       }),
     };
 
+    const mockMailService = {
+      enqueueEmail: jest.fn().mockResolvedValue(undefined),
+    };
+
+    const mockNotificationsGateway = {
+      sendToUser: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         NotificationsService,
@@ -87,6 +103,14 @@ describe('NotificationsService', () => {
         {
           provide: ConfigService,
           useValue: mockConfigService,
+        },
+        {
+          provide: MailService,
+          useValue: mockMailService,
+        },
+        {
+          provide: NotificationsGateway,
+          useValue: mockNotificationsGateway,
         },
       ],
     }).compile();
@@ -117,21 +141,34 @@ describe('NotificationsService', () => {
   });
 
   describe('dispatch', () => {
-    it('should dispatch, saving and calling sendPush when preferences are enabled', async () => {
+    it('should dispatch, saving and calling sendPush with string-only FCM data including notificationId', async () => {
       const result = await service.dispatch(
         'user-123',
-        NotificationType.KYC,
-        'KYC Approved',
-        'Your KYC has been approved',
+        NotificationType.DEPOSIT_CONFIRMED,
+        'Deposit Confirmed',
+        'Your deposit was confirmed',
+        { transactionId: 'tx-999', resourceType: 'transaction' },
       );
 
       expect(notificationRepo.save).toHaveBeenCalled();
-      expect(fcmService.sendPush).toHaveBeenCalledWith(
-        'user-123',
-        'KYC Approved',
-        'Your KYC has been approved',
-        undefined,
+      expect(fcmService.sendPush).toHaveBeenCalledTimes(1);
+      const [calledUserId, calledTitle, calledBody, calledFcmData] =
+        fcmService.sendPush.mock.calls[0];
+      expect(calledUserId).toBe('user-123');
+      expect(calledTitle).toBe('Deposit Confirmed');
+      expect(calledBody).toBe('Your deposit was confirmed');
+      expect(calledFcmData).toEqual(
+        expect.objectContaining({
+          notificationId: mockNotification.id,
+          type: NotificationType.DEPOSIT_CONFIRMED,
+          resourceId: 'tx-999',
+          resourceType: 'transaction',
+          deepLink: 'nexafx://transactions/tx-999',
+        }),
       );
+      for (const value of Object.values(calledFcmData || {})) {
+        expect(typeof value).toBe('string');
+      }
       expect(result).toBeDefined();
     });
 

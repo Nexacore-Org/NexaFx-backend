@@ -7,7 +7,11 @@ import {
 import { Repository, In } from 'typeorm';
 import { Notification, NotificationType } from './entities/notification.entity';
 import { CreateNotificationDto } from './dto/create-notification.dto';
-import { resolveDeepLink, buildFcmData } from './deep-links.registry';
+import {
+  resolveDeepLink,
+  resolveDeepLinkFromData,
+  buildFcmData,
+} from './deep-links.registry';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from '../users/user.entity';
 import { FCMService } from '../firebase/fcm.service';
@@ -102,13 +106,11 @@ export class NotificationsService {
       return base;
     }
 
-    const resourceId =
-      base.transactionId ?? base.resourceId ?? base.relatedId ?? undefined;
-
-    const actionUrl = resolveDeepLink(type, {
-      notificationId: base.notificationId ?? '',
-      resourceId,
-    });
+    const actionUrl = resolveDeepLinkFromData(
+      type,
+      base,
+      base.notificationId ?? '',
+    );
 
     if (actionUrl) {
       base.actionUrl = actionUrl;
@@ -154,11 +156,38 @@ export class NotificationsService {
 
       // 3. Send FCM push if push preference is enabled (opt-in based on user preferences)
       if (prefs.push === true) {
-        const notificationData = (notification.data || {}) as Record<
+        const notificationData = (notification.data || data || {}) as Record<
           string,
           any
         >;
-        const fcmData = buildFcmData(type, notificationData);
+        const rawResourceId =
+          notificationData.resourceId ??
+          notificationData.transactionId ??
+          notificationData.relatedId ??
+          undefined;
+        const resourceId =
+          rawResourceId != null ? String(rawResourceId) : undefined;
+        const deepLink = resolveDeepLinkFromData(
+          type,
+          notificationData,
+          notification.id,
+        );
+        const fcmData = buildFcmData(
+          type,
+          {
+            notificationId: notification.id,
+            resourceId,
+            resourceType:
+              notificationData.resourceType != null
+                ? String(notificationData.resourceType)
+                : undefined,
+            actionType:
+              notificationData.actionType != null
+                ? String(notificationData.actionType)
+                : undefined,
+          },
+          { deepLink },
+        );
         await this.fcmService.sendPush(userId, title, body, fcmData);
       }
 

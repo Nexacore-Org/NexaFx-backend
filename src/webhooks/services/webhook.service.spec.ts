@@ -3,9 +3,14 @@ import { WebhookService } from './webhook.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { WebhookEndpoint } from '../entities/webhook-endpoint.entity';
 import { WebhookDelivery } from '../entities/webhook-delivery.entity';
-import { BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { AuditLogsService } from '../../audit-logs/audit-logs.service';
 import axios from 'axios';
+import * as dns from 'dns';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -17,6 +22,13 @@ describe('WebhookService', () => {
   let auditLogsService: any;
 
   beforeEach(async () => {
+    jest
+      .spyOn(dns, 'lookup')
+      .mockImplementation((_hostname: any, _options: any, cb: any) => {
+        const callback = typeof _options === 'function' ? _options : cb;
+        callback(null, [{ address: '93.184.216.34', family: 4 }]);
+      });
+
     auditLogsService = { log: jest.fn().mockResolvedValue(undefined) };
 
     endpointRepo = {
@@ -28,7 +40,7 @@ describe('WebhookService', () => {
         ),
       find: jest.fn(),
       findOne: jest.fn(),
-      delete: jest.fn(),
+      delete: jest.fn().mockResolvedValue({ affected: 1 }),
     };
 
     deliveryRepo = {
@@ -39,6 +51,7 @@ describe('WebhookService', () => {
           Promise.resolve({ id: 'delivery-id', ...entity }),
         ),
       find: jest.fn(),
+      findAndCount: jest.fn().mockResolvedValue([[], 0]),
       findOne: jest.fn(),
     };
 
@@ -70,6 +83,7 @@ describe('WebhookService', () => {
   });
 
   afterEach(() => {
+    jest.restoreAllMocks();
     jest.clearAllMocks();
   });
 
@@ -115,14 +129,90 @@ describe('WebhookService', () => {
     });
   });
 
+  describe('listEndpoints & deleteEndpoint (#1509)', () => {
+    it('lists endpoints scoped to the authenticated user', async () => {
+      endpointRepo.find.mockResolvedValue([{ id: '1', userId: 'user1' }]);
+
+      const result = await service.listEndpoints('user1');
+
+      expect(endpointRepo.find).toHaveBeenCalledWith({
+        where: { userId: 'user1' },
+        order: { createdAt: 'DESC' },
+      });
+      expect(result).toHaveLength(1);
+    });
+
+    it("throws NotFoundException (404) when deleting another user's endpoint", async () => {
+      endpointRepo.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.deleteEndpoint('user1', 'other-users-endpoint'),
+      ).rejects.toThrow(NotFoundException);
+      expect(endpointRepo.delete).not.toHaveBeenCalled();
+    });
+
+    it('deletes an owned endpoint', async () => {
+      endpointRepo.findOne.mockResolvedValue({ id: 'ep-1', userId: 'user1' });
+
+      await service.deleteEndpoint('user1', 'ep-1');
+
+      expect(endpointRepo.delete).toHaveBeenCalledWith({
+        id: 'ep-1',
+        userId: 'user1',
+      });
+    });
+
+    it('rejects empty userId via assertUserId', async () => {
+      await expect(service.listEndpoints('')).rejects.toThrow(
+        UnauthorizedException,
+      );
+      await expect(service.deleteEndpoint('', 'ep-1')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+  });
+
+  describe('getDeliveryHistory (#1509)', () => {
+    it("throws NotFoundException when endpoint is not owned by the caller", async () => {
+      endpointRepo.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.getDeliveryHistory('ep-1', 'user1'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('returns paginated delivery history for an owned endpoint', async () => {
+      endpointRepo.findOne.mockResolvedValue({ id: 'ep-1', userId: 'user1' });
+      deliveryRepo.findAndCount.mockResolvedValue([
+        [{ id: 'del-1', endpointId: 'ep-1' }],
+        1,
+      ]);
+
+      const history = await service.getDeliveryHistory('ep-1', 'user1', 2, 10);
+
+      expect(deliveryRepo.findAndCount).toHaveBeenCalledWith({
+        where: { endpointId: 'ep-1' },
+        order: { createdAt: 'DESC' },
+        skip: 10,
+        take: 10,
+      });
+      expect(history).toEqual({
+        data: [{ id: 'del-1', endpointId: 'ep-1' }],
+        total: 1,
+        page: 2,
+        limit: 10,
+      });
+    });
+  });
+
   describe('updateEndpoint', () => {
-    it('should throw BadRequestException if endpoint not found', async () => {
+    it('should throw NotFoundException if endpoint not found', async () => {
       endpointRepo.findOne.mockResolvedValue(null);
       await expect(
         service.updateEndpoint('user1', 'endpoint1', {
           preferredSchemaVersion: '1.0',
         }),
-      ).rejects.toThrow(BadRequestException);
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should pin the endpoint to the requested schema version', async () => {
@@ -379,10 +469,10 @@ describe('WebhookService', () => {
   });
 
   describe('testEndpoint', () => {
-    it('should throw BadRequestException if endpoint not found', async () => {
+    it('should throw NotFoundException if endpoint not found', async () => {
       endpointRepo.findOne.mockResolvedValue(null);
       await expect(service.testEndpoint('endpoint1', 'user1')).rejects.toThrow(
-        BadRequestException,
+        NotFoundException,
       );
     });
 
@@ -411,14 +501,14 @@ describe('WebhookService', () => {
   });
 
   describe('redeliver', () => {
-    it('should throw BadRequestException if endpoint not found', async () => {
+    it('should throw NotFoundException if endpoint not found', async () => {
       endpointRepo.findOne.mockResolvedValue(null);
       await expect(
         service.redeliver('endpoint1', 'delivery1', 'user1'),
-      ).rejects.toThrow(BadRequestException);
+      ).rejects.toThrow(NotFoundException);
     });
 
-    it('should throw BadRequestException if delivery not found', async () => {
+    it('should throw NotFoundException if delivery not found', async () => {
       endpointRepo.findOne.mockResolvedValue({
         id: '1',
         url: 'https://test.com',
@@ -428,7 +518,7 @@ describe('WebhookService', () => {
       deliveryRepo.findOne.mockResolvedValue(null);
       await expect(
         service.redeliver('1', 'delivery1', 'user1'),
-      ).rejects.toThrow(BadRequestException);
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should re-execute delivery', async () => {

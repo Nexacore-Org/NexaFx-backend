@@ -1,4 +1,12 @@
-import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -15,29 +23,44 @@ import {
   RewardDistribution,
   RewardDistributionStatus,
 } from './entities/reward-distribution.entity';
+import { ALLOWED_REWARD_CURRENCIES } from './dto/distribute-reward.dto';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { User } from '../users/user.entity';
+
+export const DEFAULT_DAO_REWARD_FUNCTION = 'distribute';
 
 @Injectable()
 export class DaoService {
   private readonly logger = new Logger(DaoService.name);
   private readonly sorobanRpcUrl: string;
   private readonly defaultContractId: string;
+  private readonly rewardFunctionName: string;
   private readonly networkPassphrase: string | null = null;
   private readonly hotWalletKeypair: Keypair | null = null;
   private readonly sorobanServer: rpc.Server | null = null;
   private readonly horizonServer: Horizon.Server | null = null;
   private readonly daoConfigError: string | null = null;
+  private readonly idempotencyRecords = new Map<
+    string,
+    Promise<RewardDistribution>
+  >();
 
   constructor(
     private readonly configService: ConfigService,
     @InjectRepository(RewardDistribution)
     private readonly rewardDistributionRepo: Repository<RewardDistribution>,
     private readonly auditLogsService: AuditLogsService,
+    @Optional()
+    @InjectRepository(User)
+    private readonly userRepo?: Repository<User>,
   ) {
     this.sorobanRpcUrl =
       this.configService.get<string>('STELLAR_SOROBAN_RPC_URL') || '';
     this.defaultContractId =
       this.configService.get<string>('DAO_CONTRACT_ID') || '';
+    this.rewardFunctionName =
+      this.configService.get<string>('DAO_REWARD_FUNCTION') ||
+      DEFAULT_DAO_REWARD_FUNCTION;
 
     const horizonUrl = this.configService.get<string>('STELLAR_HORIZON_URL');
     const network = this.configService.get<string>('STELLAR_NETWORK');
@@ -96,9 +119,18 @@ export class DaoService {
     }
 
     if (!targetContractId) {
-      throw new HttpException(
-        'Contract ID is required',
-        HttpStatus.BAD_REQUEST,
+      throw new BadRequestException('Contract ID is required');
+    }
+
+    if (targetContractId !== this.defaultContractId) {
+      throw new BadRequestException(
+        'Only the configured DAO_CONTRACT_ID may be invoked',
+      );
+    }
+
+    if (!functionName || functionName !== this.rewardFunctionName) {
+      throw new BadRequestException(
+        `Contract function "${functionName}" is not allowed`,
       );
     }
 
@@ -146,7 +178,7 @@ export class DaoService {
       };
     } catch (err: any) {
       this.logger.error(
-        `Failed Soroban contract invocation for ${contractId}.${functionName}`,
+        `Failed Soroban contract invocation for ${targetContractId}.${functionName}`,
         err?.message || err,
       );
 
@@ -165,20 +197,94 @@ export class DaoService {
     adminId: string,
     payload: {
       userId: string;
-      contractId?: string;
-      functionName: string;
-      args?: any[];
+      amount: number;
+      currency: string;
+      requestId?: string;
+    },
+    requestId?: string,
+  ): Promise<RewardDistribution> {
+    const rawPayload = payload as Record<string, unknown>;
+    if (
+      rawPayload.contractId !== undefined ||
+      rawPayload.functionName !== undefined ||
+      rawPayload.args !== undefined
+    ) {
+      throw new BadRequestException(
+        'contractId, functionName, and args cannot be specified by the client',
+      );
+    }
+
+    if (
+      typeof payload.amount !== 'number' ||
+      !Number.isFinite(payload.amount) ||
+      payload.amount <= 0
+    ) {
+      throw new BadRequestException('Amount must be a positive number.');
+    }
+
+    if (
+      !ALLOWED_REWARD_CURRENCIES.includes(
+        payload.currency as (typeof ALLOWED_REWARD_CURRENCIES)[number],
+      )
+    ) {
+      throw new BadRequestException('Unsupported reward currency.');
+    }
+
+    const effectiveRequestId = requestId ?? payload.requestId;
+    const idempotencyKey = effectiveRequestId
+      ? `${payload.userId}:${effectiveRequestId}`
+      : null;
+
+    if (idempotencyKey) {
+      const existingInFlight = this.idempotencyRecords.get(idempotencyKey);
+      if (existingInFlight) {
+        return existingInFlight;
+      }
+    }
+
+    const execution = this.executeDistributeReward(
+      adminId,
+      payload,
+      effectiveRequestId,
+    );
+
+    if (idempotencyKey) {
+      this.idempotencyRecords.set(idempotencyKey, execution);
+      execution.catch(() => {
+        this.idempotencyRecords.delete(idempotencyKey);
+      });
+    }
+
+    return execution;
+  }
+
+  private async executeDistributeReward(
+    adminId: string,
+    payload: {
+      userId: string;
       amount: number;
       currency: string;
     },
+    requestId?: string,
   ): Promise<RewardDistribution> {
-    const contractId = payload.contractId || this.defaultContractId;
+    if (this.userRepo) {
+      const user = await this.userRepo.findOne({
+        where: { id: payload.userId },
+      });
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+    }
+
+    const contractId = this.defaultContractId;
+    const functionName = this.rewardFunctionName;
+    const contractArgs = [payload.userId, payload.amount, payload.currency];
 
     let distribution = this.rewardDistributionRepo.create({
       userId: payload.userId,
       contractId,
-      functionName: payload.functionName,
-      args: payload.args || null,
+      functionName,
+      args: contractArgs,
       amount: payload.amount,
       currency: payload.currency,
       txHash: null,
@@ -195,17 +301,18 @@ export class DaoService {
         adminId,
         userId: payload.userId,
         contractId,
-        functionName: payload.functionName,
+        functionName,
         amount: payload.amount,
         currency: payload.currency,
+        ...(requestId ? { requestId } : {}),
       },
     );
 
     try {
       const { txHash } = await this.invokeContract(
         contractId,
-        payload.functionName,
-        payload.args || [],
+        functionName,
+        contractArgs,
       );
 
       distribution.txHash = txHash;
@@ -219,6 +326,7 @@ export class DaoService {
           adminId,
           txHash,
           distributionId: distribution.id,
+          ...(requestId ? { requestId } : {}),
         },
       );
 
@@ -243,6 +351,7 @@ export class DaoService {
           adminId,
           error: distribution.errorMessage,
           distributionId: distribution.id,
+          ...(requestId ? { requestId } : {}),
         },
       );
 

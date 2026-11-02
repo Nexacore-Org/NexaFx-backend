@@ -33,14 +33,28 @@ export class DaoController {
     summary: 'Trigger DAO reward distribution via Soroban contract',
   })
   @ApiResponse({ status: 201, description: 'Reward distribution queued' })
+  @ApiResponse({ status: 400, description: 'Invalid reward request' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async distributeReward(
-    @Request() req: { user: { userId: string } },
+    @Request()
+    req: {
+      user: { userId: string };
+      headers?: Record<string, string | string[] | undefined>;
+    },
     @Body() distributeRewardDto: DistributeRewardDto,
   ) {
+    const headerIdempotencyKey =
+      req.headers?.['idempotency-key'] ?? req.headers?.['x-request-id'];
+    const requestId =
+      distributeRewardDto.requestId ??
+      (Array.isArray(headerIdempotencyKey)
+        ? headerIdempotencyKey[0]
+        : headerIdempotencyKey);
+
     return this.daoService.distributeReward(
       req.user.userId,
       distributeRewardDto,
+      requestId,
     );
   }
 

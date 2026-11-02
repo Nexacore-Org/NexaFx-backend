@@ -7,12 +7,13 @@ import { ProposalService } from './services/proposal.service';
 import { RewardDistribution } from './entities/reward-distribution.entity';
 import { Proposal } from './entities/proposal.entity';
 import { Vote } from './entities/vote.entity';
+import { User } from '../users/user.entity';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([RewardDistribution, Proposal, Vote]),
+    TypeOrmModule.forFeature([RewardDistribution, Proposal, Vote, User]),
     AuditLogsModule,
     UsersModule,
   ],

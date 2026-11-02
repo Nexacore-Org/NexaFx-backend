@@ -8,7 +8,7 @@ import { RateLimitConfig } from './rate-limit-config.entity';
 import { StellarService } from '../blockchain/stellar/stellar.service';
 import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
 import { NotificationPreferenceService } from '../notifications/services/notification-preference.service';
-import { RedisService } from '../common/services/redis.service';
+import { RedisService } from '../modules/redis/redis.service';
 
 describe('UsersService', () => {
   let service: UsersService;

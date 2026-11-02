@@ -23,7 +23,7 @@ import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
 import { RateLimitConfig } from './rate-limit-config.entity';
 import { ThrottlerStorageService } from '@nestjs/throttler';
 import { NotificationPreferenceService } from '../notifications/services/notification-preference.service';
-import { RedisService } from '../common/services/redis.service';
+import { RedisService } from '../modules/redis/redis.service';
 
 interface WalletBalancesCacheEntry {
   expiresAt: number;

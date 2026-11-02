@@ -37,7 +37,7 @@ import { TwoFactorService } from './two-factor/two-factor.service';
 import { WalletsService } from './wallets/wallets.service';
 import { ThrottlerStorageService } from '@nestjs/throttler';
 import { NotificationPreferenceService } from './notifications/services/notification-preference.service';
-import { RedisService } from './common/services/redis.service';
+import { RedisService } from './modules/redis/redis.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { ExchangeRatesService } from './exchange-rates/exchange-rates.service';

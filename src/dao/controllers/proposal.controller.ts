@@ -26,7 +26,7 @@ import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { UserRole } from '../../users/user.entity';
 import { ProposalStatus } from '../entities/proposal.entity';
-import { RedisService } from '../../common/services/redis.service';
+import { RedisService } from '../../modules/redis/redis.service';
 
 @ApiTags('DAO - Governance')
 @Controller('dao/proposals')

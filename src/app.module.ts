@@ -41,20 +41,29 @@ import { GraphQLApiModule } from './graphql/graphql.module';
 import { SuperAdminModule } from './super-admin/super-admin.module';
 import { MaintenanceGuard } from './super-admin/guards/maintenance.guard';
 import { buildThrottlerOptions } from './common/throttler/throttler.config';
+import { RedisModule } from './modules/redis/redis.module';
+import { RedisThrottlerStorage } from './modules/redis/redis-throttler.storage';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    RedisModule,
     ThrottlerModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
+      imports: [ConfigModule, RedisModule],
+      inject: [ConfigService, RedisThrottlerStorage],
       // THROTTLE_TTL is documented in seconds; the factory coerces the env
       // strings with Number() and converts the window to milliseconds.
-      useFactory: (configService: ConfigService) =>
-        buildThrottlerOptions({
-          THROTTLE_TTL: configService.get<string>('THROTTLE_TTL'),
-          THROTTLE_LIMIT: configService.get<string>('THROTTLE_LIMIT'),
-        }),
+      useFactory: (
+        configService: ConfigService,
+        storage: RedisThrottlerStorage,
+      ) =>
+        buildThrottlerOptions(
+          {
+            THROTTLE_TTL: configService.get<string>('THROTTLE_TTL'),
+            THROTTLE_LIMIT: configService.get<string>('THROTTLE_LIMIT'),
+          },
+          storage,
+        ),
     }),
     SuperAdminModule,
     EscrowModule,

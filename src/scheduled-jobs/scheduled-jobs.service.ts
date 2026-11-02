@@ -27,7 +27,7 @@ import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { IdempotencyRecord } from '../common/entities/idempotency-record.entity';
 import { DataRequest } from '../users/entities/data-request.entity';
 import { AmlService } from '../modules/compliance/aml.service';
-import { RedisService } from '../common/services/redis.service';
+import { RedisService } from '../modules/redis/redis.service';
 import { DataSource } from 'typeorm';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { InjectQueue } from '@nestjs/bullmq';

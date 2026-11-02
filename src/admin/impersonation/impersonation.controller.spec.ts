@@ -9,7 +9,7 @@ import * as request from 'supertest';
 import { ImpersonationController } from './impersonation.controller';
 import { ImpersonationService } from './impersonation.service';
 import { UsersService } from '../../users/users.service';
-import { RedisService } from '../../common/services/redis.service';
+import { RedisService } from '../../modules/redis/redis.service';
 import { AuditLogsService } from '../../audit-logs/audit-logs.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';

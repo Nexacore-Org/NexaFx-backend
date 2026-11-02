@@ -8,18 +8,17 @@ import {
   IdempotencyRedisCache,
 } from './services/idempotency.service';
 import { IdempotencyRecord } from './entities/idempotency-record.entity';
-import { RedisService } from './services/redis.service';
+import { RedisModule } from '../modules/redis/redis.module';
 
 @Global()
 @Module({
-  imports: [TypeOrmModule.forFeature([IdempotencyRecord])],
+  imports: [TypeOrmModule.forFeature([IdempotencyRecord]), RedisModule],
   providers: [
     PaginationService,
     DateService,
     EncryptionService,
     IdempotencyRedisCache,
     IdempotencyService,
-    RedisService,
   ],
   exports: [
     PaginationService,
@@ -27,7 +26,7 @@ import { RedisService } from './services/redis.service';
     EncryptionService,
     IdempotencyRedisCache,
     IdempotencyService,
-    RedisService,
+    RedisModule,
   ],
 })
 export class CommonModule {}

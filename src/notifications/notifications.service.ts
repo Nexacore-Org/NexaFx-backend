@@ -3,8 +3,9 @@ import {
   NotFoundException,
   BadRequestException,
   Logger,
+  Optional,
 } from '@nestjs/common';
-import { Repository, In } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Notification, NotificationType } from './entities/notification.entity';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { resolveDeepLink, buildFcmData } from './deep-links.registry';
@@ -14,6 +15,7 @@ import { FCMService } from '../firebase/fcm.service';
 import { ConfigService } from '@nestjs/config';
 import { MailService } from '../modules/mail/mail.service';
 import { NotificationsGateway } from './notifications.gateway';
+import { NotificationPreferenceService } from './services/notification-preference.service';
 
 @Injectable()
 export class NotificationsService {
@@ -26,8 +28,12 @@ export class NotificationsService {
     private readonly userRepository: Repository<User>,
     private readonly fcmService: FCMService,
     private readonly configService: ConfigService,
-    private readonly mailService: MailService,
-    private readonly notificationsGateway: NotificationsGateway,
+    @Optional()
+    private readonly mailService?: MailService,
+    @Optional()
+    private readonly notificationsGateway?: NotificationsGateway,
+    @Optional()
+    private readonly notificationPreferenceService?: NotificationPreferenceService,
   ) {}
 
   async create(dto: CreateNotificationDto): Promise<Notification>;
@@ -123,11 +129,41 @@ export class NotificationsService {
     body: string,
     data?: Record<string, any>,
   ): Promise<Notification> {
-    // 1. Create the in-app notification record in the DB
-    const notification = await this.create(userId, type, title, body, data);
+    const resolvedData = this.resolveActionUrl(type, data);
+    const [inAppEnabled, pushEnabled, emailEnabled] =
+      this.notificationPreferenceService
+        ? await Promise.all([
+            this.notificationPreferenceService.isChannelEnabled(
+              userId,
+              type,
+              'inApp',
+            ),
+            this.notificationPreferenceService.isChannelEnabled(
+              userId,
+              type,
+              'push',
+            ),
+            this.notificationPreferenceService.isChannelEnabled(
+              userId,
+              type,
+              'email',
+            ),
+          ])
+        : [true, true, true];
+
+    // 1. Create the in-app notification record only when inAppEnabled is true
+    const notification = inAppEnabled
+      ? await this.create(userId, type, title, body, data)
+      : this.notificationRepository.create({
+          userId,
+          type,
+          title,
+          body,
+          data: resolvedData,
+        });
 
     try {
-      // 2. Fetch the user and their notification preferences
+      // 2. Fetch the user for push and email delivery
       const user = await this.userRepository.findOne({ where: { id: userId } });
       if (!user) {
         this.logger.warn(
@@ -136,24 +172,8 @@ export class NotificationsService {
         return notification;
       }
 
-      const prefs = (user as any).notificationPreferences || {
-        email: true,
-        push: true,
-        types: { TRANSACTION: true, KYC: true, RATE_ALERT: true },
-      };
-
-      // Check if this type is enabled for the user
-      const isTypeEnabled = prefs.types?.[type] !== false;
-
-      if (!isTypeEnabled) {
-        this.logger.log(
-          `Notification type ${type} is disabled for user ${userId}. Skipping delivery.`,
-        );
-        return notification;
-      }
-
-      // 3. Send FCM push if push preference is enabled (opt-in based on user preferences)
-      if (prefs.push === true) {
+      // 3. Send FCM push if push preference is enabled
+      if (pushEnabled) {
         const notificationData = (notification.data || {}) as Record<
           string,
           any
@@ -162,8 +182,8 @@ export class NotificationsService {
         await this.fcmService.sendPush(userId, title, body, fcmData);
       }
 
-      // 4. Send email if email preference is enabled (opt-in based on user preferences)
-      if (prefs.email === true && user.email) {
+      // 4. Send email if email preference is enabled
+      if (emailEnabled && user.email) {
         await this.sendEmail(user.email, title, body);
       }
     } catch (error) {
@@ -182,7 +202,11 @@ export class NotificationsService {
    */
   private emitToUser(notification: Notification): void {
     try {
-      this.notificationsGateway.sendToUser(notification.userId, notification);
+      this.notificationsGateway?.sendToUser(
+        notification.userId,
+        'notification',
+        notification,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to emit real-time notification for user ${notification.userId}: ${error instanceof Error ? error.message : String(error)}`,
@@ -298,7 +322,7 @@ export class NotificationsService {
     `;
 
     try {
-      await this.mailService.enqueueEmail({
+      await this.mailService?.enqueueEmail({
         to,
         subject,
         html,

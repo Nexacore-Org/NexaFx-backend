@@ -102,6 +102,11 @@ export class User {
   @Column({ type: 'jsonb', nullable: true, default: [] })
   fcmTokens: string[];
 
+  /**
+   * @deprecated Legacy JSON notification preferences column. Per-type and
+   * per-channel delivery preferences are stored in `notification_preferences`
+   * and evaluated via `NotificationPreferenceService.isChannelEnabled` (#1512).
+   */
   @Column({
     type: 'jsonb',
     nullable: true,

@@ -1,11 +1,52 @@
+jest.mock('@nestjs/typeorm', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { Inject } = require('@nestjs/common');
+  const tokenFor = (entity: { name?: string } | string) =>
+    `${typeof entity === 'string' ? entity : (entity?.name ?? 'Entity')}Repository`;
+  return {
+    InjectRepository: (entity: { name?: string } | string) =>
+      Inject(tokenFor(entity)),
+    getRepositoryToken: tokenFor,
+  };
+});
+
+jest.mock('@nestjs/config', () => ({
+  ConfigService: class ConfigService {},
+}));
+
+jest.mock('@nestjs/swagger', () => ({
+  ApiProperty: () => () => undefined,
+  ApiPropertyOptional: () => () => undefined,
+  ApiTags: () => () => undefined,
+  ApiBearerAuth: () => () => undefined,
+  ApiOperation: () => () => undefined,
+  ApiResponse: () => () => undefined,
+}));
+
+jest.mock('@nestjs/websockets', () => ({
+  WebSocketGateway: () => () => undefined,
+  WebSocketServer: () => () => undefined,
+  SubscribeMessage: () => () => undefined,
+}));
+
+jest.mock('@nestjs/bullmq', () => ({
+  InjectQueue: () => () => undefined,
+  Processor: () => () => undefined,
+}));
+
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { NotificationsService } from './notifications.service';
+import {
+  NotificationsService,
+  NOTIFICATION_EVENT,
+} from './notifications.service';
+import { NotificationsGateway } from './notifications.gateway';
 import { Notification, NotificationType } from './entities/notification.entity';
 import { User } from '../users/user.entity';
 import { FCMService } from '../firebase/fcm.service';
 import { ConfigService } from '@nestjs/config';
+import { MailService } from '../modules/mail/mail.service';
 import { NotFoundException } from '@nestjs/common';
 
 describe('NotificationsService', () => {
@@ -15,6 +56,9 @@ describe('NotificationsService', () => {
   let fcmService: jest.Mocked<FCMService>;
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let configService: jest.Mocked<ConfigService>;
+  let gateway: NotificationsGateway;
+  let roomEmitMock: jest.Mock;
+  let serverToMock: jest.Mock;
 
   const mockNotification: Notification = {
     id: '550e8400-e29b-41d4-a716-446655440000',
@@ -27,7 +71,6 @@ describe('NotificationsService', () => {
     readAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
-    readAt: undefined,
     searchVector: null,
     user: {} as any,
   };
@@ -69,6 +112,15 @@ describe('NotificationsService', () => {
       }),
     };
 
+    const mockMailService = {
+      enqueueEmail: jest.fn().mockResolvedValue(undefined),
+    };
+
+    roomEmitMock = jest.fn();
+    serverToMock = jest.fn().mockReturnValue({ emit: roomEmitMock });
+    gateway = new NotificationsGateway({ verifyAsync: jest.fn() } as any);
+    gateway.server = { to: serverToMock } as any;
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         NotificationsService,
@@ -88,6 +140,14 @@ describe('NotificationsService', () => {
           provide: ConfigService,
           useValue: mockConfigService,
         },
+        {
+          provide: MailService,
+          useValue: mockMailService,
+        },
+        {
+          provide: NotificationsGateway,
+          useValue: gateway,
+        },
       ],
     }).compile();
 
@@ -103,16 +163,30 @@ describe('NotificationsService', () => {
   });
 
   describe('create', () => {
-    it('should create and save a notification', async () => {
+    it('should create and save a notification and emit the "notification" event to user:<id>', async () => {
+      const sendToUserSpy = jest.spyOn(gateway, 'sendToUser');
+
       const result = await service.create(
         'user-123',
         NotificationType.SYSTEM,
         'Title',
         'Body',
       );
+
       expect(notificationRepo.create).toHaveBeenCalled();
       expect(notificationRepo.save).toHaveBeenCalled();
-      expect(result).toBeDefined();
+      expect(result).toBe(mockNotification);
+      expect(NOTIFICATION_EVENT).toBe('notification');
+      expect(sendToUserSpy).toHaveBeenCalledWith(
+        'user-123',
+        'notification',
+        mockNotification,
+      );
+      expect(serverToMock).toHaveBeenCalledWith('user:user-123');
+      expect(roomEmitMock).toHaveBeenCalledWith(
+        'notification',
+        mockNotification,
+      );
     });
   });
 
@@ -130,7 +204,14 @@ describe('NotificationsService', () => {
         'user-123',
         'KYC Approved',
         'Your KYC has been approved',
-        undefined,
+        expect.objectContaining({
+          deepLink: expect.any(String),
+        }),
+      );
+      expect(serverToMock).toHaveBeenCalledWith('user:user-123');
+      expect(roomEmitMock).toHaveBeenCalledWith(
+        'notification',
+        mockNotification,
       );
       expect(result).toBeDefined();
     });

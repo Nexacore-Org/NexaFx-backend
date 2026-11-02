@@ -9,6 +9,14 @@ import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 
 /**
+ * Canonical Socket.IO event name emitted to `user:<userId>` rooms on the
+ * `/notifications` namespace whenever a new notification is created.
+ * Shared with `docs/mobile-sdk-guide.md`.
+ */
+export const NOTIFICATION_EVENT = 'notification';
+export const NOTIFICATION_SOCKET_EVENT = NOTIFICATION_EVENT;
+
+/**
  * WebSocket gateway for real‑time notification delivery.
  * Namespace: /notifications
  * CORS origin is taken from ALLOWED_ORIGINS env variable.

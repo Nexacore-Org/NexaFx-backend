@@ -6,7 +6,21 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThanOrEqual } from 'typeorm';
 import { CurrencyPair } from '../entities/currency-pair.entity';
+import {
+  CURRENCY_CODE_REGEX,
+  CreateCurrencyPairDto,
+  UpdateCurrencyPairDto,
+} from '../dto/currency-pair.dto';
 import { ExchangeRatesService } from '../../exchange-rates/exchange-rates.service';
+
+const ALLOWED_PAIR_FIELDS = new Set([
+  'fromCurrencyCode',
+  'toCurrencyCode',
+  'spreadPercent',
+  'minAmountUsd',
+  'maxAmountUsd',
+  'isActive',
+]);
 
 @Injectable()
 export class CurrencyPairService {
@@ -38,7 +52,7 @@ export class CurrencyPairService {
             currentRate: rateData.rate,
             effectiveRate: rateData.rate * (1 - pair.spreadPercent / 100),
           };
-        } catch (error) {
+        } catch {
           return {
             ...pair,
             currentRate: null,
@@ -62,20 +76,120 @@ export class CurrencyPairService {
     });
   }
 
-  async create(data: Partial<CurrencyPair>): Promise<CurrencyPair> {
+  async create(
+    data: CreateCurrencyPairDto | Partial<CurrencyPair>,
+  ): Promise<CurrencyPair> {
+    this.validateAllowedFields(data as Record<string, unknown>);
+
+    if (!data?.fromCurrencyCode || !data?.toCurrencyCode) {
+      throw new BadRequestException(
+        'fromCurrencyCode and toCurrencyCode are required',
+      );
+    }
+
+    const fromCurrencyCode = this.normalizeCurrencyCode(
+      data.fromCurrencyCode,
+      'fromCurrencyCode',
+    );
+    const toCurrencyCode = this.normalizeCurrencyCode(
+      data.toCurrencyCode,
+      'toCurrencyCode',
+    );
+    if (fromCurrencyCode === toCurrencyCode) {
+      throw new BadRequestException(
+        'fromCurrencyCode and toCurrencyCode must be different',
+      );
+    }
+
+    const spreadPercent =
+      data.spreadPercent !== undefined ? Number(data.spreadPercent) : 0;
+    this.validateSpread(spreadPercent);
+
+    const minAmountUsd =
+      data.minAmountUsd !== undefined && data.minAmountUsd !== null
+        ? Number(data.minAmountUsd)
+        : undefined;
+    const maxAmountUsd =
+      data.maxAmountUsd !== undefined && data.maxAmountUsd !== null
+        ? Number(data.maxAmountUsd)
+        : undefined;
+    this.validateBounds(minAmountUsd, maxAmountUsd);
+
     const pair = this.currencyPairRepository.create({
-      ...data,
-      fromCurrencyCode: data.fromCurrencyCode?.toUpperCase(),
-      toCurrencyCode: data.toCurrencyCode?.toUpperCase(),
+      fromCurrencyCode,
+      toCurrencyCode,
+      spreadPercent,
+      ...(minAmountUsd !== undefined ? { minAmountUsd } : {}),
+      ...(maxAmountUsd !== undefined ? { maxAmountUsd } : {}),
+      ...(data.isActive !== undefined
+        ? { isActive: Boolean(data.isActive) }
+        : {}),
     });
     return this.currencyPairRepository.save(pair);
   }
 
-  async update(id: string, data: Partial<CurrencyPair>): Promise<CurrencyPair> {
+  async update(
+    id: string,
+    data: UpdateCurrencyPairDto | Partial<CurrencyPair>,
+  ): Promise<CurrencyPair> {
+    this.validateAllowedFields(data as Record<string, unknown>);
+
     const pair = await this.currencyPairRepository.findOne({ where: { id } });
     if (!pair) throw new NotFoundException('Currency pair not found');
 
-    Object.assign(pair, data);
+    if (data.fromCurrencyCode !== undefined) {
+      pair.fromCurrencyCode = this.normalizeCurrencyCode(
+        data.fromCurrencyCode,
+        'fromCurrencyCode',
+      );
+    }
+    if (data.toCurrencyCode !== undefined) {
+      pair.toCurrencyCode = this.normalizeCurrencyCode(
+        data.toCurrencyCode,
+        'toCurrencyCode',
+      );
+    }
+    if (pair.fromCurrencyCode === pair.toCurrencyCode) {
+      throw new BadRequestException(
+        'fromCurrencyCode and toCurrencyCode must be different',
+      );
+    }
+
+    if (data.spreadPercent !== undefined) {
+      const spread = Number(data.spreadPercent);
+      this.validateSpread(spread);
+      pair.spreadPercent = spread;
+    }
+
+    const resolvedMin =
+      data.minAmountUsd !== undefined
+        ? data.minAmountUsd === null
+          ? undefined
+          : Number(data.minAmountUsd)
+        : pair.minAmountUsd !== undefined && pair.minAmountUsd !== null
+          ? Number(pair.minAmountUsd)
+          : undefined;
+    const resolvedMax =
+      data.maxAmountUsd !== undefined
+        ? data.maxAmountUsd === null
+          ? undefined
+          : Number(data.maxAmountUsd)
+        : pair.maxAmountUsd !== undefined && pair.maxAmountUsd !== null
+          ? Number(pair.maxAmountUsd)
+          : undefined;
+
+    this.validateBounds(resolvedMin, resolvedMax);
+
+    if (data.minAmountUsd !== undefined) {
+      pair.minAmountUsd = resolvedMin as number;
+    }
+    if (data.maxAmountUsd !== undefined) {
+      pair.maxAmountUsd = resolvedMax as number;
+    }
+    if (data.isActive !== undefined) {
+      pair.isActive = Boolean(data.isActive);
+    }
+
     return this.currencyPairRepository.save(pair);
   }
 
@@ -84,22 +198,29 @@ export class CurrencyPairService {
     reason: string,
     durationIso: string,
   ): Promise<CurrencyPair> {
+    if (!reason || typeof reason !== 'string' || !reason.trim()) {
+      throw new BadRequestException('Suspension reason is required');
+    }
+    if (
+      !durationIso ||
+      typeof durationIso !== 'string' ||
+      !durationIso.trim()
+    ) {
+      throw new BadRequestException('Suspension duration is required');
+    }
+
     const pair = await this.currencyPairRepository.findOne({ where: { id } });
     if (!pair) throw new NotFoundException('Currency pair not found');
 
-    // Simple duration parsing (ISO 8601 duration or simple seconds/minutes/hours)
-    // For simplicity, we'll assume the user provides a future date or we use a library if available.
-    // Since I don't know the libraries, I'll use a simple approach: assume duration is in minutes for now
-    // OR just use a Date object if the user provides ISO string.
-    // The requirement says "ISO duration". I'll use a basic parser or just expect a valid Date string for now.
-    // Wait, requirement says "ISO duration". Let's use `Date` and add time to it.
-
     const durationMs = this.parseDuration(durationIso);
+    if (!Number.isFinite(durationMs) || durationMs <= 0) {
+      throw new BadRequestException('Invalid suspension duration');
+    }
     const suspendedUntil = new Date(Date.now() + durationMs);
 
     pair.isActive = false;
     pair.suspendedUntil = suspendedUntil;
-    pair.suspensionReason = reason;
+    pair.suspensionReason = reason.trim();
 
     return this.currencyPairRepository.save(pair);
   }
@@ -138,8 +259,6 @@ export class CurrencyPairService {
     const pairs = await this.currencyPairRepository.find();
     return Promise.all(
       pairs.map(async (pair) => {
-        // Mocking 24h volume for now as it's not in the entity
-        // In a real scenario, we'd query the transaction table
         return {
           id: pair.id,
           pair: `${pair.fromCurrencyCode}/${pair.toCurrencyCode}`,
@@ -148,8 +267,8 @@ export class CurrencyPairService {
             ? `Suspended until ${pair.suspendedUntil.toISOString()}`
             : 'Active',
           spread: `${pair.spreadPercent}%`,
-          lastRateFetchTime: new Date(), // Mock
-          '24hVolume': 0, // Mock
+          lastRateFetchTime: new Date(),
+          '24hVolume': 0,
         };
       }),
     );
@@ -193,13 +312,68 @@ export class CurrencyPairService {
     return pair;
   }
 
+  private validateAllowedFields(data: Record<string, unknown>): void {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      throw new BadRequestException('Invalid currency pair payload');
+    }
+    for (const key of Object.keys(data)) {
+      if (!ALLOWED_PAIR_FIELDS.has(key)) {
+        throw new BadRequestException(`Property ${key} should not exist`);
+      }
+    }
+  }
+
+  private normalizeCurrencyCode(code: unknown, fieldName: string): string {
+    if (typeof code !== 'string' || !CURRENCY_CODE_REGEX.test(code.trim())) {
+      throw new BadRequestException(
+        `${fieldName} must be 2 to 10 alphanumeric characters`,
+      );
+    }
+    return code.trim().toUpperCase();
+  }
+
+  private validateSpread(spreadPercent: number): void {
+    if (
+      !Number.isFinite(spreadPercent) ||
+      spreadPercent < 0 ||
+      spreadPercent > 100
+    ) {
+      throw new BadRequestException(
+        'spreadPercent must be a number between 0 and 100',
+      );
+    }
+  }
+
+  private validateBounds(minAmountUsd?: number, maxAmountUsd?: number): void {
+    if (minAmountUsd !== undefined) {
+      if (!Number.isFinite(minAmountUsd) || minAmountUsd < 0) {
+        throw new BadRequestException(
+          'minAmountUsd must be a non-negative number',
+        );
+      }
+    }
+    if (maxAmountUsd !== undefined) {
+      if (!Number.isFinite(maxAmountUsd) || maxAmountUsd < 0) {
+        throw new BadRequestException(
+          'maxAmountUsd must be a non-negative number',
+        );
+      }
+    }
+    if (
+      minAmountUsd !== undefined &&
+      maxAmountUsd !== undefined &&
+      minAmountUsd > maxAmountUsd
+    ) {
+      throw new BadRequestException(
+        'minAmountUsd must be less than or equal to maxAmountUsd',
+      );
+    }
+  }
+
   private parseDuration(isoDuration: string): number {
-    // Very basic ISO 8601 duration parser (supports only PT...H, PT...M, PT...S)
-    // Example: PT1H = 1 hour, PT30M = 30 minutes
-    const regex = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/;
+    const regex = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/;
     const matches = isoDuration.match(regex);
     if (!matches) {
-      // Fallback: try to parse as ISO date string
       const date = new Date(isoDuration);
       if (!isNaN(date.getTime())) {
         return date.getTime() - Date.now();
@@ -207,9 +381,9 @@ export class CurrencyPairService {
       return 0;
     }
 
-    const hours = parseInt(matches[1] || '0');
-    const minutes = parseInt(matches[2] || '0');
-    const seconds = parseInt(matches[3] || '0');
+    const hours = parseInt(matches[1] || '0', 10);
+    const minutes = parseInt(matches[2] || '0', 10);
+    const seconds = parseInt(matches[3] || '0', 10);
 
     return (hours * 3600 + minutes * 60 + seconds) * 1000;
   }

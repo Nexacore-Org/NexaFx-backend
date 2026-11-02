@@ -40,7 +40,7 @@
     "@aws-sdk/client-s3": "^3.1098.0",
     "@aws-sdk/lib-storage": "^3.1150.0",
     "@aws-sdk/s3-request-presigner": "^3.500.0",
-    "@bull-board/api": "^8.0.1",
+    "@bull-board/api": "^9.10.4",
     "@bull-board/express": "^9.10.4",
     "@maxmind/geoip2-node": "^7.1.0",
     "@nestjs-modules/ioredis": "^2.2.2",

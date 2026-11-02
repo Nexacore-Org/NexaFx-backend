@@ -1,13 +1,25 @@
-import { Controller, Get, Request } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Query,
+  Request,
+  UsePipes,
+  ValidationPipe,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import { ReferralsService } from './referrals.service';
 import { ReferralStatsDto } from './dto/referral-stats.dto';
-import { ReferralItemDto } from './dto/referral-item.dto';
+import {
+  ListReferralsQueryDto,
+  PaginatedReferralsResponseDto,
+} from './dto/referral-item.dto';
 
 @ApiTags('Referrals')
 @ApiBearerAuth('access-token')
@@ -29,15 +41,38 @@ export class ReferralsController {
   }
 
   @Get()
+  @UsePipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+    }),
+  )
   @ApiOperation({ summary: 'List users referred by the authenticated user' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({
     status: 200,
     description: 'Referrals fetched successfully',
-    type: [ReferralItemDto],
+    type: PaginatedReferralsResponseDto,
   })
   async getMyReferrals(
     @Request() req: { user: { userId: string } },
-  ): Promise<ReferralItemDto[]> {
-    return this.referralsService.getUserReferrals(req.user.userId);
+    @Query() query?: ListReferralsQueryDto,
+  ): Promise<PaginatedReferralsResponseDto> {
+    if (query === undefined) {
+      return this.referralsService.getUserReferrals(req.user.userId);
+    }
+    const page = query.page !== undefined ? Number(query.page) : 1;
+    const limit = query.limit !== undefined ? Number(query.limit) : 20;
+    if (!Number.isInteger(page) || page < 1) {
+      throw new BadRequestException('page must be an integer >= 1');
+    }
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new BadRequestException(
+        'limit must be an integer between 1 and 100',
+      );
+    }
+    return this.referralsService.getUserReferrals(req.user.userId, page, limit);
   }
 }

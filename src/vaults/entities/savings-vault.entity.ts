@@ -73,6 +73,9 @@ export class SavingsVault {
   lastInterestAccruedAt: Date | null;
 
   @Column({ type: 'timestamp with time zone', nullable: true })
+  lastAutoDepositAt: Date | null;
+
+  @Column({ type: 'timestamp with time zone', nullable: true })
   maturedAt: Date | null;
 
   @Column({ type: 'timestamp with time zone', nullable: true })

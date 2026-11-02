@@ -66,6 +66,9 @@ export class VaultResponseDto {
   @ApiProperty({ nullable: true, enum: AutoDepositFrequency })
   autoDepositFrequency: AutoDepositFrequency | null;
 
+  @ApiProperty({ nullable: true, required: false })
+  lastAutoDepositAt?: Date | null;
+
   @ApiProperty()
   progressPercent: number;
 

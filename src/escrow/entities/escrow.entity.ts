@@ -18,6 +18,8 @@ export enum EscrowStatus {
   REFUNDED = 'REFUNDED',
   DISPUTED = 'DISPUTED',
   RESOLVED = 'RESOLVED',
+  CANCELLED = 'CANCELLED',
+  EXPIRED = 'EXPIRED',
 }
 
 @Index(['senderId', 'recipientId'])

@@ -18,6 +18,7 @@ import {
   ApiBody,
   ApiParam,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { EscrowService } from './escrow.service';
 import { CreateEscrowDto } from './dto/create-escrow.dto';
 import { EscrowQueryDto } from './dto/escrow-query.dto';
@@ -39,6 +40,12 @@ export class EscrowController {
   constructor(private readonly escrowService: EscrowService) {}
 
   @Post()
+  @Throttle({
+    default: {
+      ttl: 60 * 1000,
+      limit: Number(process.env.THROTTLE_ESCROW_CREATE_LIMIT ?? 10),
+    },
+  })
   @ApiOperation({ summary: 'Create a new escrow agreement' })
   @ApiBody({ type: CreateEscrowDto })
   @ApiResponse({ status: 201, description: 'Escrow created successfully' })
@@ -48,6 +55,18 @@ export class EscrowController {
     @Body() dto: CreateEscrowDto,
   ) {
     return this.escrowService.createEscrow(user.userId, dto);
+  }
+
+  @Post(':id/cancel')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Cancel a pending escrow agreement' })
+  @ApiParam({ name: 'id', type: String, description: 'Escrow UUID' })
+  @ApiResponse({ status: 200, description: 'Escrow cancelled successfully' })
+  async cancelEscrow(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.escrowService.cancelEscrow(user.userId, id);
   }
 
   @Post(':id/fund')
@@ -77,12 +96,12 @@ export class EscrowController {
   @Post(':id/refund')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Refund a funded escrow back to the sender as admin' })
+  @ApiOperation({
+    summary: 'Refund a funded escrow back to the sender as admin',
+  })
   @ApiParam({ name: 'id', type: String, description: 'Escrow UUID' })
   @ApiResponse({ status: 200, description: 'Escrow refunded successfully' })
-  async refundEscrow(
-    @Param('id', ParseUUIDPipe) id: string,
-  ) {
+  async refundEscrow(@Param('id', ParseUUIDPipe) id: string) {
     return this.escrowService.adminRefundEscrow(id);
   }
 

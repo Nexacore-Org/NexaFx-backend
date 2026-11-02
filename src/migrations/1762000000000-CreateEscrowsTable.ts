@@ -11,7 +11,9 @@ export class CreateEscrowsTable1762000000000 implements MigrationInterface {
         'RELEASED',
         'REFUNDED',
         'DISPUTED',
-        'RESOLVED'
+        'RESOLVED',
+        'CANCELLED',
+        'EXPIRED'
       )
     `);
 

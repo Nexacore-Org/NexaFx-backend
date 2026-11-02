@@ -7,14 +7,18 @@ import { User } from '../users/user.entity';
 import { FCMService } from '../firebase/fcm.service';
 import { ConfigService } from '@nestjs/config';
 import { NotFoundException } from '@nestjs/common';
+import { MailService } from '../modules/mail/mail.service';
+import { NotificationsGateway } from './notifications.gateway';
+import { NotificationPreferenceService } from './services/notification-preference.service';
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
   let notificationRepo: jest.Mocked<Repository<Notification>>;
   let userRepo: jest.Mocked<Repository<User>>;
   let fcmService: jest.Mocked<FCMService>;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let configService: jest.Mocked<ConfigService>;
+  let mailService: { enqueueEmail: jest.Mock };
+  let preferenceService: { generateUnsubscribeToken: jest.Mock };
 
   const mockNotification: Notification = {
     id: '550e8400-e29b-41d4-a716-446655440000',
@@ -27,7 +31,6 @@ describe('NotificationsService', () => {
     readAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
-    readAt: undefined,
     searchVector: null,
     user: {} as any,
   };
@@ -65,8 +68,19 @@ describe('NotificationsService', () => {
     const mockConfigService = {
       get: jest.fn().mockImplementation((key) => {
         if (key === 'SKIP_EMAIL_SENDING') return 'true';
+        if (key === 'APP_URL') return 'https://api.nexafx.io';
         return null;
       }),
+    };
+
+    mailService = {
+      enqueueEmail: jest.fn().mockResolvedValue(undefined),
+    };
+
+    preferenceService = {
+      generateUnsubscribeToken: jest
+        .fn()
+        .mockReturnValue('signed-unsub-token-123'),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -87,6 +101,18 @@ describe('NotificationsService', () => {
         {
           provide: ConfigService,
           useValue: mockConfigService,
+        },
+        {
+          provide: MailService,
+          useValue: mailService,
+        },
+        {
+          provide: NotificationsGateway,
+          useValue: { sendToUser: jest.fn() },
+        },
+        {
+          provide: NotificationPreferenceService,
+          useValue: preferenceService,
         },
       ],
     }).compile();
@@ -153,6 +179,39 @@ describe('NotificationsService', () => {
       );
 
       expect(fcmService.sendPush).not.toHaveBeenCalled();
+    });
+
+    it('includes an unsubscribe URL and List-Unsubscribe headers in notification emails (#1514)', async () => {
+      configService.get.mockImplementation((key: string) => {
+        if (key === 'SKIP_EMAIL_SENDING') return 'false';
+        if (key === 'APP_URL') return 'https://api.nexafx.io';
+        return null;
+      });
+
+      await service.dispatch(
+        'user-123',
+        NotificationType.KYC,
+        'KYC Approved',
+        'Your KYC has been approved',
+      );
+
+      expect(preferenceService.generateUnsubscribeToken).toHaveBeenCalledWith(
+        'user-123',
+        NotificationType.KYC,
+      );
+      expect(mailService.enqueueEmail).toHaveBeenCalledTimes(1);
+
+      const emailJob = mailService.enqueueEmail.mock.calls[0][0];
+      const expectedUrl =
+        'https://api.nexafx.io/v1/notifications/unsubscribe?token=signed-unsub-token-123';
+
+      expect(emailJob.to).toBe('test@example.com');
+      expect(emailJob.html).toContain(expectedUrl);
+      expect(emailJob.text).toContain(expectedUrl);
+      expect(emailJob.headers).toEqual({
+        'List-Unsubscribe': `<${expectedUrl}>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      });
     });
   });
 

@@ -12,6 +12,7 @@ export interface SendEmailJob {
   html?: string;
   text?: string;
   from?: string;
+  headers?: Record<string, string>;
 }
 
 const HTML_ESCAPE_MAP: Record<string, string> = {
@@ -66,6 +67,16 @@ export class MailService {
       );
     }
 
+    const customHeaders: Record<string, string> = {};
+    if (job.headers) {
+      for (const [key, value] of Object.entries(job.headers)) {
+        if (value !== undefined && value !== null) {
+          const headerKey = key.startsWith('h:') ? key : `h:${key}`;
+          customHeaders[headerKey] = value;
+        }
+      }
+    }
+
     const mailgun = new Mailgun(FormData);
     const client = mailgun.client({ username: 'api', key: apiKey });
 
@@ -75,6 +86,7 @@ export class MailService {
       subject: job.subject,
       html: job.html,
       text: job.text,
+      ...customHeaders,
     } as any);
   }
 

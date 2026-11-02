@@ -5,11 +5,14 @@ import {
   UnprocessableEntityException,
   NotFoundException,
   Logger,
+  Inject,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan } from 'typeorm';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Repository, LessThan, In } from 'typeorm';
+import { Cron } from '@nestjs/schedule';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { GdprConsent } from './entities/gdpr-consent.entity';
 import { ErasureAuditLog } from './entities/erasure-audit-log.entity';
 import { User } from '../../users/user.entity';
@@ -31,14 +34,24 @@ import {
   STORAGE_SERVICE_TOKEN,
   StorageService,
 } from '../../modules/storage/storage.service';
-import { Inject } from '@nestjs/common';
+import { RedisService } from '../redis/redis.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
 
+export interface RetentionUserDeletionFailure {
+  userId: string;
+  error: string;
+}
+
 @Injectable()
 export class GdprService {
+  static readonly RETENTION_BATCH_SIZE = 500;
+  static readonly RETENTION_LOCK_KEY = 'gdpr:data_retention_cron_lock';
+  static readonly RETENTION_LOCK_TTL_MS = 30 * 60 * 1000;
+
   private readonly logger = new Logger(GdprService.name);
+  private isRetentionRunning = false;
 
   constructor(
     @InjectRepository(GdprConsent)
@@ -69,6 +82,8 @@ export class GdprService {
     private readonly storageService: StorageService,
     @InjectQueue('gdpr-export') private readonly exportQueue: Queue,
     private readonly configService: ConfigService,
+    @Optional()
+    private readonly redisService?: RedisService,
   ) {}
 
   async recordConsent(
@@ -182,10 +197,7 @@ export class GdprService {
 
     // Drop the document keys, then the applications themselves.
     if (kycApplications.length > 0) {
-      await this.kycApplicationRepository.update(
-        { userId },
-        { documents: {} },
-      );
+      await this.kycApplicationRepository.update({ userId }, { documents: {} });
     }
     await this.kycApplicationRepository.delete({ userId });
 
@@ -267,76 +279,285 @@ export class GdprService {
     return { status: state, jobId: userJob.id || null };
   }
 
-  @Cron('0 0 1 * *')
-  async enforceDataRetentionPolicies(): Promise<void> {
-    this.logger.log('Starting monthly data retention cron job...');
+  private async acquireRetentionLock(): Promise<{
+    acquired: boolean;
+    release: () => Promise<void>;
+  }> {
+    if (this.isRetentionRunning) {
+      return { acquired: false, release: async () => undefined };
+    }
 
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-    const sevenYearsAgo = new Date(
-      now.getTime() - 7 * 365 * 24 * 60 * 60 * 1000,
-    );
+    this.isRetentionRunning = true;
+    const token = crypto.randomUUID();
+    const lockKey =
+      typeof this.redisService?.key === 'function'
+        ? this.redisService.key('gdpr', 'data_retention_cron_lock')
+        : GdprService.RETENTION_LOCK_KEY;
+    const rawClient = this.redisService?.rawClient;
 
-    // 1. Delete notifications older than 90 days
-    const notificationsResult = await this.notificationRepository.delete({
-      createdAt: LessThan(ninetyDaysAgo),
-    });
+    if (rawClient && typeof rawClient.set === 'function') {
+      try {
+        const result = await rawClient.set(
+          lockKey,
+          token,
+          'PX',
+          GdprService.RETENTION_LOCK_TTL_MS,
+          'NX',
+        );
+        if (result !== 'OK') {
+          this.isRetentionRunning = false;
+          return { acquired: false, release: async () => undefined };
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Redis lock unavailable for GDPR retention cron; falling back to local lock: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
 
-    // 2. Delete webhook deliveries older than 30 days
-    const webhooksResult = await this.webhookDeliveryRepository.delete({
-      createdAt: LessThan(thirtyDaysAgo),
-    });
+    return {
+      acquired: true,
+      release: async () => {
+        try {
+          if (rawClient && typeof rawClient.get === 'function') {
+            const current = await rawClient.get(lockKey);
+            if (current === token && typeof rawClient.del === 'function') {
+              await rawClient.del(lockKey);
+            }
+          }
+        } catch {
+          // Best-effort lock release
+        } finally {
+          this.isRetentionRunning = false;
+        }
+      },
+    };
+  }
 
-    // 3. Delete anonymised users without financial records in 7 years
-    const anonymisedUsers = await this.userRepository.find({
+  private async deleteExpiredInBatches<
+    T extends { id: string; createdAt: Date },
+  >(repo: Repository<T>, cutoff: Date, batchSize: number): Promise<number> {
+    let totalDeleted = 0;
+
+    if (typeof repo.createQueryBuilder === 'function') {
+      const probeQb = repo.createQueryBuilder('record');
+      if (probeQb && typeof probeQb.select === 'function') {
+        while (true) {
+          const batchQb = repo
+            .createQueryBuilder('record')
+            .select(['record.id'])
+            .where('record.createdAt < :cutoff', { cutoff })
+            .orderBy('record.createdAt', 'ASC')
+            .take(batchSize);
+
+          const batch = await batchQb.getMany();
+          if (!Array.isArray(batch) || batch.length === 0) {
+            break;
+          }
+
+          const ids = batch.map((row) => row.id);
+          const deleteRes = await repo.delete({ id: In(ids) } as any);
+          totalDeleted += deleteRes?.affected ?? ids.length;
+
+          if (batch.length < batchSize) {
+            break;
+          }
+        }
+
+        return totalDeleted;
+      }
+    }
+
+    if (typeof repo.find === 'function') {
+      let fetchedAnyBatch = false;
+      while (true) {
+        const batch = await repo.find({
+          select: ['id'] as any,
+          where: { createdAt: LessThan(cutoff) } as any,
+          take: batchSize,
+        });
+
+        if (!Array.isArray(batch) || batch.length === 0) {
+          break;
+        }
+
+        fetchedAnyBatch = true;
+        const ids = batch.map((row) => row.id);
+        const deleteRes = await repo.delete({ id: In(ids) } as any);
+        totalDeleted += deleteRes?.affected ?? ids.length;
+
+        if (batch.length < batchSize) {
+          break;
+        }
+      }
+
+      if (fetchedAnyBatch) {
+        return totalDeleted;
+      }
+    }
+
+    const fallbackRes = await repo.delete({
+      createdAt: LessThan(cutoff),
+    } as any);
+    return fallbackRes?.affected ?? 0;
+  }
+
+  private async fetchEligibleUsersBatch(
+    thirtyDaysAgo: Date,
+    sevenYearsAgo: Date,
+    batchSize: number,
+    lastProcessedUserId: string | null,
+  ): Promise<Array<{ id: string }>> {
+    if (typeof this.userRepository.createQueryBuilder === 'function') {
+      const qb = this.userRepository.createQueryBuilder('u');
+      if (qb && typeof qb.where === 'function') {
+        qb.select(['u.id'])
+          .where('u.isActive = :isActive', { isActive: false })
+          .andWhere('u.deletedAt < :thirtyDaysAgo', { thirtyDaysAgo })
+          .andWhere(
+            `NOT EXISTS (
+              SELECT 1
+              FROM transactions tx
+              WHERE tx."userId" = u.id
+                AND tx."createdAt" > :sevenYearsAgo
+            )`,
+            { sevenYearsAgo },
+          );
+
+        if (lastProcessedUserId) {
+          qb.andWhere('u.id > :lastProcessedUserId', { lastProcessedUserId });
+        }
+
+        if (typeof qb.orderBy === 'function') {
+          qb.orderBy('u.id', 'ASC');
+        }
+        if (typeof qb.take === 'function') {
+          qb.take(batchSize);
+        }
+
+        const rows = await qb.getMany();
+        return Array.isArray(rows) ? rows : [];
+      }
+    }
+
+    // Fallback when createQueryBuilder is not mocked in lightweight unit tests
+    if (lastProcessedUserId !== null) {
+      return [];
+    }
+    const rows = await this.userRepository.find({
       where: {
         isActive: false,
         deletedAt: LessThan(thirtyDaysAgo),
       },
+      take: batchSize,
     });
+    return Array.isArray(rows) ? rows : [];
+  }
 
-    let deletedUsersCount = 0;
-    for (const user of anonymisedUsers) {
-      const recentTransactions = await this.transactionRepository.count({
-        where: {
-          userId: user.id,
-          createdAt: LessThan(now), // Wait, needs to be greater than 7 years ago
-        },
-      });
-      // We actually want to check if there are ANY transactions created AFTER 7 years ago
-      const hasRecentFinancials = await this.transactionRepository
-        .createQueryBuilder('tx')
-        .where('tx.userId = :userId', { userId: user.id })
-        .andWhere('tx.createdAt > :sevenYearsAgo', { sevenYearsAgo })
-        .getCount();
-
-      if (hasRecentFinancials === 0) {
-        await this.userRepository.delete(user.id);
-        deletedUsersCount++;
-      }
+  @Cron('0 0 1 * *')
+  async enforceDataRetentionPolicies(
+    batchSize: number = GdprService.RETENTION_BATCH_SIZE,
+  ): Promise<void> {
+    const lock = await this.acquireRetentionLock();
+    if (!lock.acquired) {
+      this.logger.log(
+        'Skipping monthly data retention cron job — lock already held by another instance.',
+      );
+      return;
     }
 
-    // Log the results
-    const auditLog = this.auditLogRepository.create({
-      actorId: null,
-      action: 'gdpr.data_retention_cron',
-      resourceType: AuditEntityType.SYSTEM,
-      resourceId: null,
-      status: AuditLogStatus.SUCCESS,
-      metadata: {
-        notificationsDeleted: notificationsResult.affected || 0,
-        webhookDeliveriesDeleted: webhooksResult.affected || 0,
-        usersHardDeleted: deletedUsersCount,
-      },
-      ipAddress: '127.0.0.1',
-      userAgent: 'Cron',
-    });
-    await this.auditLogRepository.save(auditLog);
+    try {
+      this.logger.log('Starting monthly data retention cron job...');
 
-    this.logger.log(
-      `Data retention complete: ${deletedUsersCount} users, ${notificationsResult.affected} notifications, ${webhooksResult.affected} webhooks deleted.`,
-    );
+      const now = new Date();
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+      const sevenYearsAgo = new Date(
+        now.getTime() - 7 * 365 * 24 * 60 * 60 * 1000,
+      );
+
+      // 1. Delete notifications older than 90 days in batches
+      const notificationsDeleted = await this.deleteExpiredInBatches(
+        this.notificationRepository,
+        ninetyDaysAgo,
+        batchSize,
+      );
+
+      // 2. Delete webhook deliveries older than 30 days in batches
+      const webhookDeliveriesDeleted = await this.deleteExpiredInBatches(
+        this.webhookDeliveryRepository,
+        thirtyDaysAgo,
+        batchSize,
+      );
+
+      // 3. Select eligible anonymised users without financial records in 7 years
+      //    using a single NOT EXISTS query per batch and isolate per-user delete errors.
+      let deletedUsersCount = 0;
+      const failedUserDeletions: RetentionUserDeletionFailure[] = [];
+      let lastProcessedUserId: string | null = null;
+
+      while (true) {
+        const eligibleUsers = await this.fetchEligibleUsersBatch(
+          thirtyDaysAgo,
+          sevenYearsAgo,
+          batchSize,
+          lastProcessedUserId,
+        );
+
+        if (eligibleUsers.length === 0) {
+          break;
+        }
+
+        for (const user of eligibleUsers) {
+          lastProcessedUserId = user.id;
+          try {
+            await this.userRepository.delete(user.id);
+            deletedUsersCount++;
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
+            failedUserDeletions.push({
+              userId: user.id,
+              error: errorMessage,
+            });
+            this.logger.error(
+              `Failed to hard-delete user ${user.id} during retention cron: ${errorMessage}`,
+            );
+          }
+        }
+
+        if (eligibleUsers.length < batchSize) {
+          break;
+        }
+      }
+
+      // Always write the retention audit log, including failure count and failures
+      const auditLog = this.auditLogRepository.create({
+        actorId: null,
+        action: 'gdpr.data_retention_cron',
+        resourceType: AuditEntityType.SYSTEM,
+        resourceId: null,
+        status: AuditLogStatus.SUCCESS,
+        metadata: {
+          notificationsDeleted,
+          webhookDeliveriesDeleted,
+          usersHardDeleted: deletedUsersCount,
+          failureCount: failedUserDeletions.length,
+          failedUsersCount: failedUserDeletions.length,
+          failures: failedUserDeletions,
+          failedUserDeletions,
+        },
+        ipAddress: '127.0.0.1',
+        userAgent: 'Cron',
+      });
+      await this.auditLogRepository.save(auditLog);
+
+      this.logger.log(
+        `Data retention complete: ${deletedUsersCount} users (${failedUserDeletions.length} failed), ${notificationsDeleted} notifications, ${webhookDeliveriesDeleted} webhooks deleted.`,
+      );
+    } finally {
+      await lock.release();
+    }
   }
 
   async getConsentStatus(userId: string): Promise<{

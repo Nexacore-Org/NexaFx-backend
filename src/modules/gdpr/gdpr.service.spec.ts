@@ -1,3 +1,42 @@
+jest.mock('@nestjs/typeorm', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { Inject } = require('@nestjs/common');
+  const tokenFor = (entity: { name?: string } | string) =>
+    `${typeof entity === 'string' ? entity : (entity?.name ?? 'Entity')}Repository`;
+  return {
+    InjectRepository: (entity: { name?: string } | string) =>
+      Inject(tokenFor(entity)),
+    getRepositoryToken: tokenFor,
+  };
+});
+
+jest.mock('@nestjs/config', () => ({
+  ConfigService: class ConfigService {},
+}));
+
+jest.mock('@nestjs/swagger', () => ({
+  ApiProperty: () => () => undefined,
+  ApiPropertyOptional: () => () => undefined,
+  ApiTags: () => () => undefined,
+  ApiBearerAuth: () => () => undefined,
+  ApiOperation: () => () => undefined,
+  ApiResponse: () => () => undefined,
+}));
+
+jest.mock('@nestjs/schedule', () => ({
+  Cron: () => () => undefined,
+  CronExpression: { EVERY_DAY_AT_MIDNIGHT: '0 0 * * *' },
+}));
+
+jest.mock('@nestjs/bullmq', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { Inject } = require('@nestjs/common');
+  return {
+    InjectQueue: (name: string) => Inject(`BullQueue_${name}`),
+    Processor: () => () => undefined,
+  };
+});
+
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import {
@@ -11,6 +50,7 @@ import { GdprService } from './gdpr.service';
 import { GdprConsent } from './entities/gdpr-consent.entity';
 import { ErasureAuditLog } from './entities/erasure-audit-log.entity';
 import { STORAGE_SERVICE_TOKEN } from '../storage/storage.service';
+import { RedisService } from '../redis/redis.service';
 
 jest.mock('bcrypt');
 const mockedBcrypt = bcrypt as jest.Mocked<typeof bcrypt>;
@@ -40,6 +80,7 @@ describe('GdprService', () => {
     count: jest.fn().mockResolvedValue(0),
     delete: jest.fn().mockResolvedValue({ affected: 1 }),
     update: jest.fn().mockResolvedValue({ affected: 1 }),
+    createQueryBuilder: jest.fn(),
   });
 
   let consentRepo: ReturnType<typeof mockRepo>;
@@ -56,6 +97,8 @@ describe('GdprService', () => {
   let expenseRepo: ReturnType<typeof mockRepo>;
   let storageService: { delete: jest.Mock };
   let exportQueue: { add: jest.Mock; getJobs: jest.Mock };
+  let redisClient: { set: jest.Mock; get: jest.Mock; del: jest.Mock };
+  let redisService: { key: jest.Mock; rawClient: typeof redisClient };
 
   beforeEach(async () => {
     consentRepo = mockRepo();
@@ -74,6 +117,15 @@ describe('GdprService', () => {
     exportQueue = {
       add: jest.fn().mockResolvedValue({ id: 'job-1' }),
       getJobs: jest.fn().mockResolvedValue([]),
+    };
+    redisClient = {
+      set: jest.fn().mockResolvedValue('OK'),
+      get: jest.fn().mockResolvedValue(null),
+      del: jest.fn().mockResolvedValue(1),
+    };
+    redisService = {
+      key: jest.fn((mod: string, k: string) => `nexafx:test:${mod}:${k}`),
+      rawClient: redisClient,
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -112,6 +164,7 @@ describe('GdprService', () => {
           provide: ConfigService,
           useValue: { get: jest.fn().mockReturnValue('1.0.0') },
         },
+        { provide: RedisService, useValue: redisService },
       ],
     }).compile();
 
@@ -249,6 +302,91 @@ describe('GdprService', () => {
       await expect(service.requestExport('missing')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('enforceDataRetentionPolicies (#1502)', () => {
+    const buildUserEligibilityQb = (batches: Array<Array<{ id: string }>>) => {
+      let callIdx = 0;
+      const qb = {
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockImplementation(async () => {
+          const next = batches[callIdx] ?? [];
+          callIdx += 1;
+          return next;
+        }),
+      };
+      return qb;
+    };
+
+    it('issues one NOT EXISTS eligibility query per batch (not per user) and never queries transactionRepository per user', async () => {
+      const userQb = buildUserEligibilityQb([
+        [{ id: 'user-a' }, { id: 'user-b' }],
+        [{ id: 'user-c' }],
+      ]);
+      userRepo.createQueryBuilder.mockReturnValue(userQb);
+
+      await service.enforceDataRetentionPolicies(2);
+
+      // 2 batch queries total for 3 users, 0 per-user transaction queries
+      expect(userQb.getMany).toHaveBeenCalledTimes(2);
+      expect(userQb.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('NOT EXISTS'),
+        expect.objectContaining({ sevenYearsAgo: expect.any(Date) }),
+      );
+      expect(txRepo.count).not.toHaveBeenCalled();
+      expect(txRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(userRepo.delete).toHaveBeenCalledTimes(3);
+    });
+
+    it('isolates per-user delete errors so a failing delete does not abort remaining users or the audit log', async () => {
+      const userQb = buildUserEligibilityQb([
+        [{ id: 'user-1' }, { id: 'user-2-fk-fail' }, { id: 'user-3' }],
+      ]);
+      userRepo.createQueryBuilder.mockReturnValue(userQb);
+
+      userRepo.delete
+        .mockResolvedValueOnce({ affected: 1 })
+        .mockRejectedValueOnce(new Error('FK constraint violation on user-2'))
+        .mockResolvedValueOnce({ affected: 1 });
+
+      await service.enforceDataRetentionPolicies(10);
+
+      expect(userRepo.delete).toHaveBeenCalledTimes(3);
+      expect(userRepo.delete).toHaveBeenNthCalledWith(1, 'user-1');
+      expect(userRepo.delete).toHaveBeenNthCalledWith(2, 'user-2-fk-fail');
+      expect(userRepo.delete).toHaveBeenNthCalledWith(3, 'user-3');
+
+      expect(auditLogRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'gdpr.data_retention_cron',
+          metadata: expect.objectContaining({
+            usersHardDeleted: 2,
+            failureCount: 1,
+            failedUsersCount: 1,
+            failures: [
+              expect.objectContaining({
+                userId: 'user-2-fk-fail',
+                error: expect.stringContaining('FK constraint violation'),
+              }),
+            ],
+          }),
+        }),
+      );
+      expect(auditLogRepo.save).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips execution when the Redis distributed lock is already held by another replica', async () => {
+      redisClient.set.mockResolvedValueOnce(null);
+
+      await service.enforceDataRetentionPolicies();
+
+      expect(userRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(auditLogRepo.save).not.toHaveBeenCalled();
     });
   });
 });

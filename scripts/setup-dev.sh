@@ -73,7 +73,7 @@ else
 fi
 
 # 4. Start Docker Compose services
-print_status "Starting Docker services (PostgreSQL)..."
+print_status "Starting Docker services (PostgreSQL and Redis)..."
 docker-compose up -d
 
 # 5. Wait for PostgreSQL to be healthy
@@ -96,11 +96,31 @@ if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
     exit 1
 fi
 
-# 6. Install npm dependencies
+# 6. Wait for Redis to be healthy
+print_status "Waiting for Redis to be ready..."
+REDIS_MAX_RETRIES=30
+REDIS_RETRY_COUNT=0
+
+while [ $REDIS_RETRY_COUNT -lt $REDIS_MAX_RETRIES ]; do
+    if [ "$(docker-compose exec -T redis redis-cli ping 2>/dev/null)" = "PONG" ]; then
+        print_success "Redis is ready!"
+        break
+    fi
+    REDIS_RETRY_COUNT=$((REDIS_RETRY_COUNT + 1))
+    print_warning "Redis not ready yet (attempt $REDIS_RETRY_COUNT/$REDIS_MAX_RETRIES)..."
+    sleep 2
+done
+
+if [ $REDIS_RETRY_COUNT -eq $REDIS_MAX_RETRIES ]; then
+    print_error "Timed out waiting for Redis"
+    exit 1
+fi
+
+# 7. Install npm dependencies
 print_status "Installing npm dependencies..."
 npm ci
 
-# 7. Run database migrations
+# 8. Run database migrations
 print_status "Running database migrations..."
 npm run typeorm:migration:run
 
@@ -110,6 +130,6 @@ print_success "NexaFX v2 dev environment ready!"
 echo ""
 echo "Next steps:"
 echo "  • Start the app: npm run start:dev"
-echo "  • View API docs: http://localhost:3000/api/docs"
+echo "  • Check health: http://localhost:3000/health"
 echo "  • Run tests: npm run test"
 echo "=============================================="

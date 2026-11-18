@@ -6,22 +6,35 @@ services:
     container_name: nexafx_postgres_v2
     environment:
       POSTGRES_DB: nexafx
-      POSTGRES_USER: nexafx
-      POSTGRES_PASSWORD: nexafx
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     ports:
       - '5432:5432'
     volumes:
       - postgres_data_v2:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U nexafx']
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
       interval: 5s
       timeout: 5s
       retries: 5
 
-  # Jaeger distributed tracing system instance container
+  redis:
+    image: redis:7-alpine
+    container_name: nexafx_redis_v2
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Jaeger is opt-in until OpenTelemetry instrumentation is implemented.
   jaeger:
     image: jaegertracing/all-in-one:latest
     container_name: nexafx-jaeger-v2
+    profiles:
+      - tracing
     environment:
       - COLLECTOR_OTLP_ENABLED=true
     ports:

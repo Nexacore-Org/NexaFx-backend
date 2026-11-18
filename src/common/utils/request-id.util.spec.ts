@@ -1,5 +1,7 @@
-import { randomUUID } from 'crypto';
 import { sanitizeRequestId } from './request-id.util';
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 describe('sanitizeRequestId', () => {
   it('keeps a well-formed id', () => {
@@ -14,9 +16,7 @@ describe('sanitizeRequestId', () => {
     const result = sanitizeRequestId('req-1\n[INFO] forged log line');
 
     expect(result).not.toContain('\n');
-    expect(result).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-    );
+    expect(result).toMatch(UUID_PATTERN);
   });
 
   it.each([
@@ -26,21 +26,13 @@ describe('sanitizeRequestId', () => {
     'a'.repeat(65),
     '',
   ])('replaces %j with a UUID', (value) => {
-    const result = sanitizeRequestId(value);
-
-    if (value.trim() === '') {
-      expect(result).not.toBe('');
-    } else {
-      expect(result).toBe(randomUUID());
-    }
+    expect(sanitizeRequestId(value)).toMatch(UUID_PATTERN);
   });
 
   it.each([undefined, null, 42, {}, ['a']])(
     'replaces a non-string value (%j)',
     (value) => {
-      expect(sanitizeRequestId(value)).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-      );
+      expect(sanitizeRequestId(value)).toMatch(UUID_PATTERN);
     },
   );
 });

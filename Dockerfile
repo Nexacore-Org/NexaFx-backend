@@ -7,7 +7,7 @@ WORKDIR /app
 
 # Install dependencies first for better layer caching.
 # Copy manifests and lockfile only, then run a clean install.
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci
 
 # Copy the rest of the source and build.
@@ -21,8 +21,8 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 # Install only production dependencies into a clean tree.
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+COPY package.json package-lock.json .npmrc ./
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
 # Copy the compiled output from the builder stage.
 COPY --from=builder /app/dist ./dist

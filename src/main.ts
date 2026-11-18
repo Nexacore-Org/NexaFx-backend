@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { readFileSync } from 'fs';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { MulterExceptionFilter } from './common/filters/multer-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -26,6 +26,14 @@ import { runWithRequestId } from './common/context/request-context';
 import { sanitizeRequestId } from './common/utils/request-id.util';
 
 async function bootstrap() {
+  if (process.argv.includes('--version')) {
+    const packageJson = JSON.parse(
+      readFileSync(join(process.cwd(), 'package.json'), 'utf8'),
+    ) as { version?: string };
+    console.log(packageJson.version ?? '0.0.0');
+    return;
+  }
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     rawBody: true,
   });
@@ -75,13 +83,6 @@ async function bootstrap() {
     type: VersioningType.URI,
     defaultVersion: '1',
   });
-
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('NexaFX API')
-    .setDescription('NexaFX Backend API with Audit Logs')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
 
   const allowedOrigins = configService.get<string>('ALLOWED_ORIGINS') ?? '';
   const origins = allowedOrigins

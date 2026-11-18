@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 
-const REQUEST_ID_PATTERN = /^[A-Za-z0-9-]{1,64}$/;
+const REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
 /**
  * Returns the client-supplied X-Request-ID when it is safe to echo, otherwise

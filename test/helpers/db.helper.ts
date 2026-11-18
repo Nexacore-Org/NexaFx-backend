@@ -1,21 +1,41 @@
 import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 
+function isMissingTableError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: string }).code === '42P01'
+  );
+}
+
 /**
  * Truncate all tables in the database
  * Keep schema intact for speed
  */
 export async function truncateAll(dataSource: DataSource): Promise<void> {
-  const entities = dataSource.entityMetadatas;
+  const tables = dataSource.entityMetadatas.map((entity) =>
+    entity.tablePath
+      .split('.')
+      .map((part) => `"${part.replace(/"/g, '""')}"`)
+      .join('.'),
+  );
 
-  for (const entity of entities) {
-    try {
-      const repository = dataSource.getRepository(entity.name);
-      await repository.query(`TRUNCATE TABLE "${entity.tableName}" CASCADE;`);
-    } catch (error) {
-      // Ignore tables that might not exist or can't be truncated
-      console.warn(`Failed to truncate ${entity.tableName}:`, error.message);
+  if (tables.length === 0) {
+    return;
+  }
+
+  try {
+    await dataSource.query(
+      `TRUNCATE TABLE ${tables.join(', ')} RESTART IDENTITY CASCADE`,
+    );
+  } catch (error) {
+    if (isMissingTableError(error)) {
+      console.warn('Failed to truncate tables:', error);
+      return;
     }
+    throw error;
   }
 }
 
@@ -50,7 +70,6 @@ export async function seedTestUser(
     INSERT INTO "users" (
       email,
       password,
-      "passwordHash",
       "firstName",
       "lastName",
       role,
@@ -60,7 +79,7 @@ export async function seedTestUser(
       "walletSecretKeyEncrypted",
       "referralCode"
     )
-    VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     RETURNING *
     `,
     [

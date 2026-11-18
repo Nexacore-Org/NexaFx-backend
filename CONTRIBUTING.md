@@ -199,7 +199,11 @@ Every PR must include appropriate tests:
 
 - **Unit Tests**: For services, utils, and pure functions
 - **E2E Tests**: For API endpoints and user flows
-- **Coverage**: Aim for 80%+ coverage on new code
+- **Coverage**: Aim for 80%+ coverage on new code. CI runs `npm run test:cov` and
+  fails when the global thresholds in `package.json` are not met.
+- **E2E isolation**: All E2E specs share one Postgres database.
+  `test/jest-e2e.json` pins `maxWorkers` to 1 and CI also passes `--runInBand`;
+  keep the E2E suite serial so `truncateAll()` cannot wipe another suite's rows.
 
 ### Test Commands
 

@@ -27,9 +27,9 @@ describe('Boot smoke (temporary)', () => {
 
   it('seed + mint token + hit risk high-risk', async () => {
     const rows = await dataSource.query(
-      `INSERT INTO users (email, "passwordHash", "walletPublicKey", "walletSecretKeyEncrypted", "referralCode", role, "isActive", "isVerified", "createdAt", "updatedAt")
-       VALUES ($1, $2, $3, $4, $5, 'ADMIN', true, true, NOW(), NOW()) RETURNING id`,
-      ['smoke-admin@example.com', 'x', 'G' + 'A'.repeat(55), 'enc', 'SMOKE001'],
+      `INSERT INTO users (email, "walletPublicKey", "walletSecretKeyEncrypted", "referralCode", role, "isActive", "isVerified", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, 'ADMIN', true, true, NOW(), NOW()) RETURNING id`,
+      ['smoke-admin@example.com', 'G' + 'A'.repeat(55), 'enc', 'SMOKE001'],
     );
     const secret =
       process.env.JWT_SECRET || 'default-secret-change-in-production';

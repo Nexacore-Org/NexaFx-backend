@@ -1,29 +1,14 @@
-import { NestFactory, Reflector } from '@nestjs/core';
+import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import {
-  ClassSerializerInterceptor,
-  Logger,
-  ValidationPipe,
-  VersioningType,
-} from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
-import { MulterExceptionFilter } from './common/filters/multer-exception.filter';
-import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
-import { TransformResponseInterceptor } from './common/interceptors/transform-response.interceptor';
-import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
-import { IdempotencyService } from './common/services/idempotency.service';
-import helmet from 'helmet';
+import { DocumentBuilder } from '@nestjs/swagger';
 import { JwtService } from '@nestjs/jwt';
 import { createAdminQueueAuthMiddleware } from './modules/queues/admin-queue-auth.middleware';
 import { QueuesDashboardService } from './modules/queues/queues-dashboard.service';
 import { join } from 'path';
-import * as compression from 'compression';
-import { Request, Response, NextFunction } from 'express';
-import { runWithRequestId } from './common/context/request-context';
-import { sanitizeRequestId } from './common/utils/request-id.util';
+import { configureApp } from './bootstrap/configure-app';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -32,49 +17,7 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const configService = app.get(ConfigService);
 
-  // Trace Correlation & Request ID Context Propagation Middleware
-  app.use((req: Request, res: Response, next: NextFunction) => {
-    // Validated: the value is echoed into log lines, so a client-supplied
-    // newline would otherwise let it forge extra log entries.
-    const requestId = sanitizeRequestId(req.headers['x-request-id']);
-    req.headers['x-request-id'] = requestId;
-    res.setHeader('X-Request-ID', requestId);
-    // Bind the request ID to the async context so it survives async
-    // boundaries and is available to loggers, filters and queue producers.
-    runWithRequestId(requestId, () => next());
-  });
-
-  app.use(helmet());
-
-  // Response compression
-  app.use(compression({ threshold: 1024 }));
-
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-    }),
-  );
-
-  // Get service instance for global interceptor
-  const idempotencyService = app.get(IdempotencyService);
-
-  // Global Filters (order matters: specific before general)
-  app.useGlobalFilters(new AllExceptionsFilter());
-
-  // Global Interceptors
-  app.useGlobalInterceptors(
-    new ClassSerializerInterceptor(app.get(Reflector)),
-    new LoggingInterceptor(),
-    new TransformResponseInterceptor(),
-    new IdempotencyInterceptor(idempotencyService),
-  );
-
-  app.enableVersioning({
-    type: VersioningType.URI,
-    defaultVersion: '1',
-  });
+  configureApp(app);
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('NexaFX API')

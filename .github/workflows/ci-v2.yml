@@ -79,10 +79,29 @@ jobs:
           MAILGUN_DOMAIN: 'test.nexafx.com'
           MAILGUN_FROM_EMAIL: 'test@nexafx.com'
           FRONTEND_URL: 'http://localhost:3001'
-        run: npm run test -- --forceExit
+        run: npm run test:cov -- --forceExit
 
       - name: Build
         run: npm run build
+
+      - name: Add coverage summary to job summary
+        if: always()
+        run: |
+          node -e '
+            const fs = require("fs");
+            const path = "coverage/coverage-summary.json";
+            if (!fs.existsSync(path)) process.exit(0);
+            const totals = JSON.parse(fs.readFileSync(path, "utf8")).total;
+            const metrics = ["lines", "functions", "branches", "statements"];
+            const rows = [
+              "## Coverage",
+              "| Metric | Coverage |",
+              "| --- | --- |",
+              ...metrics.map((metric) => `| ${metric} | ${totals[metric].pct}% |`),
+              "",
+            ];
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, rows.join("\n"));
+          '
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -90,6 +109,7 @@ jobs:
         with:
           name: coverage-report-v2-node-${{ matrix.node-version }}
           path: coverage/
+          if-no-files-found: error
 
   # ---------------------------------------------------------------------------
   # E2E test job — runs the full HTTP round-trip suite against a live Postgres.
@@ -160,26 +180,7 @@ jobs:
           MAILGUN_DOMAIN: 'test.nexafx.com'
           MAILGUN_FROM_EMAIL: 'test@nexafx.com'
           FRONTEND_URL: 'http://localhost:3001'
-        run: npm run test:e2e -- --forceExit
-
-      - name: Run compression regression check
-        env:
-          NODE_ENV: test
-          DATABASE_URL: 'postgresql://postgres:password@localhost:5432/nexafx_test'
-          REDIS_URL: 'redis://localhost:6379'
-          JWT_SECRET: ${{ secrets.JWT_SECRET || 'test_jwt_secret_must_be_32_chars_long' }}
-          OTP_SECRET: 'dummy_otp_secret_32_chars_long_123'
-          REFRESH_TOKEN_SECRET: 'dummy_refresh_token_secret_32_chars'
-          STELLAR_NETWORK: 'TESTNET'
-          STELLAR_HORIZON_URL: 'https://horizon-testnet.stellar.org'
-          STELLAR_BASE_FEE: '100'
-          STELLAR_HOT_WALLET_SECRET: 'SC_DUMMY_SECRET'
-          WALLET_ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
-          MAILGUN_API_KEY: 'dummy_mailgun_key'
-          MAILGUN_DOMAIN: 'test.nexafx.com'
-          MAILGUN_FROM_EMAIL: 'test@nexafx.com'
-          FRONTEND_URL: 'http://localhost:3001'
-        run: npx jest --config test/jest-e2e.json test/e2e/compression.e2e-spec.ts --forceExit
+        run: npm run test:e2e -- --forceExit --runInBand
 
   # ---------------------------------------------------------------------------
   # Migration rollback validation job — runs AFTER unit tests pass.

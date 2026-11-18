@@ -25,4 +25,16 @@ export class PlatformConfig {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  get maintenanceMode(): boolean {
+    if (typeof this.value === 'boolean') {
+      return this.value;
+    }
+
+    return Boolean(this.value?.maintenanceMode ?? this.value?.enabled ?? false);
+  }
+
+  set maintenanceMode(enabled: boolean) {
+    this.value = { ...(this.value ?? {}), maintenanceMode: enabled };
+  }
 }

@@ -277,7 +277,9 @@ export class SuperAdminService {
     }
 
     const created = this.platformConfigRepository.create({
-      maintenanceMode: false,
+      key: 'maintenanceMode',
+      category: 'system',
+      value: { maintenanceMode: false },
     });
 
     return this.platformConfigRepository.save(created);

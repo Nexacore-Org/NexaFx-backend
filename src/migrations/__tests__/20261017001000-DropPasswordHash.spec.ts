@@ -1,5 +1,5 @@
 import { QueryRunner } from 'typeorm';
-import { DropPasswordHash20261017001000 } from './20261017001000-DropPasswordHash';
+import { DropPasswordHash20261017001000 } from '../20261017001000-DropPasswordHash';
 
 describe('DropPasswordHash migration', () => {
   const run = async (hasUsers = true, direction: 'up' | 'down' = 'up') => {

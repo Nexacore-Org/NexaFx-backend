@@ -42,6 +42,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Verify migrations directory contains only migrations
+        run: |
+          invalid=$(find src/migrations -maxdepth 1 -type f ! -regex '.*/[0-9][^/]*\.ts' -print)
+          if [ -n "$invalid" ]; then
+            echo "Non-migration files found in src/migrations:"
+            echo "$invalid"
+            exit 1
+          fi
+
       - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
@@ -93,7 +102,7 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # E2E test job — runs the full HTTP round-trip suite against a live Postgres.
-  # Picked up automatically by test/jest-e2e.json (.e2e-spec.ts$ regex).
+  # Picked up automatically by test/jest-e2e.config.ts (.e2e-spec.ts$ regex).
   # ---------------------------------------------------------------------------
   e2e-tests:
     name: E2E Tests
@@ -179,7 +188,7 @@ jobs:
           MAILGUN_DOMAIN: 'test.nexafx.com'
           MAILGUN_FROM_EMAIL: 'test@nexafx.com'
           FRONTEND_URL: 'http://localhost:3001'
-        run: npx jest --config test/jest-e2e.json test/e2e/compression.e2e-spec.ts --forceExit
+        run: npx jest --config test/jest-e2e.config.ts test/e2e/compression.e2e-spec.ts --forceExit
 
   # ---------------------------------------------------------------------------
   # Migration rollback validation job — runs AFTER unit tests pass.
@@ -221,4 +230,12 @@ jobs:
         with:
           name: migration-validation-log
           path: /tmp/migration-validate-*.log
+          if-no-files-found: ignore
+
+      - name: Upload schema drift SQL
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: migration-schema-drift-sql
+          path: ${{ runner.temp }}/migration-schema-drift.sql
           if-no-files-found: ignore

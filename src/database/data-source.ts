@@ -27,7 +27,7 @@ export function buildGlobPaths(
 
   return {
     entities: [`${root}/**/*.entity${extension}`],
-    migrations: [`${root}/migrations/*${extension}`],
+    migrations: [`${root}/migrations/[0-9]*${extension}`],
   };
 }
 
@@ -46,8 +46,6 @@ export const AppDataSource = new DataSource({
   // AddMissingIndexes, which needs CREATE INDEX CONCURRENTLY — actually run
   // outside a transaction block.
   migrationsTransactionMode: 'each',
-  entities: ['src/**/*.entity.ts'],
-  migrations: ['src/migrations/*.ts'],
   entities,
   migrations,
   extra: {

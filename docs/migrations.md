@@ -118,11 +118,18 @@ The script (`scripts/validate-migrations.ts`):
 
 1. Starts a temporary `postgres:15` Docker container on port `45432`.
 2. Waits for PostgreSQL to accept connections.
-3. Runs `typeorm migration:run` (all pending migrations, `up`).
+3. Runs `typeorm migration:run` (all pending migrations, first `up`).
 4. Runs `typeorm migration:revert` once for **each** migration file (all `down`).
-5. If any step fails → exits `1` with an error message.
-6. If all steps pass → exits `0`.
-7. Always stops and removes the temporary container.
+5. Runs `typeorm migration:run` again (second `up`) to prove the `down()`
+   methods leave no residue that would break a clean re-apply.
+6. Runs `typeorm schema:log -d src/database/data-source.ts` and fails if it
+   prints any pending SQL — this catches entity changes committed without a
+   migration. The drift SQL is written to `migration-schema-drift.sql` in the
+   runner temp directory and uploaded as the `migration-schema-drift-sql` CI
+   artifact on failure.
+7. If any step fails → exits `1` with an error message.
+8. If all steps pass → exits `0`.
+9. Always stops and removes the temporary container.
 
 ### Running locally
 
@@ -140,6 +147,8 @@ npm run migration:validate
 | `PostgreSQL did not become ready` | Docker image pull failed or port conflict |
 | `migration:run failed` | Syntax error or constraint violation in `up()` |
 | `migration:revert failed` | `down()` is incomplete, incorrect, or missing |
+| `second migration:run failed` | `down()` left residue (table, enum, constraint) behind |
+| `schema drift detected` | Entities changed without a matching migration; see the `migration-schema-drift-sql` artifact |
 
 ---
 
@@ -285,7 +294,9 @@ Then wrap the generated `up()` and `down()` in the transactional pattern above.
 All migrations live in a single directory: `src/migrations/`.
 
 This is the only directory scanned by TypeORM for migration files (configured in
-`src/database/data-source.ts`). Do not create migrations under
+`src/database/data-source.ts`). Only digit-prefixed migration files belong here;
+migration specs live in `src/migrations/__tests__/` and CI rejects any other
+file placed directly in `src/migrations/`. Do not create migrations under
 `src/database/migrations/` — that directory is no longer used.
 
 ---

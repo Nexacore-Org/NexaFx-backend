@@ -3,6 +3,7 @@ import {
   NestInterceptor,
   ExecutionContext,
   CallHandler,
+  Logger,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Observable } from 'rxjs';
@@ -13,6 +14,8 @@ import { AUDIT_ACTION_KEY } from '../decorators/audit.decorator';
 
 @Injectable()
 export class AuditInterceptor implements NestInterceptor {
+  private readonly logger = new Logger(AuditInterceptor.name);
+
   constructor(
     private readonly reflector: Reflector,
     private readonly auditLogsService: AuditLogsService,
@@ -74,7 +77,7 @@ export class AuditInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       tap({
-        next: async (response) => {
+        next: (response) => {
           let finalAction = action;
           // Resolve dynamic action name for KYC review
           if (action === 'kyc.review') {
@@ -112,7 +115,6 @@ export class AuditInterceptor implements NestInterceptor {
             metadata.impersonatedByAdminId = request.user.impersonatedBy;
           }
 
-          // Asynchronously write audit log (without blocking request execution)
           this.auditLogsService
             .log(
               actorId,
@@ -123,9 +125,13 @@ export class AuditInterceptor implements NestInterceptor {
               metadata,
               request,
             )
-            .catch(() => {});
+            .catch((error: unknown) =>
+              this.logger.warn(
+                `Failed to write audit log for ${finalAction}: ${error instanceof Error ? error.message : String(error)}`,
+              ),
+            );
         },
-        error: async (err) => {
+        error: (err) => {
           const metadata: Record<string, any> = {
             method: request.method,
             url: encodeURI(String(request.url ?? '')),
@@ -150,7 +156,11 @@ export class AuditInterceptor implements NestInterceptor {
               metadata,
               request,
             )
-            .catch(() => {});
+            .catch((error: unknown) =>
+              this.logger.warn(
+                `Failed to write audit log for ${action}: ${error instanceof Error ? error.message : String(error)}`,
+              ),
+            );
         },
       }),
     );

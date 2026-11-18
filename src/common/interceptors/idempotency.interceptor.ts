@@ -9,7 +9,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Observable, from, of, throwError } from 'rxjs';
-import { catchError, switchMap, tap, map } from 'rxjs/operators';
+import { catchError, switchMap, concatMap, map } from 'rxjs/operators';
 import { IdempotencyService } from '../services/idempotency.service';
 
 import { MANDATORY_ENDPOINT_PATTERNS } from './idempotency-patterns';
@@ -86,16 +86,18 @@ export class IdempotencyInterceptor implements NestInterceptor {
         }
 
         return next.handle().pipe(
-          tap((responseData) => {
-            this.idempotencyService.storeIdempotency(
-              idempotencyKey,
-              userId,
-              endpoint,
-              response.statusCode,
-              responseData,
-              request.body,
-            );
-          }),
+          concatMap((responseData) =>
+            from(
+              this.idempotencyService.storeIdempotency(
+                idempotencyKey,
+                userId,
+                endpoint,
+                response.statusCode,
+                responseData,
+                request.body,
+              ),
+            ).pipe(map(() => responseData)),
+          ),
           map((responseData) => {
             response.setHeader('Idempotency-Key', idempotencyKey);
             return responseData;

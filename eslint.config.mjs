@@ -8,9 +8,6 @@ export default tseslint.config(
   {
     ignores: [
       'eslint.config.mjs',
-      'src/database/seed.ts',
-      'src/database/seed-fresh.ts',
-      'src/database/seeders/**',
     ],
   },
   eslint.configs.recommended,
@@ -32,7 +29,7 @@ export default tseslint.config(
   {
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-floating-promises': 'warn',
+      '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-unsafe-argument': 'warn',
       '@typescript-eslint/no-unsafe-member-access': 'warn',
       '@typescript-eslint/no-unsafe-assignment': 'warn',
@@ -44,7 +41,7 @@ export default tseslint.config(
       '@typescript-eslint/restrict-template-expressions': 'warn',
       '@typescript-eslint/restrict-plus-operands': 'warn',
       '@typescript-eslint/unbound-method': 'warn',
-      '@typescript-eslint/no-misused-promises': 'warn',
+      '@typescript-eslint/no-misused-promises': 'error',
       '@typescript-eslint/no-unsafe-enum-comparison': 'warn',
       '@typescript-eslint/ban-ts-comment': 'warn',
     },

@@ -43,7 +43,7 @@ export class NotificationsGateway
       if (!userId) throw new Error('Invalid token payload');
 
       const room = `user:${userId}`;
-      client.join(room);
+      await client.join(room);
       if (!NotificationsGateway.userSockets.has(userId)) {
         NotificationsGateway.userSockets.set(userId, new Set());
       }

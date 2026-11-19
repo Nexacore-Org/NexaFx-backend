@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from '../../src/app.module';
-import { configureApp } from '../../src/bootstrap/configure-app';
+import { configureApp } from '../../src/configure-app';
 
 /**
  * Mock Firebase Admin SDK
@@ -98,20 +98,60 @@ jest.mock('stripe', () => {
 });
 
 /**
+ * Virtual mocks for packages referenced by the app but not declared as
+ * dependencies (pre-existing defects). These keep the E2E app bootable while
+ * never touching the real external service.
+ */
+jest.mock(
+  '@aws-sdk/lib-storage',
+  () => ({
+    Upload: class MockUpload {
+      constructor(_options: unknown) {}
+      done() {
+        return Promise.resolve({});
+      }
+      on() {
+        return this;
+      }
+      abort() {
+        return Promise.resolve();
+      }
+    },
+  }),
+  { virtual: true },
+);
+
+// Services in the app use the (undeclared) package's @InjectRedis(), while the
+// repo's own RedisModule provides the REDIS_CLIENT symbol. Map the decorator to
+// the real repo client so Nest DI resolves and the app degrades gracefully.
+jest.mock(
+  '@nestjs-modules/ioredis',
+  () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Inject } = require('@nestjs/common');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { REDIS_CLIENT } = require('../../src/modules/redis/redis.constants');
+    return {
+      InjectRedis: () => Inject(REDIS_CLIENT),
+      getRedisToken: () => REDIS_CLIENT,
+    };
+  },
+  { virtual: true },
+);
+
+/**
  * Create and configure a test NestJS application
  * with mocked external services and proper middleware setup
  */
 export async function createTestApp(
-  configure?: (app: INestApplication) => void,
-): Promise<INestApplication> {
+  configure?: (app: NestExpressApplication) => void,
+): Promise<NestExpressApplication> {
   const moduleFixture: TestingModule = await Test.createTestingModule({
     imports: [AppModule],
   }).compile();
 
-  const app = moduleFixture.createNestApplication();
-
+  const app = moduleFixture.createNestApplication<NestExpressApplication>();
   configureApp(app, { transformOptions: { enableImplicitConversion: true } });
-
   configure?.(app);
 
   await app.init();

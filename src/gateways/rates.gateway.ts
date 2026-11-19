@@ -86,7 +86,7 @@ export class RatesGateway
     try {
       await this.service.validateCurrencyPair(from, to);
       const roomName = `rate:${from}:${to}`;
-      client.join(roomName);
+      await client.join(roomName);
       this.logger.log(`Client ${client.id} subscribed to ${roomName}`);
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -96,7 +96,7 @@ export class RatesGateway
   }
 
   @SubscribeMessage('unsubscribe')
-  handleUnsubscribe(
+  async handleUnsubscribe(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { from: string; to: string },
   ) {
@@ -106,7 +106,7 @@ export class RatesGateway
     if (!from || !to) return;
 
     const roomName = `rate:${from}:${to}`;
-    client.leave(roomName);
+    await client.leave(roomName);
     this.logger.log(`Client ${client.id} unsubscribed from ${roomName}`);
   }
 }

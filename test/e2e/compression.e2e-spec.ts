@@ -3,6 +3,14 @@ import { Request, Response } from 'express';
 import * as request from 'supertest';
 import { createTestApp } from '../helpers/app.helper';
 
+/**
+ * Compression regression coverage.
+ *
+ * `configureApp` wires `compression({ threshold: 1024 })`, which is shared by
+ * `src/main.ts` and the e2e app factory, so any response body larger than
+ * 1024 bytes must come back with `Content-Encoding: gzip` and anything at or
+ * below the threshold must not.
+ */
 describe('Response compression (e2e)', () => {
   let app: INestApplication;
 

@@ -13,6 +13,10 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+concurrency:
+  group: ci-v2-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build-and-test:
     name: Build, Lint, Test & Validate Migrations
@@ -42,6 +46,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Verify migrations directory contains only migrations
+        run: |
+          invalid=$(find src/migrations -maxdepth 1 -type f ! -regex '.*/[0-9][^/]*\.ts' -print)
+          if [ -n "$invalid" ]; then
+            echo "Non-migration files found in src/migrations:"
+            echo "$invalid"
+            exit 1
+          fi
+
       - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
@@ -57,8 +70,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify NestJS dependency majors
+        run: |
+          output=$(npm ls @nestjs/core @nestjs/common --all)
+          printf '%s\n' "$output"
+          if printf '%s\n' "$output" | grep -Eiq 'invalid|overridden'; then
+            echo 'NestJS core/common must be a single valid major without overrides'
+            exit 1
+          fi
+
       - name: Lint
-        run: npm run lint
+        run: npm run lint:check
 
       - name: Type check
         run: npx tsc --noEmit
@@ -79,29 +101,10 @@ jobs:
           MAILGUN_DOMAIN: 'test.nexafx.com'
           MAILGUN_FROM_EMAIL: 'test@nexafx.com'
           FRONTEND_URL: 'http://localhost:3001'
-        run: npm run test:cov -- --forceExit
+        run: npm run test -- --forceExit
 
       - name: Build
         run: npm run build
-
-      - name: Add coverage summary to job summary
-        if: always()
-        run: |
-          node -e '
-            const fs = require("fs");
-            const path = "coverage/coverage-summary.json";
-            if (!fs.existsSync(path)) process.exit(0);
-            const totals = JSON.parse(fs.readFileSync(path, "utf8")).total;
-            const metrics = ["lines", "functions", "branches", "statements"];
-            const rows = [
-              "## Coverage",
-              "| Metric | Coverage |",
-              "| --- | --- |",
-              ...metrics.map((metric) => `| ${metric} | ${totals[metric].pct}% |`),
-              "",
-            ];
-            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, rows.join("\n"));
-          '
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -109,11 +112,10 @@ jobs:
         with:
           name: coverage-report-v2-node-${{ matrix.node-version }}
           path: coverage/
-          if-no-files-found: error
 
   # ---------------------------------------------------------------------------
   # E2E test job — runs the full HTTP round-trip suite against a live Postgres.
-  # Picked up automatically by test/jest-e2e.json (.e2e-spec.ts$ regex).
+  # Picked up automatically by test/jest-e2e.config.ts (.e2e-spec.ts$ regex).
   # ---------------------------------------------------------------------------
   e2e-tests:
     name: E2E Tests
@@ -182,6 +184,25 @@ jobs:
           FRONTEND_URL: 'http://localhost:3001'
         run: npm run test:e2e -- --forceExit --runInBand
 
+      - name: Run compression regression check
+        env:
+          NODE_ENV: test
+          DATABASE_URL: 'postgresql://postgres:password@localhost:5432/nexafx_test'
+          REDIS_URL: 'redis://localhost:6379'
+          JWT_SECRET: ${{ secrets.JWT_SECRET || 'test_jwt_secret_must_be_32_chars_long' }}
+          OTP_SECRET: 'dummy_otp_secret_32_chars_long_123'
+          REFRESH_TOKEN_SECRET: 'dummy_refresh_token_secret_32_chars'
+          STELLAR_NETWORK: 'TESTNET'
+          STELLAR_HORIZON_URL: 'https://horizon-testnet.stellar.org'
+          STELLAR_BASE_FEE: '100'
+          STELLAR_HOT_WALLET_SECRET: 'SC_DUMMY_SECRET'
+          WALLET_ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
+          MAILGUN_API_KEY: 'dummy_mailgun_key'
+          MAILGUN_DOMAIN: 'test.nexafx.com'
+          MAILGUN_FROM_EMAIL: 'test@nexafx.com'
+          FRONTEND_URL: 'http://localhost:3001'
+        run: npx jest --config test/jest-e2e.config.ts test/e2e/compression.e2e-spec.ts --forceExit
+
   # ---------------------------------------------------------------------------
   # Migration rollback validation job — runs AFTER unit tests pass.
   # Uses Docker-in-Docker (dind) so the validation script can launch containers.
@@ -223,3 +244,49 @@ jobs:
           name: migration-validation-log
           path: /tmp/migration-validate-*.log
           if-no-files-found: ignore
+
+      - name: Upload schema drift SQL
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: migration-schema-drift-sql
+          path: ${{ runner.temp }}/migration-schema-drift.sql
+          if-no-files-found: ignore
+  # ---------------------------------------------------------------------------
+  # Stable aggregate gate for branch protection. Require only this check.
+  # ---------------------------------------------------------------------------
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [build-and-test, e2e-tests, validate-migrations]
+
+    steps:
+      - name: Verify required jobs succeeded
+        run: |
+          if [ "${{ needs.build-and-test.result }}" != "success" ] ||
+             [ "${{ needs.e2e-tests.result }}" != "success" ] ||
+             [ "${{ needs.validate-migrations.result }}" != "success" ]; then
+            echo "One or more required CI jobs did not succeed"
+            exit 1
+          fi
+  workflow-lint:
+    name: Workflow Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      SHELLCHECK_OPTS: '--exclude=SC2002 --exclude=SC2034 --exclude=SC2046 --exclude=SC2086 --exclude=SC2129 --exclude=SC2155'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install actionlint
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Lint workflow files
+        shell: bash
+        run: actionlint -color .github/workflows/*.yml

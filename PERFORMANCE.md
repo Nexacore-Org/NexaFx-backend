@@ -14,7 +14,7 @@ exercises the real HTTP response pipeline (Supertest against the Nest app):
 - `test/e2e/compression.e2e-spec.ts`
 
 The test app uses the shared `configureApp()` bootstrap from
-`src/bootstrap/configure-app.ts`, the same middleware setup used by `src/main.ts`,
+`src/configure-app.ts`, the same middleware setup used by `src/main.ts`,
 so removing compression from the production bootstrap makes the test fail. It runs
 once as part of the `npm run test:e2e` CI step.
 

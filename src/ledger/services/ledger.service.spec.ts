@@ -13,6 +13,7 @@ import {
 const makeTransaction = (overrides: Partial<Transaction> = {}): Transaction =>
   ({
     id: 'tx-1',
+    userId: 'user-1',
     type: TransactionType.DEPOSIT,
     amount: '100.00000000',
     currency: 'USD',
@@ -86,6 +87,7 @@ describe('LedgerService', () => {
       expect(debit).toBeDefined();
       expect(credit?.amount).toBe('100.00000000');
       expect(credit?.currency).toBe('USD');
+      expect(credit?.userId).toBe('user-1');
     });
 
     it('records 2 entries for WITHDRAW', async () => {
@@ -201,6 +203,63 @@ describe('LedgerService', () => {
       result.forEach((entry: any) => {
         expect(entry.transactionId).toBe('tx-unique-id');
       });
+    });
+
+    it('records mirrored entries under the compensating transaction with owner retained', async () => {
+      const original = makeTransaction();
+      const compensating = makeTransaction({ id: 'reversal-tx' });
+      const originalEntries = [
+        {
+          transactionId: original.id,
+          userId: original.userId,
+          accountType: LedgerAccountType.USER,
+          direction: LedgerDirection.CREDIT,
+          amount: '100.00000000',
+          currency: 'USD',
+        },
+        {
+          transactionId: original.id,
+          userId: null,
+          accountType: LedgerAccountType.PLATFORM_LIABILITY,
+          direction: LedgerDirection.DEBIT,
+          amount: '100.00000000',
+          currency: 'USD',
+        },
+      ];
+      const manager = {
+        find: jest.fn().mockResolvedValue(originalEntries),
+        create: jest.fn((_, entries) => entries),
+        save: jest.fn(async (_, entries) => entries),
+      };
+
+      const mirrored = await service.recordReversal(
+        original,
+        compensating,
+        manager as any,
+      );
+
+      expect(manager.find).toHaveBeenCalledWith(
+        expect.anything(),
+        { where: { transactionId: original.id } },
+      );
+      expect(mirrored).toEqual([
+        {
+          transactionId: 'reversal-tx',
+          userId: original.userId,
+          accountType: LedgerAccountType.USER,
+          direction: LedgerDirection.DEBIT,
+          amount: '100.00000000',
+          currency: 'USD',
+        },
+        {
+          transactionId: 'reversal-tx',
+          userId: null,
+          accountType: LedgerAccountType.PLATFORM_LIABILITY,
+          direction: LedgerDirection.CREDIT,
+          amount: '100.00000000',
+          currency: 'USD',
+        },
+      ]);
     });
   });
 });

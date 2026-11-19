@@ -3,6 +3,7 @@ import {
   NotFoundException,
   Logger,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
@@ -126,13 +127,20 @@ export class FeesService {
    * Create a new fee configuration rule.
    */
   async createFeeConfig(dto: CreateFeeConfigDto): Promise<FeeConfig> {
-    if (dto.feeType === FeeType.FLAT && (dto.minFee || dto.maxFee)) {
+    if (
+      dto.feeType === FeeType.FLAT &&
+      (dto.minFee != null || dto.maxFee != null)
+    ) {
       throw new BadRequestException(
         'minFee and maxFee are only applicable for percentage-based fees',
       );
     }
 
-    if (dto.minFee && dto.maxFee && dto.minFee > dto.maxFee) {
+    if (
+      dto.minFee != null &&
+      dto.maxFee != null &&
+      new Decimal(dto.minFee).gt(dto.maxFee)
+    ) {
       throw new BadRequestException('minFee cannot be greater than maxFee');
     }
 
@@ -161,7 +169,17 @@ export class FeesService {
     };
 
     const config = this.feeConfigRepository.create(partial);
-    const saved = await this.feeConfigRepository.save(config);
+    let saved: FeeConfig;
+    try {
+      saved = await this.feeConfigRepository.save(config);
+    } catch (error) {
+      if (this.isUniqueViolation(error)) {
+        throw new ConflictException(
+          `An active fee config already exists for ${dto.transactionType} / ${dto.currency}.`,
+        );
+      }
+      throw error;
+    }
 
     this.logger.log(
       `Fee config created: ${config.transactionType} / ${config.currency} — ` +
@@ -185,23 +203,50 @@ export class FeesService {
     }
 
     const resolvedFeeType = dto.feeType ?? config.feeType;
+    const resolvedTransactionType =
+      dto.transactionType ?? config.transactionType;
+    const resolvedCurrency =
+      dto.currency !== undefined ? dto.currency.toUpperCase() : config.currency;
+    const resolvedIsActive = dto.isActive ?? config.isActive;
+    const resolvedMinFee =
+      dto.minFee !== undefined ? dto.minFee : config.minFee;
+    const resolvedMaxFee =
+      dto.maxFee !== undefined ? dto.maxFee : config.maxFee;
 
     if (resolvedFeeType === FeeType.FLAT) {
-      const hasMinFee = dto.minFee !== undefined ? dto.minFee : config.minFee;
-      const hasMaxFee = dto.maxFee !== undefined ? dto.maxFee : config.maxFee;
-      if (hasMinFee || hasMaxFee) {
+      if (resolvedMinFee != null || resolvedMaxFee != null) {
         throw new BadRequestException(
           'minFee and maxFee are only applicable for percentage-based fees',
         );
       }
     }
 
-    if (dto.transactionType !== undefined) {
-      config.transactionType = dto.transactionType;
+    if (
+      resolvedMinFee != null &&
+      resolvedMaxFee != null &&
+      new Decimal(resolvedMinFee).gt(resolvedMaxFee)
+    ) {
+      throw new BadRequestException('minFee cannot be greater than maxFee');
     }
-    if (dto.currency !== undefined) {
-      config.currency = dto.currency.toUpperCase();
+
+    if (resolvedIsActive) {
+      const existing = await this.feeConfigRepository.findOne({
+        where: {
+          transactionType: resolvedTransactionType,
+          currency: resolvedCurrency,
+          isActive: true,
+        },
+      });
+      if (existing && existing.id !== config.id) {
+        throw new ConflictException(
+          `An active fee config already exists for ${resolvedTransactionType} / ${resolvedCurrency}. ` +
+            'Deactivate or update the existing rule first.',
+        );
+      }
     }
+
+    config.transactionType = resolvedTransactionType;
+    config.currency = resolvedCurrency;
     if (dto.feeType !== undefined) {
       config.feeType = dto.feeType;
     }
@@ -218,7 +263,17 @@ export class FeesService {
       config.isActive = dto.isActive;
     }
 
-    const saved = await this.feeConfigRepository.save(config);
+    let saved: FeeConfig;
+    try {
+      saved = await this.feeConfigRepository.save(config);
+    } catch (error) {
+      if (this.isUniqueViolation(error)) {
+        throw new ConflictException(
+          `An active fee config already exists for ${resolvedTransactionType} / ${resolvedCurrency}.`,
+        );
+      }
+      throw error;
+    }
 
     this.logger.log(`Fee config updated: ${saved.id}`);
 
@@ -255,5 +310,20 @@ export class FeesService {
         isActive: true,
       },
     });
+  }
+
+  private isUniqueViolation(
+    error: unknown,
+  ): error is { code?: string; driverError?: { code?: string } } {
+    if (typeof error !== 'object' || error === null) {
+      return false;
+    }
+    const queryError = error as {
+      code?: string;
+      driverError?: { code?: string };
+    };
+    return (
+      queryError.code === '23505' || queryError.driverError?.code === '23505'
+    );
   }
 }

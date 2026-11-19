@@ -32,6 +32,10 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     };
 
     if (req.user?.authStage === 'partial_auth') {
+      if (context.getType<string>() === 'graphql') {
+        throw new ForbiddenException('2FA verification required');
+      }
+
       // Metadata instead of a path comparison: URI versioning prefixes every
       // route (/v1/two-factor/verify), so matching on the raw URL never matched.
       const allowed = this.reflector.getAllAndOverride<boolean>(
@@ -56,33 +60,5 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       }>().req;
     }
     return context.switchToHttp().getRequest<Express.Request>();
-  }
-
-  async canActivate(context: ExecutionContext): Promise<boolean> {
-    const result = (await super.canActivate(context)) as boolean;
-    if (!result) {
-      return false;
-    }
-
-    // FIX: Use getRequest(context) instead of switchToHttp().getRequest() to support GraphQL
-    const request = this.getRequest(context);
-    const user = request.user;
-
-    // Check for partial_auth (2FA pending) restriction
-    if (user && user.authStage === 'partial_auth') {
-      const isGraphql = context.getType() === 'graphql';
-      
-      if (isGraphql) {
-        throw new UnauthorizedException('2FA verification required');
-      }
-
-      // Allow specific HTTP endpoints like /two-factor/verify
-      const path = request.path || request.url;
-      if (!path?.includes('/two-factor/verify')) {
-        throw new UnauthorizedException('2FA verification required');
-      }
-    }
-
-    return true;
   }
 }

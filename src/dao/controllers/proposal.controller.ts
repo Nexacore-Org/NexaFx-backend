@@ -9,6 +9,9 @@ import {
   Request,
   UseGuards,
   HttpCode,
+  DefaultValuePipe,
+  ParseIntPipe,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -75,7 +78,6 @@ export class ProposalController {
   ) {
     return this.proposalService.createProposal(
       req.user.userId,
-      req.user.role,
       createProposalDto,
     );
   }
@@ -116,7 +118,7 @@ export class ProposalController {
     description: 'Cannot vote on a cancelled proposal',
   })
   async castVote(
-    @Param('id') proposalId: string,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) proposalId: string,
     @Request() req: { user: { userId: string } },
     @Body() castVoteDto: CastVoteDto,
   ) {
@@ -168,7 +170,9 @@ export class ProposalController {
     },
   })
   @ApiResponse({ status: 404, description: 'Proposal not found' })
-  async getProposalDetail(@Param('id') proposalId: string) {
+  async getProposalDetail(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) proposalId: string,
+  ) {
     return this.proposalService.getProposalDetail(proposalId);
   }
 
@@ -207,7 +211,9 @@ export class ProposalController {
     },
   })
   @ApiResponse({ status: 404, description: 'Proposal not found' })
-  async getResults(@Param('id') proposalId: string) {
+  async getResults(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) proposalId: string,
+  ) {
     const cacheKey = `proposal_results_${proposalId}`;
     const cached = await this.redisService.get(cacheKey);
     if (cached) {
@@ -268,8 +274,8 @@ export class ProposalController {
     },
   })
   async listProposals(
-    @Query('page') page?: number,
-    @Query('limit') limit?: number,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query('status') status?: ProposalStatus,
   ) {
     return this.proposalService.listProposals(page, limit, status);
@@ -293,7 +299,7 @@ export class ProposalController {
     },
   })
   async cancelProposal(
-    @Param('id') proposalId: string,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) proposalId: string,
     @Request() req: { user: { userId: string } },
   ) {
     return this.proposalService.cancelProposal(proposalId, req.user.userId);

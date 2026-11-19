@@ -1,5 +1,6 @@
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import type { UsersService } from '../users/users.service';
+import type { UserPlan } from '../users/user.entity';
 
 export interface JwtPayload {
   sub: string;
@@ -21,6 +22,7 @@ export interface AuthenticatedUser {
   isImpersonation?: boolean;
   impersonatedBy?: string;
   jti?: string;
+  plan?: UserPlan;
 }
 
 /**
@@ -77,5 +79,6 @@ export async function validateAuthenticatedUser(
     isImpersonation: payload.isImpersonation ?? false,
     impersonatedBy: payload.impersonatedBy,
     jti: payload.jti,
+    plan: user.plan,
   };
 }

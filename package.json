@@ -1,4 +1,4 @@
-﻿{
+{
     "name":  "nexafx-backend",
     "version":  "2.0.0",
     "description":  "",
@@ -49,7 +49,7 @@
                          "@nestjs/apollo":  "^13.4.5",
                          "@nestjs/axios":  "^4.0.0",
                          "@nestjs/bullmq":  "^11.0.4",
-                         "@nestjs/cache-manager":  "^3.1.3",
+                         "@nestjs/cache-manager":  "^12.0.5",
                          "@nestjs/common":  "^11.0.1",
                          "@nestjs/config":  "^4.0.4",
                          "@nestjs/core":  "^11.0.1",

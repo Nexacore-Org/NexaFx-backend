@@ -1,9 +1,9 @@
 /**
- * src/migrations/migration-validation.spec.ts
+ * src/migrations/__tests__/migration-validation.spec.ts
  *
  * Tests the logic that the migration validation script exercises:
- *  - successful up/down cycle exits 0
- *  - a failed revert causes exit code 1
+ *  - successful up/down/up cycle with no schema drift exits 0
+ *  - a failed revert, a failed second up or schema drift causes exit code 1
  *  - Docker unavailability causes exit code 1
  *
  * Since scripts/validate-migrations.ts drives Docker and the TypeORM CLI,
@@ -12,7 +12,8 @@
 
 import * as path from 'path';
 import * as fs from 'fs';
-import { AddMissingIndexes1715421500000 } from './1715421500000-AddMissingIndexes';
+import { AddMissingIndexes1715421500000 } from '../1715421500000-AddMissingIndexes';
+import { detectSchemaDrift } from '../../../scripts/validate-migrations';
 
 // ---------------------------------------------------------------------------
 // Helpers extracted from validate-migrations.ts (mirrored here for unit testing)
@@ -45,9 +46,7 @@ function makeWaiter(isReady: () => boolean, timeoutMs: number): void {
 
 function countMigrationFilesInDir(dir: string): number {
   if (!fs.existsSync(dir)) return 0;
-  return fs
-    .readdirSync(dir)
-    .filter((f) => f.endsWith('.ts') && !f.endsWith('.spec.ts')).length;
+  return fs.readdirSync(dir).filter((f) => /^[0-9].*\.ts$/.test(f)).length;
 }
 
 // ---------------------------------------------------------------------------
@@ -114,27 +113,18 @@ describe('migration validation logic', () => {
       expect(count).toBe(0);
     });
 
-    it('should count only .ts files that are not spec files', () => {
-      // Point at the real src/migrations directory
-      const migrationsDir = path.resolve(__dirname);
+    it('should count only digit-prefixed .ts migration files', () => {
+      const migrationsDir = path.resolve(__dirname, '..');
       const count = countMigrationFilesInDir(migrationsDir);
-      // We have at least 3 migration files (1760, 1761, 1762)
       expect(count).toBeGreaterThanOrEqual(3);
     });
 
-    it('should not count .spec.ts files as migrations', () => {
-      const migrationsDir = path.resolve(__dirname);
-      if (fs.existsSync(migrationsDir)) {
-        const count = countMigrationFilesInDir(migrationsDir);
-        const specFiles = fs
-          .readdirSync(migrationsDir)
-          .filter((f) => f.endsWith('.spec.ts'));
-        // spec files in migrations dir should NOT be counted
-        const rawCount = fs
-          .readdirSync(migrationsDir)
-          .filter((f) => f.endsWith('.ts')).length;
-        expect(count).toBe(rawCount - specFiles.length);
-      }
+    it('should keep spec files out of the migrations directory', () => {
+      const migrationsDir = path.resolve(__dirname, '..');
+      const specFiles = fs
+        .readdirSync(migrationsDir)
+        .filter((f) => f.endsWith('.spec.ts'));
+      expect(specFiles).toEqual([]);
     });
   });
 
@@ -151,8 +141,12 @@ describe('migration validation logic', () => {
       postgresBecamesReady: boolean;
       migrateUpSucceeds: boolean;
       migrateDownSucceeds: boolean;
+      migrateUpAgainSucceeds?: boolean;
+      schemaDriftDetected?: boolean;
     }): { exitCode: number; errors: string[] } {
       const errors: string[] = [];
+      const { migrateUpAgainSucceeds = true, schemaDriftDetected = false } =
+        opts;
 
       // Step 1: check docker
       if (!opts.dockerAvailable) {
@@ -175,6 +169,16 @@ describe('migration validation logic', () => {
       // Step 4: revert each migration
       if (!opts.migrateDownSucceeds) {
         errors.push('migration:revert failed');
+        return { exitCode: 1, errors };
+      }
+
+      if (!migrateUpAgainSucceeds) {
+        errors.push('second migration:run failed');
+        return { exitCode: 1, errors };
+      }
+
+      if (schemaDriftDetected) {
+        errors.push('schema drift detected');
         return { exitCode: 1, errors };
       }
 
@@ -234,6 +238,52 @@ describe('migration validation logic', () => {
       });
       expect(result.exitCode).toBe(1);
       expect(result.errors[0]).toMatch(/migration:revert/i);
+    });
+
+    it('should exit 1 when the second migration:run fails', () => {
+      const result = runValidationFlow({
+        dockerAvailable: true,
+        postgresBecamesReady: true,
+        migrateUpSucceeds: true,
+        migrateDownSucceeds: true,
+        migrateUpAgainSucceeds: false,
+      });
+      expect(result.exitCode).toBe(1);
+      expect(result.errors[0]).toMatch(/second migration:run/i);
+    });
+
+    it('should exit 1 when schema:log reports drift', () => {
+      const result = runValidationFlow({
+        dockerAvailable: true,
+        postgresBecamesReady: true,
+        migrateUpSucceeds: true,
+        migrateDownSucceeds: true,
+        schemaDriftDetected: true,
+      });
+      expect(result.exitCode).toBe(1);
+      expect(result.errors[0]).toMatch(/schema drift/i);
+    });
+  });
+
+  describe('detectSchemaDrift', () => {
+    it('accepts clean schema:log output', () => {
+      expect(
+        detectSchemaDrift('No changes in database schema were found\n'),
+      ).toBe(false);
+    });
+
+    it('rejects schema:log output containing SQL', () => {
+      expect(
+        detectSchemaDrift('ALTER TABLE "users" ADD "newColumn" integer;\n'),
+      ).toBe(true);
+    });
+
+    it('ignores npm banners and blank lines', () => {
+      expect(
+        detectSchemaDrift(
+          '\n> nexafx-backend@2.0.0 typeorm\n> typeorm-ts-node-commonjs schema:log\n\nNo changes in database schema were found\n',
+        ),
+      ).toBe(false);
     });
   });
 

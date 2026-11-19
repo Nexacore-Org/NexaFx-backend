@@ -1,5 +1,5 @@
 import { QueryRunner } from 'typeorm';
-import { FixFeeConfigEnumsAndDefaults20261015000000 } from './20261015000000-FixFeeConfigEnumsAndDefaults';
+import { FixFeeConfigEnumsAndDefaults20261015000000 } from '../20261015000000-FixFeeConfigEnumsAndDefaults';
 
 describe('FixFeeConfigEnumsAndDefaults migration', () => {
   it('replaces unsupported legacy values with entity-backed enums and valid rules', async () => {

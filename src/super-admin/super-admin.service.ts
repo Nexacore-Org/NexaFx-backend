@@ -6,7 +6,8 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
-import { Repository } from 'typeorm';
+import { instanceToPlain } from 'class-transformer';
+import { DataSource, Repository } from 'typeorm';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { AuditEntityType } from '../audit-logs/enums/audit-entity-type.enum';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
@@ -39,13 +40,20 @@ export class SuperAdminService {
     private readonly encryptionService: EncryptionService,
     private readonly auditLogsService: AuditLogsService,
     private readonly walletsService: WalletsService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async createAdmin(
     actorUserId: string,
     dto: CreateManagedAdminDto,
   ): Promise<
-    Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'>
+    Omit<
+      User,
+      | 'password'
+      | 'walletSecretKeyEncrypted'
+      | 'twoFactorSecret'
+      | 'pendingTwoFactorSecret'
+    >
   > {
     const actor = await this.requireSuperAdmin(actorUserId);
     const role = dto.role ?? UserRole.ADMIN;
@@ -105,12 +113,16 @@ export class SuperAdminService {
     targetUserId: string,
     dto: UpdateManagedAdminRoleDto,
   ): Promise<
-    Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'>
+    Omit<
+      User,
+      | 'password'
+      | 'walletSecretKeyEncrypted'
+      | 'twoFactorSecret'
+      | 'pendingTwoFactorSecret'
+    >
   > {
     const actor = await this.requireSuperAdmin(actorUserId);
-    const target = await this.requireUser(targetUserId);
-
-    if (actor.id === target.id) {
+    if (actor.id === targetUserId) {
       throw new ForbiddenException(
         'SUPER_ADMIN role changes are not self-service',
       );
@@ -122,15 +134,52 @@ export class SuperAdminService {
       throw new BadRequestException('Unsupported managed role');
     }
 
-    if (target.role === dto.role) {
-      return this.sanitizeUser(target);
+    const { savedUser, previousRole, changed } =
+      await this.dataSource.transaction(async (manager) => {
+        const activeSuperAdmins = await manager.find(User, {
+          where: {
+            role: UserRole.SUPER_ADMIN,
+            isSuspended: false,
+            isDeleted: false,
+          },
+          order: { id: 'ASC' },
+          lock: { mode: 'pessimistic_write' },
+        });
+        const target = await manager.findOne(User, {
+          where: { id: targetUserId },
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (!target) {
+          throw new NotFoundException('User not found');
+        }
+
+        if (target.role === dto.role) {
+          return {
+            savedUser: target,
+            previousRole: target.role,
+            changed: false,
+          };
+        }
+
+        this.assertSuperAdminDemotionSafety(
+          target,
+          dto.role,
+          activeSuperAdmins,
+        );
+
+        const previousRole = target.role;
+        target.role = dto.role;
+        return {
+          savedUser: await manager.save(User, target),
+          previousRole,
+          changed: true,
+        };
+      });
+
+    if (!changed) {
+      return this.sanitizeUser(savedUser);
     }
-
-    await this.assertSuperAdminDemotionSafety(target, dto.role);
-
-    const previousRole = target.role;
-    target.role = dto.role;
-    const savedUser = await this.userRepository.save(target);
 
     await this.auditLogsService.createLog({
       userId: actor.id,
@@ -153,7 +202,13 @@ export class SuperAdminService {
     actorUserId: string,
     targetUserId: string,
   ): Promise<
-    Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'>
+    Omit<
+      User,
+      | 'password'
+      | 'walletSecretKeyEncrypted'
+      | 'twoFactorSecret'
+      | 'pendingTwoFactorSecret'
+    >
   > {
     return this.updateManagedAdminRole(actorUserId, targetUserId, {
       role: UserRole.USER,
@@ -184,71 +239,151 @@ export class SuperAdminService {
     dto: UpdatePlatformConfigDto,
   ) {
     const actor = await this.requireSuperAdmin(actorUserId);
-    const config = await this.getOrCreatePlatformConfig();
-
-    if (dto.maintenanceMode !== undefined) {
-      config.maintenanceMode = dto.maintenanceMode;
-      await this.platformConfigRepository.save(config);
-    }
-
-    if (dto.currencies?.length) {
-      for (const currencyUpdate of dto.currencies) {
-        const currency = await this.currencyRepository.findOne({
-          where: { code: currencyUpdate.code.toUpperCase() },
+    const { snapshot, maintenanceMode, currencies, feeConfigs } =
+      await this.dataSource.transaction(async (manager) => {
+        let config = await manager.findOne(PlatformConfig, {
+          where: {},
+          order: { createdAt: 'ASC' },
         });
 
-        if (!currency) {
-          throw new NotFoundException(
-            `Currency '${currencyUpdate.code}' not found`,
-          );
+        if (!config) {
+          config = manager.create(PlatformConfig, {
+            key: 'maintenanceMode',
+            category: 'system',
+            value: { maintenanceMode: false },
+          });
         }
 
-        currency.isActive = currencyUpdate.isActive;
-        await this.currencyRepository.save(currency);
-      }
-    }
-
-    if (dto.feeConfigs?.length) {
-      for (const feeUpdate of dto.feeConfigs) {
-        const feeConfig = await this.feeConfigRepository.findOne({
-          where: { id: feeUpdate.id },
-        });
-
-        if (!feeConfig) {
-          throw new NotFoundException(
-            `Fee config with ID '${feeUpdate.id}' not found`,
-          );
+        const previousMaintenanceMode = config.maintenanceMode;
+        if (dto.maintenanceMode !== undefined) {
+          config.maintenanceMode = dto.maintenanceMode;
         }
 
-        if (feeUpdate.feeType !== undefined) {
-          feeConfig.feeType = feeUpdate.feeType;
-        }
-        if (feeUpdate.feeValue !== undefined) {
-          feeConfig.feeValue = feeUpdate.feeValue.toString();
-        }
-        if (feeUpdate.minFee !== undefined) {
-          feeConfig.minFee = feeUpdate.minFee.toString();
-        }
-        if (feeUpdate.maxFee !== undefined) {
-          feeConfig.maxFee = feeUpdate.maxFee.toString();
-        }
-        if (feeUpdate.isActive !== undefined) {
-          feeConfig.isActive = feeUpdate.isActive;
+        const currencyChanges: {
+          currency: Currency;
+          before: { isActive: boolean };
+          after: { isActive: boolean };
+          code: string;
+        }[] = [];
+
+        for (const currencyUpdate of dto.currencies ?? []) {
+          const currency = await manager.findOne(Currency, {
+            where: { code: currencyUpdate.code.toUpperCase() },
+          });
+
+          if (!currency) {
+            throw new NotFoundException(
+              `Currency '${currencyUpdate.code}' not found`,
+            );
+          }
+
+          currencyChanges.push({
+            currency,
+            code: currency.code,
+            before: { isActive: currency.isActive },
+            after: { isActive: currencyUpdate.isActive },
+          });
+          currency.isActive = currencyUpdate.isActive;
         }
 
-        if (
-          feeConfig.minFee !== null &&
-          feeConfig.maxFee !== null &&
-          parseFloat(feeConfig.minFee) > parseFloat(feeConfig.maxFee)
-        ) {
-          throw new BadRequestException('minFee cannot be greater than maxFee');
+        const feeChanges: {
+          feeConfig: FeeConfig;
+          before: Pick<
+            FeeConfig,
+            'feeType' | 'feeValue' | 'minFee' | 'maxFee' | 'isActive'
+          >;
+          after: Pick<
+            FeeConfig,
+            'feeType' | 'feeValue' | 'minFee' | 'maxFee' | 'isActive'
+          >;
+          id: string;
+        }[] = [];
+
+        for (const feeUpdate of dto.feeConfigs ?? []) {
+          const feeConfig = await manager.findOne(FeeConfig, {
+            where: { id: feeUpdate.id },
+          });
+
+          if (!feeConfig) {
+            throw new NotFoundException(
+              `Fee config with ID '${feeUpdate.id}' not found`,
+            );
+          }
+
+          const before = {
+            feeType: feeConfig.feeType,
+            feeValue: feeConfig.feeValue,
+            minFee: feeConfig.minFee,
+            maxFee: feeConfig.maxFee,
+            isActive: feeConfig.isActive,
+          };
+
+          if (feeUpdate.feeType !== undefined) {
+            feeConfig.feeType = feeUpdate.feeType;
+          }
+          if (feeUpdate.feeValue !== undefined) {
+            feeConfig.feeValue = feeUpdate.feeValue.toString();
+          }
+          if (feeUpdate.minFee !== undefined) {
+            feeConfig.minFee = feeUpdate.minFee.toString();
+          }
+          if (feeUpdate.maxFee !== undefined) {
+            feeConfig.maxFee = feeUpdate.maxFee.toString();
+          }
+          if (feeUpdate.isActive !== undefined) {
+            feeConfig.isActive = feeUpdate.isActive;
+          }
+
+          if (
+            feeConfig.minFee !== null &&
+            feeConfig.maxFee !== null &&
+            parseFloat(feeConfig.minFee) > parseFloat(feeConfig.maxFee)
+          ) {
+            throw new BadRequestException(
+              'minFee cannot be greater than maxFee',
+            );
+          }
+
+          feeChanges.push({
+            feeConfig,
+            id: feeConfig.id,
+            before,
+            after: {
+              feeType: feeConfig.feeType,
+              feeValue: feeConfig.feeValue,
+              minFee: feeConfig.minFee,
+              maxFee: feeConfig.maxFee,
+              isActive: feeConfig.isActive,
+            },
+          });
         }
 
-        await this.feeConfigRepository.save(feeConfig);
-      }
-    }
+        const snapshot = await manager.save(PlatformConfig, config);
+        for (const change of currencyChanges) {
+          await manager.save(Currency, change.currency);
+        }
+        for (const change of feeChanges) {
+          await manager.save(FeeConfig, change.feeConfig);
+        }
 
-    const snapshot = await this.getOrCreatePlatformConfig();
+        return {
+          snapshot,
+          maintenanceMode: {
+            before: previousMaintenanceMode,
+            after: snapshot.maintenanceMode,
+          },
+          currencies: currencyChanges.map(({ code, before, after }) => ({
+            code,
+            before,
+            after,
+          })),
+          feeConfigs: feeChanges.map(({ id, before, after }) => ({
+            id,
+            before,
+            after,
+          })),
+        };
+      });
 
     await this.auditLogsService.createLog({
       userId: actor.id,
@@ -256,9 +391,9 @@ export class SuperAdminService {
       entity: AuditEntityType.SYSTEM,
       metadata: {
         actorRole: actor.role,
-        maintenanceMode: snapshot.maintenanceMode,
-        currencies: dto.currencies ?? [],
-        feeConfigs: dto.feeConfigs ?? [],
+        maintenanceMode,
+        currencies,
+        feeConfigs,
       },
       isSensitive: true,
     });
@@ -305,24 +440,23 @@ export class SuperAdminService {
     return user;
   }
 
-  private async assertSuperAdminDemotionSafety(
+  private assertSuperAdminDemotionSafety(
     target: User,
     nextRole: UserRole,
-  ): Promise<void> {
+    activeSuperAdmins: User[],
+  ): void {
     if (
       target.role !== UserRole.SUPER_ADMIN ||
-      nextRole === UserRole.SUPER_ADMIN
+      nextRole === UserRole.SUPER_ADMIN ||
+      target.isSuspended ||
+      target.isDeleted
     ) {
       return;
     }
 
-    const superAdminCount = await this.userRepository.count({
-      where: { role: UserRole.SUPER_ADMIN },
-    });
-
-    if (superAdminCount <= 1) {
+    if (activeSuperAdmins.length <= 1) {
       throw new BadRequestException(
-        'Cannot demote the last remaining SUPER_ADMIN',
+        'Cannot demote the last active SUPER_ADMIN',
       );
     }
   }
@@ -347,14 +481,13 @@ export class SuperAdminService {
 
   private sanitizeUser(
     user: User,
-  ): Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'> {
-    const {
-      password: _password,
-      walletSecretKeyEncrypted: _walletSecretKeyEncrypted,
-      twoFactorSecret: _twoFactorSecret,
-      ...safeUser
-    } = user;
-
-    return safeUser;
+  ): Omit<
+    User,
+    | 'password'
+    | 'walletSecretKeyEncrypted'
+    | 'twoFactorSecret'
+    | 'pendingTwoFactorSecret'
+  > {
+    return instanceToPlain(user);
   }
 }

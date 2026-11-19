@@ -222,3 +222,24 @@ jobs:
           name: migration-validation-log
           path: /tmp/migration-validate-*.log
           if-no-files-found: ignore
+
+  workflow-lint:
+    name: Workflow Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      SHELLCHECK_OPTS: '--exclude=SC2002 --exclude=SC2034 --exclude=SC2046 --exclude=SC2086 --exclude=SC2129 --exclude=SC2155'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install actionlint
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Lint workflow files
+        shell: bash
+        run: actionlint -color .github/workflows/*.yml

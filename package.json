@@ -31,7 +31,7 @@
     "seed:fresh": "ts-node src/database/seed-fresh.ts",
     "commitlint": "commitlint --config commitlint.config.js",
     "release": "semantic-release",
-    "release:prerelease": "semantic-release --branch v2",
+    "release:prerelease": "semantic-release",
     "prepare": "husky"
   },
   "dependencies": {

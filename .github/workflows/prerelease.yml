@@ -4,6 +4,11 @@ on:
   push:
     branches: [v2]
 
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
 jobs:
   prerelease:
     runs-on: ubuntu-latest
@@ -27,4 +32,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_WEBHOOK: ${{ secrets.RELEASE_WEBHOOK }}
-        run: npx semantic-release --branch v2
+        run: npx semantic-release

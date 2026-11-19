@@ -1,8 +1,9 @@
-name: Dependabot Auto-merge
+name: Dependabot Review
 on: pull_request
 
 permissions:
-  contents: write
+  contents: read
+  issues: write
   pull-requests: write
 
 jobs:
@@ -14,10 +15,51 @@ jobs:
         id: metadata
         uses: dependabot/fetch-metadata@v2
         with:
-          github-token: "${{ secrets.GITHUB_TOKEN }}"
-      - name: Enable auto-merge for Dependabot PRs
-        if: steps.metadata.outputs.update-type == 'version-update:semver-patch' || steps.metadata.outputs.update-type == 'version-update:semver-minor'
-        run: gh pr merge --auto --merge "$PR_URL"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Classify dependency updates
+        id: classify
         env:
-          PR_URL: ${{github.event.pull_request.html_url}}
-          GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+          DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          critical=false
+          IFS=',' read -ra names <<< "$DEPENDENCY_NAMES"
+          for name in "${names[@]}"; do
+            name="$(printf '%s' "$name" | tr -d '[:space:]')"
+            case "$name" in
+              stellar-sdk|@stellar/stellar-sdk|bcrypt|@nestjs/jwt|@nestjs/passport|typeorm|pg|passport*)
+                critical=true
+                ;;
+            esac
+          done
+          echo "critical=${critical}" >> "$GITHUB_OUTPUT"
+
+      - name: Label critical dependency updates for manual review
+        if: steps.classify.outputs.critical == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          gh label create needs-manual-review \
+            --color B60205 \
+            --description "Security-critical dependency update requiring manual review" \
+            --force
+          gh pr edit "$PR_URL" --add-label "needs-manual-review"
+
+      - name: Approve and label eligible Dependabot PRs
+        if: >-
+          steps.classify.outputs.critical == 'false' &&
+          (steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+           steps.metadata.outputs.update-type == 'version-update:semver-minor')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          gh label create auto-merge-approved \
+            --color 0E8A16 \
+            --description "Patch or minor dependency update approved by automation" \
+            --force
+          gh pr review --approve "$PR_URL"
+          gh pr edit "$PR_URL" --add-label "auto-merge-approved"

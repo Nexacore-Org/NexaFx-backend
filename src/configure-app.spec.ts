@@ -58,7 +58,25 @@ describe('configureApp', () => {
     expect(app.useGlobalFilters).toHaveBeenCalledWith(
       new AllExceptionsFilter(),
     );
-    expect(app.useStaticAssets).toHaveBeenCalled();
+    expect(app.useStaticAssets).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        prefix: '/uploads',
+        setHeaders: expect.any(Function),
+      }),
+    );
+    const staticHeaders = (app.useStaticAssets as jest.Mock).mock.calls[0][1]
+      .setHeaders;
+    const response = { setHeader: jest.fn() };
+    staticHeaders(response);
+    expect(response.setHeader).toHaveBeenCalledWith(
+      'Content-Disposition',
+      'attachment',
+    );
+    expect(response.setHeader).toHaveBeenCalledWith(
+      'X-Content-Type-Options',
+      'nosniff',
+    );
     expect(app.enableVersioning).toHaveBeenCalledWith({
       type: VersioningType.URI,
       defaultVersion: '1',

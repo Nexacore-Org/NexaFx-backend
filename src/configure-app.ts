@@ -89,5 +89,9 @@ export function configureApp(
 
   app.useStaticAssets(join(process.cwd(), 'uploads'), {
     prefix: '/uploads',
+    setHeaders: (response: Response) => {
+      response.setHeader('Content-Disposition', 'attachment');
+      response.setHeader('X-Content-Type-Options', 'nosniff');
+    },
   });
 }

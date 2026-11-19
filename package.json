@@ -1,4 +1,4 @@
-﻿{
+{
     "name":  "nexafx-backend",
     "version":  "2.0.0",
     "description":  "",
@@ -57,7 +57,7 @@
                          "@nestjs/jwt":  "^11.0.0",
                          "@nestjs/passport":  "^11.0.5",
                          "@nestjs/platform-express":  "^11.2.11",
-                         "@nestjs/platform-socket.io":  "^11.1.17",
+                         "@nestjs/platform-socket.io":  "^12.5.1",
                          "@nestjs/schedule":  "^6.1.0",
                          "@nestjs/swagger":  "^11.4.8",
                          "@nestjs/terminus":  "^11.1.1",

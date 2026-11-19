@@ -1,5 +1,5 @@
 import { QueryRunner } from 'typeorm';
-import { DropPasswordHash20261017001000 } from './20261017001000-DropPasswordHash';
+import { DropPasswordHash20261017001000 } from '../20261017001000-DropPasswordHash';
 
 describe('DropPasswordHash migration', () => {
   const run = async (hasUsers = true, direction: 'up' | 'down' = 'up') => {
@@ -51,8 +51,8 @@ describe('DropPasswordHash migration', () => {
     expect(sql).toContain(
       'UPDATE "users" SET "passwordHash" = "password" WHERE "passwordHash" IS NULL',
     );
-    expect(
-      sql.indexOf('SET "passwordHash" = "password"'),
-    ).toBeLessThan(sql.indexOf('ALTER COLUMN "password" SET NOT NULL'));
+    expect(sql.indexOf('SET "passwordHash" = "password"')).toBeLessThan(
+      sql.indexOf('ALTER COLUMN "password" SET NOT NULL'),
+    );
   });
 });

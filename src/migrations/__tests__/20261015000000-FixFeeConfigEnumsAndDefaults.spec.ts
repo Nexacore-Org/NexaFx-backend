@@ -1,5 +1,5 @@
 import { QueryRunner } from 'typeorm';
-import { FixFeeConfigEnumsAndDefaults20261015000000 } from './20261015000000-FixFeeConfigEnumsAndDefaults';
+import { FixFeeConfigEnumsAndDefaults20261015000000 } from '../20261015000000-FixFeeConfigEnumsAndDefaults';
 
 describe('FixFeeConfigEnumsAndDefaults migration', () => {
   it('replaces unsupported legacy values with entity-backed enums and valid rules', async () => {
@@ -15,13 +15,11 @@ describe('FixFeeConfigEnumsAndDefaults migration', () => {
 
     const migrationSql = queries.join('\n');
     expect(migrationSql).toContain(
-      "CREATE TYPE \"fee_configs_transactiontype_enum\" AS ENUM",
+      'CREATE TYPE "fee_configs_transactiontype_enum" AS ENUM',
     );
+    expect(migrationSql).toContain("'DEPOSIT', 'WITHDRAW', 'CONVERT', 'SWAP'");
     expect(migrationSql).toContain(
-      "'DEPOSIT', 'WITHDRAW', 'CONVERT', 'SWAP'",
-    );
-    expect(migrationSql).toContain(
-      "CREATE TYPE \"fee_configs_feetype_enum\" AS ENUM",
+      'CREATE TYPE "fee_configs_feetype_enum" AS ENUM',
     );
     expect(migrationSql).toContain("'FLAT', 'PERCENTAGE'");
     expect(migrationSql).toContain(

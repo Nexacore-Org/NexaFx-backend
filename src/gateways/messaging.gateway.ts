@@ -35,11 +35,11 @@ export class MessagingGateway
     this.logger.log('MessagingGateway initialized');
   }
 
-  handleConnection(client: Socket) {
+  async handleConnection(client: Socket) {
     const payload = client.data.user as { userId?: string } | undefined;
     const userId = payload?.userId;
     if (userId) {
-      client.join(`user:${userId}`);
+      await client.join(`user:${userId}`);
       this.connectedUsers.set(userId, {
         socketId: client.id,
         lastSeen: new Date(),

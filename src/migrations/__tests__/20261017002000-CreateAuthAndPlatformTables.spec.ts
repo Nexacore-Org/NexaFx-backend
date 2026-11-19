@@ -1,5 +1,5 @@
 import { QueryRunner } from 'typeorm';
-import { CreateAuthAndPlatformTables20261017002000 } from './20261017002000-CreateAuthAndPlatformTables';
+import { CreateAuthAndPlatformTables20261017002000 } from '../20261017002000-CreateAuthAndPlatformTables';
 
 const TABLES = [
   'refresh_tokens',

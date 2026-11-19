@@ -34,9 +34,23 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install PostgreSQL client
+        env:
+          PG_CLIENT_VERSION: ${{ vars.PG_CLIENT_VERSION || '15' }}
         run: |
+          set -euo pipefail
+          if [ -z "$PG_CLIENT_VERSION" ]; then
+            echo "PG_CLIENT_VERSION repository variable must not be empty" >&2
+            exit 1
+          fi
           sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-client
+          sudo install -d -m 0755 /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq "postgresql-client-${PG_CLIENT_VERSION}"
+          echo "PG_BIN=/usr/lib/postgresql/${PG_CLIENT_VERSION}/bin" >> "$GITHUB_ENV"
 
       - name: Find latest backup manifest
         id: find_latest
@@ -46,6 +60,7 @@ jobs:
           AWS_REGION: ${{ secrets.AWS_REGION }}
           BACKUP_BUCKET: ${{ secrets.BACKUP_BUCKET }}
         run: |
+          set -euo pipefail
           LATEST=$(aws s3api list-objects-v2 \
             --bucket "${BACKUP_BUCKET}" \
             --prefix "nexafx/manifests/" \
@@ -53,19 +68,45 @@ jobs:
             --output text 2>/dev/null || echo "")
 
           if [ -z "$LATEST" ] || [ "$LATEST" = "None" ]; then
-            echo "No backup manifests found"
-            echo "manifest_found=false" >> $GITHUB_OUTPUT
-            exit 0
+            echo "No backup manifests found in s3://${BACKUP_BUCKET}/nexafx/manifests/" >&2
+            echo "manifest_found=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+          LAST_MODIFIED=$(aws s3api head-object \
+            --bucket "${BACKUP_BUCKET}" \
+            --key "${LATEST}" \
+            --query LastModified \
+            --output text 2>/dev/null || echo "")
+          if [ -z "$LAST_MODIFIED" ] || [ "$LAST_MODIFIED" = "None" ]; then
+            echo "Could not determine the age of ${LATEST}" >&2
+            echo "manifest_found=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+          MANIFEST_TS=$(date -u -d "$LAST_MODIFIED" +%s)
+          CUTOFF_TS=$(date -u -d '48 hours ago' +%s)
+          if [ "$MANIFEST_TS" -lt "$CUTOFF_TS" ]; then
+            echo "Latest manifest ${LATEST} is older than 48 hours" >&2
+            echo "manifest_found=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+          aws s3 cp "s3://${BACKUP_BUCKET}/${LATEST}" manifest.json
+          BACKUP_KEY=$(jq -r '.key // empty' manifest.json)
+          BACKUP_FILE=$(jq -r '.filename // empty' manifest.json)
+          if [ -z "$BACKUP_KEY" ]; then
+            echo "Manifest ${LATEST} does not contain a full S3 key" >&2
+            echo "manifest_found=false" >> "$GITHUB_OUTPUT"
+            exit 1
           fi
 
           echo "Latest manifest: ${LATEST}"
-          echo "manifest_key=${LATEST}" >> $GITHUB_OUTPUT
-          echo "manifest_found=true" >> $GITHUB_OUTPUT
-
-          # Extract backup filename from manifest key or derive from manifest
-          aws s3 cp "s3://${BACKUP_BUCKET}/${LATEST}" - > manifest.json
-          BACKUP_FILE=$(jq -r '.filename' manifest.json)
-          echo "backup_file=${BACKUP_FILE}" >> $GITHUB_OUTPUT
+          echo "Backup key: ${BACKUP_KEY}"
+          echo "manifest_key=${LATEST}" >> "$GITHUB_OUTPUT"
+          echo "backup_key=${BACKUP_KEY}" >> "$GITHUB_OUTPUT"
+          echo "backup_file=${BACKUP_FILE}" >> "$GITHUB_OUTPUT"
+          echo "manifest_found=true" >> "$GITHUB_OUTPUT"
 
       - name: Download and decrypt latest backup
         if: steps.find_latest.outputs.manifest_found == 'true'
@@ -75,14 +116,9 @@ jobs:
           AWS_REGION: ${{ secrets.AWS_REGION }}
           BACKUP_BUCKET: ${{ secrets.BACKUP_BUCKET }}
           BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+          BACKUP_KEY: ${{ steps.find_latest.outputs.backup_key }}
         run: |
-          MANIFEST_KEY="${{ steps.find_latest.outputs.manifest_key }}"
-          BACKUP_FILE="${{ steps.find_latest.outputs.backup_file }}"
-
-          # Derive the backup key from manifest key
-          BACKUP_DIR=$(dirname "$MANIFEST_KEY" | sed 's|/manifests||')
-          BACKUP_KEY="${BACKUP_DIR}/${BACKUP_FILE}"
-
+          set -euo pipefail
           echo "Downloading s3://${BACKUP_BUCKET}/${BACKUP_KEY}"
           aws s3 cp "s3://${BACKUP_BUCKET}/${BACKUP_KEY}" backup.dump.gz.enc
 
@@ -97,10 +133,12 @@ jobs:
 
       - name: Restore into temporary database
         if: steps.find_latest.outputs.manifest_found == 'true'
+        shell: bash
         env:
           PGPASSWORD: verify_pass
         run: |
-          pg_restore --verbose --clean --if-exists \
+          set -o pipefail
+          "$PG_BIN/pg_restore" --verbose --clean --if-exists \
             --host=localhost \
             --port=5433 \
             --username=verify \
@@ -113,7 +151,7 @@ jobs:
         env:
           PGPASSWORD: verify_pass
         run: |
-          RESULT=$(psql -h localhost -p 5433 -U verify -d restore_verify \
+          RESULT=$("$PG_BIN/psql" -h localhost -p 5433 -U verify -d restore_verify \
             -t -c "SELECT COUNT(*) FROM users;" 2>/dev/null || echo "0")
 
           USER_COUNT=$(echo "$RESULT" | tr -d ' ')
@@ -121,10 +159,11 @@ jobs:
 
           if [ "$USER_COUNT" -gt 0 ] 2>/dev/null; then
             echo "✅ Sanity check PASSED — ${USER_COUNT} users found"
-            echo "status=passed" >> $GITHUB_OUTPUT
+            echo "status=passed" >> "$GITHUB_OUTPUT"
           else
-            echo "❌ Sanity check FAILED — no users in restored database"
-            echo "status=failed" >> $GITHUB_OUTPUT
+            echo "❌ Sanity check FAILED — no users in restored database" >&2
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            exit 1
           fi
 
       - name: Clean up temporary files
@@ -134,50 +173,61 @@ jobs:
 
       - name: Generate workflow summary
         if: always()
+        env:
+          MANIFEST_FOUND: ${{ steps.find_latest.outputs.manifest_found }}
+          MANIFEST_KEY: ${{ steps.find_latest.outputs.manifest_key }}
+          BACKUP_FILE: ${{ steps.find_latest.outputs.backup_file }}
+          SANITY_STATUS: ${{ steps.sanity.outputs.status }}
         run: |
-          echo "## DB Restore Verification Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## DB Restore Verification Report"
+            echo ""
+            echo "| Check | Status |"
+            echo "|-------|--------|"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-          if [ "${{ steps.find_latest.outputs.manifest_found }}" = "true" ]; then
-            echo "| Latest manifest | ${{ steps.find_latest.outputs.manifest_key }} |" >> $GITHUB_STEP_SUMMARY
-            echo "| Backup file | ${{ steps.find_latest.outputs.backup_file }} |" >> $GITHUB_STEP_SUMMARY
+          if [ "$MANIFEST_FOUND" = "true" ]; then
+            {
+              echo "| Latest manifest | ${MANIFEST_KEY} |"
+              echo "| Backup file | ${BACKUP_FILE} |"
+            } >> "$GITHUB_STEP_SUMMARY"
 
-            if [ "${{ steps.sanity.outputs.status }}" = "passed" ]; then
-              echo "| Decrypt + Decompress | ✅ |" >> $GITHUB_STEP_SUMMARY
-              echo "| pg_restore | ✅ |" >> $GITHUB_STEP_SUMMARY
-              echo "| Sanity query (SELECT COUNT(*) FROM users) | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+            if [ "$SANITY_STATUS" = "passed" ]; then
+              {
+                echo "| Decrypt + Decompress | ✅ |"
+                echo "| pg_restore | ✅ |"
+                echo "| Sanity query (SELECT COUNT(*) FROM users) | ✅ Passed |"
+              } >> "$GITHUB_STEP_SUMMARY"
             else
-              echo "| Decrypt + Decompress | ⚠️ See logs |" >> $GITHUB_STEP_SUMMARY
-              echo "| pg_restore | ⚠️ See logs |" >> $GITHUB_STEP_SUMMARY
-              echo "| Sanity query | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+              {
+                echo "| Decrypt + Decompress | ⚠️ See logs |"
+                echo "| pg_restore | ⚠️ See logs |"
+                echo "| Sanity query | ❌ Failed |"
+              } >> "$GITHUB_STEP_SUMMARY"
             fi
           else
-            echo "| Backup manifest | ❌ Not found |" >> $GITHUB_STEP_SUMMARY
-            echo "| Result | No backup available to verify |" >> $GITHUB_STEP_SUMMARY
+            {
+              echo "| Backup manifest | ❌ Not found or older than 48 hours |"
+              echo "| Result | No recent backup available to verify |"
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Notify verification result
         if: always()
         env:
           BACKUP_ALERT_WEBHOOK: ${{ secrets.BACKUP_ALERT_WEBHOOK }}
+          SANITY_STATUS: ${{ steps.sanity.outputs.status }}
+          BACKUP_FILE: ${{ steps.find_latest.outputs.backup_file }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           if [ -n "$BACKUP_ALERT_WEBHOOK" ]; then
-            STATUS="${{ steps.sanity.outputs.status }}"
-            if [ "$STATUS" = "passed" ]; then
+            if [ "$SANITY_STATUS" = "passed" ]; then
               curl -s -X POST "$BACKUP_ALERT_WEBHOOK" \
                 -H "Content-Type: application/json" \
-                -d '{
-                  "text": "✅ *DB Restore Verification PASSED*\nBackup: ${{ steps.find_latest.outputs.backup_file }}\nSanity check: Users table contains data",
-                  "attachments": []
-                }' || true
+                -d "{\"text\": \"✅ *DB Restore Verification PASSED*\nBackup: ${BACKUP_FILE}\nSanity check: Users table contains data\", \"attachments\": []}" || true
             else
               curl -s -X POST "$BACKUP_ALERT_WEBHOOK" \
                 -H "Content-Type: application/json" \
-                -d '{
-                  "text": "❌ *DB Restore Verification FAILED*\nBackup: ${{ steps.find_latest.outputs.backup_file }}\nCheck: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-                  "attachments": []
-                }' || true
+                -d "{\"text\": \"❌ *DB Restore Verification FAILED*\nBackup: ${BACKUP_FILE}\nCheck: ${RUN_URL}\", \"attachments\": []}" || true
             fi
           fi

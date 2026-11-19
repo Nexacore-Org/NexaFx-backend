@@ -12,6 +12,9 @@ Automated daily PostgreSQL backups using GitHub Actions. Backups are compressed,
 
 All three workflows can also be triggered manually via `workflow_dispatch` from the GitHub Actions tab.
 
+Retention uses the AWS CLI v2 preinstalled on GitHub-hosted Ubuntu runners and reports
+the deleted object count from the cleanup step that performed the deletion.
+
 ## Required GitHub Secrets
 
 Set these secrets in your GitHub repository: **Settings → Secrets and variables → Actions**.
@@ -25,6 +28,10 @@ Set these secrets in your GitHub repository: **Settings → Secrets and variable
 | `AWS_REGION` | AWS region of the S3 bucket | `us-east-1` |
 | `BACKUP_BUCKET` | S3 bucket name for backup storage | `nexafx-backups` |
 | `BACKUP_ALERT_WEBHOOK` | Slack/email webhook for failure alerts | `https://hooks.slack.com/...` |
+
+Set the repository variable `PG_CLIENT_VERSION` (Settings → Secrets and variables → Actions → Variables) to the major version of the production PostgreSQL server, for example `15`. The backup and restore-verification workflows install `postgresql-client-NN` from the PostgreSQL PGDG repository for that version and use its binaries directly. If the variable is unset, version `15` is used. A mismatched client version can make `pg_dump` fail.
+
+The backup workflow fails immediately when `DATABASE_URL` is empty instead of producing a confusing `pg_dump` error.
 
 ### S3 Bucket Policy
 
@@ -74,6 +81,7 @@ s3://<bucket>/
 
 ```json
 {
+  "key": "nexafx/2026/06/24/backup-20260624-020015.dump.gz.enc",
   "filename": "backup-20260624-020015.dump.gz.enc",
   "size": 10485760,
   "checksum": "sha256hexhash...",
@@ -81,6 +89,10 @@ s3://<bucket>/
   "pgVersion": "pg_dump (PostgreSQL) 15.4"
 }
 ```
+
+`key` is the full S3 object key written by the backup workflow. Restore verification
+downloads the backup using this key rather than reconstructing the path from the
+manifest key.
 
 ## Encryption Details
 
@@ -103,14 +115,17 @@ pg_restore -d your_db backup.dump
 ## Restore Verification
 
 The `db-restore-verify.yml` workflow:
-1. Finds the latest manifest in S3
-2. Downloads the corresponding encrypted backup
+1. Finds the latest manifest in S3 and fails when no manifest is newer than 48 hours
+2. Downloads the corresponding encrypted backup using the `key` stored in the manifest
 3. Decrypts and decompresses
 4. Starts a temporary PostgreSQL 15 container (port 5433 — isolated from production)
-5. Runs `pg_restore` into the temp database
-6. Executes `SELECT COUNT(*) FROM users` — must return > 0
+5. Runs `pg_restore` into the temp database with pipefail enabled
+6. Executes `SELECT COUNT(*) FROM users` — must return > 0; a failed sanity check fails the workflow
 7. Tears down the container
 8. Reports results as a GitHub Actions workflow summary
+
+A green restore-verification run therefore proves that a recent backup exists and
+can be restored, not merely that the job was skipped.
 
 ## Admin Endpoint
 
@@ -119,6 +134,7 @@ The `db-restore-verify.yml` workflow:
 ```json
 [
   {
+    "key": "nexafx/2026/06/24/backup-20260624-020015.dump.gz.enc",
     "filename": "backup-20260624-020015.dump.gz.enc",
     "size": 10485760,
     "checksum": "sha256hexhash...",

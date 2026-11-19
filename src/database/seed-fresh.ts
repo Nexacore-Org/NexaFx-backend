@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { execSync } from 'child_process';
 import { config } from 'dotenv';
+import { AppDataSource as dataSource } from './data-source';
 
 config();
 
@@ -10,15 +11,17 @@ async function main() {
       'Seeding is not allowed in production or staging environments.',
     );
   }
-  // Drop all tables
-  execSync(
-    'npm run typeorm migration:revert -- -d src/database/data-source.ts || true',
-    { stdio: 'inherit' },
-  );
-  execSync('npm run typeorm migration:run -- -d src/database/data-source.ts', {
-    stdio: 'inherit',
-  });
-  execSync('ts-node src/database/seed.ts', { stdio: 'inherit' });
+
+  await dataSource.initialize();
+  try {
+    await dataSource.query('DROP SCHEMA public CASCADE');
+    await dataSource.query('CREATE SCHEMA public');
+  } finally {
+    await dataSource.destroy();
+  }
+
+  execSync('npm run typeorm:migration:run', { stdio: 'inherit' });
+  execSync('npm run seed', { stdio: 'inherit' });
 }
 
 main().catch((err) => {

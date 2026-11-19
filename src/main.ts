@@ -3,9 +3,19 @@ import { AppModule } from './app.module';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { configureApp } from './configure-app';
 
 async function bootstrap() {
+  if (process.argv.includes('--version')) {
+    const packageJson = JSON.parse(
+      readFileSync(join(process.cwd(), 'package.json'), 'utf8'),
+    ) as { version?: string };
+    console.log(packageJson.version ?? '0.0.0');
+    return;
+  }
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     rawBody: true,
   });

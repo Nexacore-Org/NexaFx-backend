@@ -90,17 +90,13 @@ describe('I18n Integration', () => {
     });
   });
 
-  // Interpolation is a common source of regressions (missing `{args}`
-  // placeholders, wrong casing, etc.). Wire this up once you have a
-  // real interpolated key in your translation files, e.g.:
-  //   auth.WELCOME_USER: "Welcome, {name}!"
-  describe.skip('interpolation', () => {
+  describe('interpolation', () => {
     it('should interpolate args into the translated string', async () => {
       const text = i18nService.translate('auth.WELCOME_USER', {
         lang: 'en',
         args: { name: 'Jane' },
       });
-      expect(text).toContain('Jane');
+      expect(text).toBe('Welcome, Jane!');
     });
   });
 });

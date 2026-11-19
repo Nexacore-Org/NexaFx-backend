@@ -96,9 +96,11 @@ describe('scanBuffer', () => {
   const originalEnv = { ...process.env };
 
   const loadScanner = () =>
-    require('./virus-scanner.helper').scanBuffer as (
-      buffer: Buffer,
-    ) => Promise<void>;
+    (
+      jest.requireActual('../helpers/virus-scanner.helper') as {
+        scanBuffer: (buffer: Buffer) => Promise<void>;
+      }
+    ).scanBuffer;
 
   /** Minimal net.Socket stand-in the scanner can drive. */
   const fakeSocket = () => {

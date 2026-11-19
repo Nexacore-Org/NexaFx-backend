@@ -35,9 +35,10 @@ flowchart TD
         Notifications[Notifications Module]
     end
 
-    subgraph Database
+    subgraph Data Stores
         PostgreSQL[(PostgreSQL)]
-        Redis[(Redis Cache)]
+        Redis[(Redis)]
+        InMemoryCache[(In-Memory Cache)]
     end
 
     subgraph External
@@ -59,11 +60,15 @@ flowchart TD
     Gateway --> Admin
     Gateway --> Notifications
     
+    Gateway -->|rate limiting| Redis
     Auth --> PostgreSQL
+    Auth -->|revoked tokens| Redis
     Users --> PostgreSQL
     Currencies --> PostgreSQL
     Transactions --> PostgreSQL
-    ExchangeRates --> Redis
+    Transactions -->|idempotency and queues| Redis
+    ExchangeRates -->|process-local cache| InMemoryCache
+    ExchangeRates -->|shared cache| Redis
     Notifications --> PostgreSQL
     
     Transactions --> Stellar
@@ -90,53 +95,89 @@ flowchart TD
 ```
 nexafx-backend/
 ├── src/
-│   ├── admin/                # Admin panel and controls
-│   ├── audit-logs/           # Audit trail and logging
-│   ├── auth/                 # JWT authentication & authorization
-│   ├── beneficiaries/        # Beneficiary management
-│   ├── blockchain/           # Stellar blockchain integration
-│   ├── common/               # Shared guards, interceptors, decorators, services
-│   ├── currencies/           # Fiat and crypto currency management
-│   ├── database/             # Database seeding scripts
-│   ├── exchange-rates/       # Real-time exchange rate providers
-│   ├── fees/                 # Transaction fee management
-│   ├── health/               # Health check endpoints
-│   ├── kyc/                  # KYC/AML compliance
-│   ├── notifications/        # Push & email notifications
-│   ├── otps/                 # One-time passwords for 2FA
-│   ├── push-notifications/   # Firebase push notifications
-│   ├── rate-alerts/          # Rate change alerts (utility)
-│   ├── receipts/             # Transaction receipts
-│   ├── referrals/            # Referral program
-│   ├── scheduled-jobs/       # Background scheduled tasks
-│   ├── tokens/               # Refresh token management (utility)
-│   ├── transactions/         # Transaction processing & tracking
-│   ├── two-factor/           # Two-factor authentication
-│   ├── users/                # User management (CRUD, roles, profiles)
-│   ├── app.module.ts         # Root application module
-│   ├── app.controller.ts     # Root application controller
-│   ├── app.service.ts        # Root application service
-│   └── main.ts               # Application entry point
-├── migrations/               # TypeORM migration files
-├── test/                     # E2E and integration tests
-├── .env.example              # Environment configuration template
-├── package.json              # Dependencies and scripts
-├── tsconfig.json             # TypeScript configuration
-└── README.md                 # This file
+│   ├── __mocks__/                 # Jest module mocks
+│   ├── admin/                     # Admin APIs and impersonation
+│   ├── analytics/                 # Usage and platform analytics
+│   ├── audit-logs/                # Audit trail and logging
+│   ├── auth/                      # Authentication and authorization
+│   ├── beneficiaries/             # Beneficiary management
+│   ├── blockchain/                # Stellar blockchain integration
+│   ├── cards/                     # Card issuance and management
+│   ├── common/                    # Shared guards, interceptors and services
+│   ├── currencies/                # Currency registry and pairs
+│   ├── custom-reports/            # Custom report generation
+│   ├── dao/                       # Governance proposals and voting
+│   ├── database/                  # Data source configuration and seeds
+│   ├── escrow/                    # Escrow accounts and workflows
+│   ├── exchange-rates/            # Rate providers and comparison
+│   ├── fees/                      # Fee calculation and matrices
+│   ├── financial-health/          # Financial health reporting
+│   ├── firebase/                  # Firebase integration
+│   ├── gateways/                  # Socket.IO gateways
+│   ├── graphql/                   # GraphQL API
+│   ├── health/                    # Health check endpoints
+│   ├── i18n/                      # Translation files
+│   ├── intelligent-sms-routing/   # SMS routing rules
+│   ├── kyc/                       # KYC document and verification workflows
+│   ├── ledger/                    # Ledger entries and reconciliation
+│   ├── migrations/                # TypeORM migrations
+│   ├── modules/
+│   │   ├── auth/                  # Auth helpers
+│   │   ├── compliance/            # AML, SAR and compliance flags
+│   │   ├── expenses/              # Expense entities
+│   │   ├── flags/                 # Feature flags
+│   │   ├── gdpr/                  # Consent and erasure workflows
+│   │   ├── mail/                  # Mail queue processing
+│   │   ├── micro-savings/         # Savings rules and contributions
+│   │   ├── queues/                # BullMQ setup and dashboard
+│   │   ├── redis/                 # Redis client and throttler storage
+│   │   ├── stellar/               # Stellar service wrapper
+│   │   ├── storage/               # Local and S3 storage
+│   │   └── webhooks/              # Webhook payload schemas
+│   ├── notifications/             # Email and in-app notifications
+│   ├── otps/                      # One-time passwords
+│   ├── portfolio/                 # Portfolio reporting
+│   ├── push-notifications/        # Firebase push notifications
+│   ├── qr/                        # QR code generation
+│   ├── rate-alerts/               # Rate threshold alerts
+│   ├── receipts/                  # Receipt generation and export
+│   ├── referrals/                 # Referral tracking and rewards
+│   ├── sanctions/                 # Sanctions screening
+│   ├── scheduled-jobs/            # Scheduled background tasks
+│   ├── super-admin/               # Managed admins and platform controls
+│   ├── tax/                       # Tax calculation and reporting
+│   ├── tokens/                    # Refresh token helpers
+│   ├── transactions/              # Transaction processing and tracking
+│   ├── two-factor/                # TOTP-based 2FA
+│   ├── unified-activity-feed/     # Aggregated activity feed
+│   ├── users/                     # User management
+│   ├── vaults/                    # Savings vaults
+│   ├── wallets/                   # Wallet management
+│   ├── webhooks/                  # Webhook endpoints and deliveries
+│   ├── app.module.ts              # Root application module
+│   ├── app.controller.ts          # Root application controller
+│   ├── app.service.ts             # Root application service
+│   └── main.ts                    # Application entry point
+├── scripts/                       # Setup and maintenance scripts
+├── test/                          # E2E and integration tests
+├── .env.example                   # Environment configuration template
+├── package.json                   # Dependencies and scripts
+├── tsconfig.json                  # TypeScript configuration
+└── README.md                      # This file
 ```
 
 ---
 
 ## 📦 Tech Stack
 
-- **Backend Framework**: NestJS 11, TypeScript 5.7
+- **Backend Framework**: NestJS 11, TypeScript 5.9
 - **Database ORM**: TypeORM 0.3 (PostgreSQL)
 - **Authentication**: JWT (Passport.js), Bcrypt, TOTP
 - **Blockchain**: Stellar SDK with Horizon API integration
 - **Background Jobs**: NestJS Schedule (@nestjs/schedule)
 - **Notifications**: Mailgun (email), Firebase (push notifications)
 - **Rate Limiting**: NestJS Throttler
-- **Documentation**: Swagger/OpenAPI
+- **Documentation**: Swagger/OpenAPI decorators (Swagger UI is not mounted yet)
 - **Testing**: Jest, Supertest
 - **Code Quality**: ESLint, Prettier
 
@@ -147,7 +188,7 @@ nexafx-backend/
 ### Prerequisites
 
 - **Node.js**: v20+ (LTS recommended)
-- **Docker & Docker Compose**: For running PostgreSQL
+- **Docker & Docker Compose**: For running PostgreSQL and Redis
 - **npm**: v9+ (comes with Node.js)
 - **Git**: For version control
 
@@ -194,7 +235,7 @@ cp .env.example .env
 
 Edit `.env` and configure your variables (see [Environment Variables](#-environment-variables) section below).
 
-#### 4. Start Database with Docker
+#### 4. Start PostgreSQL and Redis with Docker
 
 ```bash
 docker-compose up -d
@@ -216,7 +257,6 @@ npm run start:dev
 
 ### Development Workflow
 
-- **API Docs**: Visit `http://localhost:3000/api/docs` for Swagger UI
 - **Health Check**: `http://localhost:3000/health`
 - **Run Tests**: `npm run test`
 - **Run Lint**: `npm run lint`
@@ -234,12 +274,13 @@ Copy `.env.example` to `.env` and configure the following variables:
 ### Database Configuration
 | Variable | Type | Required | Example | Description |
 |----------|------|----------|---------|-------------|
-| `DATABASE_URL` | string | ✅ Yes | `postgresql://user:pass@localhost:5432/nexafx` | PostgreSQL connection string |
+| `DATABASE_URL` | string | ✅ Yes | `postgresql://postgres:postgres@localhost:5432/nexafx` | PostgreSQL connection string |
 | `DB_HOST` | string | ✅ Yes | `localhost` | Database host address |
 | `DB_PORT` | number | ✅ Yes | `5432` | Database port |
 | `DB_USERNAME` | string | ✅ Yes | `postgres` | Database user |
-| `DB_PASSWORD` | string | ✅ Yes | `secure_password` | Database password |
+| `DB_PASSWORD` | string | ✅ Yes | `postgres` | Database password |
 | `DB_NAME` | string | ✅ Yes | `nexafx` | Database name |
+| `REDIS_URL` | string | ✅ Yes | `redis://localhost:6379` | Redis connection string |
 
 ### Application Configuration
 | Variable | Type | Required | Example | Description |
@@ -335,55 +376,84 @@ Guards are applied at controller and route levels using custom decorators (`@Req
 
 ---
 
-## 📁 Module Overview & Architecture
+## 📁 Module Overview
 
-The codebase contains 150+ module directories. The following table lists the core modules that are fully implemented and integrated. Scaffold-stub modules (those containing `NotImplementedException` placeholders) are not listed here as complete.
+The tables reflect the directories that currently exist under `src/` and `src/modules/`. They describe the code in the tree; no completion status is implied.
 
-| Module | File Location | Purpose | Status |
-|--------|---|---------|--------|
-| **auth** | `src/auth/` | JWT authentication, password reset, OAuth2 strategies. Implements Passport.js strategies and JWT verification | ✅ Complete |
-| **admin** | `src/admin/` | Admin dashboard, user moderation, system controls, configuration management | ✅ Complete |
-| **super-admin** | `src/super-admin/` | Managed admin CRUD, role assignments, platform configuration. restricted to SUPER_ADMIN role | ✅ Complete |
-| **users** | `src/users/` | User CRUD operations, profile management, roles, KYC status, personal data storage | ✅ Complete |
-| **currencies** | `src/currencies/` | Fiat and crypto currency registry, metadata, pairs, support matrix | ✅ Complete |
-| **transactions** | `src/transactions/` | Core exchange transactions, Stellar blockchain integration, settlement tracking, reversals | ✅ Complete |
-| **exchange-rates** | `src/exchange-rates/` | Real-time rate fetching, multi-provider aggregation, in-memory caching | ✅ Complete |
-| **beneficiaries** | `src/beneficiaries/` | Manage recipient accounts, wallets, bank details for transactions | ✅ Complete |
-| **kyc** | `src/kyc/` | KYC/AML workflows, document collection, verification, compliance status | ✅ Complete |
-| **notifications** | `src/notifications/` | Email & SMS system via Mailgun, verification codes, alerts, announcements | ✅ Complete |
-| **push-notifications** | `src/push-notifications/` | Firebase Cloud Messaging (FCM) integration for mobile push notifications | ✅ Complete |
-| **referrals** | `src/referrals/` | Referral program tracking, unique codes, rewards, commission calculation | ✅ Complete |
-| **receipts** | `src/receipts/` | Transaction receipt generation and export (PDF via pdfkit, CSV, Excel via exceljs) | ✅ Complete |
-| **fees** | `src/fees/` | Dynamic fee calculation, fee matrices, tier-based pricing, settlement | ✅ Complete |
-| **audit-logs** | `src/audit-logs/` | Comprehensive audit trail for compliance, debugging, user activity tracking | ✅ Complete |
-| **scheduled-jobs** | `src/scheduled-jobs/` | Background tasks: rate updates, data cleanup, notification batching, reconciliation | ✅ Complete |
-| **common** | `src/common/` | Shared infrastructure: global guards, interceptors, decorators, pipes, error filters, shared services | ✅ Complete |
-| **health** | `src/health/` | Health check endpoints for monitoring, load balancer integration, readiness/liveness probes | ✅ Complete |
-| **blockchain** | `src/blockchain/` | Stellar SDK integration, Horizon API communication, contract deployment, transaction signing | ✅ Complete |
-| **two-factor** | `src/two-factor/` | TOTP-based 2FA, recovery codes, backup authentication methods | ✅ Complete |
-| **otps** | `src/otps/` | One-time password generation, validation, expiration, retry limits | ✅ Complete |
-| **analytics** | `src/analytics/` | Platform analytics, usage metrics, reporting dashboards | ✅ Complete |
-| **dao** | `src/dao/` | Decentralized governance, proposal creation, voting mechanisms | ✅ Complete |
-| **rate-alerts** | `src/rate-alerts/` | Above/below absolute-threshold rate alerts with cron evaluation | ✅ Complete |
-| **sanctions** | `src/sanctions/` | Sanctions screening, provider integration, compliance checks | ✅ Complete |
-| **disputes** | `src/disputes/` | Dispute management, resolution workflows, admin controls | ✅ Complete |
-| **escrow** | `src/escrow/` | Escrow accounts, fund locking, release/reversal workflows | ✅ Complete |
-| **compliance** | `src/compliance/` | Compliance rules, checks, and reporting across modules | ✅ Complete |
-| **donations** | `src/donations/` | Charitable donation processing, receipts, campaign tracking | ✅ Complete |
-| **cards** | `src/cards/` | Virtual and physical card management, issuance, limits | ✅ Complete |
-| **loans** | `src/loans/` | Loan products, applications, disbursement, repayment tracking | ✅ Complete |
-| **splits** | `src/splits/` | Payment splits, beneficiary allocation, proportional distribution | ✅ Complete |
-| **vaults** | `src/vaults/` | Secure storage, cold wallet management, key custody | ✅ Complete |
+### `src/`
+
+| Directory | Contents |
+|-----------|----------|
+| `src/__mocks__/` | Jest mocks |
+| `src/admin/` | Admin APIs, reports and impersonation |
+| `src/analytics/` | Platform analytics and reporting |
+| `src/audit-logs/` | Audit trail capture and queries |
+| `src/auth/` | Authentication, JWT and OAuth strategies |
+| `src/beneficiaries/` | Recipient and payout details |
+| `src/blockchain/` | Stellar SDK integration |
+| `src/cards/` | Card issuance and management |
+| `src/common/` | Shared guards, interceptors, pipes and services |
+| `src/currencies/` | Currency registry and pairs |
+| `src/custom-reports/` | User-defined reports |
+| `src/dao/` | Governance proposals and voting |
+| `src/database/` | Data source configuration and seeds |
+| `src/escrow/` | Escrow accounts and release workflows |
+| `src/exchange-rates/` | Rate providers, caching and comparison |
+| `src/fees/` | Fee calculation and matrices |
+| `src/financial-health/` | Financial health reporting |
+| `src/firebase/` | Firebase integration |
+| `src/gateways/` | Socket.IO gateways |
+| `src/graphql/` | GraphQL API |
+| `src/health/` | Health indicators and endpoints |
+| `src/i18n/` | Translation files |
+| `src/intelligent-sms-routing/` | SMS routing rules |
+| `src/kyc/` | KYC documents and verification |
+| `src/ledger/` | Ledger entries and reconciliation |
+| `src/migrations/` | TypeORM migrations |
+| `src/modules/` | Shared infrastructure modules (see below) |
+| `src/notifications/` | Email and in-app notifications |
+| `src/otps/` | One-time passwords |
+| `src/portfolio/` | Portfolio reporting |
+| `src/push-notifications/` | Firebase push notifications |
+| `src/qr/` | QR code generation |
+| `src/rate-alerts/` | Rate threshold alerts |
+| `src/receipts/` | Receipt generation and export |
+| `src/referrals/` | Referral codes and rewards |
+| `src/sanctions/` | Sanctions screening |
+| `src/scheduled-jobs/` | Scheduled background tasks |
+| `src/super-admin/` | Managed admins and platform controls |
+| `src/tax/` | Tax calculation and reporting |
+| `src/tokens/` | Refresh token helpers |
+| `src/transactions/` | Transaction processing and reversals |
+| `src/two-factor/` | TOTP-based 2FA |
+| `src/unified-activity-feed/` | Aggregated activity feed |
+| `src/users/` | User management and profiles |
+| `src/vaults/` | Savings vaults |
+| `src/wallets/` | Wallet management |
+| `src/webhooks/` | Webhook endpoints and deliveries |
+
+### `src/modules/`
+
+| Directory | Contents |
+|-----------|----------|
+| `src/modules/auth/` | Authentication helpers |
+| `src/modules/compliance/` | AML, SAR and compliance flags |
+| `src/modules/expenses/` | Expense entities |
+| `src/modules/flags/` | Feature flags |
+| `src/modules/gdpr/` | Consent and erasure workflows |
+| `src/modules/mail/` | Mail queue processing |
+| `src/modules/micro-savings/` | Savings rules and contributions |
+| `src/modules/queues/` | BullMQ setup and queue dashboard |
+| `src/modules/redis/` | Redis client and throttler storage |
+| `src/modules/stellar/` | Stellar service wrapper |
+| `src/modules/storage/` | Local and S3 storage |
+| `src/modules/webhooks/` | Webhook payload schemas |
 
 ---
 
 ## 📄 API Documentation
 
-**Swagger/OpenAPI** documentation is available when the backend is running:
-
-- **URL**: [http://localhost:3000/api/docs](http://localhost:3000/api/docs)
-- Features: Interactive API explorer, request/response examples, schema definitions
-- Auto-generated from NestJS decorators
+Swagger decorators are present on controllers, but the Swagger UI is not mounted yet. Use the root and health endpoints, or read the controller sources, for API details.
 
 ---
 
@@ -441,14 +511,4 @@ npm run test:debug     # Debug mode (use Chrome DevTools on port 9229)
 - `GET /health`
 
 ## Real-Time Transport Architecture
-This platform supports real-time updates via two complementary transports:
-1. **Socket.IO Gateways (`src/gateways/`)**: Optimized for high-throughput WebSocket clients and exchange rate feeds.
-2. **GraphQL Subscriptions (`src/graphql-subscriptions/`)**: Powered by `graphql-ws`, sharing underlying event streams with gateways for Apollo Client consumers with strict JWT authentication boundaries.
-
-## Handsoff notes
-
-<!-- handsoff-issue-1292 -->
-- #1292: [Wave 200pts] v2: FIX — No migrations for webhook_endpoints/deliveries, push_notifications, sms_provider_routes
-
-<!-- handsoff-issue-1293 -->
-- #1293: [Wave 200pts] v2: FIX — Retry of a refunded FAILED withdrawal flips it to SUCCESS without reversing the refund
+Real-time updates are provided by the Socket.IO gateways in `src/gateways/`. GraphQL support lives in `src/graphql/`; subscriptions are not enabled.

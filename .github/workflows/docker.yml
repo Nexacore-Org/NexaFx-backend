@@ -34,6 +34,11 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Verify built image starts
+        run: |
+          VERSION_OUTPUT=$(docker run --rm app:${{ github.sha }} --version)
+          test -n "$VERSION_OUTPUT"
+
       - name: Scan image for vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:

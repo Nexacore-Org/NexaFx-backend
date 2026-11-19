@@ -3,7 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Transaction, TransactionType } from '../entities/transaction.entity';
 import { FeesService, CalculatedFee } from '../../fees/fees.service';
-import { FeeTransactionType } from '../../fees/entities/fee-config.entity';
+import {
+  FeeTransactionType,
+  FeeType,
+} from '../../fees/entities/fee-config.entity';
 import { ExchangeRatesService } from '../../exchange-rates/exchange-rates.service';
 import { StellarService } from '../../modules/stellar/stellar.service';
 import { RedisService } from '../../modules/redis/redis.service';
@@ -58,7 +61,6 @@ export interface BatchEstimateResult {
 
 const ESTIMATE_TTL_SECONDS = 30;
 const MARKUP_PERCENT = 0.35;
-const STELLAR_NETWORK_FEE = '0.00001';
 
 @Injectable()
 export class FeeEstimatorService {
@@ -83,7 +85,10 @@ export class FeeEstimatorService {
     },
   ): Promise<FeeEstimateResult> {
     const fromCurrency = params.currency.toUpperCase();
-    const toCurrency = (params.toCurrency ?? params.currency).toUpperCase();
+    const isSwap = params.type === TransactionType.SWAP;
+    const toCurrency = isSwap
+      ? (params.toCurrency ?? params.currency).toUpperCase()
+      : fromCurrency;
 
     const platformFee = await this.feesService.calculateFee(
       this.mapTransactionType(params.type),
@@ -91,24 +96,17 @@ export class FeeEstimatorService {
       params.amount,
     );
 
-    const networkFeeDecimal = new Decimal(STELLAR_NETWORK_FEE);
-
-    const markupAmount = new Decimal(params.amount)
-      .times(MARKUP_PERCENT)
-      .div(100)
-      .toDecimalPlaces(8);
-
-    const totalFees = new Decimal(platformFee.feeAmount)
-      .plus(networkFeeDecimal)
-      .plus(markupAmount);
-
-    const toAmount = new Decimal(params.amount).minus(totalFees);
-
-    if (toAmount.isNegative()) {
-      throw new BadRequestException(
-        'Insufficient amount: total fees exceed the transaction amount',
-      );
-    }
+    const exchangeRate = isSwap
+      ? (
+          await this.exchangeRatesService.getFreshRate(
+            fromCurrency,
+            toCurrency,
+          )
+        ).rate
+      : null;
+    const toAmount = new Decimal(params.amount).times(exchangeRate ?? 1);
+    const totalFees = new Decimal(platformFee.feeAmount);
+    const zeroFee = new Decimal(0);
 
     const result: FeeEstimateResult = {
       fromAmount: params.amount.toFixed(8),
@@ -124,26 +122,28 @@ export class FeeEstimatorService {
           amount: platformFee.feeAmount.toFixed(8),
           currency: fromCurrency,
           percent:
-            platformFee.feeType === 'PERCENTAGE'
+            platformFee.feeType === FeeType.PERCENTAGE
               ? this.getFeePercentage(platformFee)
               : undefined,
         },
         networkFee: {
-          amount: networkFeeDecimal.toFixed(8),
+          amount: zeroFee.toFixed(8),
           currency: fromCurrency,
         },
         markupFee: {
-          amount: markupAmount.toFixed(8),
+          amount: zeroFee.toFixed(8),
           currency: fromCurrency,
-          percent: MARKUP_PERCENT.toString(),
+          percent: '0',
         },
         total: {
           amount: totalFees.toFixed(8),
           currency: fromCurrency,
         },
       },
-      exchangeRate: null,
-      totalDeducted: params.amount.toFixed(8),
+      exchangeRate,
+      totalDeducted: new Decimal(params.amount)
+        .plus(totalFees)
+        .toFixed(8),
       validForSeconds: ESTIMATE_TTL_SECONDS,
     };
 
@@ -174,27 +174,19 @@ export class FeeEstimatorService {
     const baseRate = rateResponse.rate;
 
     const markupRate = new Decimal(baseRate)
-      .times(new Decimal(1).plus(new Decimal(MARKUP_PERCENT).div(100)))
+      .times(new Decimal(1).minus(new Decimal(MARKUP_PERCENT).div(100)))
       .toDecimalPlaces(8)
       .toNumber();
 
     const grossToAmount = new Decimal(params.fromAmount).times(markupRate);
 
-    const conversionFeePercent = parseFloat(
-      process.env.CONVERSION_FEE_PERCENT ?? '0.5',
+    const conversionFee = await this.feesService.calculateFee(
+      FeeTransactionType.CONVERT,
+      toCurrency,
+      grossToAmount.toNumber(),
     );
-    const conversionFee = grossToAmount
-      .times(conversionFeePercent)
-      .div(100)
-      .toDecimalPlaces(8);
-
-    const platformFeePercent = new Decimal(conversionFeePercent);
-    const platformFeeAmount = grossToAmount
-      .times(platformFeePercent)
-      .div(100)
-      .toDecimalPlaces(8);
-
-    const totalFees = conversionFee.plus(platformFeeAmount);
+    const conversionFeeAmount = new Decimal(conversionFee.feeAmount);
+    const totalFees = conversionFeeAmount;
     const netToAmount = grossToAmount.minus(totalFees);
 
     const result: ConversionEstimateResult = {
@@ -204,14 +196,16 @@ export class FeeEstimatorService {
       toCurrency,
       fees: {
         conversionFee: {
-          amount: conversionFee.toFixed(8),
-          currency: toCurrency,
-          percent: conversionFeePercent.toString(),
+          amount: conversionFeeAmount.toFixed(8),
+          currency: conversionFee.feeCurrency,
+          percent:
+            conversionFee.feeType === FeeType.PERCENTAGE
+              ? this.getFeePercentage(conversionFee)
+              : undefined,
         },
         platformFee: {
-          amount: platformFeeAmount.toFixed(8),
+          amount: '0.00000000',
           currency: toCurrency,
-          percent: platformFeePercent.toFixed(1),
         },
         total: {
           amount: totalFees.toFixed(8),
@@ -314,8 +308,8 @@ export class FeeEstimatorService {
     return mapping[type] ?? FeeTransactionType.DEPOSIT;
   }
 
-  private getFeePercentage(fee: CalculatedFee): string {
-    return fee.feeType === 'PERCENTAGE' ? '0.5' : '0';
+  private getFeePercentage(fee: CalculatedFee): string | undefined {
+    return fee.feeType === FeeType.PERCENTAGE ? fee.feeValue : undefined;
   }
 
   private hashParams(params: Record<string, unknown>): string {

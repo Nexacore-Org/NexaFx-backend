@@ -64,10 +64,14 @@ describe('TransactionsService.createSwap', () => {
   let stellarService: any;
   let notificationsService: any;
   let activityFeedService: any;
+  let currencyPairService: any;
 
   const mockRedisService = {
     del: jest.fn(),
     delete: jest.fn(),
+    key: jest.fn((...parts: string[]) => parts.join(':')),
+    getJson: jest.fn(async () => null),
+    setJson: jest.fn(async () => undefined),
   };
 
   beforeEach(async () => {
@@ -143,6 +147,7 @@ describe('TransactionsService.createSwap', () => {
           provide: ExchangeRatesService,
           useValue: {
             getRate: jest.fn(async () => ({ rate: 0.5 })),
+            getFreshRate: jest.fn(async () => ({ rate: 1 })),
           },
         },
         { provide: StellarService, useValue: stellarService },
@@ -185,10 +190,10 @@ describe('TransactionsService.createSwap', () => {
         { provide: NotificationsService, useValue: notificationsService },
         {
           provide: CurrencyPairService,
-          useValue: {
+          useValue: (currencyPairService = {
             validatePair: jest.fn(async () => ({ spreadPercent: 0.5 })),
             findByCodes: jest.fn(async () => ({ spreadPercent: 0.5 })),
-          },
+          }),
         },
         {
           provide: WalletsService,
@@ -212,7 +217,17 @@ describe('TransactionsService.createSwap', () => {
         { provide: LedgerService, useValue: ledgerService },
         {
           provide: TransactionLimitService,
-          useValue: { check: jest.fn(async () => undefined) },
+          useValue: {
+            check: jest.fn(async () => undefined),
+            withLimitCheck: jest.fn(
+              async (
+                _userId: string,
+                _amount: number,
+                _currency: string,
+                operation: () => Promise<unknown>,
+              ) => operation(),
+            ),
+          },
         },
         { provide: UnifiedActivityFeedService, useValue: activityFeedService },
         { provide: AmlService, useValue: { enqueue: jest.fn(async () => undefined) } },
@@ -275,6 +290,73 @@ describe('TransactionsService.createSwap', () => {
     await expect(service.createSwap('user-1', dto)).rejects.toThrow(
       BadRequestException,
     );
+  });
+
+  it('rejects swap amounts below the configured pair minimum in USD', async () => {
+    currencyPairService.validatePair.mockImplementationOnce(
+      async (_from: string, _to: string, amountUsd: number) => {
+        if (amountUsd < 25) {
+          throw new BadRequestException('Amount is below the minimum limit');
+        }
+        return { spreadPercent: 0.5 };
+      },
+    );
+
+    await expect(
+      service.createSwap('user-1', {
+        amount: 10,
+        fromCurrency: 'XLM',
+        toCurrency: 'USDC',
+        sourceAddress: 'G123',
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(currencyPairService.validatePair).toHaveBeenCalledWith(
+      'XLM',
+      'USDC',
+      10,
+    );
+    expect(stellarService.submitTransaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects swap amounts above the configured pair maximum in USD', async () => {
+    currencyPairService.validatePair.mockImplementationOnce(
+      async (_from: string, _to: string, amountUsd: number) => {
+        if (amountUsd > 100) {
+          throw new BadRequestException('Amount exceeds the maximum limit');
+        }
+        return { spreadPercent: 0.5 };
+      },
+    );
+
+    await expect(
+      service.createSwap('user-1', {
+        amount: 101,
+        fromCurrency: 'XLM',
+        toCurrency: 'USDC',
+        sourceAddress: 'G123',
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(currencyPairService.validatePair).toHaveBeenCalledWith(
+      'XLM',
+      'USDC',
+      101,
+    );
+    expect(stellarService.submitTransaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects a suspended pair when requesting a swap preview', async () => {
+    currencyPairService.validatePair.mockRejectedValueOnce(
+      new BadRequestException('Pair is suspended'),
+    );
+
+    await expect(
+      service.getSwapPreview('XLM', 'USDC', 10),
+    ).rejects.toThrow(BadRequestException);
+    expect(currencyPairService.validatePair).toHaveBeenCalledWith(
+      'XLM',
+      'USDC',
+    );
+    expect(stellarService.findBestPath).not.toHaveBeenCalled();
   });
 
   it('keeps SUCCESS and submits once when a post-submit side effect fails', async () => {

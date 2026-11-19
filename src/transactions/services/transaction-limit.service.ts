@@ -2,13 +2,18 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  OnModuleInit,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { ExchangeRatesService } from '../../exchange-rates/exchange-rates.service';
 import { User, UserKycTier } from '../../users/user.entity';
-import { Transaction, TransactionStatus } from '../entities/transaction.entity';
+import {
+  Transaction,
+  TransactionStatus,
+  TransactionType,
+} from '../entities/transaction.entity';
 import { TransactionLimit } from '../entities/transaction-limit.entity';
 
 export interface UsageSummary {
@@ -17,7 +22,7 @@ export interface UsageSummary {
 }
 
 @Injectable()
-export class TransactionLimitService {
+export class TransactionLimitService implements OnModuleInit {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
@@ -26,7 +31,12 @@ export class TransactionLimitService {
     @InjectRepository(TransactionLimit)
     private readonly transactionLimitRepository: Repository<TransactionLimit>,
     private readonly exchangeRatesService: ExchangeRatesService,
+    private readonly dataSource: DataSource,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    await this.ensureDefaultLimits();
+  }
 
   async ensureDefaultLimits(): Promise<void> {
     const defaults: Array<{
@@ -152,6 +162,39 @@ export class TransactionLimitService {
     }
   }
 
+  async withLimitCheck<T>(
+    userId: string,
+    amount: number,
+    currency: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+
+    let lockAcquired = false;
+    try {
+      await queryRunner.query(
+        'SELECT pg_advisory_lock(hashtext($1), hashtext($2))',
+        ['transaction-limit', userId],
+      );
+      lockAcquired = true;
+
+      await this.check(userId, amount, currency);
+      return await operation();
+    } finally {
+      try {
+        if (lockAcquired) {
+          await queryRunner.query(
+            'SELECT pg_advisory_unlock(hashtext($1), hashtext($2))',
+            ['transaction-limit', userId],
+          );
+        }
+      } finally {
+        await queryRunner.release();
+      }
+    }
+  }
+
   async getUserLimitStatus(userId: string): Promise<{
     tier: UserKycTier;
     limits: {
@@ -165,8 +208,6 @@ export class TransactionLimitService {
       monthlyUsd: number;
     };
   }> {
-    await this.ensureDefaultLimits();
-
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('User not found');
@@ -219,6 +260,13 @@ export class TransactionLimitService {
         .andWhere('t.status IN (:...statuses)', {
           statuses: [TransactionStatus.PENDING, TransactionStatus.SUCCESS],
         })
+        .andWhere(
+          '(t.type != :deposit OR t.status != :pending OR t.txHash IS NOT NULL)',
+          {
+            deposit: TransactionType.DEPOSIT,
+            pending: TransactionStatus.PENDING,
+          },
+        )
         .andWhere('t.createdAt >= :dayStart', { dayStart })
         .groupBy('t.currency')
         .getRawMany<{ currency: string; total: string }>(),
@@ -230,6 +278,13 @@ export class TransactionLimitService {
         .andWhere('t.status IN (:...statuses)', {
           statuses: [TransactionStatus.PENDING, TransactionStatus.SUCCESS],
         })
+        .andWhere(
+          '(t.type != :deposit OR t.status != :pending OR t.txHash IS NOT NULL)',
+          {
+            deposit: TransactionType.DEPOSIT,
+            pending: TransactionStatus.PENDING,
+          },
+        )
         .andWhere('t.createdAt >= :monthStart', { monthStart })
         .groupBy('t.currency')
         .getRawMany<{ currency: string; total: string }>(),

@@ -13,6 +13,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { UsersService } from '../users/users.service';
 import { OtpsService } from '../otps/otps.service';
 import { OtpType } from '../otps/otp.entity';
@@ -943,7 +944,7 @@ export class AuthService {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       let code = '';
       for (let i = 0; i < codeLength; i++) {
-        code += characters[Math.floor(Math.random() * characters.length)];
+        code += characters[crypto.randomInt(characters.length)];
       }
 
       const existing = await this.usersService.findByReferralCode(code);

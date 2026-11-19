@@ -2,12 +2,17 @@ import { INestApplication } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as request from 'supertest';
+import * as speakeasy from 'speakeasy';
 import { createTestApp } from '../helpers/app.helper';
+import { EncryptionService } from '../../src/common/services/encryption.service';
 import {
   seedTestUser,
   setupTestDatabase,
   truncateAll,
 } from '../helpers/db.helper';
+
+process.env.WALLET_ENCRYPTION_KEY =
+  process.env.WALLET_ENCRYPTION_KEY ?? '0'.repeat(64);
 
 /**
  * E2E coverage for the JwtAuthGuard partial_auth allow-list.
@@ -25,6 +30,7 @@ describe('Partial auth allow-list (e2e)', () => {
 
   let partialToken: string;
   let fullToken: string;
+  let userId: string;
 
   beforeAll(async () => {
     app = await createTestApp();
@@ -44,6 +50,7 @@ describe('Partial auth allow-list (e2e)', () => {
       email: 'partial-auth@example.com',
       password: 'Password123!',
     });
+    userId = user.id;
 
     partialToken = jwt.sign({
       sub: user.id,
@@ -68,6 +75,25 @@ describe('Partial auth allow-list (e2e)', () => {
     // bogus code. 403 here would mean the allow-list missed the route again.
     expect(res.status).not.toBe(403);
     expect([400, 401]).toContain(res.status);
+  });
+
+  it('exchanges a partial token plus a valid TOTP for full tokens', async () => {
+    const secret = speakeasy.generateSecret({ length: 20 }).base32!;
+    const encrypted = app.get(EncryptionService).encrypt(secret);
+    await dataSource.query(
+      'UPDATE "users" SET "twoFactorSecret" = $1, "isTwoFactorEnabled" = true, "lastTotpStep" = NULL WHERE id = $2',
+      [encrypted, userId],
+    );
+
+    const totpCode = speakeasy.totp({ secret, encoding: 'base32' });
+    const res = await request(app.getHttpServer())
+      .post('/v1/two-factor/verify')
+      .set('Authorization', `Bearer ${partialToken}`)
+      .send({ totpCode });
+
+    expect(res.status).toBe(200);
+    expect(res.body.accessToken).toEqual(expect.any(String));
+    expect(res.body.expiresIn).toEqual(expect.any(Number));
   });
 
   it('is still rejected on every other REST route', async () => {

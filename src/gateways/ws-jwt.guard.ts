@@ -35,9 +35,13 @@ export class WsJwtGuard implements CanActivate {
     try {
       const payload = await this.jwtService.verifyAsync<JwtPayload>(token);
 
-      // Same validation as the HTTP JwtStrategy (#1321): rejects partial_auth
-      // tokens, suspended/deleted/deactivated accounts and downgrades
-      // impersonation tokens.
+      // Gateways have no @AllowPartialAuth() equivalent: reject the stage
+      // before resolving the user, as the shared validator now allows it for
+      // the HTTP allow-list.
+      if (payload.authStage === 'partial_auth') {
+        throw new WsException('Two-factor verification required');
+      }
+
       client.data.user = await validateAuthenticatedUser(
         this.usersService,
         payload,

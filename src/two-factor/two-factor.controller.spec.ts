@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  MethodNotAllowedException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { TwoFactorController } from './two-factor.controller';
 import { TwoFactorService } from './two-factor.service';
 import { AuthService } from '../auth/auth.service';
@@ -170,9 +174,9 @@ describe('TwoFactorController', () => {
         backupCodes: ['X'],
       });
 
-      await expect(controller.regenerate(req, '123456')).resolves.toEqual({
-        backupCodes: ['X'],
-      });
+      await expect(
+        controller.regenerate(req, { totpCode: '123456' }),
+      ).resolves.toEqual({ backupCodes: ['X'] });
       expect(twoFactorService.regenerateBackupCodes).toHaveBeenCalledWith(
         'user-1',
         '123456',
@@ -181,9 +185,15 @@ describe('TwoFactorController', () => {
 
     it('rejects a missing TOTP code before hitting the service', async () => {
       await expect(
-        controller.regenerate(req, undefined as unknown as string),
+        controller.regenerate(req, { totpCode: undefined as unknown as string }),
       ).rejects.toBeInstanceOf(UnauthorizedException);
       expect(twoFactorService.regenerateBackupCodes).not.toHaveBeenCalled();
+    });
+
+    it('returns 405 for the retired GET route', () => {
+      expect(() => controller.regenerateViaGet()).toThrow(
+        MethodNotAllowedException,
+      );
     });
   });
 

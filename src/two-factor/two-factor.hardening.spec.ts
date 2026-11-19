@@ -1,9 +1,7 @@
 ﻿import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import {
-  ConflictException,
-  TooManyRequestsException,
-} from '@nestjs/common';
+import { ConflictException } from '@nestjs/common';
+import { ThrottlerException } from '@nestjs/throttler';
 import { ConfigService } from '@nestjs/config';
 import { IsNull } from 'typeorm';
 import * as speakeasy from 'speakeasy';
@@ -14,6 +12,8 @@ import { BackupCode } from './entities/backup-code.entity';
 import { UsersService } from '../users/users.service';
 import { EncryptionService } from '../common/services/encryption.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { RefreshTokensService } from '../tokens/refresh-tokens.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import type { User } from '../users/user.entity';
 
 jest.mock('qrcode', () => ({
@@ -42,6 +42,8 @@ describe('TwoFactorService hardening', () => {
   const usersService = {
     findById: jest.fn(),
     updateByUserId: jest.fn().mockResolvedValue(undefined),
+    incrementTwoFactorFailedAttempts: jest.fn().mockResolvedValue(1),
+    acceptTotpStep: jest.fn().mockResolvedValue(true),
   };
   const encryptionService = {
     encrypt: jest.fn(() => ENCRYPTED),
@@ -55,15 +57,23 @@ describe('TwoFactorService hardening', () => {
     update: jest.fn().mockResolvedValue({ affected: 1 }),
   };
   const auditLogsService = { logAuthEvent: jest.fn().mockResolvedValue(undefined) };
+  const refreshTokensService = {
+    revokeAllUserTokens: jest.fn().mockResolvedValue(undefined),
+  };
+  const notificationsService = {
+    create: jest.fn().mockResolvedValue(undefined),
+  };
   const configService = { get: jest.fn().mockReturnValue(undefined) };
 
   const currentTotp = (): string =>
-    speakeasy.totp({ secret: SECRET, encoding: 'base32' }).generate();
+    speakeasy.totp({ secret: SECRET, encoding: 'base32' });
 
   beforeEach(async () => {
     jest.clearAllMocks();
     configService.get.mockReturnValue(undefined);
     usersService.updateByUserId.mockResolvedValue(undefined);
+    usersService.incrementTwoFactorFailedAttempts.mockReset().mockResolvedValue(1);
+    usersService.acceptTotpStep.mockReset().mockResolvedValue(true);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -76,6 +86,8 @@ describe('TwoFactorService hardening', () => {
         { provide: EncryptionService, useValue: encryptionService },
         { provide: AuditLogsService, useValue: auditLogsService },
         { provide: ConfigService, useValue: configService },
+        { provide: RefreshTokensService, useValue: refreshTokensService },
+        { provide: NotificationsService, useValue: notificationsService },
       ],
     }).compile();
 
@@ -128,8 +140,11 @@ describe('TwoFactorService hardening', () => {
       );
 
       const nowStep = Math.floor(Date.now() / 1000 / 30);
+      expect(usersService.acceptTotpStep).toHaveBeenCalledWith(
+        'user-1',
+        expect.any(Number),
+      );
       expect(usersService.updateByUserId).toHaveBeenCalledWith('user-1', {
-        lastTotpStep: expect.any(Number),
         twoFactorFailedAttempts: 0,
         twoFactorLockedUntil: null,
       });
@@ -160,9 +175,11 @@ describe('TwoFactorService hardening', () => {
         service.verifyTotpCode('user-1', currentTotp()),
       ).resolves.toBe(false);
 
-      expect(usersService.updateByUserId).toHaveBeenCalledWith('user-1', {
-        twoFactorFailedAttempts: 1,
-      });
+      expect(usersService.incrementTwoFactorFailedAttempts).toHaveBeenCalledWith(
+        'user-1',
+        5,
+        15,
+      );
     });
   });
 
@@ -176,10 +193,9 @@ describe('TwoFactorService hardening', () => {
         false,
       );
 
-      expect(usersService.updateByUserId).toHaveBeenCalledWith('user-1', {
-        twoFactorFailedAttempts: 0,
-        twoFactorLockedUntil: expect.any(Date),
-      });
+      expect(
+        usersService.incrementTwoFactorFailedAttempts,
+      ).toHaveBeenCalledWith('user-1', 5, 15);
     });
 
     it('honours TWO_FACTOR_MAX_FAILED_ATTEMPTS', async () => {
@@ -193,10 +209,9 @@ describe('TwoFactorService hardening', () => {
 
       await service.verifyTotpCode('user-1', '000000');
 
-      expect(usersService.updateByUserId).toHaveBeenCalledWith(
-        'user-1',
-        expect.objectContaining({ twoFactorLockedUntil: expect.any(Date) }),
-      );
+      expect(
+        usersService.incrementTwoFactorFailedAttempts,
+      ).toHaveBeenCalledWith('user-1', 2, 15);
     });
 
     it('honours TWO_FACTOR_LOCKOUT_MINUTES', async () => {
@@ -210,24 +225,26 @@ describe('TwoFactorService hardening', () => {
 
       await service.verifyTotpCode('user-1', '000000');
 
-      const patch = usersService.updateByUserId.mock.calls[0][1];
-      const minutes = Math.round(
-        (patch.twoFactorLockedUntil.getTime() - Date.now()) / 60_000,
-      );
-      expect(minutes).toBeGreaterThanOrEqual(29);
-      expect(minutes).toBeLessThanOrEqual(30);
+      expect(
+        usersService.incrementTwoFactorFailedAttempts,
+      ).toHaveBeenCalledWith('user-1', 5, 30);
     });
 
-    it('refuses to verify while locked', async () => {
+    it('returns 429 with retry guidance while locked', async () => {
       usersService.findById.mockResolvedValue(
         enabledUser({
           twoFactorLockedUntil: new Date(Date.now() + 5 * 60 * 1000),
         }),
       );
 
-      await expect(
-        service.verifyTotpCode('user-1', currentTotp()),
-      ).rejects.toThrow(TooManyRequestsException);
+      expect.assertions(3);
+      try {
+        await service.verifyTotpCode('user-1', currentTotp());
+      } catch (error) {
+        expect(error).toBeInstanceOf(ThrottlerException);
+        expect((error as ThrottlerException).getStatus()).toBe(429);
+        expect((error as Error).message).toContain('Try again in 5 minute(s)');
+      }
     });
 
     it('refuses to verify once the lock has expired', async () => {
@@ -294,9 +311,48 @@ describe('TwoFactorService hardening', () => {
         service.consumeBackupCode('user-1', 'WRONGCODE12'),
       ).rejects.toThrow('Invalid backup code');
 
-      expect(usersService.updateByUserId).toHaveBeenCalledWith('user-1', {
-        twoFactorFailedAttempts: 1,
-      });
+      expect(
+        usersService.incrementTwoFactorFailedAttempts,
+      ).toHaveBeenCalledWith('user-1', 5, 15);
+    });
+  });
+
+  describe('concurrent verification', () => {
+    it('accepts only one of two parallel submissions of the same code', async () => {
+      usersService.findById.mockResolvedValue(enabledUser());
+      usersService.acceptTotpStep
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
+      const code = currentTotp();
+
+      const results = await Promise.all([
+        service.verifyTotpCode('user-1', code),
+        service.verifyTotpCode('user-1', code),
+      ]);
+
+      expect(results).toEqual([true, false]);
+      expect(usersService.acceptTotpStep).toHaveBeenCalledTimes(2);
+      expect(
+        usersService.incrementTwoFactorFailedAttempts,
+      ).toHaveBeenCalledTimes(1);
+    });
+
+    it('counts parallel invalid guesses independently', async () => {
+      usersService.findById.mockResolvedValue(enabledUser());
+      usersService.incrementTwoFactorFailedAttempts
+        .mockResolvedValueOnce(1)
+        .mockResolvedValueOnce(2);
+
+      const results = await Promise.all([
+        service.verifyTotpCode('user-1', '000000'),
+        service.verifyTotpCode('user-1', '111111'),
+      ]);
+
+      expect(results).toEqual([false, false]);
+      expect(
+        usersService.incrementTwoFactorFailedAttempts,
+      ).toHaveBeenCalledTimes(2);
+      expect(usersService.acceptTotpStep).not.toHaveBeenCalled();
     });
   });
 

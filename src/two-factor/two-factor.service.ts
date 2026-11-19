@@ -3,9 +3,10 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
-  TooManyRequestsException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ThrottlerException } from '@nestjs/throttler';
+import * as crypto from 'crypto';
 import * as speakeasy from 'speakeasy';
 import * as qrcode from 'qrcode';
 import * as bcrypt from 'bcrypt';
@@ -18,6 +19,9 @@ import { SetupTwoFactorResponseDto } from './dto/setup-two-factor-response.dto';
 import { BackupCode } from './entities/backup-code.entity';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
+import { RefreshTokensService } from '../tokens/refresh-tokens.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/entities/notification.entity';
 import type { User } from '../users/user.entity';
 
 const TOTP_STEP_SECONDS = 30;
@@ -34,6 +38,8 @@ export class TwoFactorService {
     private readonly encryptionService: EncryptionService,
     private readonly auditLogsService: AuditLogsService,
     private readonly configService: ConfigService,
+    private readonly refreshTokensService: RefreshTokensService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async generateSecret(userId: string): Promise<SetupTwoFactorResponseDto> {
@@ -97,7 +103,8 @@ export class TwoFactorService {
       );
     }
 
-    if (this.matchTotpStep(secretToConfirm, totpCode) === null) {
+    const step = await this.checkTotpCode(user, secretToConfirm, totpCode);
+    if (step === null) {
       throw new UnauthorizedException('Invalid two-factor code');
     }
 
@@ -107,7 +114,7 @@ export class TwoFactorService {
       twoFactorSecret: secretToConfirm,
       pendingTwoFactorSecret: null,
       isTwoFactorEnabled: true,
-      lastTotpStep: null,
+      lastTotpStep: step,
       twoFactorFailedAttempts: 0,
       twoFactorLockedUntil: null,
     });
@@ -130,7 +137,8 @@ export class TwoFactorService {
       throw new BadRequestException('Two-factor authentication is not enabled');
     }
 
-    if (this.matchTotpStep(user.twoFactorSecret, totpCode) === null) {
+    const step = await this.checkTotpCode(user, user.twoFactorSecret, totpCode);
+    if (step === null) {
       throw new UnauthorizedException('Invalid two-factor code');
     }
 
@@ -145,6 +153,12 @@ export class TwoFactorService {
     });
 
     await this.backupCodeRepository.delete({ userId });
+    await this.refreshTokensService.revokeAllUserTokens(userId);
+    await this.notifySecurity(
+      userId,
+      'Two-factor authentication disabled',
+      'Two-factor authentication was disabled on your account. Contact support if this was not you.',
+    );
 
     await this.audit(userId, AuditAction.TWO_FACTOR_DISABLED);
   }
@@ -167,28 +181,15 @@ export class TwoFactorService {
       throw new BadRequestException('Two-factor authentication is not enabled');
     }
 
-    this.assertNotLocked(user);
-
-    const step = this.matchTotpStep(user.twoFactorSecret, totpCode);
-    const lastStep = user.lastTotpStep ?? null;
-    const isReplay = step !== null && lastStep !== null && step <= lastStep;
+    const step = await this.checkTotpCode(user, user.twoFactorSecret, totpCode);
 
     // A wrong or replayed code keeps the historical contract of this method:
     // return false and let the caller raise the 401.
-    if (step === null || isReplay) {
-      await this.registerFailedAttempt(user);
-
-      await this.audit(
-        userId,
-        AuditAction.TWO_FACTOR_FAILED,
-        isReplay ? { reason: 'replay' } : { reason: 'invalid_code' },
-      );
-
+    if (step === null) {
       return false;
     }
 
     await this.usersService.updateByUserId(userId, {
-      lastTotpStep: step,
       twoFactorFailedAttempts: 0,
       twoFactorLockedUntil: null,
     });
@@ -255,7 +256,8 @@ export class TwoFactorService {
       throw new BadRequestException('Two-factor authentication is not enabled');
     }
 
-    if (this.matchTotpStep(user.twoFactorSecret, totpCode) === null) {
+    const step = await this.checkTotpCode(user, user.twoFactorSecret, totpCode);
+    if (step === null) {
       throw new UnauthorizedException('Invalid two-factor code');
     }
 
@@ -294,6 +296,41 @@ export class TwoFactorService {
     await this.backupCodeRepository.save(entities);
 
     return backupCodes;
+  }
+
+  private async checkTotpCode(
+    user: User,
+    encryptedSecret: string,
+    totpCode: string,
+  ): Promise<number | null> {
+    this.assertNotLocked(user);
+
+    const step = this.matchTotpStep(encryptedSecret, totpCode);
+    const isReplay =
+      step !== null &&
+      user.lastTotpStep !== null &&
+      step <= user.lastTotpStep;
+
+    if (step === null || isReplay) {
+      await this.registerFailedAttempt(user);
+      await this.audit(
+        user.id,
+        AuditAction.TWO_FACTOR_FAILED,
+        isReplay ? { reason: 'replay' } : { reason: 'invalid_code' },
+      );
+      return null;
+    }
+
+    const accepted = await this.usersService.acceptTotpStep(user.id, step);
+    if (!accepted) {
+      await this.registerFailedAttempt(user);
+      await this.audit(user.id, AuditAction.TWO_FACTOR_FAILED, {
+        reason: 'replay',
+      });
+      return null;
+    }
+
+    return step;
   }
 
   /**
@@ -338,7 +375,7 @@ export class TwoFactorService {
       return;
     }
 
-    throw new TooManyRequestsException(
+    throw new ThrottlerException(
       `Two-factor verification is locked. Try again in ${Math.ceil(
         remainingMs / 60_000,
       )} minute(s).`,
@@ -346,26 +383,22 @@ export class TwoFactorService {
   }
 
   private async registerFailedAttempt(user: User): Promise<void> {
-    const maxAttempts = parseInt(
+    await this.usersService.incrementTwoFactorFailedAttempts(
+      user.id,
+      this.maxFailedAttempts(),
+      this.lockoutMinutes(),
+    );
+  }
+
+  private maxFailedAttempts(): number {
+    const parsed = parseInt(
       this.configService.get<string>('TWO_FACTOR_MAX_FAILED_ATTEMPTS') ??
         String(DEFAULT_MAX_FAILED_ATTEMPTS),
       10,
     );
-    const attempts = (user.twoFactorFailedAttempts ?? 0) + 1;
-
-    if (attempts >= maxAttempts) {
-      await this.usersService.updateByUserId(user.id, {
-        twoFactorFailedAttempts: 0,
-        twoFactorLockedUntil: new Date(
-          Date.now() + this.lockoutMinutes() * 60_000,
-        ),
-      });
-      return;
-    }
-
-    await this.usersService.updateByUserId(user.id, {
-      twoFactorFailedAttempts: attempts,
-    });
+    return Number.isFinite(parsed) && parsed > 0
+      ? parsed
+      : DEFAULT_MAX_FAILED_ATTEMPTS;
   }
 
   private lockoutMinutes(): number {
@@ -389,6 +422,23 @@ export class TwoFactorService {
     }
   }
 
+  private async notifySecurity(
+    userId: string,
+    title: string,
+    body: string,
+  ): Promise<void> {
+    try {
+      await this.notificationsService.create(
+        userId,
+        NotificationType.SECURITY_ALERT,
+        title,
+        body,
+      );
+    } catch {
+      return;
+    }
+  }
+
   private generateBackupCodes(count: number): string[] {
     // Human-friendly: 10 chars from Crockford-ish alphabet without 0/O/I/1
     const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -398,7 +448,7 @@ export class TwoFactorService {
     while (codes.size < count) {
       let code = '';
       for (let i = 0; i < length; i++) {
-        code += alphabet[Math.floor(Math.random() * alphabet.length)];
+        code += alphabet[crypto.randomInt(alphabet.length)];
       }
       codes.add(code);
     }

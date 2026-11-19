@@ -15,7 +15,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     super();
   }
 
-  async canActivate(context: ExecutionContext) {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
@@ -23,14 +23,21 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
 
     if (isPublic) return true;
 
+    const allowPartialAuth = this.reflector.getAllAndOverride<boolean>(
+      ALLOW_PARTIAL_AUTH_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+
     const ok = await super.canActivate(context);
     if (!ok) return false;
 
     const req = this.getRequest(context) as {
-      method?: string;
       user?: { authStage?: string };
     };
 
+    if (req.user?.authStage === 'partial_auth' && !allowPartialAuth) {
+      throw new ForbiddenException(
+        'Two-factor verification required to access this resource',
     if (req.user?.authStage === 'partial_auth') {
       if (context.getType<string>() === 'graphql') {
         throw new ForbiddenException('2FA verification required');
@@ -42,12 +49,6 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
         ALLOW_PARTIAL_AUTH_KEY,
         [context.getHandler(), context.getClass()],
       );
-
-      if (!allowed) {
-        throw new ForbiddenException(
-          'Two-factor verification required to access this resource',
-        );
-      }
     }
 
     return true;

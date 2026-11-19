@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { getQueueToken } from '@nestjs/bullmq';
 import { DataSource } from 'typeorm';
 import { TransactionsService } from './transaction.service';
 import {
@@ -30,6 +31,10 @@ import { LedgerService } from '../../ledger/services/ledger.service';
 import { TransactionLimitService } from './transaction-limit.service';
 import { RedisService } from '../../modules/redis/redis.service';
 import { TransactionCategory } from '../../analytics/entities/transaction-category.entity';
+import { AmlService } from '../../modules/compliance/aml.service';
+import { MicroSavingsService } from '../../modules/micro-savings/micro-savings.service';
+import { UnifiedActivityFeedService } from '../../unified-activity-feed/unified-activity-feed.service';
+import { TAX_QUEUE } from '../../modules/queues/queue.constants';
 
 // Mock Stellar SDK components
 jest.mock('stellar-sdk', () => {
@@ -58,6 +63,7 @@ describe('TransactionsService.createSwap', () => {
   let transactionRepository: any;
   let stellarService: any;
   let notificationsService: any;
+  let activityFeedService: any;
 
   const mockRedisService = {
     del: jest.fn(),
@@ -90,6 +96,9 @@ describe('TransactionsService.createSwap', () => {
 
     notificationsService = {
       dispatch: jest.fn(async () => ({})),
+    };
+    activityFeedService = {
+      append: jest.fn(async () => ({})),
     };
     const ledgerService = {
       record: jest.fn(async () => undefined),
@@ -205,6 +214,16 @@ describe('TransactionsService.createSwap', () => {
           provide: TransactionLimitService,
           useValue: { check: jest.fn(async () => undefined) },
         },
+        { provide: UnifiedActivityFeedService, useValue: activityFeedService },
+        { provide: AmlService, useValue: { enqueue: jest.fn(async () => undefined) } },
+        {
+          provide: MicroSavingsService,
+          useValue: {
+            evaluatePerTransaction: jest.fn(async () => undefined),
+            evaluateBalanceThreshold: jest.fn(async () => undefined),
+          },
+        },
+        { provide: getQueueToken(TAX_QUEUE), useValue: { add: jest.fn(async () => undefined) } },
       ],
     }).compile();
 
@@ -255,6 +274,33 @@ describe('TransactionsService.createSwap', () => {
 
     await expect(service.createSwap('user-1', dto)).rejects.toThrow(
       BadRequestException,
+    );
+  });
+
+  it('keeps SUCCESS and submits once when a post-submit side effect fails', async () => {
+    activityFeedService.append.mockRejectedValueOnce(new Error('feed down'));
+
+    const dto = {
+      amount: 10,
+      fromCurrency: 'XLM',
+      toCurrency: 'USDC',
+      sourceAddress: 'G123',
+    };
+
+    const result = await service.createSwap('user-1', dto);
+
+    expect(result.status).toBe(TransactionStatus.SUCCESS);
+    expect(result.txHash).toBe('stellar-hash');
+    expect(stellarService.submitTransaction).toHaveBeenCalledTimes(1);
+    expect(transactionRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: TransactionStatus.SUCCESS,
+        txHash: 'stellar-hash',
+        stellarTxHash: 'stellar-hash',
+      }),
+    );
+    expect(transactionRepository.save.mock.invocationCallOrder[0]).toBeLessThan(
+      activityFeedService.append.mock.invocationCallOrder[0],
     );
   });
 

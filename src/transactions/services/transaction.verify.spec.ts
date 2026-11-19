@@ -165,6 +165,36 @@ describe('TransactionsService.verifyTransaction', () => {
       ).toHaveBeenCalledWith('user-1', 'XLM', 100);
     });
 
+    it('credits a deposit net of the recorded fee', async () => {
+      transactionRepository.findOne.mockResolvedValue(
+        makeTransaction({ feeAmount: '1.25', feeCurrency: 'XLM' }),
+      );
+
+      await service.verifyTransaction('tx-1', 'user-1', UserRole.USER, 'user-1');
+
+      expect(
+        (service as unknown as { updateUserBalance: jest.Mock })
+          .updateUserBalance,
+      ).toHaveBeenCalledWith('user-1', 'XLM', 98.75);
+    });
+
+    it('deducts a fee recorded in another currency from that currency', async () => {
+      transactionRepository.findOne.mockResolvedValue(
+        makeTransaction({ feeAmount: '1.25', feeCurrency: 'USDC' }),
+      );
+
+      await service.verifyTransaction('tx-1', 'user-1', UserRole.USER, 'user-1');
+
+      expect(
+        (service as unknown as { updateUserBalance: jest.Mock })
+          .updateUserBalance,
+      ).toHaveBeenCalledWith('user-1', 'XLM', 100);
+      expect(
+        (service as unknown as { updateUserBalance: jest.Mock })
+          .updateUserBalance,
+      ).toHaveBeenCalledWith('user-1', 'USDC', -1.25);
+    });
+
     it('does not credit when the row was already claimed', async () => {
       transactionRepository.findOne.mockResolvedValue(makeTransaction());
       transactionRepository.update.mockResolvedValue({ affected: 0 });

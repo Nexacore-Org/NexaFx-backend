@@ -501,7 +501,15 @@ export class AuthController {
   @ApiResponse({ status: 400, description: 'User already has a password' })
   async setPassword(@Req() req: any, @Body() dto: SetPasswordDto) {
     const userId = req.user.userId;
-    await this.authService.setPassword(userId, dto.newPassword);
+    const ipAddress = req.ip || req.connection?.remoteAddress;
+    const userAgent = req.get('User-Agent');
+    await this.authService.setPassword(
+      userId,
+      dto.newPassword,
+      dto.otp,
+      ipAddress,
+      userAgent,
+    );
     return {
       message:
         'Password set successfully. You can now log in with your email and password.',

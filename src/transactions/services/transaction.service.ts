@@ -1,5 +1,5 @@
 import { Operation, Asset } from 'stellar-sdk';
-import { randomBytes } from 'crypto';
+import { randomBytes, createHash } from 'crypto';
 import {
   Injectable,
   NotFoundException,
@@ -67,11 +67,18 @@ import { ActivityFeedType } from '../../unified-activity-feed/entities/activity-
 export function truncateMemoTo28Bytes(memo: string): string {
   const encoded = Buffer.from(memo, 'utf8');
   if (encoded.length <= 28) return memo;
-  // Slice to 28 bytes, then decode — incomplete multi-byte sequences are dropped
   return encoded
     .slice(0, 28)
     .toString('utf8')
     .replace(/\uFFFD/g, '');
+}
+
+export function buildStellarMemo(prefix: 'W' | 'S', transactionId: string): string {
+  const hash = createHash('sha256')
+    .update(transactionId)
+    .digest('hex')
+    .slice(0, 26);
+  return `${prefix}-${hash}`;
 }
 
 /** Narrows an unknown catch value to a plain Error with a message string. */
@@ -524,40 +531,22 @@ export class TransactionsService {
         },
       );
 
-      const sourceAddress = await this.getUserStellarAddress(
-        userId,
-        createWithdrawalDto.walletId,
-      );
-
-      const paymentOperation = Operation.payment({
-        destination: destinationAddress,
-        asset: Asset.native(),
-        amount: amount.toString(),
-      });
-
-      // Use counterpartyMemo on Stellar if provided (truncated to 28 bytes)
       const stellarMemo = createWithdrawalDto.memo
         ? truncateMemoTo28Bytes(createWithdrawalDto.memo)
-        : `WITHDRAW-${transaction.id}`;
-
-      const stellarTx = await this.stellarService.createTransaction({
-        sourcePublicKey: sourceAddress,
-        operations: [paymentOperation],
-        memo: stellarMemo,
-      });
+        : buildStellarMemo('W', transaction.id);
 
       const secretKey = await this.getUserStellarSecretKey(
         userId,
         createWithdrawalDto.walletId,
       );
 
-      const paymentResult = await this.stellarService.sendPayment(
+      const paymentResult = await this.stellarService.sendPayment({
+        destination: destinationAddress,
+        amount: amount.toString(),
         secretKey,
-        destinationAddress,
-        amount.toString(),
-        `WITHDRAW-${transaction.id}`,
+        memo: stellarMemo,
         userId,
-      );
+      });
 
       transaction.txHash = paymentResult.hash;
       transaction.stellarTxHash = paymentResult.hash;
@@ -792,7 +781,7 @@ export class TransactionsService {
 
         const swapMemo = createSwapDto.memo
           ? truncateMemoTo28Bytes(createSwapDto.memo)
-          : `SWAP-${transaction.id}`;
+          : buildStellarMemo('S', transaction.id);
 
         const stellarTx = await this.stellarService.createTransaction({
           sourcePublicKey: txWallet.publicKey,

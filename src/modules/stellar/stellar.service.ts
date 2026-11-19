@@ -314,8 +314,9 @@ export class StellarService {
         }),
       );
 
-      if (paymentMemo) {
-        builder.addMemo(Memo.text(paymentMemo));
+      const normalizedMemo = this.normalizeMemo(paymentMemo);
+      if (normalizedMemo) {
+        builder.addMemo(Memo.text(normalizedMemo));
       }
 
       const transaction = builder.setTimeout(180).build();
@@ -630,6 +631,13 @@ export class StellarService {
 
   /* -------------------- TRANSACTION -------------------- */
 
+  private normalizeMemo(memo?: string): string | undefined {
+    if (!memo) return undefined;
+    const encoded = Buffer.from(memo, 'utf8');
+    if (encoded.length <= 28) return memo;
+    return encoded.slice(0, 28).toString('utf8').replace(/\uFFFD/g, '');
+  }
+
   async createTransaction(
     params: CreateTransactionParams,
   ): Promise<Transaction> {
@@ -647,8 +655,9 @@ export class StellarService {
         );
       }
 
-      if (params.memo) {
-        builder.addMemo(Memo.text(params.memo));
+      const normalizedMemo = this.normalizeMemo(params.memo);
+      if (normalizedMemo) {
+        builder.addMemo(Memo.text(normalizedMemo));
       }
 
       const transaction = builder.setTimeout(180).build();

@@ -14,6 +14,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { AddMissingIndexes1715421500000 } from '../1715421500000-AddMissingIndexes';
 import { detectSchemaDrift } from '../../../scripts/validate-migrations';
+import { buildGlobPaths } from '../../database/data-source';
 
 // ---------------------------------------------------------------------------
 // Helpers extracted from validate-migrations.ts (mirrored here for unit testing)
@@ -125,6 +126,37 @@ describe('migration validation logic', () => {
         .readdirSync(migrationsDir)
         .filter((f) => f.endsWith('.spec.ts'));
       expect(specFiles).toEqual([]);
+    });
+  });
+
+  describe('empty database validation', () => {
+    it('loads digit-prefixed migrations from src/migrations only', () => {
+      const { migrations } = buildGlobPaths(
+        path.resolve(__dirname, '../../database'),
+        '.ts',
+      );
+
+      expect(migrations).toEqual([
+        expect.stringContaining('src/migrations/[0-9]*.ts'),
+      ]);
+    });
+
+    it('has a migration for every table used on a fresh database', () => {
+      const files = fs.readdirSync(path.resolve(__dirname, '..'));
+      const tables = [
+        'transactions',
+        'currencies',
+        'currency_pairs',
+        'ledger_entries',
+        'fee_records',
+        'transaction_reversals',
+      ];
+
+      for (const table of tables) {
+        expect(files.some((file) => file.toLowerCase().includes(table))).toBe(
+          true,
+        );
+      }
     });
   });
 

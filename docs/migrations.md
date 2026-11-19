@@ -114,7 +114,10 @@ This runs automatically via the `ci-v2.yml` workflow.
 npm run migration:validate
 ```
 
-The script (`scripts/validate-migrations.ts`):
+The script (`scripts/validate-migrations.ts`) runs `migration:run` against a
+brand-new **empty** database, so every table must be created by a migration in
+`src/migrations/` (the glob used by `src/database/data-source.ts`). After the
+round trip it runs `schema:log` and fails on any drift.
 
 1. Starts a temporary `postgres:15` Docker container on port `45432`.
 2. Waits for PostgreSQL to accept connections.

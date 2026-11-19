@@ -16,7 +16,7 @@ export interface CreateTransactionParams {
 }
 
 export interface VerifyTransactionResult {
-  status: 'PENDING' | 'SUCCESS' | 'FAILED';
+  status: 'PENDING' | 'SUCCESS' | 'FAILED' | 'NOT_FOUND';
   details?: unknown;
 }
 

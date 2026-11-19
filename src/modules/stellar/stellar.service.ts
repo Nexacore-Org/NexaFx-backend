@@ -798,6 +798,9 @@ export class StellarService {
       return result;
     } catch (err: unknown) {
       const error = toStellarError(err);
+      const statusCode = error.response?.status ?? error.status;
+      const status: VerifyTransactionResult['status'] =
+        statusCode === 404 ? 'NOT_FOUND' : 'PENDING';
 
       if (userId) {
         await this.auditLogsService.logSystemEvent(
@@ -805,13 +808,13 @@ export class StellarService {
           userId,
           {
             transactionHash: txHash,
-            status: 'PENDING',
+            status,
             error: error.message,
           },
         );
       }
 
-      return { status: 'PENDING' };
+      return { status };
     }
   }
 

@@ -104,6 +104,9 @@ function isStellarSubmitResult(value: unknown): value is StellarSubmitResult {
 /** Timeout for the pre-submission Stellar account existence check. */
 const STELLAR_ACCOUNT_CHECK_TIMEOUT_MS = 5_000;
 
+const STELLAR_TRANSACTION_TIME_BOUND_MS = 180_000;
+const NOT_FOUND_GRACE_MARGIN_MS = 60_000;
+
 /**
  * Verifies that a Stellar account exists and is funded before attempting a
  * payment. Throwing here prevents creating a PENDING transaction that will
@@ -1095,6 +1098,13 @@ export class TransactionsService {
       );
 
       const oldStatus = transaction.status;
+      const isNotFound = verificationResult.status === 'NOT_FOUND';
+      const createdAt = new Date(transaction.createdAt).getTime();
+      const isExpiredNotFound =
+        isNotFound &&
+        Number.isFinite(createdAt) &&
+        Date.now() - createdAt >
+          STELLAR_TRANSACTION_TIME_BOUND_MS + NOT_FOUND_GRACE_MARGIN_MS;
 
       if (verificationResult.status === 'SUCCESS') {
         transaction.status = TransactionStatus.SUCCESS;
@@ -1136,10 +1146,25 @@ export class TransactionsService {
         }
 
         this.logger.log(`Transaction verified successfully: ${transactionId}`);
-      } else if (verificationResult.status === 'FAILED') {
+      } else if (verificationResult.status === 'FAILED' || isExpiredNotFound) {
         transaction.status = TransactionStatus.FAILED;
-        transaction.failureReason =
-          'Transaction verification failed on blockchain';
+        transaction.failureReason = isNotFound
+          ? 'Transaction hash was not found on the blockchain after the time bound'
+          : 'Transaction verification failed on blockchain';
+
+        const claimed = await this.transactionRepository.update(
+          { id: transactionId, status: oldStatus },
+          {
+            status: TransactionStatus.FAILED,
+            failureReason: transaction.failureReason,
+          },
+        );
+        if ((claimed.affected ?? 0) === 0) {
+          this.logger.warn(
+            `Transaction ${transactionId} was already transitioned from ${oldStatus}; skipping failure side effects`,
+          );
+          return transaction;
+        }
 
         if (transaction.type === TransactionType.WITHDRAW) {
           await this.updateUserBalance(
@@ -1147,6 +1172,10 @@ export class TransactionsService {
             transaction.currency,
             parseFloat(transaction.amount),
           );
+        }
+
+        if (isExpiredNotFound && oldStatus === TransactionStatus.PENDING) {
+          await this.ledgerService.reverse(transaction);
         }
 
         this.logger.warn(`Transaction verification failed: ${transactionId}`);

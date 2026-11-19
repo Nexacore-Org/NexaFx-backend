@@ -7,9 +7,14 @@ import {
   Body,
   UseGuards,
   Query,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { CurrencyPairService } from '../services/currency-pair.service';
-import { CurrencyPair } from '../entities/currency-pair.entity';
+import {
+  CreateCurrencyPairDto,
+  SuspendPairDto,
+  UpdateCurrencyPairDto,
+} from '../dto/currency-pair.dto';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { UserRole } from '../../users/user.entity';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -28,7 +33,7 @@ export class CurrencyPairController {
   @Post('/admin')
   @Roles(UserRole.ADMIN)
   @UseGuards(RolesGuard)
-  async createPair(@Body() data: Partial<CurrencyPair>) {
+  async createPair(@Body() data: CreateCurrencyPairDto) {
     return this.currencyPairService.create(data);
   }
 
@@ -36,8 +41,8 @@ export class CurrencyPairController {
   @Roles(UserRole.ADMIN)
   @UseGuards(RolesGuard)
   async updatePair(
-    @Param('id') id: string,
-    @Body() data: Partial<CurrencyPair>,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() data: UpdateCurrencyPairDto,
   ) {
     return this.currencyPairService.update(id, data);
   }
@@ -46,17 +51,16 @@ export class CurrencyPairController {
   @Roles(UserRole.ADMIN)
   @UseGuards(RolesGuard)
   async suspendPair(
-    @Param('id') id: string,
-    @Body('reason') reason: string,
-    @Body('duration') duration: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() data: SuspendPairDto,
   ) {
-    return this.currencyPairService.suspend(id, reason, duration);
+    return this.currencyPairService.suspend(id, data);
   }
 
   @Post('/admin/:id/resume')
   @Roles(UserRole.ADMIN)
   @UseGuards(RolesGuard)
-  async resumePair(@Param('id') id: string) {
+  async resumePair(@Param('id', ParseUUIDPipe) id: string) {
     return this.currencyPairService.resume(id);
   }
 

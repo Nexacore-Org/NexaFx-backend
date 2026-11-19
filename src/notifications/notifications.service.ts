@@ -14,6 +14,7 @@ import { FCMService } from '../firebase/fcm.service';
 import { ConfigService } from '@nestjs/config';
 import { MailService } from '../modules/mail/mail.service';
 import { NotificationsGateway } from './notifications.gateway';
+import { NotificationPreferenceService } from './services/notification-preference.service';
 
 @Injectable()
 export class NotificationsService {
@@ -28,6 +29,7 @@ export class NotificationsService {
     private readonly configService: ConfigService,
     private readonly mailService: MailService,
     private readonly notificationsGateway: NotificationsGateway,
+    private readonly preferenceService: NotificationPreferenceService,
   ) {}
 
   async create(dto: CreateNotificationDto): Promise<Notification>;
@@ -164,7 +166,7 @@ export class NotificationsService {
 
       // 4. Send email if email preference is enabled (opt-in based on user preferences)
       if (prefs.email === true && user.email) {
-        await this.sendEmail(user.email, title, body);
+        await this.sendEmail(userId, type, user.email, title, body);
       }
     } catch (error) {
       // Catch and log dispatch errors to ensure main flows are not blocked
@@ -272,6 +274,8 @@ export class NotificationsService {
   }
 
   private async sendEmail(
+    userId: string,
+    notificationType: NotificationType,
     to: string,
     subject: string,
     body: string,
@@ -287,12 +291,23 @@ export class NotificationsService {
 
     const safeSubject = this.escapeHtml(subject);
     const safeBody = this.escapeHtml(body);
+    const unsubscribeToken = this.preferenceService.generateUnsubscribeToken(
+      userId,
+      notificationType,
+    );
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') ?? 'http://localhost:3001';
+    const unsubscribeUrl = `${frontendUrl.replace(/\/$/, '')}/notifications/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`;
+    const safeUnsubscribeUrl = this.escapeHtml(unsubscribeUrl);
 
     const html = `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 5px;">
         <h2 style="color: #333;">${safeSubject}</h2>
         <p style="font-size: 16px; color: #555; line-height: 1.5;">${safeBody}</p>
         <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+        <p style="font-size: 12px; color: #999; text-align: center;">
+          <a href="${safeUnsubscribeUrl}">Unsubscribe from these emails</a>
+        </p>
         <p style="font-size: 12px; color: #999; text-align: center;">This is an automated notification from NexaFX.</p>
       </div>
     `;
@@ -302,7 +317,11 @@ export class NotificationsService {
         to,
         subject,
         html,
-        text: body,
+        text: `${body}\n\nUnsubscribe: ${unsubscribeUrl}`,
+        headers: {
+          'List-Unsubscribe': `<${unsubscribeUrl}>`,
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        },
       });
     } catch (error) {
       this.logger.error(

@@ -23,6 +23,9 @@ export class Currency {
   @Column({ type: 'int', default: 2 })
   decimals: number; // Number of decimal places
 
+  @Column({ type: 'varchar', length: 56, nullable: true })
+  issuer: string | null;
+
   @Column({ type: 'boolean', default: false })
   isBase: boolean; // True for NGN (base currency)
 

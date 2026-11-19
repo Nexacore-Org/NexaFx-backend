@@ -97,6 +97,59 @@ describe('Impersonation restrictions (e2e)', () => {
       expect(res.status).toBe(403);
     });
 
+    it('cannot delete the impersonated account via DELETE /users/me', async () => {
+      const res = await request(app.getHttpServer())
+        .delete('/v1/users/me')
+        .set('Authorization', `Bearer ${impersonationToken}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it('cannot download a GDPR data export', async () => {
+      const res = await request(app.getHttpServer())
+        .get(
+          '/v1/users/me/data-export/00000000-0000-0000-0000-000000000000/download',
+        )
+        .set('Authorization', `Bearer ${impersonationToken}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it('cannot register a device token', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/v1/users/device-token')
+        .set('Authorization', `Bearer ${impersonationToken}`)
+        .send({ token: 'impersonation-device-token' });
+
+      expect(res.status).toBe(403);
+    });
+
+    it('cannot remove a device token', async () => {
+      const res = await request(app.getHttpServer())
+        .delete('/v1/users/device-token')
+        .set('Authorization', `Bearer ${impersonationToken}`)
+        .send({ token: 'impersonation-device-token' });
+
+      expect(res.status).toBe(403);
+    });
+
+    it('cannot update an FCM token', async () => {
+      const res = await request(app.getHttpServer())
+        .patch('/v1/users/me/fcm-token')
+        .set('Authorization', `Bearer ${impersonationToken}`)
+        .send({ fcmToken: 'impersonation-fcm-token' });
+
+      expect(res.status).toBe(403);
+    });
+
+    it('cannot log out all devices', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/v1/auth/logout-all')
+        .set('Authorization', `Bearer ${impersonationToken}`);
+
+      expect(res.status).toBe(403);
+    });
+
     it('cannot unlink an OAuth account', async () => {
       const res = await request(app.getHttpServer())
         .post('/v1/auth/oauth/unlink')

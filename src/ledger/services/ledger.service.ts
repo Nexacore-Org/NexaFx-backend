@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException, Optional } from '@nestjs/common';
-import { DataSource, QueryRunner } from 'typeorm';
+import { DataSource, EntityManager, QueryRunner } from 'typeorm';
 import {
   Transaction,
   TransactionType,
@@ -38,6 +38,7 @@ export class LedgerService {
         {
           transactionId: transaction.id,
           accountType: LedgerAccountType.USER,
+          userId: transaction.userId,
           direction: LedgerDirection.CREDIT,
           amount,
           currency,
@@ -58,6 +59,7 @@ export class LedgerService {
         {
           transactionId: transaction.id,
           accountType: LedgerAccountType.USER,
+          userId: transaction.userId,
           direction: LedgerDirection.DEBIT,
           amount,
           currency,
@@ -81,6 +83,7 @@ export class LedgerService {
         {
           transactionId: transaction.id,
           accountType: LedgerAccountType.USER,
+          userId: transaction.userId,
           direction: LedgerDirection.DEBIT,
           amount,
           currency,
@@ -102,6 +105,7 @@ export class LedgerService {
         {
           transactionId: transaction.id,
           accountType: LedgerAccountType.USER,
+          userId: transaction.userId,
           direction: LedgerDirection.CREDIT,
           amount: toAmount,
           currency: destinationCurrency,
@@ -119,6 +123,7 @@ export class LedgerService {
         {
           transactionId: transaction.id,
           accountType: LedgerAccountType.USER,
+          userId: transaction.userId,
           direction: LedgerDirection.CREDIT,
           amount,
           currency,
@@ -138,6 +143,7 @@ export class LedgerService {
         {
           transactionId: transaction.id,
           accountType: LedgerAccountType.USER,
+          userId: transaction.userId,
           direction: LedgerDirection.DEBIT,
           amount,
           currency,
@@ -172,6 +178,7 @@ export class LedgerService {
       {
         transactionId: transaction.id,
         accountType: LedgerAccountType.USER,
+        userId: transaction.userId,
         direction: LedgerDirection.DEBIT,
         amount: feeAmount,
         currency: feeCurrency,
@@ -203,8 +210,36 @@ export class LedgerService {
     });
     if (entries.length === 0) return;
 
-    const mirrored = entries.map((entry) => ({
-      transactionId: entry.transactionId,
+    const mirrored = this.mirrorEntries(entries, transaction.id);
+
+    await manager.save(LedgerEntry, manager.create(LedgerEntry, mirrored));
+  }
+
+  async recordReversal(
+    original: Transaction,
+    compensating: Transaction,
+    manager: EntityManager,
+  ): Promise<LedgerEntry[]> {
+    const entries = await manager.find(LedgerEntry, {
+      where: { transactionId: original.id },
+    });
+    if (entries.length === 0) {
+      throw new BadRequestException(
+        `Cannot reverse transaction ${original.id} without ledger entries`,
+      );
+    }
+
+    const mirrored = this.mirrorEntries(entries, compensating.id);
+    return manager.save(LedgerEntry, manager.create(LedgerEntry, mirrored));
+  }
+
+  private mirrorEntries(
+    entries: LedgerEntry[],
+    transactionId: string,
+  ): Partial<LedgerEntry>[] {
+    return entries.map((entry) => ({
+      transactionId,
+      userId: entry.userId,
       accountType: entry.accountType,
       direction:
         entry.direction === LedgerDirection.DEBIT
@@ -213,7 +248,5 @@ export class LedgerService {
       amount: entry.amount,
       currency: entry.currency,
     }));
-
-    await manager.save(LedgerEntry, manager.create(LedgerEntry, mirrored));
   }
 }

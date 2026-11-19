@@ -162,6 +162,9 @@ export class User {
   isTwoFactorEnabled: boolean;
 
   @Column({ type: 'int', default: 0 })
+  tokenVersion: number;
+
+  @Column({ type: 'int', default: 0 })
   failedLoginAttempts: number;
 
   @Column({ type: 'boolean', default: false })

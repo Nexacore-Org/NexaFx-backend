@@ -476,6 +476,7 @@ export class AdminService {
     }
 
     user.isSuspended = true;
+    user.tokenVersion = (user.tokenVersion ?? 0) + 1;
     await this.userRepository.save(user);
 
     await this.auditLogsService.logAuthEvent(

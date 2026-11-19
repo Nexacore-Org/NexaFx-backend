@@ -1,3 +1,4 @@
+﻿import { ConflictException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -66,71 +67,67 @@ describe('IdempotencyService', () => {
     });
   });
 
-  describe('checkEndpointMatch', () => {
-    it('should return no cached entry for unknown key', async () => {
-      const result = await service.checkEndpointMatch(
-        'user-123',
-        'unknown-key',
-        'POST /test',
+  describe('concurrent duplicates', () => {
+    it('reserves once and returns 409 for a concurrent duplicate while in progress', async () => {
+      const body = { amount: 100 };
+      const [a, b] = await Promise.allSettled([
+        service.beginIdempotency('dup-key', 'user-1', body, 'POST /v2/transactions'),
+        service.beginIdempotency('dup-key', 'user-1', body, 'POST /v2/transactions'),
+      ]);
+
+      const fulfilled = [a, b].filter((r) => r.status === 'fulfilled');
+      const rejected = [a, b].filter((r) => r.status === 'rejected');
+      expect(fulfilled).toHaveLength(1);
+      expect((fulfilled[0] as PromiseFulfilledResult<any>).value.state).toBe('proceed');
+      expect(rejected).toHaveLength(1);
+      expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(
+        ConflictException,
       );
-      expect(result.match).toBe(true);
-      expect(result.cached).toBeUndefined();
     });
 
-    it('should isolate cached entries by user', async () => {
-      await cache.set('user-a', 'same-key', {
-        endpoint: 'POST /v2/transactions',
-        statusCode: 201,
-        body: { id: 'tx-a' },
-      });
+    it('replays completed response after reservation is stored', async () => {
+      const body = { amount: 100 };
+      await service.beginIdempotency('replay-key', 'user-1', body, 'POST /v2/transactions');
+      await service.storeIdempotency(
+        'replay-key',
+        'user-1',
+        'POST /v2/transactions',
+        201,
+        { id: 'tx-1' },
+        body,
+      );
 
-      const result = await service.checkEndpointMatch(
-        'user-b',
-        'same-key',
+      const result = await service.beginIdempotency(
+        'replay-key',
+        'user-1',
+        body,
         'POST /v2/transactions',
       );
-
-      expect(result.match).toBe(true);
-      expect(result.cached).toBeUndefined();
+      expect(result).toEqual({
+        state: 'replay',
+        statusCode: 201,
+        body: { id: 'tx-1' },
+        replayed: true,
+      });
     });
   });
-});
 
-describe('IdempotencyRedisCache', () => {
-  let cache: IdempotencyRedisCache;
+  describe('cache write failure', () => {
+    it('propagates storage failure when completing the cached response', async () => {
+      jest
+        .spyOn(cache, 'complete')
+        .mockRejectedValueOnce(new Error('cache down'));
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        IdempotencyRedisCache,
-        {
-          provide: ConfigService,
-          useValue: { get: jest.fn().mockReturnValue('3600') },
-        },
-      ],
-    }).compile();
-
-    cache = module.get<IdempotencyRedisCache>(IdempotencyRedisCache);
-  });
-
-  it('should store and retrieve entries', async () => {
-    const entry = {
-      endpoint: 'POST /v2/transactions',
-      statusCode: 201,
-      body: { id: 'tx-123' },
-    };
-
-    await cache.set('user-123', 'key-123', entry);
-    const result = await cache.get('user-123', 'key-123');
-
-    expect(result).toBeDefined();
-    expect(result?.endpoint).toBe('POST /v2/transactions');
-    expect(result?.statusCode).toBe(201);
-    expect(result?.body).toEqual({ id: 'tx-123' });
-  });
-
-  it('should return null for missing key', async () => {
-    const result = await cache.get('user-123', 'missing-key');
-    expect(result).toBeNull();
+      await expect(
+        service.storeIdempotency(
+          'key',
+          'user-1',
+          'POST /v2/transactions',
+          201,
+          { id: 'tx-1' },
+          { amount: 1 },
+        ),
+      ).rejects.toThrow('cache down');
+    });
   });
 });

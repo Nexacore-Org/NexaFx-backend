@@ -1,4 +1,4 @@
-export enum NotificationType {
+﻿export enum NotificationType {
   TRANSACTION = 'TRANSACTION',
   OTP = 'OTP',
   MESSAGING = 'MESSAGING',
@@ -23,4 +23,5 @@ export enum NotificationType {
   LOAN_REPAYMENT_DUE = 'LOAN_REPAYMENT_DUE',
   STAKING_UNLOCK = 'STAKING_UNLOCK',
   SPENDING_GOAL_WARNING = 'SPENDING_GOAL_WARNING',
+  SYSTEM = 'SYSTEM',
 }

@@ -9,6 +9,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
 import { AuditLogsService } from '../../audit-logs/audit-logs.service';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { User } from '../../users/user.entity';
+import {
+  LedgerAccountType,
+  LedgerDirection,
+  LedgerEntry,
+} from '../../ledger/entities/ledger-entry.entity';
+import { LedgerService } from '../../ledger/services/ledger.service';
 import { TransactionReversalService } from './transaction-reversal.service';
 import {
   ReversalStatus,
@@ -25,9 +32,11 @@ describe('TransactionReversalService', () => {
   let originalTransaction: Transaction;
   let reversal: TransactionReversal | null;
   let compensatingTransaction: Transaction | null;
+  let user: User;
 
   const manager = {
     findOne: jest.fn(),
+    find: jest.fn(),
     create: jest.fn(),
     save: jest.fn(),
   };
@@ -48,6 +57,9 @@ describe('TransactionReversalService', () => {
       key === 'REVERSAL_CONFIRMATION_TTL_MINUTES' ? 30 : undefined,
     ),
   };
+  const ledgerService = {
+    recordReversal: jest.fn(),
+  };
 
   beforeEach(async () => {
     originalTransaction = {
@@ -61,9 +73,11 @@ describe('TransactionReversalService', () => {
     } as Transaction;
     reversal = null;
     compensatingTransaction = null;
+    user = { id: 'user-1', balances: { USD: 0 } } as User;
 
     manager.findOne.mockImplementation(async (entity, options) => {
       if (entity === TransactionReversal) return reversal;
+      if (entity === User) return user;
       if (entity === Transaction) {
         if (options.where.id === originalTransaction.id) {
           return originalTransaction;
@@ -84,9 +98,33 @@ describe('TransactionReversalService', () => {
         reversal = value;
         return value;
       }
-      compensatingTransaction = value;
+      if (entity === User) {
+        user = value;
+        return value;
+      }
+      if (entity === Transaction && value.id !== originalTransaction.id) {
+        compensatingTransaction = value;
+      }
       return value;
     });
+    ledgerService.recordReversal.mockImplementation(
+      async (tx: Transaction, compensating: Transaction) => {
+        const direction =
+          tx.type === TransactionType.DEPOSIT
+            ? LedgerDirection.DEBIT
+            : LedgerDirection.CREDIT;
+        return [
+          {
+            transactionId: compensating.id,
+            userId: tx.userId,
+            accountType: LedgerAccountType.USER,
+            direction,
+            amount: tx.amount,
+            currency: tx.currency,
+          } as LedgerEntry,
+        ];
+      },
+    );
     dataSource.transaction.mockImplementation((callback) => callback(manager));
 
     const module: TestingModule = await Test.createTestingModule({
@@ -100,6 +138,7 @@ describe('TransactionReversalService', () => {
         { provide: AuditLogsService, useValue: auditLogsService },
         { provide: NotificationsService, useValue: notificationsService },
         { provide: ConfigService, useValue: configService },
+        { provide: LedgerService, useValue: ledgerService },
       ],
     }).compile();
     service = module.get(TransactionReversalService);
@@ -141,7 +180,7 @@ describe('TransactionReversalService', () => {
     );
   });
 
-  it('creates one compensating transaction and completes the reversal atomically', async () => {
+  it('creates an inverse transaction and completes the reversal atomically', async () => {
     reversal = {
       id: 'reversal-1',
       transactionId: 'transaction-1',
@@ -157,6 +196,16 @@ describe('TransactionReversalService', () => {
 
     expect(dataSource.transaction).toHaveBeenCalledTimes(1);
     expect(compensatingTransaction?.reference).toBe('REVERSAL:transaction-1');
+    expect(compensatingTransaction?.type).toBe(TransactionType.DEPOSIT);
+    expect(user.balances.USD).toBe(25);
+    expect(originalTransaction.metadata.reversedBy).toBe(
+      'compensating-transaction-1',
+    );
+    expect(ledgerService.recordReversal).toHaveBeenCalledWith(
+      originalTransaction,
+      compensatingTransaction,
+      manager,
+    );
     expect(result.status).toBe(ReversalStatus.COMPLETED);
     expect(result.reversalTransactionId).toBe(
       'compensating-transaction-1',
@@ -164,6 +213,121 @@ describe('TransactionReversalService', () => {
     expect(auditLogsService.logSystemEvent).toHaveBeenCalledTimes(1);
     expect(notificationsService.dispatch).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    {
+      originalType: TransactionType.DEPOSIT,
+      compensatingType: TransactionType.WITHDRAW,
+      mirrorEntries: [
+        {
+          userId: 'user-1',
+          accountType: LedgerAccountType.USER,
+          direction: LedgerDirection.DEBIT,
+          amount: '25',
+          currency: 'USD',
+        },
+      ],
+      balances: { USD: 50 },
+      expectedBalances: { USD: 25 },
+      expectedAmount: '25.00',
+      expectedCurrency: 'USD',
+      expectedToAmount: null,
+      expectedToCurrency: null,
+    },
+    {
+      originalType: TransactionType.WITHDRAW,
+      compensatingType: TransactionType.DEPOSIT,
+      mirrorEntries: [
+        {
+          userId: 'user-1',
+          accountType: LedgerAccountType.USER,
+          direction: LedgerDirection.CREDIT,
+          amount: '25',
+          currency: 'USD',
+        },
+      ],
+      balances: { USD: 0 },
+      expectedBalances: { USD: 25 },
+      expectedAmount: '25.00',
+      expectedCurrency: 'USD',
+      expectedToAmount: null,
+      expectedToCurrency: null,
+    },
+    {
+      originalType: TransactionType.SWAP,
+      compensatingType: TransactionType.SWAP,
+      mirrorEntries: [
+        {
+          userId: 'user-1',
+          accountType: LedgerAccountType.USER,
+          direction: LedgerDirection.CREDIT,
+          amount: '25',
+          currency: 'USD',
+        },
+        {
+          userId: 'user-1',
+          accountType: LedgerAccountType.USER,
+          direction: LedgerDirection.DEBIT,
+          amount: '40',
+          currency: 'EUR',
+        },
+      ],
+      balances: { USD: 0, EUR: 50 },
+      expectedBalances: { USD: 25, EUR: 10 },
+      expectedAmount: '40',
+      expectedCurrency: 'EUR',
+      expectedToAmount: '25.00',
+      expectedToCurrency: 'USD',
+    },
+  ])(
+    'reverses $originalType with the correct transaction direction and balance effects',
+    async ({
+      originalType,
+      compensatingType,
+      mirrorEntries,
+      balances,
+      expectedBalances,
+      expectedAmount,
+      expectedCurrency,
+      expectedToAmount,
+      expectedToCurrency,
+    }) => {
+      originalTransaction.type = originalType;
+      originalTransaction.toAmount =
+        originalType === TransactionType.SWAP ? '40' : null;
+      originalTransaction.toCurrency =
+        originalType === TransactionType.SWAP ? 'EUR' : null;
+      user.balances = balances;
+      reversal = {
+        id: 'reversal-1',
+        transactionId: 'transaction-1',
+        authorisedBy: 'admin-1',
+        status: ReversalStatus.PENDING_CONFIRMATION,
+      } as TransactionReversal;
+      ledgerService.recordReversal.mockResolvedValue(
+        mirrorEntries.map((entry) => ({
+          ...entry,
+          transactionId: 'compensating-transaction-1',
+        })) as LedgerEntry[],
+      );
+
+      await service.confirmReversal('transaction-1', 'admin-2', {
+        reason: 'Requested by customer',
+      });
+
+      expect(compensatingTransaction?.type).toBe(compensatingType);
+      expect(compensatingTransaction?.amount).toBe(expectedAmount);
+      expect(compensatingTransaction?.currency).toBe(expectedCurrency);
+      expect(compensatingTransaction?.toAmount ?? null).toBe(expectedToAmount);
+      expect(compensatingTransaction?.toCurrency ?? null).toBe(
+        expectedToCurrency,
+      );
+      expect(user.balances).toEqual(expectedBalances);
+      expect(originalTransaction.metadata.reversedBy).toBe(
+        'compensating-transaction-1',
+      );
+    },
+  );
 
   it('allows retrying a failed reversal by creating a new preview', async () => {
     reversal = {

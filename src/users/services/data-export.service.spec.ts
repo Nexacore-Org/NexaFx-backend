@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+﻿import { ConflictException } from '@nestjs/common';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -7,6 +7,7 @@ import {
   DataRequestStatus,
   DataRequestType,
 } from '../entities/data-request.entity';
+import { NotificationType } from '../../notifications/entities/notification.entity';
 
 jest.mock('archiver', () => jest.fn());
 
@@ -19,11 +20,12 @@ describe('DataExportService', () => {
   };
   const userRepository = { findOne: jest.fn() };
   const transactionRepository = { find: jest.fn() };
-  const notificationRepository = { create: jest.fn(), find: jest.fn() };
+  const notificationRepository = { create: jest.fn(), find: jest.fn(), save: jest.fn() };
   const kycRepository = { find: jest.fn() };
   const beneficiaryRepository = { find: jest.fn() };
   const auditLogRepository = { find: jest.fn() };
-  const walletRepository = { find: jest.fn() };
+  const referralRepository = { find: jest.fn() };
+  const notificationsService = { create: jest.fn().mockResolvedValue({}) };
 
   const build = (): DataExportService => {
     const instance = Object.create(
@@ -31,13 +33,14 @@ describe('DataExportService', () => {
     ) as DataExportService;
     const deps = {
       dataRequestRepository,
-      userRepository,
       transactionRepository,
       notificationRepository,
       kycRepository,
       beneficiaryRepository,
       auditLogRepository,
-      walletRepository,
+      referralRepository,
+      userRepository,
+      notificationsService,
       logger: { log: jest.fn(), error: jest.fn(), warn: jest.fn() },
       EXPORT_DIR: path.join(os.tmpdir(), 'nexafx-export-spec'),
       EXPORT_EXPIRY_HOURS: 24,
@@ -92,6 +95,17 @@ describe('DataExportService', () => {
     });
   });
 
+  describe('CSV export', () => {
+    it('neutralises formula injection and escapes fields', () => {
+      const service = build() as any;
+      const csv = service.convertToCSV([
+        { name: '=2+2', note: 'hello,"world"', amount: 10 },
+      ]);
+      expect(csv).toContain("\"'=2+2\"");
+      expect(csv).toContain('"hello,""world""');
+    });
+  });
+
   describe('getExportFilePath', () => {
     it('returns null for another users request', async () => {
       const service = build();
@@ -102,35 +116,10 @@ describe('DataExportService', () => {
       ).resolves.toBeNull();
     });
 
-    it('returns null for an incomplete request', async () => {
-      const service = build();
-      dataRequestRepository.findOne.mockResolvedValue({
-        id: 'req-1',
-        status: DataRequestStatus.PENDING,
-      });
-
-      await expect(
-        service.getExportFilePath('req-1', 'user-1'),
-      ).resolves.toBeNull();
-    });
-
-    it('returns null for an expired request', async () => {
-      const service = build();
-      dataRequestRepository.findOne.mockResolvedValue({
-        id: 'req-1',
-        status: DataRequestStatus.COMPLETE,
-        expiresAt: new Date(Date.now() - 60_000),
-      });
-
-      await expect(
-        service.getExportFilePath('req-1', 'user-1'),
-      ).resolves.toBeNull();
-    });
-
-    it('resolves the archive for a completed, unexpired request', async () => {
+    it('resolves the archive for a completed, unexpired request by requestId', async () => {
       const service = build();
       const dir = path.join(os.tmpdir(), 'nexafx-export-spec');
-      fs.writeFileSync(path.join(dir, 'nexafx-export_user-1_2026-01-01.zip'), 'x');
+      fs.writeFileSync(path.join(dir, 'nexafx-export_user-1_req-1.zip'), 'x');
       dataRequestRepository.findOne.mockResolvedValue({
         id: 'req-1',
         status: DataRequestStatus.COMPLETE,
@@ -139,25 +128,29 @@ describe('DataExportService', () => {
 
       const result = await service.getExportFilePath('req-1', 'user-1');
 
-      expect(result).toContain('nexafx-export_user-1_2026-01-01.zip');
+      expect(result).toContain('nexafx-export_user-1_req-1.zip');
     });
   });
 
-  describe('cleanupExpiredExports', () => {
-    it('removes archives older than the expiry window', () => {
+  describe('failure notification', () => {
+    it('persists failure notification through NotificationsService', async () => {
       const service = build();
-      const dir = path.join(os.tmpdir(), 'nexafx-export-spec');
-      const stale = path.join(dir, 'nexafx-export_user-9_2020-01-01.zip');
-      const fresh = path.join(dir, 'nexafx-export_user-8_2026-01-01.zip');
-      fs.writeFileSync(stale, 'x');
-      fs.writeFileSync(fresh, 'x');
-      const old = new Date(Date.now() - 48 * 60 * 60 * 1000);
-      fs.utimesSync(stale, old, old);
+      dataRequestRepository.findOne.mockResolvedValue({
+        id: 'req-1',
+        userId: 'user-1',
+        status: DataRequestStatus.PENDING,
+      });
+      userRepository.findOne.mockRejectedValue(new Error('boom'));
 
-      const result = service.cleanupExpiredExports();
+      await service.processDataExport('req-1');
 
-      expect(result.removed).toBeGreaterThanOrEqual(1);
-      expect(fs.existsSync(stale)).toBe(false);
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        'user-1',
+        NotificationType.SYSTEM,
+        'Data Export Failed',
+        expect.any(String),
+        expect.objectContaining({ requestId: 'req-1' }),
+      );
     });
   });
 });

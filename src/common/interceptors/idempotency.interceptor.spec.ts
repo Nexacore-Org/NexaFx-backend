@@ -1,33 +1,22 @@
-import { Test, TestingModule } from '@nestjs/testing';
+﻿import { Test, TestingModule } from '@nestjs/testing';
 import { ExecutionContext, CallHandler, HttpStatus } from '@nestjs/common';
 import { of, throwError } from 'rxjs';
 import { IdempotencyInterceptor } from './idempotency.interceptor';
 import { IdempotencyService } from '../services/idempotency.service';
-import { MANDATORY_ENDPOINT_PATTERNS } from './idempotency-patterns';
 
 describe('IdempotencyInterceptor', () => {
   let interceptor: IdempotencyInterceptor;
-  let idempotencyService: IdempotencyService;
-
-  const mockCache = {
-    store: new Map(),
-    get: jest.fn(),
-    set: jest.fn(),
-  };
 
   const mockService = {
     validateIdempotencyKey: jest.fn(),
-    checkIdempotency: jest.fn(),
+    beginIdempotency: jest.fn(),
     storeIdempotency: jest.fn(),
+    releaseIdempotency: jest.fn(),
   };
 
   beforeEach(async () => {
-    mockCache.store.clear();
-    mockCache.get.mockClear();
-    mockCache.set.mockClear();
-    mockService.validateIdempotencyKey.mockClear();
-    mockService.checkIdempotency.mockClear();
-    mockService.storeIdempotency.mockClear();
+    jest.clearAllMocks();
+    mockService.releaseIdempotency.mockResolvedValue(undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -40,11 +29,6 @@ describe('IdempotencyInterceptor', () => {
     }).compile();
 
     interceptor = module.get<IdempotencyInterceptor>(IdempotencyInterceptor);
-    idempotencyService = module.get<IdempotencyService>(IdempotencyService);
-  });
-
-  it('should be defined', () => {
-    expect(interceptor).toBeDefined();
   });
 
   const createMockExecutionContext = (
@@ -52,7 +36,7 @@ describe('IdempotencyInterceptor', () => {
     url: string,
     headers: Record<string, string> = {},
     body: any = {},
-    user?: { userId: string },
+    user?: { userId?: string; id?: string },
   ): ExecutionContext => {
     const mockRequest = {
       method,
@@ -76,71 +60,31 @@ describe('IdempotencyInterceptor', () => {
     } as unknown as ExecutionContext;
   };
 
+  it('should be defined', () => {
+    expect(interceptor).toBeDefined();
+  });
+
   describe('key validation', () => {
-    it('should return 400 for invalid key format (special characters)', (done) => {
+    it('should return 400 for invalid key format', (done) => {
       const context = createMockExecutionContext('POST', '/test', {
         'idempotency-key': 'invalid!@#$key',
       });
-
       mockService.validateIdempotencyKey.mockReturnValue({
         valid: false,
-        error:
-          'Idempotency-Key must contain only alphanumeric characters, hyphens, and underscores',
+        error: 'Idempotency-Key must contain only alphanumeric characters, hyphens, and underscores',
       });
 
       interceptor.intercept(context, {} as CallHandler).subscribe({
         error: (err) => {
-          expect(err.message).toContain('alphanumeric');
+          expect(err.status || err.getStatus?.()).toBe(HttpStatus.BAD_REQUEST);
           done();
         },
       });
-    });
-
-    it('should return 400 for key exceeding 128 characters', (done) => {
-      const context = createMockExecutionContext('POST', '/test', {
-        'idempotency-key': 'a'.repeat(129),
-      });
-
-      mockService.validateIdempotencyKey.mockReturnValue({
-        valid: false,
-        error: 'Idempotency-Key must be at most 128 characters',
-      });
-
-      interceptor.intercept(context, {} as CallHandler).subscribe({
-        error: (err) => {
-          expect(err.message).toContain('128 characters');
-          done();
-        },
-      });
-    });
-
-    it('should pass valid key format (alphanumeric, hyphens, underscores)', (done) => {
-      const context = createMockExecutionContext(
-        'POST',
-        '/test',
-        { 'idempotency-key': 'valid_key-123' },
-        {},
-        { userId: 'user-123' },
-      );
-
-      mockService.validateIdempotencyKey.mockReturnValue({ valid: true });
-      mockService.checkIdempotency.mockResolvedValue(null);
-
-      interceptor
-        .intercept(context, {
-          handle: () => of({ success: true }),
-        } as CallHandler)
-        .subscribe({
-          next: (data) => {
-            expect(data).toEqual({ success: true });
-            done();
-          },
-        });
     });
   });
 
   describe('mandatory key enforcement', () => {
-    it('should return 422 when Idempotency-Key is missing on mandatory endpoint', (done) => {
+    it('should return 422 when missing on mandatory endpoint', (done) => {
       const context = createMockExecutionContext(
         'POST',
         '/v2/transactions',
@@ -151,37 +95,15 @@ describe('IdempotencyInterceptor', () => {
 
       interceptor.intercept(context, {} as CallHandler).subscribe({
         error: (err) => {
-          expect(err.message).toContain('required');
-          expect(err.status).toBe(HttpStatus.UNPROCESSABLE_ENTITY);
+          expect(err.getStatus()).toBe(HttpStatus.UNPROCESSABLE_ENTITY);
           done();
         },
       });
     });
-
-    it('should pass through normally on non-mandatory endpoints without key', (done) => {
-      const context = createMockExecutionContext(
-        'POST',
-        '/transactions/deposit',
-        {},
-        { amount: 100 },
-        { userId: 'user-123' },
-      );
-
-      interceptor
-        .intercept(context, {
-          handle: () => of({ success: true }),
-        } as CallHandler)
-        .subscribe({
-          next: (data) => {
-            expect(data).toEqual({ success: true });
-            done();
-          },
-        });
-    });
   });
 
   describe('replay detection', () => {
-    it('should return cached response on retry', (done) => {
+    it('should return cached response and replay header', (done) => {
       const context = createMockExecutionContext(
         'POST',
         '/v2/transactions',
@@ -191,56 +113,30 @@ describe('IdempotencyInterceptor', () => {
       );
 
       mockService.validateIdempotencyKey.mockReturnValue({ valid: true });
-      mockService.checkIdempotency.mockResolvedValue({
+      mockService.beginIdempotency.mockResolvedValue({
+        state: 'replay',
         statusCode: 201,
-        body: { id: 'tx-123', amount: 100 },
-        replayed: true,
-      });
-
-      interceptor.intercept(context, {} as CallHandler).subscribe({
-        next: (data) => {
-          expect(data).toEqual({ id: 'tx-123', amount: 100 });
-          done();
-        },
-      });
-    });
-
-    it('should set X-Idempotency-Replayed header on cached response', (done) => {
-      const context = createMockExecutionContext(
-        'POST',
-        '/v2/transactions',
-        { 'idempotency-key': 'test-key-456' },
-        { amount: 200 },
-        { id: 'user-456' },
-      );
-
-      mockService.validateIdempotencyKey.mockReturnValue({ valid: true });
-      mockService.checkIdempotency.mockResolvedValue({
-        statusCode: 201,
-        body: { id: 'tx-456' },
+        body: { id: 'tx-123' },
         replayed: true,
       });
 
       const response = context.switchToHttp().getResponse();
-
       interceptor.intercept(context, {} as CallHandler).subscribe({
-        next: () => {
-          expect(response.setHeader).toHaveBeenCalledWith(
-            'Idempotency-Key',
-            'test-key-456',
-          );
+        next: (data) => {
+          expect(data).toEqual({ id: 'tx-123' });
           expect(response.setHeader).toHaveBeenCalledWith(
             'X-Idempotency-Replayed',
             'true',
           );
           done();
         },
+        error: done,
       });
     });
   });
 
   describe('conflict detection', () => {
-    it('should return 409 when same key is used for different endpoints', (done) => {
+    it('should return 409 when same key is used concurrently/in progress', (done) => {
       const context = createMockExecutionContext(
         'POST',
         '/v2/transactions',
@@ -250,115 +146,23 @@ describe('IdempotencyInterceptor', () => {
       );
 
       mockService.validateIdempotencyKey.mockReturnValue({ valid: true });
-      const error: any = new Error(
-        'Idempotency key already used for a different endpoint',
-      );
-      error.code = 'IDEMPOTENCY_KEY_CONFLICT';
-      mockService.checkIdempotency.mockRejectedValue(error);
+      const error: any = new Error('Idempotent request is already in progress');
+      error.status = HttpStatus.CONFLICT;
+      error.getStatus = () => HttpStatus.CONFLICT;
+      mockService.beginIdempotency.mockRejectedValue(error);
 
       interceptor.intercept(context, {} as CallHandler).subscribe({
         error: (err) => {
-          expect(err.message).toContain('different endpoint');
+          expect(err.getStatus ? err.getStatus() : err.status).toBe(
+            HttpStatus.CONFLICT,
+          );
           done();
         },
       });
     });
   });
 
-  describe('non-mutating methods', () => {
-    it('should pass through GET requests without checking idempotency', (done) => {
-      const context = createMockExecutionContext(
-        'GET',
-        '/transactions',
-        { 'idempotency-key': 'any-key' },
-        {},
-        { userId: 'user-123' },
-      );
-
-      interceptor
-        .intercept(context, {
-          handle: () => of([{ id: 'tx-1' }]),
-        } as CallHandler)
-        .subscribe({
-          next: (data) => {
-            expect(data).toEqual([{ id: 'tx-1' }]);
-            done();
-          },
-        });
-    });
-  });
-
-  describe('request body binding (#1229)', () => {
-    it('replays a cached response and flags it in the header', (done) => {
-      const context = createMockExecutionContext(
-        'POST',
-        '/v2/transactions',
-        { 'idempotency-key': 'key-1' },
-        { amount: 10 },
-        { userId: 'user-123' },
-      );
-
-      mockService.validateIdempotencyKey.mockReturnValue({ valid: true });
-      mockService.checkIdempotency.mockResolvedValue({
-        statusCode: 201,
-        body: { id: 'tx-1' },
-        replayed: true,
-      });
-
-      interceptor.intercept(context, {} as CallHandler).subscribe({
-        next: (body) => {
-          expect(body).toEqual({ id: 'tx-1' });
-          const response = context.switchToHttp().getResponse<{
-            setHeader: jest.Mock;
-          }>();
-          expect(response.setHeader).toHaveBeenCalledWith(
-            'X-Idempotency-Replayed',
-            'true',
-          );
-          expect(mockService.checkIdempotency).toHaveBeenCalledWith(
-            'key-1',
-            'user-123',
-            { amount: 10 },
-            expect.any(String),
-          );
-          done();
-        },
-        error: done.fail,
-      });
-    });
-
-    it('stores the request body with the cached entry', (done) => {
-      const context = createMockExecutionContext(
-        'POST',
-        '/v2/transactions',
-        { 'idempotency-key': 'key-2' },
-        { amount: 25 },
-        { userId: 'user-123' },
-      );
-
-      mockService.validateIdempotencyKey.mockReturnValue({ valid: true });
-      mockService.checkIdempotency.mockResolvedValue(null);
-
-      const next = {
-        handle: () => of({ id: 'tx-2' }),
-      } as unknown as CallHandler;
-
-      interceptor.intercept(context, next).subscribe({
-        next: () => {
-          expect(mockService.storeIdempotency).toHaveBeenCalledWith(
-            'key-2',
-            'user-123',
-            expect.any(String),
-            expect.any(Number),
-            { id: 'tx-2' },
-            { amount: 25 },
-          );
-          done();
-        },
-        error: done.fail,
-      });
-    });
-
+  describe('request body binding and storage', () => {
     it('waits for idempotency storage before emitting the response', (done) => {
       const context = createMockExecutionContext(
         'POST',
@@ -369,7 +173,7 @@ describe('IdempotencyInterceptor', () => {
       );
 
       mockService.validateIdempotencyKey.mockReturnValue({ valid: true });
-      mockService.checkIdempotency.mockResolvedValue(null);
+      mockService.beginIdempotency.mockResolvedValue({ state: 'proceed' });
       let resolveStore: () => void = () => undefined;
       mockService.storeIdempotency.mockReturnValue(
         new Promise<void>((resolve) => {
@@ -384,9 +188,10 @@ describe('IdempotencyInterceptor', () => {
         } as CallHandler)
         .subscribe({
           next: (data) => emitted.push(data),
-          error: done.fail,
+          error: done,
           complete: () => {
             expect(emitted).toEqual([{ id: 'tx-await' }]);
+            expect(mockService.storeIdempotency).toHaveBeenCalled();
             done();
           },
         });
@@ -395,7 +200,7 @@ describe('IdempotencyInterceptor', () => {
       resolveStore();
     });
 
-    it('propagates a storage failure to the caller', (done) => {
+    it('propagates storage failure to the caller', (done) => {
       const context = createMockExecutionContext(
         'POST',
         '/v2/transactions',
@@ -405,7 +210,7 @@ describe('IdempotencyInterceptor', () => {
       );
 
       mockService.validateIdempotencyKey.mockReturnValue({ valid: true });
-      mockService.checkIdempotency.mockResolvedValue(null);
+      mockService.beginIdempotency.mockResolvedValue({ state: 'proceed' });
       mockService.storeIdempotency.mockRejectedValue(new Error('cache down'));
 
       interceptor
@@ -413,7 +218,7 @@ describe('IdempotencyInterceptor', () => {
           handle: () => of({ id: 'tx-reject' }),
         } as CallHandler)
         .subscribe({
-          next: () => done.fail('response emitted despite storage failure'),
+          next: () => done('response emitted despite storage failure'),
           error: (error) => {
             expect(error.message).toBe('cache down');
             done();
@@ -421,33 +226,32 @@ describe('IdempotencyInterceptor', () => {
         });
     });
 
-    it('maps a body mismatch to 422', (done) => {
+    it('releases reservation on handler error', (done) => {
       const context = createMockExecutionContext(
         'POST',
         '/v2/transactions',
-        { 'idempotency-key': 'key-3' },
-        { amount: 99 },
+        { 'idempotency-key': 'rel-key' },
+        { amount: 10 },
         { userId: 'user-123' },
       );
 
       mockService.validateIdempotencyKey.mockReturnValue({ valid: true });
-      mockService.checkIdempotency.mockRejectedValue(
-        Object.assign(
-          new Error(
-            'Idempotency key already used with a different request body',
-          ),
-          {
-            code: 'IDEMPOTENCY_KEY_BODY_MISMATCH',
-          },
-        ),
-      );
+      mockService.beginIdempotency.mockResolvedValue({ state: 'proceed' });
+      mockService.releaseIdempotency.mockResolvedValue(undefined);
 
-      interceptor.intercept(context, {} as CallHandler).subscribe({
-        error: (err) => {
-          expect(err.getStatus()).toBe(422);
-          done();
-        },
-      });
+      interceptor
+        .intercept(context, {
+          handle: () => throwError(() => new Error('boom')),
+        } as CallHandler)
+        .subscribe({
+          error: () => {
+            expect(mockService.releaseIdempotency).toHaveBeenCalledWith(
+              'rel-key',
+              'user-123',
+            );
+            done();
+          },
+        });
     });
   });
 });

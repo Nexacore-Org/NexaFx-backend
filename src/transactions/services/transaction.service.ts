@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import {
   Transaction,
   TransactionStatus,
@@ -35,7 +35,7 @@ import { StellarService } from '../../modules/stellar/stellar.service';
 import { UsersService } from '../../users/users.service';
 import { AuditLogsService } from '../../audit-logs/audit-logs.service';
 import { AuditAction } from '../../audit-logs/enums/audit-action.enum';
-import { UserRole } from '../../users/user.entity';
+import { User, UserRole } from '../../users/user.entity';
 import { ReferralsService } from '../../referrals/referrals.service';
 import { CalculatedFee, FeesService } from '../../fees/fees.service';
 import {
@@ -487,11 +487,22 @@ export class TransactionsService {
           amount,
         )) || { feeAmount: 0, feeCurrency: currency, feeType: FeeType.FLAT };
 
-    const totalDeduction = amount + fee.feeAmount;
+    const feeCurrency = (fee.feeCurrency ?? currency).toUpperCase();
+    const sameCurrencyFee = feeCurrency === currency.toUpperCase();
+    const totalDeduction = amount + (sameCurrencyFee ? fee.feeAmount : 0);
     if (parseFloat(userBalance) < totalDeduction) {
       throw new BadRequestException(
         'Insufficient balance to cover the transaction amount and fee',
       );
+    }
+
+    if (!sameCurrencyFee && fee.feeAmount > 0) {
+      const feeBalance = await this.getUserBalance(userId, fee.feeCurrency);
+      if (parseFloat(feeBalance) < fee.feeAmount) {
+        throw new BadRequestException(
+          'Insufficient balance to cover the transaction fee',
+        );
+      }
     }
 
     await validateStellarDestination(
@@ -534,6 +545,33 @@ export class TransactionsService {
       const stellarMemo = createWithdrawalDto.memo
         ? truncateMemoTo28Bytes(createWithdrawalDto.memo)
         : buildStellarMemo('W', transaction.id);
+      const sourceAddress = await this.getUserStellarAddress(
+        userId,
+        createWithdrawalDto.walletId,
+      );
+
+      const paymentAsset = currencyData.issuer
+        ? this.stellarService.getAssetWithDefaultIssuer(
+            currency,
+            currencyData.issuer,
+          )
+        : this.stellarService.getAssetWithDefaultIssuer(currency);
+      const paymentOperation = Operation.payment({
+        destination: destinationAddress,
+        asset: paymentAsset,
+        amount: amount.toString(),
+      });
+
+      // Use counterpartyMemo on Stellar if provided (truncated to 28 bytes)
+      const stellarMemo = createWithdrawalDto.memo
+        ? truncateMemoTo28Bytes(createWithdrawalDto.memo)
+        : `WITHDRAW-${transaction.id}`;
+
+      await this.stellarService.createTransaction({
+        sourcePublicKey: sourceAddress,
+        operations: [paymentOperation],
+        memo: stellarMemo,
+      });
 
       const secretKey = await this.getUserStellarSecretKey(
         userId,
@@ -545,12 +583,35 @@ export class TransactionsService {
         amount: amount.toString(),
         secretKey,
         memo: stellarMemo,
+        sourcePublicKey: sourceAddress,
+        destination: destinationAddress,
+        asset: paymentAsset,
+        amount: amount.toString(),
+        memo: stellarMemo,
+        secretKey,
         userId,
       });
 
       transaction.txHash = paymentResult.hash;
       transaction.stellarTxHash = paymentResult.hash;
-      await this.updateUserBalance(userId, currency, -amount);
+      await this.transactionRepository.save(transaction);
+
+      if (sameCurrencyFee) {
+        await this.updateUserBalance(
+          userId,
+          currency,
+          -(amount + fee.feeAmount),
+        );
+      } else {
+        await this.updateUserBalance(userId, currency, -amount);
+        if (fee.feeAmount > 0) {
+          await this.updateUserBalance(
+            userId,
+            fee.feeCurrency,
+            -fee.feeAmount,
+          );
+        }
+      }
 
       if (beneficiaryId) {
         try {
@@ -690,9 +751,8 @@ export class TransactionsService {
     }
 
     // 4. Find Best Path
-    const fromAsset =
-      this.stellarService.getAssetWithDefaultIssuer(fromCurrency);
-    const toAsset = this.stellarService.getAssetWithDefaultIssuer(toCurrency);
+    const fromAsset = await this.getAssetHelper(fromCurrency);
+    const toAsset = await this.getAssetHelper(toCurrency);
 
     const paths = await this.stellarService.findBestPath(
       fromAsset,
@@ -741,26 +801,27 @@ export class TransactionsService {
         },
       });
 
+      await this.persistTransactionArtifacts(transaction, fee);
+
+      await this.auditLogsService.logTransactionEvent(
+        userId,
+        AuditAction.SWAP_CREATED,
+        transaction.id,
+        {
+          amount: transaction.amount,
+          fromCurrency: transaction.currency,
+          toCurrency: transaction.toCurrency,
+          toAmount: transaction.toAmount,
+          feeAmount: fee.feeAmount,
+          sourceAddress,
+          ip: ipAddress,
+          device: userAgent,
+          retryAttempt: i,
+        },
+      );
+
+      let submittedHash = '';
       try {
-        await this.persistTransactionArtifacts(transaction, fee);
-
-        await this.auditLogsService.logTransactionEvent(
-          userId,
-          AuditAction.SWAP_CREATED,
-          transaction.id,
-          {
-            amount: transaction.amount,
-            fromCurrency: transaction.currency,
-            toCurrency: transaction.toCurrency,
-            toAmount: transaction.toAmount,
-            feeAmount: fee.feeAmount,
-            sourceAddress,
-            ip: ipAddress,
-            device: userAgent,
-            retryAttempt: i,
-          },
-        );
-
         const destinationAddress = txWallet.publicKey;
         const slippageTolerance = parseFloat(
           process.env.SWAP_SLIPPAGE_PERCENT || '0.005',
@@ -800,84 +861,7 @@ export class TransactionsService {
           throw new Error('Unexpected response shape from Stellar submit');
         }
 
-        transaction.txHash = rawResult.hash;
-        transaction.stellarTxHash = rawResult.hash;
-        transaction.status = TransactionStatus.SUCCESS;
-        await this.transactionRepository.save(transaction);
-        await this.activityFeedService.append(
-          transaction.userId,
-          ActivityFeedType.TRANSACTION_COMPLETE,
-          transaction.id,
-          'Transaction',
-        );
-        await this.redisService.delete('admin_stats');
-        this.taxQueue
-          .add('process-transaction', { transactionId: transaction.id })
-          .catch((e) =>
-            this.logger.error(
-              `Failed to enqueue tax processing for swap transaction ${transaction.id}: ${e.message}`,
-            ),
-          );
-
-        await this.updateUserBalance(
-          userId,
-          fromCurrency,
-          -(amount + fee.feeAmount),
-        );
-        await this.updateUserBalance(userId, toCurrency, effectiveAmount);
-
-        await this.notificationsService.dispatch(
-          userId,
-          NotificationType.TRANSACTION,
-          'Swap Completed',
-          `Successfully swapped ${amount} ${fromCurrency} to ${effectiveAmount.toFixed(2)} ${toCurrency}`,
-          {
-            transactionId: transaction.id,
-          },
-        );
-
-        this.logger.log(
-          `Swap transaction completed successfully: ${transaction.id} (Attempt ${i})`,
-        );
-
-        this.autoAssignCategory(transaction).catch((e) =>
-          this.logger.warn(
-            `Non-blocking category assignment failed: ${e.message}`,
-          ),
-        );
-
-        this.webhookService
-          .dispatch('transaction.completed', transaction, userId)
-          .catch((e) =>
-            this.logger.error(`Webhook dispatch failed: ${e.message}`),
-          );
-
-        this.amlService
-          .enqueue(transaction.id)
-          .catch((e) => this.logger.error(`AML enqueue failed: ${e.message}`));
-
-        // Async micro-savings evaluation — never blocks the originating transaction
-        this.microSavingsService
-          .evaluatePerTransaction(
-            userId,
-            transaction.id,
-            parseFloat(transaction.amount),
-            fromCurrency,
-          )
-          .catch((e) =>
-            this.logger.error(
-              `Micro-savings per-transaction eval failed: ${e.message}`,
-            ),
-          );
-        this.microSavingsService
-          .evaluateBalanceThreshold(userId, fromCurrency)
-          .catch((e) =>
-            this.logger.error(
-              `Micro-savings balance-threshold eval failed: ${e.message}`,
-            ),
-          );
-
-        return transaction;
+        submittedHash = rawResult.hash;
       } catch (err) {
         const error = toError(err);
         this.logger.warn(
@@ -890,7 +874,6 @@ export class TransactionsService {
 
         lastError = error;
 
-        // Check if error is slippage-related (op_under_dest_min or similar)
         const isSlippageError =
           error.message.includes('op_under_dest_min') ||
           error.message.includes('tx_too_late') ||
@@ -903,7 +886,98 @@ export class TransactionsService {
         this.logger.log(
           `Retrying swap with next best path due to slippage error...`,
         );
+        continue;
       }
+
+      transaction.txHash = submittedHash;
+      transaction.stellarTxHash = submittedHash;
+      transaction.status = TransactionStatus.SUCCESS;
+      await this.transactionRepository.save(transaction);
+
+      await this.runBestEffort(
+        () =>
+          this.applySwapBalanceUpdates(
+            userId,
+            fromCurrency,
+            -(amount + fee.feeAmount),
+            toCurrency,
+            effectiveAmount,
+          ),
+        `swap balance updates for transaction ${transaction.id}`,
+      );
+      await this.runBestEffort(
+        () =>
+          this.activityFeedService.append(
+            transaction.userId,
+            ActivityFeedType.TRANSACTION_COMPLETE,
+            transaction.id,
+            'Transaction',
+          ),
+        `activity feed append for swap transaction ${transaction.id}`,
+      );
+      await this.runBestEffort(
+        () => this.redisService.delete('admin_stats'),
+        `admin stats cache invalidation for swap transaction ${transaction.id}`,
+      );
+      await this.runBestEffort(
+        () =>
+          this.taxQueue.add('process-transaction', {
+            transactionId: transaction.id,
+          }),
+        `tax enqueue for swap transaction ${transaction.id}`,
+      );
+      await this.runBestEffort(
+        () =>
+          this.notificationsService.dispatch(
+            userId,
+            NotificationType.TRANSACTION,
+            'Swap Completed',
+            `Successfully swapped ${amount} ${fromCurrency} to ${effectiveAmount.toFixed(2)} ${toCurrency}`,
+            { transactionId: transaction.id },
+          ),
+        `swap notification for transaction ${transaction.id}`,
+      );
+      await this.runBestEffort(
+        () => this.autoAssignCategory(transaction),
+        `category assignment for swap transaction ${transaction.id}`,
+      );
+      await this.runBestEffort(
+        () =>
+          this.webhookService.dispatch(
+            'transaction.completed',
+            transaction,
+            userId,
+          ),
+        `webhook dispatch for swap transaction ${transaction.id}`,
+      );
+      await this.runBestEffort(
+        () => this.amlService.enqueue(transaction.id),
+        `AML enqueue for swap transaction ${transaction.id}`,
+      );
+      await this.runBestEffort(
+        () =>
+          this.microSavingsService.evaluatePerTransaction(
+            userId,
+            transaction.id,
+            parseFloat(transaction.amount),
+            fromCurrency,
+          ),
+        `micro-savings evaluation for swap transaction ${transaction.id}`,
+      );
+      await this.runBestEffort(
+        () =>
+          this.microSavingsService.evaluateBalanceThreshold(
+            userId,
+            fromCurrency,
+          ),
+        `micro-savings threshold evaluation for swap transaction ${transaction.id}`,
+      );
+
+      this.logger.log(
+        `Swap transaction completed successfully: ${transaction.id} (Attempt ${i})`,
+      );
+
+      return transaction;
     }
 
     throw new BadRequestException(
@@ -911,8 +985,22 @@ export class TransactionsService {
     );
   }
 
-  private getAssetHelper(code: string) {
-    return this.stellarService.getAssetWithDefaultIssuer(code);
+  private async getAssetHelper(code: string): Promise<Asset> {
+    try {
+      return this.stellarService.getAssetWithDefaultIssuer(code);
+    } catch (error: unknown) {
+      if (
+        !(error instanceof Error) ||
+        !error.message.includes('No Stellar issuer configured')
+      ) {
+        throw error;
+      }
+
+      const currency = await this.currenciesService.getCurrency(code);
+      if (!currency.issuer) throw error;
+
+      return this.stellarService.getAsset(code, currency.issuer);
+    }
   }
 
   private swapPreviewCache = new Map<string, { data: any; expiry: number }>();
@@ -938,8 +1026,8 @@ export class TransactionsService {
       return cached.data;
     }
 
-    const fromAsset = this.getAssetHelper(fromCurrency);
-    const toAsset = this.getAssetHelper(toCurrency);
+    const fromAsset = await this.getAssetHelper(fromCurrency);
+    const toAsset = await this.getAssetHelper(toCurrency);
 
     const paths = await this.stellarService.findBestPath(
       fromAsset,
@@ -1014,12 +1102,6 @@ export class TransactionsService {
       throw new NotFoundException('Transaction not found');
     }
 
-    if (!transaction.txHash) {
-      throw new BadRequestException(
-        'Transaction does not have a blockchain hash yet',
-      );
-    }
-
     const isAdmin =
       requestingUserRole === UserRole.ADMIN ||
       requestingUserRole === UserRole.SUPER_ADMIN;
@@ -1045,10 +1127,21 @@ export class TransactionsService {
         );
       }
 
+      let currencyIssuer: string | undefined;
+      try {
+        const currency = await this.currenciesService.getCurrency(
+          transaction.currency,
+        );
+        currencyIssuer = currency.issuer ?? undefined;
+      } catch {
+        currencyIssuer = undefined;
+      }
+
       const inboundPayment = await this.stellarService.findIncomingPayment({
         address: transaction.metadata.depositAddress,
         amount: transaction.amount,
         currency: transaction.currency,
+        ...(currencyIssuer ? { issuer: currencyIssuer } : {}),
         memo: transaction.metadata.depositMemo,
         createdAfter: transaction.createdAt,
       });
@@ -1107,11 +1200,21 @@ export class TransactionsService {
           transaction.type === TransactionType.DEPOSIT &&
           (claimed.affected ?? 0) === 1
         ) {
+          const { feeAmount, feeCurrency, sameCurrencyFee } =
+            this.getFeeBreakdown(transaction);
           await this.updateUserBalance(
             transaction.userId,
             transaction.currency,
-            parseFloat(transaction.amount),
+            parseFloat(transaction.amount) -
+              (sameCurrencyFee ? feeAmount : 0),
           );
+          if (!sameCurrencyFee && feeAmount > 0) {
+            await this.updateUserBalance(
+              transaction.userId,
+              feeCurrency,
+              -feeAmount,
+            );
+          }
           try {
             await this.referralsService.processReferralReward(
               transaction.userId,
@@ -1131,11 +1234,21 @@ export class TransactionsService {
           'Transaction verification failed on blockchain';
 
         if (transaction.type === TransactionType.WITHDRAW) {
+          const { feeAmount, feeCurrency, sameCurrencyFee } =
+            this.getFeeBreakdown(transaction);
           await this.updateUserBalance(
             transaction.userId,
             transaction.currency,
-            parseFloat(transaction.amount),
+            parseFloat(transaction.amount) +
+              (sameCurrencyFee ? feeAmount : 0),
           );
+          if (!sameCurrencyFee && feeAmount > 0) {
+            await this.updateUserBalance(
+              transaction.userId,
+              feeCurrency,
+              feeAmount,
+            );
+          }
         }
 
         this.logger.warn(`Transaction verification failed: ${transactionId}`);
@@ -1624,6 +1737,67 @@ export class TransactionsService {
 
   // ── Private helpers ─────────────────────────────────────────────────────────
 
+  private getFeeBreakdown(transaction: Transaction): {
+    feeAmount: number;
+    feeCurrency: string;
+    sameCurrencyFee: boolean;
+  } {
+    const feeAmount = parseFloat(transaction.feeAmount?.toString() ?? '0');
+    const feeCurrency = (
+      transaction.feeCurrency ?? transaction.currency
+    ).toUpperCase();
+
+    return {
+      feeAmount,
+      feeCurrency,
+      sameCurrencyFee: feeCurrency === transaction.currency.toUpperCase(),
+    };
+  }
+
+  private async runBestEffort(
+    action: () => unknown | Promise<unknown>,
+    description: string,
+  ): Promise<void> {
+    try {
+      await action();
+    } catch (err) {
+      this.logger.error(`${description} failed: ${toError(err).message}`);
+    }
+  }
+
+  private async applySwapBalanceUpdates(
+    userId: string,
+    fromCurrency: string,
+    fromAmount: number,
+    toCurrency: string,
+    toAmount: number,
+  ): Promise<void> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      await this.updateUserBalance(
+        userId,
+        fromCurrency,
+        fromAmount,
+        queryRunner.manager,
+      );
+      await this.updateUserBalance(
+        userId,
+        toCurrency,
+        toAmount,
+        queryRunner.manager,
+      );
+      await queryRunner.commitTransaction();
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
   private async getUserStellarAddress(
     userId: string,
     walletId?: string,
@@ -1674,12 +1848,15 @@ export class TransactionsService {
     userId: string,
     currency: string,
     amount: number,
+    manager?: EntityManager,
   ): Promise<void> {
     this.logger.log(
       `Updating balance for user ${userId}: ${amount} ${currency}`,
     );
 
-    const user = await this.usersService.findById(userId);
+    const user = manager
+      ? await manager.findOne(User, { where: { id: userId } })
+      : await this.usersService.findById(userId);
 
     if (!user) {
       throw new NotFoundException('User not found');
@@ -1699,9 +1876,13 @@ export class TransactionsService {
 
     user.balances[currency] = newBalance;
 
-    await this.usersService.updateByUserId(userId, {
-      balances: user.balances,
-    });
+    if (manager) {
+      await manager.save(User, user);
+    } else {
+      await this.usersService.updateByUserId(userId, {
+        balances: user.balances,
+      });
+    }
 
     this.logger.log(
       `Updated user ${userId} balance for ${currency}. New balance: ${newBalance}`,

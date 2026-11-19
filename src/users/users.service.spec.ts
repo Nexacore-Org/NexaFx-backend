@@ -1,4 +1,4 @@
-import { Test, TestingModule } from '@nestjs/testing';
+﻿import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ThrottlerStorageService } from '@nestjs/throttler';
@@ -47,7 +47,6 @@ describe('UsersService', () => {
     createdAt: new Date('2025-01-01T00:00:00Z'),
     updatedAt: new Date('2025-03-27T10:30:00Z'),
     password: process.env.TEST_USER_PASSWORD ?? 'hashed-password',
-    kycRecords: [],
     notifications: [],
     preferredLanguage: 'en',
   };
@@ -126,6 +125,53 @@ describe('UsersService', () => {
       expect(result).not.toHaveProperty('password');
       expect(result).not.toHaveProperty('walletSecretKeyEncrypted');
       expect(result).not.toHaveProperty('twoFactorSecret');
+    });
+
+    it('does not expose internal or security fields', async () => {
+      const userWithSecrets = {
+        ...mockUser,
+        pendingTwoFactorSecret: 'pending-secret',
+        complianceRiskScore: 99,
+        failedLoginAttempts: 5,
+        lockedUntil: new Date(),
+        lastTotpStep: 42,
+        twoFactorFailedAttempts: 3,
+        twoFactorLockedUntil: new Date(),
+        fcmTokens: ['device-token'],
+        fcmToken: 'fcm-token',
+        stripeCardholderId: 'cus_secret',
+        consentGdpr: true,
+        consentGdprAt: new Date(),
+        consentGdprVersion: '1.0',
+        deletedAt: null,
+      } as User;
+      jest.spyOn(userRepository, 'findOne').mockResolvedValue(userWithSecrets);
+
+      const result = await service.getProfile('user-123');
+
+      const forbiddenKeys = [
+        'password',
+        'walletSecretKeyEncrypted',
+        'twoFactorSecret',
+        'pendingTwoFactorSecret',
+        'complianceRiskScore',
+        'failedLoginAttempts',
+        'lockedUntil',
+        'lastTotpStep',
+        'twoFactorFailedAttempts',
+        'twoFactorLockedUntil',
+        'fcmTokens',
+        'fcmToken',
+        'stripeCardholderId',
+        'consentGdpr',
+        'consentGdprAt',
+        'consentGdprVersion',
+        'deletedAt',
+      ];
+      for (const key of forbiddenKeys) {
+        expect(result).not.toHaveProperty(key);
+      }
+      expect(result.id).toBe('user-123');
     });
 
     it('should return null balanceLastSyncedAt for new users', async () => {

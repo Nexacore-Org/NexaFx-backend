@@ -1,4 +1,4 @@
-// OAuth feature implementation
+﻿// OAuth feature implementation
 import {
   Controller,
   Post,
@@ -10,6 +10,7 @@ import {
   Req,
   Res,
   UseGuards,
+  UseFilters,
   Version,
 } from '@nestjs/common';
 import { I18n, I18nContext } from 'nestjs-i18n';
@@ -22,6 +23,7 @@ import { OAuthCodeService } from './oauth-code.service';
 import { ExchangeOauthCodeDto } from './dto/exchange-oauth-code.dto';
 import { Public } from './decorators/public.decorator';
 import { BlockDuringImpersonation } from '../common/guards/impersonation-restriction.guard';
+import { OAuthFailureFilter } from './filters/oauth-failure.filter';
 import {
   CurrentUser,
   CurrentUserPayload,
@@ -199,7 +201,7 @@ export class AuthController {
   @ApiResponse({
     status: 400,
     description:
-      'Validation failed — one or more fields are missing or invalid. ' +
+      'Validation failed â€” one or more fields are missing or invalid. ' +
       'The response body contains an `errors` array with per-field messages.',
     schema: {
       type: 'object',
@@ -249,15 +251,16 @@ export class AuthController {
   })
   @Post('refresh')  @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Refresh access token' })
+  @ApiOperation({ summary: 'Rotate the refresh token and issue a new token pair' })
   @ApiBody({ type: RefreshTokenDto })
   @ApiResponse({
     status: 200,
-    description: 'New access token issued',
+    description: 'Presented refresh token revoked and a new pair issued',
     schema: {
       type: 'object',
       properties: {
         accessToken: { type: 'string' },
+        refreshToken: { type: 'string' },
         expiresIn: { type: 'number' },
       },
     },
@@ -396,14 +399,15 @@ export class AuthController {
   private async completeOauthRedirect(
     result: any,
     res: Response,
-  ): Promise<Response> {
+  ): Promise<void> {
     const failureUrl = this.configService.get<string>(
       'OAUTH_FAILURE_REDIRECT',
       'http://localhost:3001/login?error=oauth_failed',
     );
 
     if (result?.error) {
-      return res.redirect(failureUrl);
+      res.redirect(failureUrl);
+      return;
     }
 
     try {
@@ -426,12 +430,11 @@ export class AuthController {
         redirectUrl.searchParams.set('requiresTwoFactor', 'true');
       }
 
-      return res.redirect(redirectUrl.toString());
+      res.redirect(redirectUrl.toString());
     } catch (error) {
-      return res.redirect(failureUrl);
+      res.redirect(failureUrl);
     }
   }
-
   @Public()
   @Get('google')
   @UseGuards(AuthGuard('google'))
@@ -441,9 +444,10 @@ export class AuthController {
   @Public()
   @Get('google/callback')
   @UseGuards(AuthGuard('google'))
+  @UseFilters(OAuthFailureFilter)
   @ApiOperation({ summary: 'Google OAuth callback handler' })
-  async googleAuthCallback(@Req() req: any, @Res() res: Response) {
-    return this.completeOauthRedirect(req.user, res);
+  async googleAuthCallback(@Req() req: any, @Res() res: Response): Promise<void> {
+    await this.completeOauthRedirect(req.user, res);
   }
 
   @Public()
@@ -455,9 +459,10 @@ export class AuthController {
   @Public()
   @Get('github/callback')
   @UseGuards(AuthGuard('github'))
+  @UseFilters(OAuthFailureFilter)
   @ApiOperation({ summary: 'GitHub OAuth callback handler' })
-  async githubAuthCallback(@Req() req: any, @Res() res: Response) {
-    return this.completeOauthRedirect(req.user, res);
+  async githubAuthCallback(@Req() req: any, @Res() res: Response): Promise<void> {
+    await this.completeOauthRedirect(req.user, res);
   }
 
 
@@ -485,7 +490,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Unlink an OAuth provider from your account' })
   @ApiBody({ type: UnlinkOauthDto })
   @ApiResponse({ status: 200, description: 'OAuth account unlinked' })
-  @ApiResponse({ status: 422, description: 'Cannot unlink — no password set' })
+  @ApiResponse({ status: 422, description: 'Cannot unlink â€” no password set' })
   async unlinkOauth(@Req() req: any, @Body() dto: UnlinkOauthDto) {
     const userId = req.user.userId;
     await this.authService.unlinkOAuth(userId, dto.provider);

@@ -12,6 +12,7 @@ export interface SendEmailJob {
   html?: string;
   text?: string;
   from?: string;
+  headers?: Record<string, string>;
 }
 
 const HTML_ESCAPE_MAP: Record<string, string> = {
@@ -75,6 +76,7 @@ export class MailService {
       subject: job.subject,
       html: job.html,
       text: job.text,
+      h: job.headers,
     } as any);
   }
 

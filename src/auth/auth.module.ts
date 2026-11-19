@@ -9,6 +9,8 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { GithubStrategy } from './strategies/github.strategy';
+import { RedisOAuthStateStore } from './strategies/redis-oauth-state.store';
+import { OAuthFailureFilter } from './filters/oauth-failure.filter';
 import { OAuthCodeService } from './oauth-code.service';
 import { OtpDeliveryService } from './email/otp-delivery.service';
 import { RedisModule } from '../modules/redis/redis.module';
@@ -65,6 +67,8 @@ type JwtExpiryValue = `${number}${'s' | 'm' | 'h' | 'd'}`;
     JwtStrategy,
     GoogleStrategy,
     GithubStrategy,
+    RedisOAuthStateStore,
+    OAuthFailureFilter,
     OtpDeliveryService,
     OAuthCodeService,
   ],

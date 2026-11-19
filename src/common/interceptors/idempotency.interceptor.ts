@@ -1,4 +1,4 @@
-import {
+﻿import {
   Injectable,
   NestInterceptor,
   ExecutionContext,
@@ -31,8 +31,6 @@ export class IdempotencyInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest();
     const response = context.switchToHttp().getResponse();
     const idempotencyKey = request.headers['idempotency-key'];
-    // JwtStrategy populates userId, not id: reading .id left userId
-    // undefined, which short-circuited the whole replay path below.
     const userId = request.user?.userId ?? request.user?.id;
     const method = request.method;
     const url = request.url;
@@ -64,25 +62,19 @@ export class IdempotencyInterceptor implements NestInterceptor {
     }
 
     return from(
-      this.idempotencyService.checkIdempotency(
+      this.idempotencyService.beginIdempotency(
         idempotencyKey,
         userId,
         request.body,
         endpoint,
       ),
     ).pipe(
-      switchMap((cachedResponse) => {
-        if (cachedResponse) {
+      switchMap((result) => {
+        if (result.state === 'replay') {
           response.setHeader('Idempotency-Key', idempotencyKey);
-          if (cachedResponse.replayed) {
-            response.setHeader('X-Idempotency-Replayed', 'true');
-          }
-          return of(cachedResponse.body).pipe(
-            map((body) => {
-              response.status(cachedResponse.statusCode);
-              return body;
-            }),
-          );
+          response.setHeader('X-Idempotency-Replayed', 'true');
+          response.status(result.statusCode);
+          return of(result.body);
         }
 
         return next.handle().pipe(
@@ -96,13 +88,24 @@ export class IdempotencyInterceptor implements NestInterceptor {
                 responseData,
                 request.body,
               ),
-            ).pipe(map(() => responseData)),
+            ).pipe(
+              catchError((err) =>
+                throwError(() => err),
+              ),
+              map(() => {
+                response.setHeader('Idempotency-Key', idempotencyKey);
+                return responseData;
+              }),
+            ),
           ),
-          map((responseData) => {
-            response.setHeader('Idempotency-Key', idempotencyKey);
-            return responseData;
-          }),
-          catchError((error) => throwError(() => error)),
+          catchError((error) =>
+            from(
+              this.idempotencyService.releaseIdempotency(idempotencyKey, userId),
+            ).pipe(
+              catchError(() => of(null)),
+              switchMap(() => throwError(() => error)),
+            ),
+          ),
         );
       }),
       catchError((error) => {
@@ -115,14 +118,19 @@ export class IdempotencyInterceptor implements NestInterceptor {
         }
         if (
           error['code'] === 'IDEMPOTENCY_KEY_BODY_MISMATCH' ||
+          error?.getStatus?.() === HttpStatus.UNPROCESSABLE_ENTITY ||
           error['status'] === HttpStatus.UNPROCESSABLE_ENTITY
         ) {
-          return throwError(
-            () => new UnprocessableEntityException(error.message),
-          );
+          return throwError(() => error);
         }
-        if (error['status'] === HttpStatus.BAD_REQUEST) {
-          return throwError(() => new BadRequestException(error.message));
+        if (
+          error?.getStatus?.() === HttpStatus.CONFLICT ||
+          error['status'] === HttpStatus.CONFLICT
+        ) {
+          return throwError(() => error);
+        }
+        if (error?.getStatus?.() === HttpStatus.BAD_REQUEST || error['status'] === HttpStatus.BAD_REQUEST) {
+          return throwError(() => error);
         }
         return throwError(() => error);
       }),

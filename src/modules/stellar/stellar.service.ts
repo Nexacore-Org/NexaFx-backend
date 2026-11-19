@@ -51,6 +51,7 @@ interface IncomingPaymentSearch {
   address: string;
   amount: string;
   currency: string;
+  issuer?: string;
   memo: string;
   createdAfter: Date;
 }
@@ -92,7 +93,9 @@ function toStellarError(error: unknown): StellarErrorShape {
 @Injectable()
 export class StellarService {
   private readonly server: Horizon.Server;
+  private readonly network: string;
   private readonly networkPassphrase: string;
+  private readonly assetIssuers: Map<string, string>;
   private readonly logger = new Logger(StellarService.name);
 
   constructor(
@@ -112,7 +115,9 @@ export class StellarService {
     }
 
     this.server = new Horizon.Server(horizonUrl);
+    this.network = network;
     this.networkPassphrase = Networks[network as keyof typeof Networks];
+    this.assetIssuers = this.loadAssetIssuers(network);
 
     if (!this.networkPassphrase) {
       throw new Error(`Unsupported Stellar network: ${network}`);
@@ -564,6 +569,7 @@ export class StellarService {
   ): Promise<{ hash: string } | null> {
     const expectedAsset = this.getAssetWithDefaultIssuer(
       search.currency.toUpperCase(),
+      search.issuer,
     );
     let page = await this.server
       .payments()
@@ -834,15 +840,120 @@ export class StellarService {
     return new Asset(code, issuer);
   }
 
-  getAssetWithDefaultIssuer(code: string): Asset {
-    if (code === 'XLM') {
+  getAssetWithDefaultIssuer(code: string, fallbackIssuer?: string): Asset {
+    const normalizedCode = code.trim().toUpperCase();
+    if (normalizedCode === 'XLM' || normalizedCode === 'NATIVE') {
       return Asset.native();
     }
 
-    return new Asset(
-      code,
-      'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335XPB7X3NCQXMK3SBEG3CIFE7G',
+    const configuredIssuer =
+      this.assetIssuers.get(
+        `${this.network.toUpperCase()}:${normalizedCode}`,
+      ) ?? fallbackIssuer;
+    if (!configuredIssuer) {
+      throw new Error(
+        `No Stellar issuer configured for ${normalizedCode} on ${this.network}`,
+      );
+    }
+
+    return new Asset(normalizedCode, configuredIssuer);
+  }
+
+  private loadAssetIssuers(network: string): Map<string, string> {
+    const issuers = new Map<string, string>();
+    const networkName = network.toUpperCase();
+
+    const addIssuer = (code: unknown, issuer: unknown, scope?: string) => {
+      if (typeof code !== 'string' || typeof issuer !== 'string') return;
+
+      const normalizedCode = code.trim().toUpperCase();
+      const normalizedIssuer = issuer.trim();
+      const normalizedScope = scope?.trim().toUpperCase();
+      if (
+        !normalizedCode ||
+        !normalizedIssuer ||
+        (normalizedScope && normalizedScope !== networkName)
+      ) {
+        return;
+      }
+
+      issuers.set(`${networkName}:${normalizedCode}`, normalizedIssuer);
+    };
+
+    const parse = (value: unknown, scope?: string): void => {
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) return;
+
+        if (trimmed.startsWith('{')) {
+          try {
+            parse(JSON.parse(trimmed), scope);
+            return;
+          } catch {
+            return;
+          }
+        }
+
+        for (const entry of trimmed.split(/[,;]/)) {
+          const parts = entry
+            .trim()
+            .split(/[:=]/)
+            .map((part) => part.trim())
+            .filter(Boolean);
+          if (parts.length === 3 && !scope) {
+            addIssuer(parts[1], parts[2], parts[0]);
+          } else if (parts.length === 2) {
+            addIssuer(parts[0], parts[1], scope);
+          }
+        }
+        return;
+      }
+
+      if (!value || typeof value !== 'object') return;
+
+      for (const [key, raw] of Object.entries(
+        value as Record<string, unknown>,
+      )) {
+        const upperKey = key.trim().toUpperCase();
+
+        if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+          const nested = Object.entries(raw as Record<string, unknown>);
+          const networkIssuer = nested.find(
+            ([nestedKey]) => nestedKey.trim().toUpperCase() === networkName,
+          );
+
+          if (networkIssuer && typeof networkIssuer[1] === 'string') {
+            addIssuer(key, networkIssuer[1]);
+          } else if (upperKey === networkName) {
+            for (const [code, issuer] of nested) {
+              addIssuer(code, issuer, networkName);
+            }
+          } else {
+            parse(raw, upperKey);
+          }
+          continue;
+        }
+
+        if (typeof raw !== 'string' || upperKey === networkName) continue;
+
+        if (upperKey.includes('.')) {
+          const [prefix, ...rest] = upperKey.split('.');
+          addIssuer(rest.join('.'), raw, prefix);
+          continue;
+        }
+
+        addIssuer(key, raw, scope);
+      }
+    };
+
+    parse(this.configService.get<unknown>('STELLAR_ASSET_ISSUERS'));
+    parse(
+      this.configService.get<unknown>(
+        `STELLAR_ASSET_ISSUERS_${networkName}`,
+      ),
     );
+
+    return issuers;
   }
 
   async findBestPath(

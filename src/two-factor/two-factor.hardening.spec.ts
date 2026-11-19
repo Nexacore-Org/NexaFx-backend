@@ -1,4 +1,4 @@
-import { Test, TestingModule } from '@nestjs/testing';
+﻿import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import {
   ConflictException,
@@ -23,7 +23,7 @@ jest.mock('qrcode', () => ({
 const SECRET = 'JBSWY3DPEHPK3PXP';
 const ENCRYPTED = `encrypted:${SECRET}`;
 
-const enabledUser = (overrides: Partial<User> = {}): User =>
+const enabledUser = (overrides: Record<string, unknown> = {}) =>
   ({
     id: 'user-1',
     email: 'alice@example.com',
@@ -34,7 +34,7 @@ const enabledUser = (overrides: Partial<User> = {}): User =>
     twoFactorFailedAttempts: 0,
     twoFactorLockedUntil: null,
     ...overrides,
-  }) as User;
+  }) as unknown as User;
 
 describe('TwoFactorService hardening', () => {
   let service: TwoFactorService;

@@ -1,8 +1,4 @@
-import {
-  ConflictException,
-  Injectable,
-  Logger,
-} from '@nestjs/common';
+﻿import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
@@ -10,7 +6,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { createWriteStream } from 'fs';
 import * as archiver from 'archiver';
-import { format } from 'date-fns';
 import { Transaction } from '../../transactions/entities/transaction.entity';
 import { Notification } from '../../notifications/entities/notification.entity';
 import { KycRecord } from '../../kyc/entities/kyc.entity';
@@ -24,6 +19,8 @@ import {
   DataRequestStatus,
 } from '../entities/data-request.entity';
 import { NotificationType } from '../../notifications/entities/notification.entity';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { escapeCsvField, toCsvRow } from '../../common/utils/csv.util';
 
 interface ExportData {
   profile: any;
@@ -58,6 +55,7 @@ export class DataExportService {
     private readonly referralRepository: Repository<Referral>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly notificationsService: NotificationsService,
   ) {
     if (!fs.existsSync(this.EXPORT_DIR)) {
       fs.mkdirSync(this.EXPORT_DIR, { recursive: true });
@@ -65,8 +63,6 @@ export class DataExportService {
   }
 
   async requestDataExport(userId: string): Promise<DataRequest> {
-    // Only EXPORT requests block an export. Without the type filter a pending
-    // deletion request made every export request fail with a 409.
     const existingRequest = await this.dataRequestRepository.findOne({
       where: {
         userId,
@@ -127,7 +123,7 @@ export class DataExportService {
       );
 
       const exportData = await this.collectUserData(userId);
-      const zipPath = await this.createZipArchive(userId, exportData);
+      await this.createZipArchive(requestId, userId, exportData);
 
       const expiresAt = new Date(
         Date.now() + this.EXPORT_EXPIRY_HOURS * 60 * 60 * 1000,
@@ -140,7 +136,13 @@ export class DataExportService {
       request.expiresAt = expiresAt;
       await this.dataRequestRepository.save(request);
 
-      await this.sendExportCompleteEmail(userId, downloadUrl, expiresAt);
+      await this.notificationsService.create(
+        userId,
+        NotificationType.SYSTEM,
+        'Your Data Export is Ready',
+        `Your data export is ready for download. The download link will expire on ${expiresAt.toISOString()}.`,
+        { requestId, downloadUrl, expiresAt: expiresAt.toISOString() },
+      );
 
       this.logger.log(
         `Data export completed for user ${userId}, request ${requestId}`,
@@ -156,14 +158,13 @@ export class DataExportService {
       );
 
       try {
-        // The raw INSERT named message and status columns that the
-        // notifications table does not have, so the fallback failed too.
-        await this.notificationRepository.create({
+        await this.notificationsService.create(
           userId,
-          type: NotificationType.SYSTEM,
-          title: 'Data Export Failed',
-          body: 'Your data export request failed. Please try again later.',
-        });
+          NotificationType.SYSTEM,
+          'Data Export Failed',
+          'Your data export request failed. Please try again later.',
+          { requestId },
+        );
       } catch (notifyError) {
         this.logger.error('Failed to send failure notification:', notifyError);
       }
@@ -212,22 +213,26 @@ export class DataExportService {
     };
   }
 
-  private async createZipArchive(
-    userId: string,
-    data: ExportData,
-  ): Promise<string> {
-    const timestamp = format(new Date(), 'yyyy-MM-dd_HH-mm-ss');
-    // Sanitise userId to only alphanumeric/hyphen chars to prevent path traversal
+  private getArchivePath(requestId: string, userId: string): string {
     const safeUserId = userId.replace(/[^a-zA-Z0-9-]/g, '');
-    const zipFileName = `nexafx-export_${safeUserId}_${timestamp}.zip`;
+    const safeRequestId = requestId.replace(/[^a-zA-Z0-9-]/g, '');
+    const zipFileName = `nexafx-export_${safeUserId}_${safeRequestId}.zip`;
     const zipFilePath = path.join(this.EXPORT_DIR, zipFileName);
-    // Guard: ensure the resolved path stays inside EXPORT_DIR
     if (
       !zipFilePath.startsWith(this.EXPORT_DIR + path.sep) &&
       zipFilePath !== this.EXPORT_DIR
     ) {
       throw new Error('Invalid export path detected');
     }
+    return zipFilePath;
+  }
+
+  private async createZipArchive(
+    requestId: string,
+    userId: string,
+    data: ExportData,
+  ): Promise<string> {
+    const zipFilePath = this.getArchivePath(requestId, userId);
 
     const output = createWriteStream(zipFilePath);
     const archive = archiver('zip', { zlib: { level: 9 } });
@@ -306,6 +311,7 @@ export class DataExportService {
       const manifest = {
         exportDate: new Date().toISOString(),
         userId,
+        requestId,
         version: '1.0',
         files: [
           'profile.json',
@@ -340,41 +346,10 @@ export class DataExportService {
     });
 
     const rows = data.map((item: any) =>
-      headers.map((header) => {
-        const value = item[header];
-        if (value === null || value === undefined) return '';
-        const stringValue = String(value);
-        return stringValue.includes(',') ||
-          stringValue.includes('"') ||
-          stringValue.includes('\n')
-          ? `"${stringValue.replace(/"/g, '""')}"`
-          : stringValue;
-      }),
+      toCsvRow(headers.map((header) => item[header])),
     );
 
-    return [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
-  }
-
-  private async sendExportCompleteEmail(
-    userId: string,
-    downloadUrl: string,
-    expiresAt: Date,
-  ): Promise<void> {
-    const manager = this.auditLogRepository.manager;
-    const notificationRepo = manager.getRepository(Notification);
-    await notificationRepo.save(
-      notificationRepo.create({
-        userId,
-        type: 'SYSTEM' as any,
-        title: 'Your Data Export is Ready',
-        body: `Your data export is ready for download. The download link will expire on ${expiresAt.toISOString()}.`,
-        isRead: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }),
-    );
-
-    this.logger.log(`Export completion notification sent to user ${userId}`);
+    return [headers.map(escapeCsvField).join(','), ...rows].join('\n');
   }
 
   async getDownloadUrl(
@@ -403,11 +378,6 @@ export class DataExportService {
     });
   }
 
-  /**
-   * Resolves the archive for a download request after checking ownership and
-   * expiry. Returns null when the request does not belong to the user, is not
-   * complete, has expired, or the file is no longer on disk.
-   */
   async getExportFilePath(
     requestId: string,
     userId: string,
@@ -424,34 +394,10 @@ export class DataExportService {
       return null;
     }
 
-    // The archive name carries a timestamp, so match the per-user prefix and
-    // take the newest match.
-    const safeUserId = userId.replace(/[^a-zA-Z0-9-]/g, '');
-    const prefix = `nexafx-export_${safeUserId}_`;
-
-    if (!fs.existsSync(this.EXPORT_DIR)) {
-      return null;
-    }
-
-    const candidate = fs
-      .readdirSync(this.EXPORT_DIR)
-      .filter((entry) => entry.startsWith(prefix) && entry.endsWith('.zip'))
-      .sort()
-      .pop();
-
-    if (!candidate) {
-      return null;
-    }
-
-    const zipPath = path.join(this.EXPORT_DIR, candidate);
+    const zipPath = this.getArchivePath(requestId, userId);
     return fs.existsSync(zipPath) ? zipPath : null;
   }
 
-  /**
-   * Removes expired archives. The ZIPs in the export directory were written
-   * once and never cleaned, so they accumulated for the lifetime of the
-   * container.
-   */
   @Cron(CronExpression.EVERY_HOUR)
   cleanupExpiredExports(): { removed: number } {
     let removed = 0;
@@ -470,7 +416,7 @@ export class DataExportService {
           removed += 1;
         }
       } catch {
-        // A file we cannot stat or delete is not worth failing the sweep over.
+        // ignore
       }
     }
 

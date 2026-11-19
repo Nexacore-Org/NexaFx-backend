@@ -1,8 +1,8 @@
-name: CI Pipeline (v2)
+﻿name: CI Pipeline (v2)
 
 # ---------------------------------------------------------------------------
 # Sole CI pipeline for the v2 branch. Runs on every push/PR targeting v2.
-# All verification steps are blocking — no `|| true` masking is permitted.
+# All verification steps are blocking â€” no `|| true` masking is permitted.
 # ---------------------------------------------------------------------------
 on:
   push:
@@ -85,6 +85,9 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
+      - name: Semantic diagnostics (scoped)
+        run: npm run check:semantic:scoped
+
       - name: Run unit tests
         env:
           NODE_ENV: test
@@ -114,7 +117,7 @@ jobs:
           path: coverage/
 
   # ---------------------------------------------------------------------------
-  # E2E test job — runs the full HTTP round-trip suite against a live Postgres.
+  # E2E test job â€” runs the full HTTP round-trip suite against a live Postgres.
   # Picked up automatically by test/jest-e2e.config.ts (.e2e-spec.ts$ regex).
   # ---------------------------------------------------------------------------
   e2e-tests:
@@ -204,14 +207,14 @@ jobs:
         run: npx jest --config test/jest-e2e.config.ts test/e2e/compression.e2e-spec.ts --forceExit
 
   # ---------------------------------------------------------------------------
-  # Migration rollback validation job — runs AFTER unit tests pass.
+  # Migration rollback validation job â€” runs AFTER unit tests pass.
   # Uses Docker-in-Docker (dind) so the validation script can launch containers.
   # ---------------------------------------------------------------------------
   validate-migrations:
     name: Migration Rollback Validation
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Only block the merge gate — run after tests so we don't waste time if
+    # Only block the merge gate â€” run after tests so we don't waste time if
     # basic tests fail first.
     needs: build-and-test
 

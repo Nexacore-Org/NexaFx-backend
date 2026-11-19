@@ -1,4 +1,4 @@
-import { Test, TestingModule } from '@nestjs/testing';
+﻿import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ThrottlerStorageService } from '@nestjs/throttler';
@@ -47,7 +47,6 @@ describe('UsersService', () => {
     createdAt: new Date('2025-01-01T00:00:00Z'),
     updatedAt: new Date('2025-03-27T10:30:00Z'),
     password: process.env.TEST_USER_PASSWORD ?? 'hashed-password',
-    kycRecords: [],
     notifications: [],
     preferredLanguage: 'en',
   };

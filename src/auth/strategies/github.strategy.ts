@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+﻿import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, Profile } from 'passport-github2';
@@ -16,10 +16,8 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
       clientSecret: configService.get<string>('GITHUB_CLIENT_SECRET')!,
       callbackURL: configService.get<string>('GITHUB_CALLBACK_URL')!,
       scope: ['user:email'],
-      // OAuth login-CSRF protection: without a state parameter the callback
-      // accepts a response minted for someone else's authorisation request.
       state: true,
-    });
+    } as any);
   }
 
   async validate(
@@ -33,8 +31,6 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
       const emails: Array<{ value?: string; primary?: boolean; verified?: boolean }> =
         rawProfile.emails ?? [];
 
-      // emails[0] is whatever GitHub listed first, which may be neither
-      // primary nor verified.
       const preferred =
         emails.find((entry) => entry.primary && entry.verified) ??
         emails.find((entry) => entry.verified) ??

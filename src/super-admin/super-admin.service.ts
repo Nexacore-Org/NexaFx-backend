@@ -6,7 +6,8 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
-import { Repository } from 'typeorm';
+import { instanceToPlain } from 'class-transformer';
+import { DataSource, Repository } from 'typeorm';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { AuditEntityType } from '../audit-logs/enums/audit-entity-type.enum';
 import { AuditAction } from '../audit-logs/enums/audit-action.enum';
@@ -39,6 +40,7 @@ export class SuperAdminService {
     private readonly encryptionService: EncryptionService,
     private readonly auditLogsService: AuditLogsService,
     private readonly walletsService: WalletsService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async createAdmin(
@@ -108,9 +110,8 @@ export class SuperAdminService {
     Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'>
   > {
     const actor = await this.requireSuperAdmin(actorUserId);
-    const target = await this.requireUser(targetUserId);
 
-    if (actor.id === target.id) {
+    if (actor.id === targetUserId) {
       throw new ForbiddenException(
         'SUPER_ADMIN role changes are not self-service',
       );
@@ -122,31 +123,51 @@ export class SuperAdminService {
       throw new BadRequestException('Unsupported managed role');
     }
 
-    if (target.role === dto.role) {
-      return this.sanitizeUser(target);
-    }
+    const result = await this.dataSource.transaction(async (manager) => {
+      const users = manager.getRepository(User);
+      const superAdmins = await users.find({
+        where: { role: UserRole.SUPER_ADMIN },
+        lock: { mode: 'pessimistic_write' },
+      });
+      const target = await users.findOne({
+        where: { id: targetUserId },
+        lock: { mode: 'pessimistic_write' },
+      });
 
-    await this.assertSuperAdminDemotionSafety(target, dto.role);
+      if (!target) {
+        throw new NotFoundException('User not found');
+      }
 
-    const previousRole = target.role;
-    target.role = dto.role;
-    const savedUser = await this.userRepository.save(target);
+      if (target.role === dto.role) {
+        return { user: target, previousRole: target.role, changed: false };
+      }
 
-    await this.auditLogsService.createLog({
-      userId: actor.id,
-      action: AuditAction.ROLE_CHANGE,
-      entity: AuditEntityType.USER,
-      entityId: savedUser.id,
-      metadata: {
-        actorRole: actor.role,
-        targetEmail: savedUser.email,
-        oldRole: previousRole,
-        newRole: savedUser.role,
-      },
-      isSensitive: true,
+      this.assertSuperAdminDemotionSafety(target, dto.role, superAdmins);
+
+      const previousRole = target.role;
+      target.role = dto.role;
+      const savedUser = await users.save(target);
+
+      return { user: savedUser, previousRole, changed: true };
     });
 
-    return this.sanitizeUser(savedUser);
+    if (result.changed) {
+      await this.auditLogsService.createLog({
+        userId: actor.id,
+        action: AuditAction.ROLE_CHANGE,
+        entity: AuditEntityType.USER,
+        entityId: result.user.id,
+        metadata: {
+          actorRole: actor.role,
+          targetEmail: result.user.email,
+          oldRole: result.previousRole,
+          newRole: result.user.role,
+        },
+        isSensitive: true,
+      });
+    }
+
+    return this.sanitizeUser(result.user);
   }
 
   async demoteAdmin(
@@ -184,71 +205,124 @@ export class SuperAdminService {
     dto: UpdatePlatformConfigDto,
   ) {
     const actor = await this.requireSuperAdmin(actorUserId);
-    const config = await this.getOrCreatePlatformConfig();
+    const { snapshot, before, after } = await this.dataSource.transaction(
+      async (manager) => {
+        const configRepository = manager.getRepository(PlatformConfig);
+        const currencyRepository = manager.getRepository(Currency);
+        const feeConfigRepository = manager.getRepository(FeeConfig);
 
-    if (dto.maintenanceMode !== undefined) {
-      config.maintenanceMode = dto.maintenanceMode;
-      await this.platformConfigRepository.save(config);
-    }
+        const currencyChanges: {
+          currency: Currency;
+          before: { code: string; isActive: boolean };
+          after: { code: string; isActive: boolean };
+        }[] = [];
+        for (const currencyUpdate of dto.currencies ?? []) {
+          const currency = await currencyRepository.findOne({
+            where: { code: currencyUpdate.code.toUpperCase() },
+          });
+          if (!currency) {
+            throw new NotFoundException(
+              `Currency '${currencyUpdate.code}' not found`,
+            );
+          }
 
-    if (dto.currencies?.length) {
-      for (const currencyUpdate of dto.currencies) {
-        const currency = await this.currencyRepository.findOne({
-          where: { code: currencyUpdate.code.toUpperCase() },
-        });
-
-        if (!currency) {
-          throw new NotFoundException(
-            `Currency '${currencyUpdate.code}' not found`,
-          );
+          currencyChanges.push({
+            currency,
+            before: { code: currency.code, isActive: currency.isActive },
+            after: {
+              code: currency.code,
+              isActive: currencyUpdate.isActive,
+            },
+          });
         }
 
-        currency.isActive = currencyUpdate.isActive;
-        await this.currencyRepository.save(currency);
-      }
-    }
+        const feeConfigChanges: {
+          feeConfig: FeeConfig;
+          before: Omit<FeeConfig, 'createdAt' | 'updatedAt'>;
+          after: Omit<FeeConfig, 'createdAt' | 'updatedAt'>;
+        }[] = [];
+        for (const feeUpdate of dto.feeConfigs ?? []) {
+          const feeConfig = await feeConfigRepository.findOne({
+            where: { id: feeUpdate.id },
+          });
+          if (!feeConfig) {
+            throw new NotFoundException(
+              `Fee config with ID '${feeUpdate.id}' not found`,
+            );
+          }
 
-    if (dto.feeConfigs?.length) {
-      for (const feeUpdate of dto.feeConfigs) {
-        const feeConfig = await this.feeConfigRepository.findOne({
-          where: { id: feeUpdate.id },
-        });
+          const before = {
+            id: feeConfig.id,
+            transactionType: feeConfig.transactionType,
+            currency: feeConfig.currency,
+            feeType: feeConfig.feeType,
+            feeValue: feeConfig.feeValue,
+            minFee: feeConfig.minFee,
+            maxFee: feeConfig.maxFee,
+            isActive: feeConfig.isActive,
+          };
+          const updated = { ...before };
+          if (feeUpdate.feeType !== undefined) {
+            updated.feeType = feeUpdate.feeType;
+          }
+          if (feeUpdate.feeValue !== undefined) {
+            updated.feeValue = feeUpdate.feeValue.toString();
+          }
+          if (feeUpdate.minFee !== undefined) {
+            updated.minFee = feeUpdate.minFee.toString();
+          }
+          if (feeUpdate.maxFee !== undefined) {
+            updated.maxFee = feeUpdate.maxFee.toString();
+          }
+          if (feeUpdate.isActive !== undefined) {
+            updated.isActive = feeUpdate.isActive;
+          }
 
-        if (!feeConfig) {
-          throw new NotFoundException(
-            `Fee config with ID '${feeUpdate.id}' not found`,
-          );
+          if (
+            updated.minFee !== null &&
+            updated.maxFee !== null &&
+            parseFloat(updated.minFee) > parseFloat(updated.maxFee)
+          ) {
+            throw new BadRequestException(
+              'minFee cannot be greater than maxFee',
+            );
+          }
+
+          feeConfigChanges.push({ feeConfig, before, after: updated });
         }
 
-        if (feeUpdate.feeType !== undefined) {
-          feeConfig.feeType = feeUpdate.feeType;
-        }
-        if (feeUpdate.feeValue !== undefined) {
-          feeConfig.feeValue = feeUpdate.feeValue.toString();
-        }
-        if (feeUpdate.minFee !== undefined) {
-          feeConfig.minFee = feeUpdate.minFee.toString();
-        }
-        if (feeUpdate.maxFee !== undefined) {
-          feeConfig.maxFee = feeUpdate.maxFee.toString();
-        }
-        if (feeUpdate.isActive !== undefined) {
-          feeConfig.isActive = feeUpdate.isActive;
+        const config = await this.getOrCreatePlatformConfig(configRepository);
+        const previousMaintenanceMode = config.maintenanceMode;
+        if (dto.maintenanceMode !== undefined) {
+          config.maintenanceMode = dto.maintenanceMode;
+          await configRepository.save(config);
         }
 
-        if (
-          feeConfig.minFee !== null &&
-          feeConfig.maxFee !== null &&
-          parseFloat(feeConfig.minFee) > parseFloat(feeConfig.maxFee)
-        ) {
-          throw new BadRequestException('minFee cannot be greater than maxFee');
+        for (const change of currencyChanges) {
+          change.currency.isActive = change.after.isActive;
+          await currencyRepository.save(change.currency);
         }
 
-        await this.feeConfigRepository.save(feeConfig);
-      }
-    }
+        for (const change of feeConfigChanges) {
+          Object.assign(change.feeConfig, change.after);
+          await feeConfigRepository.save(change.feeConfig);
+        }
 
-    const snapshot = await this.getOrCreatePlatformConfig();
+        return {
+          snapshot: config,
+          before: {
+            maintenanceMode: previousMaintenanceMode,
+            currencies: currencyChanges.map((change) => change.before),
+            feeConfigs: feeConfigChanges.map((change) => change.before),
+          },
+          after: {
+            maintenanceMode: config.maintenanceMode,
+            currencies: currencyChanges.map((change) => change.after),
+            feeConfigs: feeConfigChanges.map((change) => change.after),
+          },
+        };
+      },
+    );
 
     await this.auditLogsService.createLog({
       userId: actor.id,
@@ -256,9 +330,8 @@ export class SuperAdminService {
       entity: AuditEntityType.SYSTEM,
       metadata: {
         actorRole: actor.role,
-        maintenanceMode: snapshot.maintenanceMode,
-        currencies: dto.currencies ?? [],
-        feeConfigs: dto.feeConfigs ?? [],
+        before,
+        after,
       },
       isSensitive: true,
     });
@@ -266,8 +339,10 @@ export class SuperAdminService {
     return snapshot;
   }
 
-  async getOrCreatePlatformConfig(): Promise<PlatformConfig> {
-    const existing = await this.platformConfigRepository.findOne({
+  async getOrCreatePlatformConfig(
+    repository: Repository<PlatformConfig> = this.platformConfigRepository,
+  ): Promise<PlatformConfig> {
+    const existing = await repository.findOne({
       where: {},
       order: { createdAt: 'ASC' },
     });
@@ -276,13 +351,13 @@ export class SuperAdminService {
       return existing;
     }
 
-    const created = this.platformConfigRepository.create({
+    const created = repository.create({
       key: 'maintenanceMode',
       category: 'system',
       value: { maintenanceMode: false },
     });
 
-    return this.platformConfigRepository.save(created);
+    return repository.save(created);
   }
 
   private async requireSuperAdmin(userId: string): Promise<User> {
@@ -305,10 +380,11 @@ export class SuperAdminService {
     return user;
   }
 
-  private async assertSuperAdminDemotionSafety(
+  private assertSuperAdminDemotionSafety(
     target: User,
     nextRole: UserRole,
-  ): Promise<void> {
+    superAdmins: User[],
+  ): void {
     if (
       target.role !== UserRole.SUPER_ADMIN ||
       nextRole === UserRole.SUPER_ADMIN
@@ -316,9 +392,9 @@ export class SuperAdminService {
       return;
     }
 
-    const superAdminCount = await this.userRepository.count({
-      where: { role: UserRole.SUPER_ADMIN },
-    });
+    const superAdminCount = superAdmins.filter(
+      (user) => !user.isSuspended && !user.isDeleted,
+    ).length;
 
     if (superAdminCount <= 1) {
       throw new BadRequestException(
@@ -348,13 +424,9 @@ export class SuperAdminService {
   private sanitizeUser(
     user: User,
   ): Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'> {
-    const {
-      password: _password,
-      walletSecretKeyEncrypted: _walletSecretKeyEncrypted,
-      twoFactorSecret: _twoFactorSecret,
-      ...safeUser
-    } = user;
-
-    return safeUser;
+    return instanceToPlain(user) as Omit<
+      User,
+      'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'
+    >;
   }
 }

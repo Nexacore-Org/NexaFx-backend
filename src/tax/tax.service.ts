@@ -263,12 +263,11 @@ export class TaxService {
       return snapshot.priceUsd;
     }
 
-    // Fallback if worker missed it
     try {
       const rate = await this.exchangeRatesService.getRate(uc, 'USD');
       return rate.rate.toString();
     } catch {
-      return '1.00000000';
+      throw new Error(`Unable to resolve USD rate for ${uc}`);
     }
   }
 
@@ -550,9 +549,12 @@ export class TaxService {
         const gbpUsdSnapshot = await this.priceSnapshotRepository.findOne({
           where: { transactionId: event.transactionId, currency: 'GBP' },
         });
-        const rateGbpUsd = new Decimal(
-          gbpUsdSnapshot?.priceUsd || '1.25000000',
-        );
+        if (!gbpUsdSnapshot) {
+          throw new Error(
+            `Missing GBP/USD price snapshot for transaction ${event.transactionId}`,
+          );
+        }
+        const rateGbpUsd = new Decimal(gbpUsdSnapshot.priceUsd);
 
         const dateSold = event.transaction.createdAt
           .toISOString()

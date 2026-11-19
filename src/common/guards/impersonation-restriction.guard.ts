@@ -78,6 +78,10 @@ export class ImpersonationRestrictionGuard implements CanActivate {
       throw new ForbiddenException('Action not permitted during impersonation');
     }
 
+    if (/\/logout-all(?:\/|$)/.test(path)) {
+      throw new ForbiddenException('Action not permitted during impersonation');
+    }
+
     return true;
   }
 

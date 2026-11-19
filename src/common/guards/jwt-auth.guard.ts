@@ -38,6 +38,16 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     if (req.user?.authStage === 'partial_auth' && !allowPartialAuth) {
       throw new ForbiddenException(
         'Two-factor verification required to access this resource',
+    if (req.user?.authStage === 'partial_auth') {
+      if (context.getType<string>() === 'graphql') {
+        throw new ForbiddenException('2FA verification required');
+      }
+
+      // Metadata instead of a path comparison: URI versioning prefixes every
+      // route (/v1/two-factor/verify), so matching on the raw URL never matched.
+      const allowed = this.reflector.getAllAndOverride<boolean>(
+        ALLOW_PARTIAL_AUTH_KEY,
+        [context.getHandler(), context.getClass()],
       );
     }
 

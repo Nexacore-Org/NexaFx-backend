@@ -10,6 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { StellarService } from '../blockchain/stellar/stellar.service';
 import { EncryptionService } from '../common/services/encryption.service';
+import { NotificationType } from '../notifications/enum/notificationType.enum';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
 import { WalletsService } from '../wallets/wallets.service';
@@ -392,15 +393,30 @@ export class EscrowService {
     }
   }
 
+  private getNotificationType(status: EscrowStatus): NotificationType {
+    switch (status) {
+      case EscrowStatus.FUNDED:
+        return NotificationType.ESCROW_FUNDED;
+      case EscrowStatus.RELEASED:
+      case EscrowStatus.RESOLVED:
+        return NotificationType.ESCROW_RELEASED;
+      case EscrowStatus.DISPUTED:
+        return NotificationType.ESCROW_DISPUTED;
+      default:
+        return NotificationType.TRANSACTION;
+    }
+  }
+
   private async sendStatusNotification(
     escrow: Escrow,
     message: string,
   ): Promise<void> {
+    const type = this.getNotificationType(escrow.status);
     const metadata = { escrowId: escrow.id, status: escrow.status };
     await Promise.all([
       this.notificationsService.create({
         userId: escrow.senderId,
-        type: 1 as any,
+        type,
         title: 'Escrow Update',
         message,
         metadata,
@@ -408,7 +424,7 @@ export class EscrowService {
       }),
       this.notificationsService.create({
         userId: escrow.recipientId,
-        type: 1 as any,
+        type,
         title: 'Escrow Update',
         message,
         metadata,

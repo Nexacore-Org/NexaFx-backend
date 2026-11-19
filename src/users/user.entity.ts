@@ -54,6 +54,9 @@ export class User {
   @Index()
   phone: string | null;
 
+  @Column({ type: 'boolean', default: false })
+  isPhoneVerified: boolean;
+
   @Column({ type: 'varchar', length: 56 })
   @Index()
   walletPublicKey: string;
@@ -157,6 +160,9 @@ export class User {
 
   @Column({ type: 'boolean', default: false })
   isTwoFactorEnabled: boolean;
+
+  @Column({ type: 'int', default: 0 })
+  tokenVersion: number;
 
   @Column({ type: 'int', default: 0 })
   failedLoginAttempts: number;

@@ -23,6 +23,7 @@ export enum LedgerDirection {
 
 @Index(['transactionId'])
 @Index(['currency', 'direction'])
+@Index('IDX_ledger_entries_userId', ['userId'])
 @Entity('ledger_entries')
 export class LedgerEntry {
   @PrimaryGeneratedColumn('uuid')
@@ -34,6 +35,9 @@ export class LedgerEntry {
   @ManyToOne(() => Transaction, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'transactionId' })
   transaction: Transaction;
+
+  @Column({ type: 'uuid', nullable: true })
+  userId: string | null;
 
   @Column({
     type: 'enum',

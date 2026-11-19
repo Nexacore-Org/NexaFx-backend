@@ -11,6 +11,7 @@ import {
 } from '../helpers/db.helper';
 import { FlagsService } from '../../src/modules/flags/flags.service';
 import { VoteChoice } from '../../src/dao/entities/vote.entity';
+import { ProposalService } from '../../src/dao/services/proposal.service';
 
 /**
  * e2e coverage for the DAO governance write paths.
@@ -49,8 +50,8 @@ describe('DAO governance (e2e)', () => {
   const proposalBody = (overrides: Record<string, unknown> = {}) => ({
     title: 'Increase treasury allocation',
     description: 'Allocate more XLM to the community fund.',
-    votingStartAt: iso(-60 * 60 * 1000),
-    votingEndAt: iso(60 * 60 * 1000),
+    votingStartAt: iso(60 * 60 * 1000),
+    votingEndAt: iso(2 * 60 * 60 * 1000),
     quorumPercent: 10,
     passThresholdPercent: 50,
     ...overrides,
@@ -92,7 +93,7 @@ describe('DAO governance (e2e)', () => {
     });
     voterId = voter.id;
 
-    // castVote derives vote weight from the voter's XLM balance.
+    // The opening-time balance snapshot determines the voter's vote weight.
     await dataSource
       .getRepository('users')
       .update({ id: voterId }, { balances: { XLM: 100 } } as never);
@@ -109,17 +110,76 @@ describe('DAO governance (e2e)', () => {
     });
   });
 
-  describe('POST /v1/dao/proposals', () => {
+  describe('DAO proposal creation and administration', () => {
     it('lets an admin create a proposal (201)', async () => {
+      const votingStartAt = iso(60 * 60 * 1000);
+      const votingEndAt = iso(2 * 60 * 60 * 1000);
       const res = await request(app.getHttpServer())
         .post('/v1/dao/proposals')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send(proposalBody())
+        .send(proposalBody({ votingStartAt, votingEndAt }))
         .expect(201);
 
       const body = res.body?.data ?? res.body;
       expect(body).toHaveProperty('id');
       expect(body.title).toBe('Increase treasury allocation');
+      expect(new Date(body.votingStartAt).toISOString()).toBe(votingStartAt);
+      expect(new Date(body.votingEndAt).toISOString()).toBe(votingEndAt);
+    });
+
+    describe('GET /v1/dao/proposals and DELETE /v1/dao/proposals/:id', () => {
+      it('returns paginated proposal data', async () => {
+        await request(app.getHttpServer())
+          .post('/v1/dao/proposals')
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send(proposalBody())
+          .expect(201);
+
+        const res = await request(app.getHttpServer())
+          .get('/v1/dao/proposals?page=1&limit=1')
+          .set('Authorization', `Bearer ${voterToken}`)
+          .expect(200);
+        const body = res.body?.data ?? res.body;
+        expect(body.data).toHaveLength(1);
+        expect(body.pagination).toMatchObject({
+          page: 1,
+          limit: 1,
+          total: 1,
+          pages: 1,
+        });
+      });
+
+      it('rejects invalid pagination and UUID parameters with 400', async () => {
+        await request(app.getHttpServer())
+          .get('/v1/dao/proposals?page=not-a-number')
+          .set('Authorization', `Bearer ${voterToken}`)
+          .expect(400);
+
+        await request(app.getHttpServer())
+          .get('/v1/dao/proposals/invalid-uuid')
+          .set('Authorization', `Bearer ${voterToken}`)
+          .expect(400);
+
+        await request(app.getHttpServer())
+          .delete('/v1/dao/proposals/invalid-uuid')
+          .set('Authorization', `Bearer ${adminToken}`)
+          .expect(400);
+      });
+
+      it('allows an admin to cancel an active proposal before voting ends', async () => {
+        const created = await request(app.getHttpServer())
+          .post('/v1/dao/proposals')
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send(proposalBody())
+          .expect(201);
+        const proposalId = (created.body?.data ?? created.body).id as string;
+
+        const res = await request(app.getHttpServer())
+          .delete(`/v1/dao/proposals/${proposalId}`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .expect(200);
+        expect(res.body?.data?.status ?? res.body.status).toBe('CANCELLED');
+      });
     });
 
     it('rejects a non-admin creating a proposal (403)', async () => {
@@ -156,8 +216,22 @@ describe('DAO governance (e2e)', () => {
       return (res.body?.data ?? res.body).id as string;
     };
 
-    it('lets a user with an XLM balance cast a vote (201)', async () => {
+    const createStartedProposal = async () => {
       const proposalId = await createProposal();
+      const votingStartAt = new Date(Date.now() + 150);
+      await dataSource
+        .getRepository('proposals')
+        .update({ id: proposalId }, { votingStartAt } as never);
+      await new Promise((resolve) => setTimeout(resolve, 175));
+      await app.get(ProposalService).captureDueBalanceSnapshots();
+      return proposalId;
+    };
+
+    it('lets a user with an XLM balance cast a vote (201)', async () => {
+      const proposalId = await createStartedProposal();
+      await dataSource
+        .getRepository('users')
+        .update({ id: voterId }, { balances: { XLM: 1 } } as never);
 
       const res = await request(app.getHttpServer())
         .post(`/v1/dao/proposals/${proposalId}/vote`)
@@ -165,7 +239,8 @@ describe('DAO governance (e2e)', () => {
         .send({ choice: VoteChoice.YES })
         .expect(201);
 
-      expect(res.body?.data ?? res.body).toBeDefined();
+      const body = res.body?.data ?? res.body;
+      expect(Number(body.weight)).toBe(100);
     });
 
     it('rejects a vote cast before votingStartAt (400)', async () => {
@@ -186,7 +261,7 @@ describe('DAO governance (e2e)', () => {
     });
 
     it('rejects a duplicate vote for the same proposal (409)', async () => {
-      const proposalId = await createProposal();
+      const proposalId = await createStartedProposal();
 
       await request(app.getHttpServer())
         .post(`/v1/dao/proposals/${proposalId}/vote`)

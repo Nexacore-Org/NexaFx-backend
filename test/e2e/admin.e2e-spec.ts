@@ -1,4 +1,5 @@
 import { INestApplication } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import * as request from 'supertest';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../../src/app.module';
@@ -16,10 +17,12 @@ describe('Admin E2E Tests', () => {
   let dataSource: DataSource;
   let adminAccessToken: string;
   let regularUserAccessToken: string;
+  let jwt: JwtService;
 
   beforeAll(async () => {
     app = await createTestApp();
     dataSource = app.get(DataSource);
+    jwt = app.get(JwtService);
 
     // Set up test database
     await setupTestDatabase(dataSource);
@@ -133,9 +136,10 @@ describe('Admin E2E Tests', () => {
 
       expect(response.body).toHaveProperty('data');
       expect(Array.isArray(response.body.data)).toBe(true);
-      expect(response.body).toHaveProperty('total');
-      expect(response.body).toHaveProperty('page');
-      expect(response.body).toHaveProperty('limit');
+      expect(response.body).toHaveProperty('meta');
+      expect(response.body.meta).toHaveProperty('total');
+      expect(response.body.meta).toHaveProperty('page');
+      expect(response.body.meta).toHaveProperty('limit');
     });
 
     it('should return 403 for non-admin user', async () => {
@@ -156,8 +160,8 @@ describe('Admin E2E Tests', () => {
         .expect(200);
 
       expect(response.body).toHaveProperty('data');
-      expect(response.body.page).toBe(1);
-      expect(response.body.limit).toBe(10);
+      expect(response.body.meta.page).toBe(1);
+      expect(response.body.meta.limit).toBe(10);
     });
 
     it('should support filtering by email', async () => {
@@ -216,7 +220,7 @@ describe('Admin E2E Tests', () => {
       expect(response.body).toHaveProperty('email');
       expect(response.body).toHaveProperty('firstName');
       expect(response.body).toHaveProperty('lastName');
-      expect(response.body).toHaveProperty('kycStatus');
+      expect(response.body).toHaveProperty('role');
       expect(response.body).toHaveProperty('createdAt');
     });
 
@@ -289,6 +293,28 @@ describe('Admin E2E Tests', () => {
         .patch(`/v1/admin/users/${userId}/role`)
         .set('Authorization', `Bearer ${regularUserAccessToken}`)
         .send({ role: 'MODERATOR' })
+        .expect(403);
+    });
+
+    it('rejects an ADMIN promoting an account to SUPER_ADMIN with 403', async () => {
+      const adminUser = await seedTestUser(dataSource, {
+        email: 'escalation-admin@example.com',
+        role: 'ADMIN',
+      });
+      const targetUser = await seedTestUser(dataSource, {
+        email: 'escalation-target@example.com',
+        role: 'ADMIN',
+      });
+      const adminToken = jwt.sign({
+        sub: adminUser.id,
+        email: adminUser.email,
+        role: 'ADMIN',
+      });
+
+      await request(app.getHttpServer())
+        .patch(`/v1/admin/users/${targetUser.id}/role`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ role: 'SUPER_ADMIN' })
         .expect(403);
     });
 

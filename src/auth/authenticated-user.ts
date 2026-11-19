@@ -1,11 +1,13 @@
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import type { UsersService } from '../users/users.service';
+import type { UserPlan } from '../users/user.entity';
 
 export interface JwtPayload {
   sub: string;
   email: string;
   role: string;
   authStage?: 'partial_auth';
+  tokenVersion?: number;
   // Impersonation fields — only present when isImpersonation === true
   isImpersonation?: boolean;
   impersonatedBy?: string;
@@ -21,6 +23,7 @@ export interface AuthenticatedUser {
   isImpersonation?: boolean;
   impersonatedBy?: string;
   jti?: string;
+  plan?: UserPlan;
 }
 
 /**
@@ -52,6 +55,10 @@ export async function validateAuthenticatedUser(
     throw new UnauthorizedException('User not found');
   }
 
+  if ((payload.tokenVersion ?? 0) !== (user.tokenVersion ?? 0)) {
+    throw new UnauthorizedException('Session has been revoked');
+  }
+
   if (user.isSuspended) {
     throw new ForbiddenException('Account is suspended');
   }
@@ -73,5 +80,6 @@ export async function validateAuthenticatedUser(
     isImpersonation: payload.isImpersonation ?? false,
     impersonatedBy: payload.impersonatedBy,
     jti: payload.jti,
+    plan: user.plan,
   };
 }

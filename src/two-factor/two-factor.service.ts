@@ -144,6 +144,7 @@ export class TwoFactorService {
 
     await this.usersService.updateByUserId(userId, {
       isTwoFactorEnabled: false,
+      tokenVersion: (user.tokenVersion ?? 0) + 1,
       twoFactorSecret: null,
       pendingTwoFactorSecret: null,
       lastTotpStep: null,

@@ -1,6 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { FeesService } from './fees.service';
 import {
   FeeConfig,
@@ -324,6 +328,83 @@ describe('FeesService', () => {
       await expect(
         service.updateFeeConfig('cfg-1', { minFee: 0.5 }),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should reject updating into an active duplicate pair', async () => {
+      mockFeeConfigRepo.findOne
+        .mockResolvedValueOnce({
+          id: 'cfg-1',
+          transactionType: FeeTransactionType.WITHDRAW,
+          currency: 'USD',
+          feeType: FeeType.FLAT,
+          minFee: null,
+          maxFee: null,
+          isActive: true,
+        })
+        .mockResolvedValueOnce({ id: 'cfg-2' });
+
+      await expect(
+        service.updateFeeConfig('cfg-1', {
+          transactionType: FeeTransactionType.DEPOSIT,
+          currency: 'USDC',
+        }),
+      ).rejects.toThrow(ConflictException);
+      expect(mockFeeConfigRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('should reject activating a rule when its pair is already active', async () => {
+      mockFeeConfigRepo.findOne
+        .mockResolvedValueOnce({
+          id: 'cfg-1',
+          transactionType: FeeTransactionType.DEPOSIT,
+          currency: 'USDC',
+          feeType: FeeType.FLAT,
+          minFee: null,
+          maxFee: null,
+          isActive: false,
+        })
+        .mockResolvedValueOnce({ id: 'cfg-2' });
+
+      await expect(
+        service.updateFeeConfig('cfg-1', { isActive: true }),
+      ).rejects.toThrow(ConflictException);
+      expect(mockFeeConfigRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('should validate minFee and maxFee after applying partial updates', async () => {
+      mockFeeConfigRepo.findOne.mockResolvedValue({
+        id: 'cfg-1',
+        transactionType: FeeTransactionType.WITHDRAW,
+        currency: 'USD',
+        feeType: FeeType.PERCENTAGE,
+        minFee: '1',
+        maxFee: '5',
+        isActive: true,
+      });
+
+      await expect(
+        service.updateFeeConfig('cfg-1', { minFee: 10 }),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockFeeConfigRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('should map a unique index violation to ConflictException', async () => {
+      mockFeeConfigRepo.findOne.mockResolvedValue({
+        id: 'cfg-1',
+        transactionType: FeeTransactionType.WITHDRAW,
+        currency: 'USD',
+        feeType: FeeType.PERCENTAGE,
+        minFee: null,
+        maxFee: null,
+        isActive: true,
+      });
+      mockFeeConfigRepo.save.mockRejectedValue({
+        driverError: { code: '23505' },
+      });
+
+      await expect(
+        service.updateFeeConfig('cfg-1', { currency: 'EUR' }),
+      ).rejects.toThrow(ConflictException);
     });
   });
 

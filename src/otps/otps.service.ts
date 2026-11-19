@@ -174,7 +174,7 @@ export class OtpsService {
     return secret;
   }
 
-  private getOtpExpiryMinutes(): number {
+  getOtpExpiryMinutes(): number {
     const v = this.configService.get<string>('OTP_EXPIRES_MINUTES');
     const parsed = v ? Number(v) : 10;
     if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 60) return 10;

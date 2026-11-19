@@ -1,4 +1,4 @@
-// OAuth feature implementation
+﻿// OAuth feature implementation
 import {
   Controller,
   Post,
@@ -201,7 +201,7 @@ export class AuthController {
   @ApiResponse({
     status: 400,
     description:
-      'Validation failed — one or more fields are missing or invalid. ' +
+      'Validation failed â€” one or more fields are missing or invalid. ' +
       'The response body contains an `errors` array with per-field messages.',
     schema: {
       type: 'object',
@@ -435,7 +435,6 @@ export class AuthController {
       res.redirect(failureUrl);
     }
   }
-
   @Public()
   @Get('google')
   @UseGuards(AuthGuard('google'))
@@ -491,7 +490,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Unlink an OAuth provider from your account' })
   @ApiBody({ type: UnlinkOauthDto })
   @ApiResponse({ status: 200, description: 'OAuth account unlinked' })
-  @ApiResponse({ status: 422, description: 'Cannot unlink — no password set' })
+  @ApiResponse({ status: 422, description: 'Cannot unlink â€” no password set' })
   async unlinkOauth(@Req() req: any, @Body() dto: UnlinkOauthDto) {
     const userId = req.user.userId;
     await this.authService.unlinkOAuth(userId, dto.provider);

@@ -12,6 +12,7 @@ import {
   CurrentUser,
   CurrentUserPayload,
 } from '../../auth/decorators/current-user.decorator';
+import { Public } from '../../auth/decorators/public.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import {
   BulkUpdateNotificationPreferencesDto,
@@ -45,9 +46,19 @@ export class NotificationPreferenceController {
     return this.preferenceService.updateMany(user.userId, dto.preferences);
   }
 
-  @Post('unsubscribe')
+  @Public()
+  @Get('unsubscribe')
   @ApiOperation({
     summary: 'Unsubscribe from email notifications by signed token',
+  })
+  unsubscribeViaLink(@Query() query: UnsubscribeTokenQueryDto) {
+    return this.preferenceService.unsubscribe(query.token);
+  }
+
+  @Public()
+  @Post('unsubscribe')
+  @ApiOperation({
+    summary: 'One-click unsubscribe from email notifications',
   })
   unsubscribe(@Query() query: UnsubscribeTokenQueryDto) {
     return this.preferenceService.unsubscribe(query.token);

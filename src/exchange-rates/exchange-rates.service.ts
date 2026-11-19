@@ -11,7 +11,10 @@ import { ConfigService } from '@nestjs/config';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { CurrenciesService } from '../currencies/currencies.service';
-import { ExchangeRatesProviderClient } from './providers/exchange-rates.provider';
+import {
+  ExchangeRatesProviderClient,
+  ExchangeRatesProviderError,
+} from './providers/exchange-rates.provider';
 import { ExchangeRateSnapshot } from './entities/exchange-rate-snapshot.entity';
 import Decimal from 'decimal.js';
 import { Subject, Observable } from 'rxjs';
@@ -91,7 +94,15 @@ export class ExchangeRatesService {
     const cacheKey = `rate:${fromCode}:${toCode}`;
 
     // Look up cached rate
-    const cachedEntry = await this.cacheManager.get<any>(cacheKey);
+    let cachedEntry = await this.cacheManager.get<any>(cacheKey);
+    if (
+      cachedEntry &&
+      (!this.isPositiveFiniteRate(cachedEntry.rate) ||
+        !this.isPositiveFiniteRate(cachedEntry.inverseRate))
+    ) {
+      this.logger.warn(`Ignoring invalid cached exchange rate for ${cacheKey}`);
+      cachedEntry = null;
+    }
 
     if (cachedEntry) {
       const now = Date.now();
@@ -121,14 +132,22 @@ export class ExchangeRatesService {
     // Cache expired or not found - attempt external provider fetch
     try {
       const fetched = await this.providerClient.fetchRate(fromCode, toCode);
+      if (!this.isPositiveFiniteRate(fetched.rate)) {
+        throw new ExchangeRatesProviderError(
+          `Provider returned an invalid exchange rate for ${fromCode}->${toCode}`,
+        );
+      }
 
       const cachedAt = new Date().toISOString();
       const expiresAt = new Date(Date.now() + 60000).toISOString(); // 60 seconds TTL
 
       const rateDecimal = new Decimal(fetched.rate);
-      const inverseRateDecimal = rateDecimal.isZero()
-        ? new Decimal(0)
-        : new Decimal(1).div(rateDecimal);
+      const inverseRateDecimal = new Decimal(1).div(rateDecimal);
+      if (!inverseRateDecimal.isFinite() || !inverseRateDecimal.isPositive()) {
+        throw new ExchangeRatesProviderError(
+          `Provider returned an invalid exchange rate for ${fromCode}->${toCode}`,
+        );
+      }
 
       const response: ExchangeRateResponseDto = {
         from: fromCode,
@@ -294,5 +313,11 @@ export class ExchangeRatesService {
         err.message || `Currency '${code}' is invalid`,
       );
     }
+  }
+
+  private isPositiveFiniteRate(value: unknown): value is number {
+    return (
+      typeof value === 'number' && Number.isFinite(value) && value > 0
+    );
   }
 }

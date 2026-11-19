@@ -9,6 +9,7 @@ import { User, UserRole } from '../../users/user.entity';
 export type LedgerVerificationStatus = 'BALANCED' | 'DISCREPANCY';
 
 export interface LedgerVerificationDiscrepancy {
+  userId: string;
   currency: string;
   amountDelta: string;
 }
@@ -37,15 +38,41 @@ export class LedgerVerificationService {
   ) {}
 
   async verify(): Promise<LedgerVerificationResult> {
-    const rows: Array<{ currency: string; amountDelta: string }> = await this
-      .ledgerEntryRepository.query(`
+    const rows: LedgerVerificationDiscrepancy[] =
+      await this.ledgerEntryRepository.query(`
+        WITH ledger_balances AS (
+          SELECT
+            "userId",
+            currency,
+            SUM(CASE WHEN direction = 'CREDIT' THEN amount ELSE -amount END) AS amount
+          FROM ledger_entries
+          WHERE "accountType" = 'USER' AND "userId" IS NOT NULL
+          GROUP BY "userId", currency
+        ),
+        stored_balances AS (
+          SELECT
+            users.id AS "userId",
+            balance.currency,
+            balance.amount::numeric AS amount
+          FROM users
+          CROSS JOIN LATERAL jsonb_each_text(
+            COALESCE(users.balances, '{}'::jsonb)
+          ) AS balance(currency, amount)
+        )
         SELECT
-          currency,
-          COALESCE(SUM(CASE WHEN direction = 'CREDIT' THEN amount ELSE -amount END), 0)::text AS "amountDelta"
-        FROM ledger_entries
-        GROUP BY currency
-        HAVING COALESCE(SUM(CASE WHEN direction = 'CREDIT' THEN amount ELSE -amount END), 0) <> 0
-        ORDER BY currency ASC
+          COALESCE(ledger_balances."userId", stored_balances."userId") AS "userId",
+          COALESCE(ledger_balances.currency, stored_balances.currency) AS currency,
+          (
+            COALESCE(ledger_balances.amount, 0) -
+            COALESCE(stored_balances.amount, 0)
+          )::text AS "amountDelta"
+        FROM ledger_balances
+        FULL OUTER JOIN stored_balances
+          ON ledger_balances."userId" = stored_balances."userId"
+         AND ledger_balances.currency = stored_balances.currency
+        WHERE COALESCE(ledger_balances.amount, 0) <>
+              COALESCE(stored_balances.amount, 0)
+        ORDER BY "userId" ASC, currency ASC
       `);
 
     if (rows.length === 0) {
@@ -54,10 +81,7 @@ export class LedgerVerificationService {
 
     const result: LedgerVerificationResult = {
       status: 'DISCREPANCY',
-      discrepancies: rows.map((row) => ({
-        currency: row.currency,
-        amountDelta: row.amountDelta,
-      })),
+      discrepancies: rows,
     };
 
     await this.notifyAdmins(result);
@@ -103,7 +127,10 @@ export class LedgerVerificationService {
     const message =
       'Ledger verification found a discrepancy: ' +
       result.discrepancies
-        .map((item) => `${item.currency}=${item.amountDelta}`)
+        .map(
+          (item) =>
+            `${item.userId}/${item.currency}=${item.amountDelta}`,
+        )
         .join(', ');
 
     await Promise.all(

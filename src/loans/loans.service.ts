@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, In } from 'typeorm';
 import {
   LoanApplication,
   LoanStatus,
@@ -125,14 +125,16 @@ export class LoansService {
     userId: string,
     loanId: string,
     dto: RepayLoanDto,
-  ): Promise<{ message: string; repayment: LoanRepayment }> {
+  ): Promise<{
+    message: string;
+    repayment: LoanRepayment;
+    amountApplied: number;
+  }> {
     const loan = await this.loanRepo.findOne({
       where: { id: loanId, userId },
       relations: ['repayments'],
     });
     if (!loan) throw new NotFoundException('Loan not found');
-    // A defaulted borrower must be able to cure the debt, so DEFAULTED loans are
-    // repayable; every other status is refused.
     if (
       loan.status !== LoanStatus.ACTIVE &&
       loan.status !== LoanStatus.DEFAULTED
@@ -152,7 +154,6 @@ export class LoansService {
       );
     }
 
-    // Find the earliest unpaid repayment
     const pendingRepayments = loan.repayments
       .filter(
         (r) =>
@@ -166,22 +167,18 @@ export class LoansService {
       throw new BadRequestException('No outstanding repayments');
     }
 
-    const repayment = pendingRepayments[0];
-
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
-      // Lock the instalment and the user row, then recompute from those rows:
-      // the reads above happen outside the transaction, so concurrent
-      // repayments could both settle this instalment and lose a debit.
-      const lockedRepayment = await queryRunner.manager.findOne(LoanRepayment, {
-        where: { id: repayment.id },
+      const lockedRepayments = await queryRunner.manager.find(LoanRepayment, {
+        where: { id: In(pendingRepayments.map((r) => r.id)) },
+        order: { dueDate: 'ASC' },
         lock: { mode: 'pessimistic_write' },
       });
-      if (!lockedRepayment || lockedRepayment.status === RepaymentStatus.PAID) {
-        throw new BadRequestException('This repayment is already settled');
+      if (lockedRepayments.length === 0) {
+        throw new BadRequestException('No outstanding repayments');
       }
 
       const lockedUser = await queryRunner.manager.findOne(User, {
@@ -192,67 +189,96 @@ export class LoansService {
         throw new NotFoundException('User not found');
       }
 
-      repayment.totalDue = lockedRepayment.totalDue;
-      repayment.paidAmount = lockedRepayment.paidAmount;
-      const remainingDue =
-        parseFloat(repayment.totalDue) - parseFloat(repayment.paidAmount);
       const freshBalance = parseFloat(
         (lockedUser.balances?.['XLM'] ?? 0).toString(),
       );
-
-      const payAmount = Math.min(dto.amount, remainingDue);
-      const newPaidAmount = parseFloat(repayment.paidAmount) + payAmount;
-
-      repayment.paidAmount = newPaidAmount.toFixed(8);
-      // Exact comparison: the epsilon hid rounding drift in the instalments.
-      repayment.status = new Decimal(newPaidAmount).gte(
-        new Decimal(repayment.totalDue),
-      )
-        ? RepaymentStatus.PAID
-        : RepaymentStatus.PARTIAL;
-
-      if (repayment.status === RepaymentStatus.PAID) {
-        repayment.paidAt = new Date();
+      if (freshBalance < dto.amount) {
+        throw new BadRequestException(
+          `Insufficient XLM balance. Available: ${freshBalance}, required: ${dto.amount}`,
+        );
       }
 
-      await queryRunner.manager.save(LoanRepayment, repayment);
+      let remainingPayment = dto.amount;
+      let amountApplied = 0;
+      let lastRepayment = lockedRepayments[0];
 
-      // Debit user balance from the locked row
-      const newBalance = freshBalance - payAmount;
+      for (const lockedRepayment of lockedRepayments) {
+        if (remainingPayment <= 0) break;
+        if (
+          lockedRepayment.status === RepaymentStatus.PAID ||
+          lockedRepayment.status === RepaymentStatus.WAIVED
+        ) {
+          continue;
+        }
+
+        const totalDue = parseFloat(lockedRepayment.totalDue);
+        const paidAmount = parseFloat(lockedRepayment.paidAmount);
+        const remainingDue = totalDue - paidAmount;
+        if (remainingDue <= 0) continue;
+
+        const payAmount = Math.min(remainingPayment, remainingDue);
+        const newPaidAmount = paidAmount + payAmount;
+        const wasOverdue =
+          lockedRepayment.status === RepaymentStatus.OVERDUE;
+
+        lockedRepayment.paidAmount = newPaidAmount.toFixed(8);
+        lockedRepayment.status = new Decimal(newPaidAmount).gte(
+          new Decimal(totalDue),
+        )
+          ? RepaymentStatus.PAID
+          : wasOverdue
+            ? RepaymentStatus.OVERDUE
+            : RepaymentStatus.PARTIAL;
+
+        if (lockedRepayment.status === RepaymentStatus.PAID) {
+          lockedRepayment.paidAt = new Date();
+        }
+
+        await queryRunner.manager.save(LoanRepayment, lockedRepayment);
+
+        const tx = queryRunner.manager.create(Transaction, {
+          userId,
+          type: TransactionType.LOAN_REPAYMENT,
+          amount: payAmount.toFixed(8),
+          currency: 'XLM',
+          status: TransactionStatus.SUCCESS,
+          metadata: { loanId, repaymentId: lockedRepayment.id },
+        });
+        const savedTx = await queryRunner.manager.save(Transaction, tx);
+
+        await queryRunner.manager.save(LedgerEntry, [
+          queryRunner.manager.create(LedgerEntry, {
+            transactionId: savedTx.id,
+            accountType: LedgerAccountType.USER,
+            direction: LedgerDirection.DEBIT,
+            amount: payAmount.toFixed(8),
+            currency: 'XLM',
+          }),
+          queryRunner.manager.create(LedgerEntry, {
+            transactionId: savedTx.id,
+            accountType: LedgerAccountType.PLATFORM_ASSET,
+            direction: LedgerDirection.CREDIT,
+            amount: payAmount.toFixed(8),
+            currency: 'XLM',
+          }),
+        ]);
+
+        remainingPayment -= payAmount;
+        amountApplied += payAmount;
+        lastRepayment = lockedRepayment;
+      }
+
+      if (amountApplied <= 0) {
+        throw new BadRequestException('No outstanding repayments');
+      }
+
       await queryRunner.manager.update('users', userId, {
-        balances: { ...lockedUser.balances, XLM: newBalance },
+        balances: {
+          ...lockedUser.balances,
+          XLM: freshBalance - amountApplied,
+        },
       });
 
-      // Create internal transaction record
-      const tx = queryRunner.manager.create(Transaction, {
-        userId,
-        type: TransactionType.LOAN_REPAYMENT,
-        amount: payAmount.toFixed(8),
-        currency: 'XLM',
-        status: TransactionStatus.SUCCESS,
-        metadata: { loanId, repaymentId: repayment.id },
-      });
-      const savedTx = await queryRunner.manager.save(Transaction, tx);
-
-      // Ledger: USER DEBIT + PLATFORM_ASSET CREDIT
-      await queryRunner.manager.save(LedgerEntry, [
-        queryRunner.manager.create(LedgerEntry, {
-          transactionId: savedTx.id,
-          accountType: LedgerAccountType.USER,
-          direction: LedgerDirection.DEBIT,
-          amount: payAmount.toFixed(8),
-          currency: 'XLM',
-        }),
-        queryRunner.manager.create(LedgerEntry, {
-          transactionId: savedTx.id,
-          accountType: LedgerAccountType.PLATFORM_ASSET,
-          direction: LedgerDirection.CREDIT,
-          amount: payAmount.toFixed(8),
-          currency: 'XLM',
-        }),
-      ]);
-
-      // Check if all repayments are paid
       const allRepayments = await queryRunner.manager.find(LoanRepayment, {
         where: { loanId },
       });
@@ -261,17 +287,29 @@ export class LoansService {
           r.status === RepaymentStatus.PAID ||
           r.status === RepaymentStatus.WAIVED,
       );
+      const hasOverdue = allRepayments.some(
+        (r) => r.status === RepaymentStatus.OVERDUE,
+      );
 
       if (allPaid) {
         await queryRunner.manager.update(LoanApplication, loanId, {
           status: LoanStatus.REPAID,
         });
         loan.status = LoanStatus.REPAID;
+      } else if (loan.status === LoanStatus.DEFAULTED && !hasOverdue) {
+        await queryRunner.manager.update(LoanApplication, loanId, {
+          status: LoanStatus.ACTIVE,
+        });
+        loan.status = LoanStatus.ACTIVE;
       }
 
       await queryRunner.commitTransaction();
 
-      return { message: 'Repayment recorded successfully', repayment };
+      return {
+        message: 'Repayment recorded successfully',
+        repayment: lastRepayment,
+        amountApplied,
+      };
     } catch (err) {
       await queryRunner.rollbackTransaction();
       throw err;
@@ -433,7 +471,9 @@ export class LoansService {
     const dueRepayments = await this.repaymentRepo
       .createQueryBuilder('r')
       .innerJoinAndSelect('r.loan', 'loan')
-      .where('r.status = :status', { status: RepaymentStatus.SCHEDULED })
+      .where('r.status IN (:...statuses)', {
+        statuses: [RepaymentStatus.SCHEDULED, RepaymentStatus.OVERDUE],
+      })
       .andWhere('r.dueDate <= :today', { today })
       .getMany();
 
@@ -569,7 +609,12 @@ export class LoansService {
 
   private async autoDebitRepayment(repayment: LoanRepayment): Promise<void> {
     const loan = repayment.loan;
-    if (loan.status !== LoanStatus.ACTIVE) return;
+    if (
+      loan.status !== LoanStatus.ACTIVE &&
+      loan.status !== LoanStatus.DEFAULTED
+    ) {
+      return;
+    }
 
     const user = await this.usersService.findById(loan.userId);
     if (!user) return;
@@ -665,10 +710,18 @@ export class LoansService {
           r.status === RepaymentStatus.PAID ||
           r.status === RepaymentStatus.WAIVED,
       );
+      const hasOverdue = allRepayments.some(
+        (r) => r.status === RepaymentStatus.OVERDUE,
+      );
       if (allPaid) {
         await queryRunner.manager.update(LoanApplication, loan.id, {
           status: LoanStatus.REPAID,
         });
+      } else if (loan.status === LoanStatus.DEFAULTED && !hasOverdue) {
+        await queryRunner.manager.update(LoanApplication, loan.id, {
+          status: LoanStatus.ACTIVE,
+        });
+        loan.status = LoanStatus.ACTIVE;
       }
 
       await queryRunner.commitTransaction();

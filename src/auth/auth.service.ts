@@ -1,4 +1,4 @@
-// OAuth feature implementation
+﻿// OAuth feature implementation
 import {
   Injectable,
   UnauthorizedException,
@@ -181,7 +181,7 @@ export class AuthService {
         AuditAction.FAILED_LOGIN,
         {
           email: loginDto.email,
-          reason: 'OAuth-only account — no password set',
+          reason: 'OAuth-only account â€” no password set',
           ip: ipAddress,
           device: userAgent,
         },
@@ -1028,7 +1028,7 @@ export class AuthService {
    */
   async exchangeOauthCode(
     code: string,
-  ): Promise<VerifyLoginOtpResponseDto & { requiresTwoFactor?: boolean }> {
+  ): Promise<Partial<VerifyLoginOtpResponseDto> & { requiresTwoFactor?: boolean }> {
     const payload = await this.oauthCodeService.consume(code);
 
     if (!payload) {
@@ -1056,27 +1056,12 @@ export class AuthService {
           { expiresIn: '5m' },
         ),
         expiresIn: 300,
-      } as VerifyLoginOtpResponseDto;
+      };
     }
 
     return this.issueAuthTokens(user.id, user.email, user.role);
   }
 
-  private assertAccountUsable(user: {
-    isActive: boolean;
-    isSuspended: boolean;
-    isDeleted: boolean;
-  }): void {
-    if (user.isDeleted) {
-      throw new UnauthorizedException('Account has been deleted');
-    }
-    if (user.isSuspended) {
-      throw new ForbiddenException('Account is suspended');
-    }
-    if (!user.isActive) {
-      throw new ForbiddenException('Account is deactivated');
-    }
-  }
 
   getUserIdFromPartialAuth(token: string): string {
     let decoded: JwtPayload & { authStage?: string };

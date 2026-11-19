@@ -1,4 +1,4 @@
-import {
+﻿import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
@@ -49,6 +49,9 @@ export class DataRequest {
 
   @Column({ type: 'timestamp with time zone', nullable: true })
   completedAt: Date | null;
+
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  hardDeletedAt: Date | null;
 
   @Column({ type: 'varchar', length: 500, nullable: true })
   downloadUrl: string | null;

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+﻿import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, Profile } from 'passport-github2';
@@ -20,6 +20,8 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
       scope: ['user:email'],
       store: stateStore,
     });
+      state: true,
+    } as any);
   }
 
   async validate(
@@ -33,8 +35,6 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
       const emails: Array<{ value?: string; primary?: boolean; verified?: boolean }> =
         rawProfile.emails ?? [];
 
-      // emails[0] is whatever GitHub listed first, which may be neither
-      // primary nor verified.
       const preferred =
         emails.find((entry) => entry.primary && entry.verified) ??
         emails.find((entry) => entry.verified) ??

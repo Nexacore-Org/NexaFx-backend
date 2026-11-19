@@ -5,7 +5,10 @@ import {
   Index,
   PrimaryGeneratedColumn,
   Unique,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { Proposal } from './proposal.entity';
 
 /**
  * Per-proposal balance snapshot captured at votingStartAt.
@@ -14,18 +17,27 @@ import {
  * (a snapshot), not the live balance at cast time. Otherwise a voter could
  * recycle the same XLM across accounts and vote repeatedly with the same funds.
  *
- * Rows are populated lazily on the first vote for a proposal (or by the
- * finalize cron) and are keyed by (proposalId, voterId).
+ * Rows are captured once when voting opens and are keyed by
+ * (proposalId, voterId).
  */
 @Entity('proposal_balance_snapshots')
 @Unique('UQ_proposal_balance_snapshots_proposal_voter', ['proposalId', 'voterId'])
 @Index('IDX_proposal_balance_snapshots_proposal', ['proposalId'])
 export class ProposalBalanceSnapshot {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn('uuid', {
+    primaryKeyConstraintName: 'PK_proposal_balance_snapshots_id',
+  })
   id: string;
 
   @Column({ type: 'uuid' })
   proposalId: string;
+
+  @ManyToOne(() => Proposal, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'proposalId',
+    foreignKeyConstraintName: 'FK_proposal_balance_snapshots_proposalId',
+  })
+  proposal: Proposal;
 
   @Column({ type: 'uuid' })
   voterId: string;

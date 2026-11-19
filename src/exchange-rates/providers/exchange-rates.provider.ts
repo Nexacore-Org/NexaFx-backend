@@ -21,7 +21,7 @@ export class ExchangeRatesProviderClient {
   ) {
     this.baseUrl =
       this.configService.get<string>('EXCHANGE_RATES_PROVIDER_BASE_URL') ||
-      'https://api.coingecko.com/v3';
+      'https://api.coingecko.com/api/v3';
     this.timeoutMs = this.getTimeoutMs();
   }
 
@@ -60,13 +60,16 @@ export class ExchangeRatesProviderClient {
         const vsCurrency = toUpper.toLowerCase();
         const url = `${this.baseUrl}/simple/price?ids=${coinId}&vs_currencies=${vsCurrency}`;
         const response = await firstValueFrom(
-          this.httpService.get(url, { timeout: this.timeoutMs }),
+          this.httpService.get(url, {
+            timeout: this.timeoutMs,
+            headers: this.getApiHeaders(),
+          }),
         );
         const data = response.data;
         if (
           data &&
           data[coinId] &&
-          typeof data[coinId][vsCurrency] === 'number'
+          this.isPositiveFiniteRate(data[coinId][vsCurrency])
         ) {
           return {
             rate: data[coinId][vsCurrency],
@@ -82,41 +85,56 @@ export class ExchangeRatesProviderClient {
         const vsCurrency = fromUpper.toLowerCase();
         const url = `${this.baseUrl}/simple/price?ids=${coinId}&vs_currencies=${vsCurrency}`;
         const response = await firstValueFrom(
-          this.httpService.get(url, { timeout: this.timeoutMs }),
+          this.httpService.get(url, {
+            timeout: this.timeoutMs,
+            headers: this.getApiHeaders(),
+          }),
         );
         const data = response.data;
         if (
           data &&
           data[coinId] &&
-          typeof data[coinId][vsCurrency] === 'number'
+          this.isPositiveFiniteRate(data[coinId][vsCurrency])
         ) {
           const inverseRate = data[coinId][vsCurrency];
-          if (inverseRate > 0) {
-            return {
-              rate: 1 / inverseRate,
-              fetchedAt: new Date().toISOString(),
-              source: 'coingecko-inverse',
-            };
+          const rate = 1 / inverseRate;
+          if (!Number.isFinite(rate) || rate <= 0) {
+            throw new ExchangeRatesProviderError(
+              `Invalid exchange rate for ${fromUpper}->${toUpper}`,
+            );
           }
+          return {
+            rate,
+            fetchedAt: new Date().toISOString(),
+            source: 'coingecko-inverse',
+          };
         }
       }
 
       // Scenario 3: Both are fiat currencies (e.g. USD to NGN) using XLM (stellar) as a bridge
       const url = `${this.baseUrl}/simple/price?ids=stellar&vs_currencies=${fromUpper.toLowerCase()},${toUpper.toLowerCase()}`;
       const response = await firstValueFrom(
-        this.httpService.get(url, { timeout: this.timeoutMs }),
+        this.httpService.get(url, {
+          timeout: this.timeoutMs,
+          headers: this.getApiHeaders(),
+        }),
       );
       const data = response.data;
       if (data && data.stellar) {
         const fromVal = data.stellar[fromUpper.toLowerCase()];
         const toVal = data.stellar[toUpper.toLowerCase()];
         if (
-          typeof fromVal === 'number' &&
-          typeof toVal === 'number' &&
-          fromVal > 0
+          this.isPositiveFiniteRate(fromVal) &&
+          this.isPositiveFiniteRate(toVal)
         ) {
+          const rate = toVal / fromVal;
+          if (!Number.isFinite(rate) || rate <= 0) {
+            throw new ExchangeRatesProviderError(
+              `Invalid exchange rate for ${fromUpper}->${toUpper}`,
+            );
+          }
           return {
-            rate: toVal / fromVal,
+            rate,
             fetchedAt: new Date().toISOString(),
             source: 'coingecko-bridge',
           };
@@ -144,5 +162,24 @@ export class ExchangeRatesProviderClient {
     const parsed = raw ? Number(raw) : 5000;
     if (!Number.isFinite(parsed) || parsed <= 0) return 5000;
     return Math.floor(parsed);
+  }
+
+  private getApiHeaders(): Record<string, string> {
+    const apiKey = this.configService.get<string>(
+      'EXCHANGE_RATES_PROVIDER_API_KEY',
+    );
+    return apiKey ? { 'x-cg-demo-api-key': apiKey } : {};
+  }
+
+  private isPositiveFiniteRate(value: unknown): value is number {
+    if (typeof value !== 'number') {
+      return false;
+    }
+    if (!Number.isFinite(value) || value <= 0) {
+      throw new ExchangeRatesProviderError(
+        'CoinGecko returned a non-positive or non-finite exchange rate',
+      );
+    }
+    return true;
   }
 }

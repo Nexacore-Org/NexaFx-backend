@@ -5,7 +5,6 @@ import {
   ConflictException,
   Logger,
   Inject,
-  Optional,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -54,8 +53,7 @@ export class KycService {
     @Inject(STORAGE_SERVICE_TOKEN)
     private readonly storageService: StorageService,
     private readonly activityFeedService: UnifiedActivityFeedService,
-    @Optional()
-    private readonly sanctionsService?: SanctionsService,
+    private readonly sanctionsService: SanctionsService,
   ) {}
 
   async applyForKyc(
@@ -491,10 +489,20 @@ export class KycService {
 
       // Screen before the tier is granted: a sanctions hit has to block the
       // approval instead of being recorded after the user already has access.
-      const screening = await this.sanctionsService?.screenUser(user.id);
-      if (screening?.status === ScreeningStatus.BLOCKED) {
+      const screening = await this.sanctionsService.screenUser(user.id);
+      if (screening?.status === ScreeningStatus.WARNING) {
         throw new ConflictException(
-          'Approval refused: this applicant is blocked by sanctions screening.',
+          'Approval refused: this applicant requires manual sanctions review.',
+        );
+      }
+      if (screening?.status === ScreeningStatus.ERROR) {
+        throw new ConflictException(
+          'Approval refused: sanctions screening could not be completed.',
+        );
+      }
+      if (screening?.status !== ScreeningStatus.CLEAR) {
+        throw new ConflictException(
+          'Approval refused: this applicant is not cleared by sanctions screening.',
         );
       }
 

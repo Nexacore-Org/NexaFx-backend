@@ -1,4 +1,4 @@
-import { Module, Global } from '@nestjs/common';
+﻿import { Module, Global } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PaginationService } from './services/pagination.service';
 import { DateService } from './services/date.service';

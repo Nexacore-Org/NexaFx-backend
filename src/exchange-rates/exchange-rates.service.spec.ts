@@ -217,6 +217,25 @@ describe('ExchangeRatesService', () => {
         ServiceUnavailableException,
       );
     });
+
+    it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+      'should reject invalid provider rates instead of caching them: %s',
+      async (rate) => {
+        mockCurrenciesService.validateCurrency.mockResolvedValue(undefined);
+        mockCacheManager.get.mockResolvedValue(null);
+        mockProviderClient.fetchRate.mockResolvedValue({
+          rate,
+          fetchedAt: new Date().toISOString(),
+          source: 'coingecko',
+        });
+
+        await expect(service.getRate('XLM', 'NGN')).rejects.toThrow(
+          ServiceUnavailableException,
+        );
+        expect(cacheManager.set).not.toHaveBeenCalled();
+        expect(snapshotRepository.save).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('getDailyOHLCHistory', () => {

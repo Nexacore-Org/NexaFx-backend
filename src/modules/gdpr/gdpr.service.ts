@@ -7,9 +7,10 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan } from 'typeorm';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Repository, ObjectLiteral } from 'typeorm';
+import { Cron } from '@nestjs/schedule';
 import * as bcrypt from 'bcrypt';
+import { randomUUID } from 'crypto';
 import { GdprConsent } from './entities/gdpr-consent.entity';
 import { ErasureAuditLog } from './entities/erasure-audit-log.entity';
 import { User } from '../../users/user.entity';
@@ -35,6 +36,12 @@ import { Inject } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
+import { RedisService } from '../../modules/redis/redis.service';
+
+const RETENTION_BATCH_SIZE = 500;
+const RETENTION_LOCK_TTL_MS = 6 * 60 * 60 * 1000;
+const RELEASE_LOCK_SCRIPT =
+  "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
 
 @Injectable()
 export class GdprService {
@@ -69,6 +76,7 @@ export class GdprService {
     private readonly storageService: StorageService,
     @InjectQueue('gdpr-export') private readonly exportQueue: Queue,
     private readonly configService: ConfigService,
+    private readonly redisService: RedisService,
   ) {}
 
   async recordConsent(
@@ -269,6 +277,42 @@ export class GdprService {
 
   @Cron('0 0 1 * *')
   async enforceDataRetentionPolicies(): Promise<void> {
+    if (!(await this.redisService.isReady())) {
+      this.logger.error(
+        'Skipping monthly data retention cron because Redis is unavailable',
+      );
+      return;
+    }
+
+    const lockKey = this.redisService.key('gdpr', 'data-retention');
+    const lockToken = randomUUID();
+    const lock = await this.redisService.rawClient.set(
+      lockKey,
+      lockToken,
+      'PX',
+      RETENTION_LOCK_TTL_MS,
+      'NX',
+    );
+    if (lock !== 'OK') {
+      this.logger.log(
+        'Data retention cron is already running on another replica',
+      );
+      return;
+    }
+
+    try {
+      await this.runDataRetentionPolicies();
+    } finally {
+      await this.redisService.rawClient.eval(
+        RELEASE_LOCK_SCRIPT,
+        1,
+        lockKey,
+        lockToken,
+      );
+    }
+  }
+
+  private async runDataRetentionPolicies(): Promise<void> {
     this.logger.log('Starting monthly data retention cron job...');
 
     const now = new Date();
@@ -278,56 +322,115 @@ export class GdprService {
       now.getTime() - 7 * 365 * 24 * 60 * 60 * 1000,
     );
 
-    // 1. Delete notifications older than 90 days
-    const notificationsResult = await this.notificationRepository.delete({
-      createdAt: LessThan(ninetyDaysAgo),
-    });
-
-    // 2. Delete webhook deliveries older than 30 days
-    const webhooksResult = await this.webhookDeliveryRepository.delete({
-      createdAt: LessThan(thirtyDaysAgo),
-    });
-
-    // 3. Delete anonymised users without financial records in 7 years
-    const anonymisedUsers = await this.userRepository.find({
-      where: {
-        isActive: false,
-        deletedAt: LessThan(thirtyDaysAgo),
-      },
-    });
-
+    const failures: Array<{
+      operation: string;
+      userId?: string;
+      error: string;
+    }> = [];
+    let notificationsDeleted = 0;
+    let webhookDeliveriesDeleted = 0;
     let deletedUsersCount = 0;
-    for (const user of anonymisedUsers) {
-      const recentTransactions = await this.transactionRepository.count({
-        where: {
-          userId: user.id,
-          createdAt: LessThan(now), // Wait, needs to be greater than 7 years ago
-        },
-      });
-      // We actually want to check if there are ANY transactions created AFTER 7 years ago
-      const hasRecentFinancials = await this.transactionRepository
-        .createQueryBuilder('tx')
-        .where('tx.userId = :userId', { userId: user.id })
-        .andWhere('tx.createdAt > :sevenYearsAgo', { sevenYearsAgo })
-        .getCount();
 
-      if (hasRecentFinancials === 0) {
-        await this.userRepository.delete(user.id);
-        deletedUsersCount++;
-      }
+    try {
+      notificationsDeleted = await this.deleteExpiredInBatches(
+        this.notificationRepository,
+        ninetyDaysAgo,
+      );
+    } catch (error) {
+      failures.push({
+        operation: 'delete_expired_notifications',
+        error: this.errorMessage(error),
+      });
+      this.logger.error('Failed to delete expired notifications', error);
     }
 
-    // Log the results
+    try {
+      webhookDeliveriesDeleted = await this.deleteExpiredInBatches(
+        this.webhookDeliveryRepository,
+        thirtyDaysAgo,
+      );
+    } catch (error) {
+      failures.push({
+        operation: 'delete_expired_webhook_deliveries',
+        error: this.errorMessage(error),
+      });
+      this.logger.error('Failed to delete expired webhook deliveries', error);
+    }
+
+    let lastUserId: string | undefined;
+    try {
+      while (true) {
+        const eligibleUsersQuery = this.userRepository
+          .createQueryBuilder('user')
+          .select(['user.id'])
+          .where('user.isActive = :isActive', { isActive: false })
+          .andWhere('user.deletedAt < :thirtyDaysAgo', { thirtyDaysAgo })
+          .andWhere((queryBuilder) => {
+            const recentTransaction = queryBuilder
+              .subQuery()
+              .select('1')
+              .from(Transaction, 'tx')
+              .where('tx.userId = user.id')
+              .andWhere('tx.createdAt > :sevenYearsAgo')
+              .getQuery();
+            return `NOT EXISTS ${recentTransaction}`;
+          })
+          .setParameter('sevenYearsAgo', sevenYearsAgo);
+
+        if (lastUserId) {
+          eligibleUsersQuery.andWhere('user.id > :lastUserId', { lastUserId });
+        }
+
+        const users = await eligibleUsersQuery
+          .orderBy('user.id', 'ASC')
+          .take(RETENTION_BATCH_SIZE)
+          .getMany();
+        if (users.length === 0) break;
+
+        for (const user of users) {
+          lastUserId = user.id;
+          try {
+            const result = await this.userRepository.delete(user.id);
+            deletedUsersCount += result.affected ?? 0;
+          } catch (error) {
+            failures.push({
+              operation: 'hard_delete_user',
+              userId: user.id,
+              error: this.errorMessage(error),
+            });
+            this.logger.error(
+              `Failed to hard-delete retained user ${user.id}`,
+              error,
+            );
+          }
+        }
+      }
+    } catch (error) {
+      failures.push({
+        operation: 'find_eligible_users',
+        error: this.errorMessage(error),
+      });
+      this.logger.error(
+        'Failed to find users eligible for retention deletion',
+        error,
+      );
+    }
+
     const auditLog = this.auditLogRepository.create({
       actorId: null,
       action: 'gdpr.data_retention_cron',
       resourceType: AuditEntityType.SYSTEM,
       resourceId: null,
-      status: AuditLogStatus.SUCCESS,
+      status:
+        failures.length > 0 ? AuditLogStatus.FAILURE : AuditLogStatus.SUCCESS,
       metadata: {
-        notificationsDeleted: notificationsResult.affected || 0,
-        webhookDeliveriesDeleted: webhooksResult.affected || 0,
+        notificationsDeleted,
+        webhookDeliveriesDeleted,
         usersHardDeleted: deletedUsersCount,
+        usersHardDeleteFailures: failures.filter(
+          (failure) => failure.operation === 'hard_delete_user',
+        ),
+        failures,
       },
       ipAddress: '127.0.0.1',
       userAgent: 'Cron',
@@ -335,8 +438,44 @@ export class GdprService {
     await this.auditLogRepository.save(auditLog);
 
     this.logger.log(
-      `Data retention complete: ${deletedUsersCount} users, ${notificationsResult.affected} notifications, ${webhooksResult.affected} webhooks deleted.`,
+      `Data retention complete: ${deletedUsersCount} users, ${notificationsDeleted} notifications, ${webhookDeliveriesDeleted} webhooks deleted; ${failures.length} failures.`,
     );
+  }
+
+  private async deleteExpiredInBatches<T extends ObjectLiteral>(
+    repository: Repository<T>,
+    cutoff: Date,
+  ): Promise<number> {
+    let deletedCount = 0;
+    let lastId: string | undefined;
+
+    while (true) {
+      const expiredRecordsQuery = repository
+        .createQueryBuilder('record')
+        .select('record.id', 'id')
+        .where('record.createdAt < :cutoff', { cutoff });
+      if (lastId) {
+        expiredRecordsQuery.andWhere('record.id > :lastId', { lastId });
+      }
+
+      const records = await expiredRecordsQuery
+        .orderBy('record.id', 'ASC')
+        .take(RETENTION_BATCH_SIZE)
+        .getRawMany<{ id: string }>();
+      if (records.length === 0) break;
+
+      const result = await repository.delete(
+        records.map((record) => record.id),
+      );
+      deletedCount += result.affected ?? 0;
+      lastId = records[records.length - 1].id;
+    }
+
+    return deletedCount;
+  }
+
+  private errorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
   }
 
   async getConsentStatus(userId: string): Promise<{

@@ -21,6 +21,7 @@ import { ExportProcessor } from './processors/export.processor';
 import { Wallet } from '../../wallets/entities/wallet.entity';
 import { LedgerEntry } from '../../ledger/entities/ledger-entry.entity';
 import { Referral } from '../../referrals/entities/referral.entity';
+import { RedisModule } from '../../modules/redis/redis.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { Referral } from '../../referrals/entities/referral.entity';
       Referral,
     ]),
     StorageModule,
+    RedisModule,
     BullModule.registerQueue({
       name: 'gdpr-export',
     }),

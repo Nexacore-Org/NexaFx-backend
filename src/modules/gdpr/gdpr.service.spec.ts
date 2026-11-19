@@ -11,6 +11,7 @@ import { GdprService } from './gdpr.service';
 import { GdprConsent } from './entities/gdpr-consent.entity';
 import { ErasureAuditLog } from './entities/erasure-audit-log.entity';
 import { STORAGE_SERVICE_TOKEN } from '../storage/storage.service';
+import { RedisService } from '../../modules/redis/redis.service';
 
 jest.mock('bcrypt');
 const mockedBcrypt = bcrypt as jest.Mocked<typeof bcrypt>;
@@ -40,6 +41,7 @@ describe('GdprService', () => {
     count: jest.fn().mockResolvedValue(0),
     delete: jest.fn().mockResolvedValue({ affected: 1 }),
     update: jest.fn().mockResolvedValue({ affected: 1 }),
+    createQueryBuilder: jest.fn(),
   });
 
   let consentRepo: ReturnType<typeof mockRepo>;
@@ -56,6 +58,35 @@ describe('GdprService', () => {
   let expenseRepo: ReturnType<typeof mockRepo>;
   let storageService: { delete: jest.Mock };
   let exportQueue: { add: jest.Mock; getJobs: jest.Mock };
+  let redisService: {
+    isReady: jest.Mock;
+    key: jest.Mock;
+    rawClient: { set: jest.Mock; eval: jest.Mock };
+  };
+
+  const createQueryBuilderMock = () => {
+    const queryBuilder = {
+      select: jest.fn(),
+      where: jest.fn(),
+      andWhere: jest.fn(),
+      setParameter: jest.fn(),
+      orderBy: jest.fn(),
+      take: jest.fn(),
+      getMany: jest.fn().mockResolvedValue([]),
+      getRawMany: jest.fn().mockResolvedValue([]),
+    };
+    for (const method of [
+      'select',
+      'where',
+      'andWhere',
+      'setParameter',
+      'orderBy',
+      'take',
+    ] as const) {
+      queryBuilder[method].mockReturnValue(queryBuilder);
+    }
+    return queryBuilder;
+  };
 
   beforeEach(async () => {
     consentRepo = mockRepo();
@@ -75,6 +106,20 @@ describe('GdprService', () => {
       add: jest.fn().mockResolvedValue({ id: 'job-1' }),
       getJobs: jest.fn().mockResolvedValue([]),
     };
+    redisService = {
+      isReady: jest.fn().mockResolvedValue(true),
+      key: jest.fn().mockReturnValue('nexafx:test:gdpr:data-retention'),
+      rawClient: {
+        set: jest.fn().mockResolvedValue('OK'),
+        eval: jest.fn().mockResolvedValue(1),
+      },
+    };
+    notificationRepo.createQueryBuilder.mockReturnValue(
+      createQueryBuilderMock(),
+    );
+    webhookDeliveryRepo.createQueryBuilder.mockReturnValue(
+      createQueryBuilderMock(),
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -108,6 +153,7 @@ describe('GdprService', () => {
         { provide: getRepositoryToken(Expense), useValue: expenseRepo },
         { provide: STORAGE_SERVICE_TOKEN, useValue: storageService },
         { provide: 'BullQueue_gdpr-export', useValue: exportQueue },
+        { provide: RedisService, useValue: redisService },
         {
           provide: ConfigService,
           useValue: { get: jest.fn().mockReturnValue('1.0.0') },
@@ -119,6 +165,78 @@ describe('GdprService', () => {
   });
 
   afterEach(() => jest.clearAllMocks());
+
+  describe('enforceDataRetentionPolicies', () => {
+    it('selects inactive users with no financial transactions in the retention window', async () => {
+      const userQueryBuilder = createQueryBuilderMock();
+      userRepo.createQueryBuilder.mockReturnValue(userQueryBuilder);
+
+      await service.enforceDataRetentionPolicies();
+
+      expect(userQueryBuilder.where).toHaveBeenCalledWith(
+        'user.isActive = :isActive',
+        { isActive: false },
+      );
+      expect(userQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'user.deletedAt < :thirtyDaysAgo',
+        expect.objectContaining({ thirtyDaysAgo: expect.any(Date) }),
+      );
+      const notExistsPredicate = userQueryBuilder.andWhere.mock.calls.find(
+        ([condition]) => typeof condition === 'function',
+      )?.[0] as (queryBuilder: { subQuery: jest.Mock }) => string;
+      const subQuery = {
+        select: jest.fn().mockReturnThis(),
+        from: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getQuery: jest
+          .fn()
+          .mockReturnValue('(SELECT 1 FROM transactions tx WHERE ... )'),
+      };
+
+      expect(
+        notExistsPredicate({ subQuery: jest.fn().mockReturnValue(subQuery) }),
+      ).toBe('NOT EXISTS (SELECT 1 FROM transactions tx WHERE ... )');
+      expect(subQuery.where).toHaveBeenCalledWith('tx.userId = user.id');
+      expect(subQuery.andWhere).toHaveBeenCalledWith(
+        'tx.createdAt > :sevenYearsAgo',
+      );
+      expect(userQueryBuilder.take).toHaveBeenCalledWith(500);
+      expect(txRepo.count).not.toHaveBeenCalled();
+      expect(auditLogRepo.save).toHaveBeenCalled();
+    });
+
+    it('continues after one user deletion fails and audits the failed user', async () => {
+      const userQueryBuilder = createQueryBuilderMock();
+      userQueryBuilder.getMany
+        .mockResolvedValueOnce([{ id: 'user-1' }, { id: 'user-2' }])
+        .mockResolvedValueOnce([]);
+      userRepo.createQueryBuilder.mockReturnValue(userQueryBuilder);
+      userRepo.delete
+        .mockRejectedValueOnce(new Error('foreign key constraint'))
+        .mockResolvedValueOnce({ affected: 1 });
+
+      await service.enforceDataRetentionPolicies();
+
+      expect(userRepo.delete).toHaveBeenNthCalledWith(1, 'user-1');
+      expect(userRepo.delete).toHaveBeenNthCalledWith(2, 'user-2');
+      expect(auditLogRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'FAILURE',
+          metadata: expect.objectContaining({
+            usersHardDeleted: 1,
+            usersHardDeleteFailures: [
+              expect.objectContaining({
+                userId: 'user-1',
+                error: 'foreign key constraint',
+              }),
+            ],
+          }),
+        }),
+      );
+      expect(auditLogRepo.save).toHaveBeenCalled();
+    });
+  });
 
   describe('recordConsent', () => {
     it('records consent with timestamp and metadata', async () => {

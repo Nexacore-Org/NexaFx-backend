@@ -1,13 +1,21 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, MinLength, MaxLength } from 'class-validator';
+import { IsString, Length } from 'class-validator';
+import { IsStrongPassword } from './strong-password.decorator';
 
 export class SetPasswordDto {
   @ApiProperty({
-    example: 'SecurePassword123!',
-    description: 'Password (minimum 12 characters)',
+    example: '123456',
+    description: '6-digit OTP for password setup verification',
   })
   @IsString()
-  @MinLength(12)
-  @MaxLength(128)
+  @Length(6, 6)
+  otp: string;
+
+  @ApiProperty({
+    example: 'SecurePassword123!',
+    description: 'Password (12-128 characters, max 72 UTF-8 bytes)',
+  })
+  @IsString()
+  @IsStrongPassword()
   newPassword: string;
 }

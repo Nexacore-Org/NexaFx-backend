@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { resolveJwtSecret } from '../common/helpers/jwt-secret';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
@@ -49,19 +50,11 @@ type JwtExpiryValue = `${number}${'s' | 'm' | 'h' | 'd'}`;
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
-        const secret = configService.get<string>('JWT_SECRET');
-        const isProduction =
-          configService.get<string>('NODE_ENV') === 'production';
-
-        if (!secret && isProduction) {
-          throw new Error('JWT_SECRET must be set in production environment');
-        }
-
         const expiresIn = (configService.get<string>('JWT_EXPIRES_IN') ??
           '15m') as JwtExpiryValue;
 
         return {
-          secret: secret ?? 'default-secret-change-in-production',
+          secret: resolveJwtSecret(configService),
           signOptions: { expiresIn },
         };
       },

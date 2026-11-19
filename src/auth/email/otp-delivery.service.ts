@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+﻿import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OtpType } from '../../otps/otp.entity';
 import { MailService } from '../../modules/mail/mail.service';
 import { UsersService } from '../../users/users.service';
 import { IntelligentSmsRoutingService } from '../../intelligent-sms-routing/intelligent-sms-routing.service';
+import { OtpsService } from '../../otps/otps.service';
 
 interface SendOtpParams {
   email: string;
@@ -26,14 +27,22 @@ export class OtpDeliveryService {
     private readonly mailService: MailService,
     private readonly usersService: UsersService,
     private readonly smsRoutingService: IntelligentSmsRoutingService,
+    private readonly otpsService: OtpsService,
   ) {}
 
   async sendOtp(params: SendOtpParams): Promise<void> {
     const skipEmail = this.configService.get<string>('SKIP_EMAIL_SENDING');
+    const nodeEnv =
+      this.configService.get<string>('NODE_ENV') ?? 'development';
 
     if (skipEmail === 'true') {
+      if (nodeEnv === 'production') {
+        throw new Error(
+          'SKIP_EMAIL_SENDING is not allowed when NODE_ENV is production',
+        );
+      }
       this.logger.log(
-        `[OTP DEV] Email skipped — ${params.type} OTP for ${params.email}: ${params.otp}`,
+        `[OTP DEV] Email skipped — ${params.type} OTP for ${params.email}`,
       );
     } else {
       try {
@@ -43,7 +52,6 @@ export class OtpDeliveryService {
           `[OTP] ${params.type} email sent successfully to ${params.email}`,
         );
       } catch (error) {
-        // Log but do not throw — email failure must never crash the auth flow
         this.logger.error(
           `[OTP] Failed to send ${params.type} email to ${params.email}`,
           error instanceof Error ? error.message : String(error),
@@ -53,10 +61,15 @@ export class OtpDeliveryService {
 
     try {
       const user = await this.usersService.findByEmail(params.email);
-      if (user && user.phone) {
-        const smsMessage = `Your NexaFX ${params.type.toLowerCase().replace('_', ' ')} code is: ${params.otp}. Expiry 10 minutes.`;
+      const allowUnverifiedSms =
+        this.configService.get<string>('ALLOW_UNVERIFIED_SMS_OTP') === 'true';
+      if (user?.phone && (user.isPhoneVerified || allowUnverifiedSms)) {
+        const expiry = this.formatExpiry(this.otpsService.getOtpExpiryMinutes());
+        const smsMessage = `Your NexaFX ${params.type.toLowerCase().replace('_', ' ')} code is: ${params.otp}. Expires in ${expiry}.`;
         await this.smsRoutingService.sendSms(user.phone, smsMessage);
-        this.logger.log(`[OTP] SMS sent successfully to ${this.maskPhone(user.phone)}`);
+        this.logger.log(
+          `[OTP] SMS sent successfully to ${this.maskPhone(user.phone)}`,
+        );
       }
     } catch (smsError: any) {
       this.logger.error(
@@ -73,8 +86,12 @@ export class OtpDeliveryService {
     return `***${visible}`;
   }
 
+  private formatExpiry(minutes: number): string {
+    return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+  }
+
   private buildTemplate(type: OtpType, otp: string): EmailTemplate {
-    const expiry = '10 minutes';
+    const expiry = this.formatExpiry(this.otpsService.getOtpExpiryMinutes());
 
     const baseStyles = `
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -115,7 +132,7 @@ export class OtpDeliveryService {
               <h1 style="margin: 0; color: #fff; font-size: 24px; font-weight: 700;">NexaFX</h1>
             </div>
             <div style="padding: 32px;">
-              <h2 style="margin: 0 0 8px; font-size: 20px; color: #1A1A1A;">Welcome to NexaFX 👋</h2>
+              <h2 style="margin: 0 0 8px; font-size: 20px; color: #1A1A1A;">Welcome to NexaFX</h2>
               <p style="color: #555; line-height: 1.6;">
                 Thanks for signing up. Use the code below to verify your account.
               </p>
@@ -142,7 +159,7 @@ export class OtpDeliveryService {
               ${codeBlock}
               <p style="color: #e74c3c; font-size: 13px; background: #FFF0F0; padding: 12px;
                          border-radius: 8px; border-left: 3px solid #e74c3c;">
-                ⚠️ If you did not attempt to log in, change your password immediately.
+                If you did not attempt to log in, change your password immediately.
               </p>
               ${footer}
             </div>
@@ -166,7 +183,7 @@ export class OtpDeliveryService {
               ${codeBlock}
               <p style="color: #e74c3c; font-size: 13px; background: #FFF0F0; padding: 12px;
                          border-radius: 8px; border-left: 3px solid #e74c3c;">
-                ⚠️ If you did not request a password reset, your account may be at risk.
+                If you did not request a password reset, your account may be at risk.
                 Contact support immediately.
               </p>
               ${footer}

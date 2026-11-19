@@ -355,6 +355,7 @@ export class AuthService {
           email: user.email,
           role: user.role,
           authStage: 'partial_auth',
+          typ: 'partial_auth',
           tokenVersion: user.tokenVersion ?? 0,
         },
         {
@@ -410,7 +411,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired two-factor token');
     }
 
-    if (decoded.authStage !== 'partial_auth') {
+    if (
+      decoded.authStage !== 'partial_auth' ||
+      (decoded as any).typ !== 'partial_auth'
+    ) {
       throw new UnauthorizedException('Invalid two-factor token');
     }
 
@@ -517,6 +521,11 @@ export class AuthService {
       resetDto.otp,
       OtpType.PASSWORD_RESET,
     );
+    if (user.password && (await bcrypt.compare(resetDto.newPassword, user.password))) {
+      throw new BadRequestException(
+        'New password must be different from current password',
+      );
+    }
     await this.usersService.updateByUserId(user.id, {
       failedLoginAttempts: 0,
       lockedUntil: null,
@@ -528,7 +537,6 @@ export class AuthService {
     await this.refreshTokensService.revokeAllUserTokens(user.id);
     await this.otpsService.invalidateAllUserOtps(user.id);
 
-    // Log password reset completion
     await this.auditLogsService.logAuthEvent(
       user.id,
       AuditAction.PASSWORD_RESET_COMPLETE,
@@ -565,12 +573,17 @@ export class AuthService {
     if (!isPasswordValid)
       throw new UnauthorizedException('Invalid current password');
 
+    if (await bcrypt.compare(dto.newPassword, user.password)) {
+      throw new BadRequestException(
+        'New password must be different from current password',
+      );
+    }
+
     await this.usersService.updatePassword(user.id, dto.newPassword);
     await this.usersService.updateByUserId(user.id, {
       tokenVersion: (user.tokenVersion ?? 0) + 1,
     });
 
-    // Security Fix: Redis key purge and session cleanup
     await this.refreshTokensService.revokeAllUserTokens(user.id);
     await this.otpsService.invalidateAllUserOtps(user.id);
 
@@ -1008,6 +1021,17 @@ export class AuthService {
     this.assertAccountUsable(user);
 
     if (user.isTwoFactorEnabled) {
+      const twoFactorToken = this.jwtService.sign(
+        {
+          sub: user.id,
+          email: user.email,
+          role: user.role,
+          authStage: 'partial_auth',
+          typ: 'partial_auth',
+        },
+        { expiresIn: '5m' },
+      );
+
       await this.auditLogsService.logAuthEvent(user.id, AuditAction.LOGIN, {
         method: 'oauth',
         status: '2fa_required',
@@ -1051,6 +1075,7 @@ export class AuthService {
             email: user.email,
             role: user.role,
             authStage: 'partial_auth',
+            typ: 'partial_auth',
             tokenVersion: user.tokenVersion ?? 0,
           },
           { expiresIn: '5m' },
@@ -1072,7 +1097,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired two-factor token');
     }
 
-    if (decoded.authStage !== 'partial_auth') {
+    if (
+      decoded.authStage !== 'partial_auth' ||
+      (decoded as any).typ !== 'partial_auth'
+    ) {
       throw new UnauthorizedException('Invalid two-factor token');
     }
 
@@ -1198,7 +1226,13 @@ export class AuthService {
     await this.oauthAccountRepository.delete(account.id);
   }
 
-  async setPassword(userId: string, newPassword: string): Promise<void> {
+  async setPassword(
+    userId: string,
+    newPassword: string,
+    otp: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<void> {
     const user = await this.usersService.findById(userId);
     if (!user) {
       throw new UnauthorizedException('User not found');
@@ -1208,7 +1242,21 @@ export class AuthService {
       throw new BadRequestException('User already has a password set');
     }
 
+    await this.otpsService.validateOtp(user, otp, OtpType.PASSWORD_RESET);
+
     await this.usersService.updatePassword(userId, newPassword);
+    await this.refreshTokensService.revokeAllUserTokens(user.id);
+    await this.otpsService.invalidateAllUserOtps(user.id);
+
+    await this.auditLogsService.logAuthEvent(
+      user.id,
+      AuditAction.PASSWORD_RESET_COMPLETE,
+      {
+        reason: 'User set password for OAuth-only account',
+        ip: ipAddress,
+        device: userAgent,
+      },
+    );
   }
 
   private async issueAuthTokens(
@@ -1217,6 +1265,7 @@ export class AuthService {
     role: string,
   ): Promise<VerifyLoginOtpResponseDto> {
     const user = await this.usersService.findById(userId);
+    const payload = { sub: userId, email, role, typ: 'access' };
     const payload: JwtPayload = {
       sub: userId,
       email,

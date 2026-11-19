@@ -1,5 +1,5 @@
 import { Operation, Asset } from 'stellar-sdk';
-import { randomBytes } from 'crypto';
+import { randomBytes, createHash } from 'crypto';
 import {
   Injectable,
   NotFoundException,
@@ -67,11 +67,18 @@ import { ActivityFeedType } from '../../unified-activity-feed/entities/activity-
 export function truncateMemoTo28Bytes(memo: string): string {
   const encoded = Buffer.from(memo, 'utf8');
   if (encoded.length <= 28) return memo;
-  // Slice to 28 bytes, then decode — incomplete multi-byte sequences are dropped
   return encoded
     .slice(0, 28)
     .toString('utf8')
     .replace(/\uFFFD/g, '');
+}
+
+export function buildStellarMemo(prefix: 'W' | 'S', transactionId: string): string {
+  const hash = createHash('sha256')
+    .update(transactionId)
+    .digest('hex')
+    .slice(0, 26);
+  return `${prefix}-${hash}`;
 }
 
 /** Narrows an unknown catch value to a plain Error with a message string. */
@@ -535,6 +542,9 @@ export class TransactionsService {
         },
       );
 
+      const stellarMemo = createWithdrawalDto.memo
+        ? truncateMemoTo28Bytes(createWithdrawalDto.memo)
+        : buildStellarMemo('W', transaction.id);
       const sourceAddress = await this.getUserStellarAddress(
         userId,
         createWithdrawalDto.walletId,
@@ -569,6 +579,10 @@ export class TransactionsService {
       );
 
       const paymentResult = await this.stellarService.sendPayment({
+        destination: destinationAddress,
+        amount: amount.toString(),
+        secretKey,
+        memo: stellarMemo,
         sourcePublicKey: sourceAddress,
         destination: destinationAddress,
         asset: paymentAsset,
@@ -828,7 +842,7 @@ export class TransactionsService {
 
         const swapMemo = createSwapDto.memo
           ? truncateMemoTo28Bytes(createSwapDto.memo)
-          : `SWAP-${transaction.id}`;
+          : buildStellarMemo('S', transaction.id);
 
         const stellarTx = await this.stellarService.createTransaction({
           sourcePublicKey: txWallet.publicKey,

@@ -1,4 +1,4 @@
-// OAuth feature implementation
+﻿// OAuth feature implementation
 import {
   Injectable,
   UnauthorizedException,
@@ -13,6 +13,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { UsersService } from '../users/users.service';
 import { OtpsService } from '../otps/otps.service';
 import { OtpType } from '../otps/otp.entity';
@@ -181,7 +182,7 @@ export class AuthService {
         AuditAction.FAILED_LOGIN,
         {
           email: loginDto.email,
-          reason: 'OAuth-only account — no password set',
+          reason: 'OAuth-only account â€” no password set',
           ip: ipAddress,
           device: userAgent,
         },
@@ -355,6 +356,8 @@ export class AuthService {
           email: user.email,
           role: user.role,
           authStage: 'partial_auth',
+          typ: 'partial_auth',
+          tokenVersion: user.tokenVersion ?? 0,
         },
         {
           expiresIn: '5m',
@@ -409,7 +412,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired two-factor token');
     }
 
-    if (decoded.authStage !== 'partial_auth') {
+    if (
+      decoded.authStage !== 'partial_auth' ||
+      (decoded as any).typ !== 'partial_auth'
+    ) {
       throw new UnauthorizedException('Invalid two-factor token');
     }
 
@@ -516,15 +522,22 @@ export class AuthService {
       resetDto.otp,
       OtpType.PASSWORD_RESET,
     );
+    if (user.password && (await bcrypt.compare(resetDto.newPassword, user.password))) {
+      throw new BadRequestException(
+        'New password must be different from current password',
+      );
+    }
     await this.usersService.updateByUserId(user.id, {
       failedLoginAttempts: 0,
       lockedUntil: null,
     });
     await this.usersService.updatePassword(user.id, resetDto.newPassword);
+    await this.usersService.updateByUserId(user.id, {
+      tokenVersion: (user.tokenVersion ?? 0) + 1,
+    });
     await this.refreshTokensService.revokeAllUserTokens(user.id);
     await this.otpsService.invalidateAllUserOtps(user.id);
 
-    // Log password reset completion
     await this.auditLogsService.logAuthEvent(
       user.id,
       AuditAction.PASSWORD_RESET_COMPLETE,
@@ -561,9 +574,17 @@ export class AuthService {
     if (!isPasswordValid)
       throw new UnauthorizedException('Invalid current password');
 
-    await this.usersService.updatePassword(user.id, dto.newPassword);
+    if (await bcrypt.compare(dto.newPassword, user.password)) {
+      throw new BadRequestException(
+        'New password must be different from current password',
+      );
+    }
 
-    // Security Fix: Redis key purge and session cleanup
+    await this.usersService.updatePassword(user.id, dto.newPassword);
+    await this.usersService.updateByUserId(user.id, {
+      tokenVersion: (user.tokenVersion ?? 0) + 1,
+    });
+
     await this.refreshTokensService.revokeAllUserTokens(user.id);
     await this.otpsService.invalidateAllUserOtps(user.id);
 
@@ -583,9 +604,10 @@ export class AuthService {
   async refreshAccessToken(refreshToken: string): Promise<{
     accessToken: string;
     expiresIn: number;
+    refreshToken: string;
   }> {
     const tokenEntity =
-      await this.refreshTokensService.validateRefreshToken(refreshToken);
+      await this.refreshTokensService.rotateRefreshToken(refreshToken);
     const user = await this.usersService.findById(tokenEntity.userId);
 
     if (!user || !user.isVerified) {
@@ -598,13 +620,19 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       role: user.role,
+      tokenVersion: user.tokenVersion ?? 0,
     };
 
     const accessToken = this.jwtService.sign(payload);
+    const newRefreshToken = await this.refreshTokensService.createRefreshToken(
+      user.id,
+      tokenEntity.familyId,
+    );
     const expiresIn = this.getAccessTokenExpirySeconds();
 
     return {
       accessToken,
+      refreshToken: newRefreshToken,
       expiresIn,
     };
   }
@@ -766,6 +794,7 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       role: user.role,
+      tokenVersion: user.tokenVersion ?? 0,
     };
 
     const accessToken = this.jwtService.sign(payload);
@@ -869,6 +898,12 @@ export class AuthService {
     ipAddress?: string,
     userAgent?: string,
   ): Promise<void> {
+    const user = await this.usersService.findById(userId);
+    if (user) {
+      await this.usersService.updateByUserId(userId, {
+        tokenVersion: (user.tokenVersion ?? 0) + 1,
+      });
+    }
     await this.refreshTokensService.revokeAllUserTokens(userId);
 
     // Log logout from all devices
@@ -909,7 +944,7 @@ export class AuthService {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       let code = '';
       for (let i = 0; i < codeLength; i++) {
-        code += characters[Math.floor(Math.random() * characters.length)];
+        code += characters[crypto.randomInt(characters.length)];
       }
 
       const existing = await this.usersService.findByReferralCode(code);
@@ -977,8 +1012,6 @@ export class AuthService {
    */
   async completeOAuthLogin(userId: string): Promise<{
     requiresTwoFactor: boolean;
-    tokens: VerifyLoginOtpResponseDto;
-    isNew: boolean;
   }> {
     const user = await this.usersService.findById(userId);
 
@@ -995,6 +1028,7 @@ export class AuthService {
           email: user.email,
           role: user.role,
           authStage: 'partial_auth',
+          typ: 'partial_auth',
         },
         { expiresIn: '5m' },
       );
@@ -1004,21 +1038,10 @@ export class AuthService {
         status: '2fa_required',
       });
 
-      return {
-        requiresTwoFactor: true,
-        tokens: {
-          accessToken: twoFactorToken,
-          expiresIn: 300,
-        } as VerifyLoginOtpResponseDto,
-        isNew: false,
-      };
+      return { requiresTwoFactor: true };
     }
 
-    return {
-      requiresTwoFactor: false,
-      tokens: await this.issueAuthTokens(user.id, user.email, user.role),
-      isNew: false,
-    };
+    return { requiresTwoFactor: false };
   }
 
   /**
@@ -1030,7 +1053,7 @@ export class AuthService {
    */
   async exchangeOauthCode(
     code: string,
-  ): Promise<VerifyLoginOtpResponseDto & { requiresTwoFactor?: boolean }> {
+  ): Promise<Partial<VerifyLoginOtpResponseDto> & { requiresTwoFactor?: boolean }> {
     const payload = await this.oauthCodeService.consume(code);
 
     if (!payload) {
@@ -1053,31 +1076,18 @@ export class AuthService {
             email: user.email,
             role: user.role,
             authStage: 'partial_auth',
+            typ: 'partial_auth',
+            tokenVersion: user.tokenVersion ?? 0,
           },
           { expiresIn: '5m' },
         ),
         expiresIn: 300,
-      } as VerifyLoginOtpResponseDto;
+      };
     }
 
     return this.issueAuthTokens(user.id, user.email, user.role);
   }
 
-  private assertAccountUsable(user: {
-    isActive: boolean;
-    isSuspended: boolean;
-    isDeleted: boolean;
-  }): void {
-    if (user.isDeleted) {
-      throw new UnauthorizedException('Account has been deleted');
-    }
-    if (user.isSuspended) {
-      throw new ForbiddenException('Account is suspended');
-    }
-    if (!user.isActive) {
-      throw new ForbiddenException('Account is deactivated');
-    }
-  }
 
   getUserIdFromPartialAuth(token: string): string {
     let decoded: JwtPayload & { authStage?: string };
@@ -1088,7 +1098,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired two-factor token');
     }
 
-    if (decoded.authStage !== 'partial_auth') {
+    if (
+      decoded.authStage !== 'partial_auth' ||
+      (decoded as any).typ !== 'partial_auth'
+    ) {
       throw new UnauthorizedException('Invalid two-factor token');
     }
 
@@ -1214,7 +1227,13 @@ export class AuthService {
     await this.oauthAccountRepository.delete(account.id);
   }
 
-  async setPassword(userId: string, newPassword: string): Promise<void> {
+  async setPassword(
+    userId: string,
+    newPassword: string,
+    otp: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<void> {
     const user = await this.usersService.findById(userId);
     if (!user) {
       throw new UnauthorizedException('User not found');
@@ -1224,7 +1243,21 @@ export class AuthService {
       throw new BadRequestException('User already has a password set');
     }
 
+    await this.otpsService.validateOtp(user, otp, OtpType.PASSWORD_RESET);
+
     await this.usersService.updatePassword(userId, newPassword);
+    await this.refreshTokensService.revokeAllUserTokens(user.id);
+    await this.otpsService.invalidateAllUserOtps(user.id);
+
+    await this.auditLogsService.logAuthEvent(
+      user.id,
+      AuditAction.PASSWORD_RESET_COMPLETE,
+      {
+        reason: 'User set password for OAuth-only account',
+        ip: ipAddress,
+        device: userAgent,
+      },
+    );
   }
 
   private async issueAuthTokens(
@@ -1233,7 +1266,13 @@ export class AuthService {
     role: string,
   ): Promise<VerifyLoginOtpResponseDto> {
     const user = await this.usersService.findById(userId);
-    const payload = { sub: userId, email, role };
+    const payload = { sub: userId, email, role, typ: 'access' };
+    const payload: JwtPayload = {
+      sub: userId,
+      email,
+      role,
+      tokenVersion: user?.tokenVersion ?? 0,
+    };
     const authUser: AuthUserResponseDto = {
       id: userId,
       email,

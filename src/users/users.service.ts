@@ -20,7 +20,10 @@ import { UserQueryDto } from '../admin/dto/user-query.dto';
 import { StellarService } from '../blockchain/stellar/stellar.service';
 import { WalletBalanceResult } from '../blockchain/stellar/stellar.types';
 import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
-import { RateLimitConfig } from './rate-limit-config.entity';
+import {
+  RateLimitConfig,
+  DEFAULT_RATE_LIMIT_PER_MINUTE,
+} from './rate-limit-config.entity';
 import { ThrottlerStorageService } from '@nestjs/throttler';
 import { NotificationPreferenceService } from '../notifications/services/notification-preference.service';
 import { RedisService } from '../common/services/redis.service';
@@ -100,9 +103,7 @@ export class UsersService {
     consentGdpr?: boolean;
     consentGdprAt?: Date;
     consentGdprVersion?: string;
-  }): Promise<
-    Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'>
-  > {
+  }): Promise<ProfileResponseDto> {
     const normalizedEmail = params.email.toLowerCase().trim();
 
     const existingUser = await this.findByEmail(normalizedEmail);
@@ -143,13 +144,7 @@ export class UsersService {
     await this.notificationPreferenceService.createDefaults(savedUser.id);
     await this.redisService.del('admin_stats');
 
-    const {
-      password: _,
-      walletSecretKeyEncrypted: __,
-      twoFactorSecret: ___,
-      ...userWithoutSecrets
-    } = savedUser;
-    return userWithoutSecrets;
+    return ProfileResponseDto.fromUser(savedUser);
   }
 
   /**
@@ -187,6 +182,43 @@ export class UsersService {
     }
 
     return attempts;
+  }
+
+  async incrementTwoFactorFailedAttempts(
+    userId: string,
+    maxAttempts: number,
+    lockoutMinutes: number,
+  ): Promise<number> {
+    const result = await this.userRepository
+      .createQueryBuilder()
+      .update(User)
+      .set({ twoFactorFailedAttempts: () => '"twoFactorFailedAttempts" + 1' })
+      .where('id = :userId', { userId })
+      .returning('"twoFactorFailedAttempts"')
+      .execute();
+
+    const attempts = Number(result?.raw?.[0]?.twoFactorFailedAttempts ?? 0);
+
+    if (attempts >= maxAttempts) {
+      await this.userRepository.update(userId, {
+        twoFactorFailedAttempts: 0,
+        twoFactorLockedUntil: new Date(Date.now() + lockoutMinutes * 60_000),
+      });
+    }
+
+    return attempts;
+  }
+
+  async acceptTotpStep(userId: string, step: number): Promise<boolean> {
+    const result = await this.userRepository
+      .createQueryBuilder()
+      .update(User)
+      .set({ lastTotpStep: step })
+      .where('id = :userId', { userId })
+      .andWhere('("lastTotpStep" IS NULL OR "lastTotpStep" < :step)', { step })
+      .execute();
+
+    return (result.affected ?? 0) > 0;
   }
 
   /** Clears the lockout state after a completed login. */
@@ -252,7 +284,7 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    return this.excludeSecrets(user);
+    return ProfileResponseDto.fromUser(user);
   }
 
   async getWalletBalances(
@@ -407,13 +439,6 @@ export class UsersService {
     }
   }
 
-  private excludeSecrets(user: User): ProfileResponseDto {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password, walletSecretKeyEncrypted, twoFactorSecret, ...profile } =
-      user;
-    return profile;
-  }
-
   async updateProfile(
     userId: string,
     updateProfileDto: UpdateProfileDto,
@@ -442,7 +467,7 @@ export class UsersService {
     }
 
     const updatedUser = await this.findById(userId);
-    return this.excludeSecrets(updatedUser!);
+    return ProfileResponseDto.fromUser(updatedUser!);
   }
 
   async deleteProfile(userId: string): Promise<void> {
@@ -495,7 +520,7 @@ export class UsersService {
     const [users, total] = await queryBuilder.getManyAndCount();
 
     return {
-      data: users.map((user) => this.excludeSecrets(user)),
+      data: users.map((user) => ProfileResponseDto.fromUser(user)),
       total,
       page,
       limit,
@@ -606,7 +631,8 @@ export class UsersService {
     });
 
     const isUnlimited = !config || config.limitPerMinute === null;
-    const limitPerMinute = config?.limitPerMinute ?? 60; // fallback if no config
+    const limitPerMinute =
+      config?.limitPerMinute ?? DEFAULT_RATE_LIMIT_PER_MINUTE;
 
     // Get current usage from throttler storage
     // The key is constructed as 'user:${userId}' based on PlanThrottlerGuard's generateKey override

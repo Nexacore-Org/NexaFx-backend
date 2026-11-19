@@ -1,4 +1,4 @@
-import {
+﻿import {
   ConflictException,
   Injectable,
   Logger,
@@ -7,7 +7,6 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, In } from 'typeorm';
 import { UsersService } from '../users.service';
-import { RefreshTokensService } from '../../tokens/refresh-tokens.service';
 import { RefreshToken } from '../../tokens/refresh-token.entity';
 import { BackupCode } from '../../two-factor/entities/backup-code.entity';
 import { OAuthAccount } from '../../auth/entities/oauth-account.entity';
@@ -30,6 +29,7 @@ import { NotificationsService } from '../../notifications/notifications.service'
 export class AccountDeletionService {
   private readonly logger = new Logger(AccountDeletionService.name);
   private readonly HARD_DELETE_DAYS = 30;
+  private readonly AUDIT_LOG_RETENTION_DAYS = 365;
 
   constructor(
     @InjectRepository(User)
@@ -47,7 +47,6 @@ export class AccountDeletionService {
     @InjectRepository(AuditLog)
     private readonly auditLogRepository: Repository<AuditLog>,
     private readonly usersService: UsersService,
-    private readonly refreshTokensService: RefreshTokensService,
     private readonly notificationsService: NotificationsService,
     private readonly dataSource: DataSource,
   ) {}
@@ -58,7 +57,6 @@ export class AccountDeletionService {
       throw new NotFoundException('User not found');
     }
 
-    // Check for existing deletion request
     const existingRequest = await this.dataRequestRepository.findOne({
       where: {
         userId,
@@ -68,7 +66,6 @@ export class AccountDeletionService {
     });
 
     if (existingRequest) {
-      // A plain Error surfaced as a 500; this is a client-state conflict.
       throw new ConflictException(
         'An account deletion request is already in progress.',
       );
@@ -89,7 +86,6 @@ export class AccountDeletionService {
       `Account deletion requested for user ${userId}, request ID: ${saved.id}`,
     );
 
-    // Start async processing
     this.processAccountDeletion(saved.id).catch((err) => {
       this.logger.error(
         `Failed to process account deletion for request ${saved.id}:`,
@@ -116,25 +112,15 @@ export class AccountDeletionService {
       request.status = DataRequestStatus.PROCESSING;
       await this.dataRequestRepository.save(request);
 
-      this.logger.log(
-        `Processing account deletion for user ${userId}, request ${requestId}`,
-      );
-
       await this.anonymizeUserAccount(userId);
 
       request.status = DataRequestStatus.COMPLETE;
       request.completedAt = new Date();
       await this.dataRequestRepository.save(request);
 
-      // Schedule hard delete in 30 days
       const hardDeleteAt = new Date();
       hardDeleteAt.setDate(hardDeleteAt.getDate() + this.HARD_DELETE_DAYS);
 
-      this.logger.log(
-        `Account deletion completed for user ${userId}. Hard delete scheduled for ${hardDeleteAt.toISOString()}`,
-      );
-
-      // Send notification
       await this.notificationsService.create({
         userId,
         type: NotificationType.SECURITY_ALERT,
@@ -186,7 +172,6 @@ export class AccountDeletionService {
         throw new NotFoundException('User not found');
       }
 
-      // Anonymize PII fields
       const suffix = `DELETED_${userId}`;
 
       user.email = `deleted_${suffix}@nexafx.invalid`;
@@ -202,31 +187,25 @@ export class AccountDeletionService {
       user.balances = {};
       user.isSuspended = false;
       user.isDeleted = true;
+      if ('deletedAt' in user) {
+        (user as any).deletedAt = new Date();
+      }
 
-      await queryRunner.manager.save(user);
+      await queryRunner.manager.save(User, user);
 
-      // Revoke all refresh tokens
-      // The table is refresh_tokens and the entity is RefreshToken: TypeORM
-      // threw on the string target, which rolled the whole transaction back.
       await queryRunner.manager.update(
         RefreshToken,
         { userId },
         { revokedAt: new Date() },
       );
 
-      // Two-factor backup codes and linked OAuth identities are personal data
-      // too, and both were left behind.
       await queryRunner.manager.delete(BackupCode, { userId });
       await queryRunner.manager.delete(OAuthAccount, { userId });
 
-      // Anonymize KYC records
       await queryRunner.manager.update(
         KycRecord,
         { userId },
         {
-          // These columns are NOT NULL: writing null aborted the transaction,
-          // so nothing was ever anonymized. The stored objects are dropped by
-          // their storage key and the key itself is replaced.
           fullName: 'DELETED',
           documentNumber: 'DELETED',
           documentFrontKey: 'deleted',
@@ -237,9 +216,6 @@ export class AccountDeletionService {
         },
       );
 
-      // Note: Transactions are retained for compliance (only PII anonymized above)
-
-      // Anonymize beneficiaries
       await queryRunner.manager.update(
         Beneficiary,
         { userId },
@@ -249,25 +225,18 @@ export class AccountDeletionService {
         },
       );
 
-      // The encrypted wallet secret is personal data and is unrecoverable
-      // once the account is anonymized.
       await queryRunner.manager.update(
         Wallet,
         { userId },
         { encryptedSecretKey: 'deleted' },
       );
 
-      // Note: Audit logs are retained for compliance
-      // Only clear IP/userAgent in audit logs if they contain PII
-
-      // Clear notifications content
       await queryRunner.manager.update(
         Notification,
         { userId },
         {
           title: 'Account Deleted',
           body: 'This account has been anonymized',
-          // jsonb NOT NULL: the payload is emptied rather than nulled.
           data: {},
         },
       );
@@ -290,12 +259,12 @@ export class AccountDeletionService {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - this.HARD_DELETE_DAYS);
 
-    // Find deletion requests that are COMPLETE and older than 30 days
     const deletionRequests = await this.dataRequestRepository
       .createQueryBuilder('dr')
       .where('dr.type = :type', { type: DataRequestType.DELETION })
       .andWhere('dr.status = :status', { status: DataRequestStatus.COMPLETE })
       .andWhere('dr.completedAt < :cutoff', { cutoff: cutoffDate })
+      .andWhere('dr.hardDeletedAt IS NULL')
       .getMany();
 
     if (deletionRequests.length === 0) {
@@ -303,21 +272,20 @@ export class AccountDeletionService {
       return { deleted: 0, processed: 0 };
     }
 
-    this.logger.log(
-      `[Hard Delete] Found ${deletionRequests.length} accounts ready for hard delete`,
-    );
-
-    const userIds = deletionRequests.map((req) => req.userId);
     let deletedCount = 0;
 
-    for (const userId of userIds) {
+    for (const request of deletionRequests) {
       try {
-        await this.hardDeleteUser(userId);
+        await this.hardDeleteUser(request.userId);
+        request.hardDeletedAt = new Date();
+        await this.dataRequestRepository.save(request);
         deletedCount++;
-        this.logger.log(`[Hard Delete] Permanently deleted user: ${userId}`);
+        this.logger.log(
+          `[Hard Delete] Permanently deleted user: ${request.userId}`,
+        );
       } catch (error) {
         this.logger.error(
-          `[Hard Delete] Failed to delete user ${userId}:`,
+          `[Hard Delete] Failed to delete user ${request.userId}:`,
           error,
         );
       }
@@ -335,7 +303,6 @@ export class AccountDeletionService {
     await queryRunner.startTransaction();
 
     try {
-      // Get user
       const user = await queryRunner.manager.findOne(User, {
         where: { id: userId },
       });
@@ -344,7 +311,6 @@ export class AccountDeletionService {
         throw new NotFoundException('User not found');
       }
 
-      // Anonymize PII fields on user record
       const suffix = `DELETED_${userId}`;
       user.email = `deleted_${suffix}@nexafx.invalid`;
       user.firstName = 'DELETED';
@@ -359,32 +325,35 @@ export class AccountDeletionService {
       user.balances = {};
       user.isSuspended = false;
       user.isDeleted = true;
+      if ('deletedAt' in user) {
+        (user as any).deletedAt = new Date();
+      }
 
       await queryRunner.manager.save(User, user);
 
-      // Revoke all refresh tokens
       await queryRunner.manager.update(
-        'refresh_token',
+        RefreshToken,
         { userId },
         { revokedAt: new Date() },
       );
 
-      // Anonymize KYC records
+      await queryRunner.manager.delete(BackupCode, { userId });
+      await queryRunner.manager.delete(OAuthAccount, { userId });
+
       await queryRunner.manager.update(
         KycRecord,
         { userId },
         {
           fullName: 'DELETED',
           documentNumber: 'DELETED',
-          documentFrontKey: null as any,
-          documentBackKey: null as any,
-          selfieKey: null as any,
+          documentFrontKey: 'deleted',
+          documentBackKey: 'deleted',
+          selfieKey: 'deleted',
           rejectionReason: 'Account deleted',
           status: 'rejected' as any,
         },
       );
 
-      // Anonymize beneficiaries
       await queryRunner.manager.update(
         Beneficiary,
         { userId },
@@ -394,18 +363,37 @@ export class AccountDeletionService {
         },
       );
 
-      // Delete notifications
+      await queryRunner.manager.update(
+        Wallet,
+        { userId },
+        { encryptedSecretKey: 'deleted' },
+      );
+
       await queryRunner.manager.delete(Notification, { userId });
 
-      // Delete audit logs
-      await queryRunner.manager.delete(AuditLog, { actorId: userId });
+      const auditRetentionCutoff = new Date();
+      auditRetentionCutoff.setDate(
+        auditRetentionCutoff.getDate() - this.AUDIT_LOG_RETENTION_DAYS,
+      );
+      await queryRunner.manager
+        .createQueryBuilder()
+        .delete()
+        .from(AuditLog)
+        .where('actorId = :userId', { userId })
+        .andWhere('createdAt < :cutoff', { cutoff: auditRetentionCutoff })
+        .execute();
 
-      // Delete price alerts
+      // Pseudonymize retained audit logs (if retained for compliance window)
+      await queryRunner.manager.update(
+        AuditLog,
+        { actorId: userId },
+        { actorId: null, ipAddress: null, userAgent: null } as any,
+      );
+
       await queryRunner.manager.delete('rate_alerts', { userId });
-      await queryRunner.manager.delete('rate_alert_price_history', { userId });
-
-      // Delete referral records where user is referee
       await queryRunner.manager.delete('referrals', { refereeId: userId });
+
+      await queryRunner.manager.delete(User, { id: userId });
 
       await queryRunner.commitTransaction();
     } catch (error) {

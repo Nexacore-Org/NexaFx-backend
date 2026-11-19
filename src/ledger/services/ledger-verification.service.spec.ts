@@ -72,7 +72,9 @@ describe('LedgerVerificationService', () => {
     });
 
     it('returns DISCREPANCY and notifies admins when discrepancies exist', async () => {
-      const rows = [{ currency: 'USD', amountDelta: '-50.00' }];
+      const rows = [
+        { userId: 'user-1', currency: 'USD', amountDelta: '-50.00' },
+      ];
       ledgerRepo.query.mockResolvedValue(rows);
 
       const adminUser = {
@@ -85,6 +87,7 @@ describe('LedgerVerificationService', () => {
 
       expect(result.status).toBe('DISCREPANCY');
       expect(result.discrepancies).toHaveLength(1);
+      expect(result.discrepancies[0].userId).toBe('user-1');
       expect(result.discrepancies[0].currency).toBe('USD');
       expect(result.discrepancies[0].amountDelta).toBe('-50.00');
 
@@ -100,7 +103,7 @@ describe('LedgerVerificationService', () => {
 
     it('logs a warning and does not dispatch when no admins found', async () => {
       ledgerRepo.query.mockResolvedValue([
-        { currency: 'NGN', amountDelta: '100' },
+        { userId: 'user-1', currency: 'NGN', amountDelta: '100' },
       ]);
       userRepo.find.mockResolvedValue([]);
 
@@ -119,8 +122,8 @@ describe('LedgerVerificationService', () => {
 
     it('notifies multiple admins when multiple discrepancies exist', async () => {
       const rows = [
-        { currency: 'USD', amountDelta: '-50.00' },
-        { currency: 'EUR', amountDelta: '10.00' },
+        { userId: 'user-1', currency: 'USD', amountDelta: '-50.00' },
+        { userId: 'user-2', currency: 'EUR', amountDelta: '10.00' },
       ];
       ledgerRepo.query.mockResolvedValue(rows);
 
@@ -134,6 +137,19 @@ describe('LedgerVerificationService', () => {
 
       expect(result.discrepancies).toHaveLength(2);
       expect(notificationsService.dispatch).toHaveBeenCalledTimes(2);
+    });
+
+    it('compares each user currency against the stored wallet balance', async () => {
+      ledgerRepo.query.mockResolvedValue([]);
+
+      await service.verify();
+
+      expect(ledgerRepo.query).toHaveBeenCalledWith(
+        expect.stringContaining('FULL OUTER JOIN stored_balances'),
+      );
+      expect(ledgerRepo.query).toHaveBeenCalledWith(
+        expect.stringContaining('jsonb_each_text'),
+      );
     });
   });
 

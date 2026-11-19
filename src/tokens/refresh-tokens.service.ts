@@ -15,7 +15,7 @@ export class RefreshTokensService {
     private readonly configService: ConfigService,
   ) {}
 
-  async createRefreshToken(userId: string): Promise<string> {
+  async createRefreshToken(userId: string, familyId?: string): Promise<string> {
     const token = this.generateSecureToken();
     const tokenHash = this.hashRefreshToken(token);
 
@@ -25,6 +25,7 @@ export class RefreshTokensService {
     const refreshToken = this.refreshTokenRepository.create({
       userId,
       tokenHash,
+      familyId: familyId ?? crypto.randomUUID(),
       expiresAt,
       revokedAt: null,
     });
@@ -48,9 +49,49 @@ export class RefreshTokensService {
 
   async revokeToken(tokenHash: string): Promise<void> {
     await this.refreshTokenRepository.update(
-      { tokenHash },
+      { tokenHash, revokedAt: IsNull() },
       { revokedAt: new Date() },
     );
+  }
+
+  async revokeFamily(familyId: string): Promise<void> {
+    await this.refreshTokenRepository.update(
+      { familyId, revokedAt: IsNull() },
+      { revokedAt: new Date() },
+    );
+  }
+
+  async rotateRefreshToken(token: string): Promise<RefreshToken> {
+    const tokenHash = this.hashRefreshToken(token);
+    const stored = await this.refreshTokenRepository.findOne({
+      where: { tokenHash },
+    });
+
+    if (!stored) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    if (stored.revokedAt || stored.expiresAt <= new Date()) {
+      if (stored.familyId) {
+        await this.revokeFamily(stored.familyId);
+      }
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    const result = await this.refreshTokenRepository.update(
+      { tokenHash, revokedAt: IsNull(), expiresAt: MoreThan(new Date()) },
+      { revokedAt: new Date() },
+    );
+
+    if (result.affected !== 1) {
+      if (stored.familyId) {
+        await this.revokeFamily(stored.familyId);
+      }
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    stored.revokedAt = new Date();
+    return stored;
   }
 
   async validateRefreshToken(token: string): Promise<RefreshToken> {

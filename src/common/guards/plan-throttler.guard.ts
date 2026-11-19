@@ -1,4 +1,4 @@
-import { Injectable, ExecutionContext, Logger } from '@nestjs/common';
+import { Injectable, ExecutionContext } from '@nestjs/common';
 import {
   ThrottlerGuard,
   ThrottlerModuleOptions,
@@ -9,19 +9,35 @@ import { Reflector } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { GqlExecutionContext } from '@nestjs/graphql';
-import { User, UserRole } from '../../users/user.entity';
-import { RateLimitConfig } from '../../users/rate-limit-config.entity';
+import { User, UserRole, UserPlan } from '../../users/user.entity';
+import {
+  RateLimitConfig,
+  DEFAULT_RATE_LIMIT_PER_MINUTE,
+  RATE_LIMIT_CONFIG_CACHE_TTL_MS,
+} from '../../users/rate-limit-config.entity';
+
+const THROTTLER_LIMIT_KEY = 'THROTTLER:LIMIT';
+const UNLIMITED_LIMIT = Number.MAX_SAFE_INTEGER;
+const USER_PLAN_CACHE_TTL_MS = 60_000;
 
 interface AuthenticatedRequest extends Record<string, any> {
   user?: {
     userId: string;
     role: string;
+    plan?: UserPlan;
   };
+}
+
+interface CachedUserPlan {
+  plan: UserPlan;
+  expiresAt: number;
 }
 
 @Injectable()
 export class PlanThrottlerGuard extends ThrottlerGuard {
-  private readonly logger = new Logger(PlanThrottlerGuard.name);
+  private readonly planLimits = new Map<UserPlan, number | null>();
+  private readonly userPlans = new Map<string, CachedUserPlan>();
+  private planLimitsExpireAt = 0;
 
   constructor(
     options: ThrottlerModuleOptions,
@@ -47,10 +63,6 @@ export class PlanThrottlerGuard extends ThrottlerGuard {
     return super.getRequestResponse(context);
   }
 
-  /**
-   * Override generateKey to use a consistent key based only on user tracker for authenticated users.
-   * For unauthenticated requests, fallback to default behavior (includes route prefix).
-   */
   protected generateKey(
     context: ExecutionContext,
     suffix: string,
@@ -59,6 +71,9 @@ export class PlanThrottlerGuard extends ThrottlerGuard {
     const { req } = this.getRequestResponse(context);
     const authReq = req as AuthenticatedRequest;
     if (authReq?.user?.userId) {
+      if (this.getRouteLimit(context, name) !== undefined) {
+        return `${suffix}:${context.getClass().name}.${context.getHandler().name}`;
+      }
       return suffix;
     }
     return super.generateKey(context, suffix, name);
@@ -72,52 +87,96 @@ export class PlanThrottlerGuard extends ThrottlerGuard {
     if (authReq.user?.userId) {
       return Promise.resolve(`user:${authReq.user.userId}`);
     }
-    // Fallback to IP for unauthenticated requests
     return Promise.resolve(req.ip);
   }
 
-  /**
-   * Override handleRequest to apply dynamic rate limits based on user plan
-   */
   protected async handleRequest(
     requestProps: ThrottlerRequest,
   ): Promise<boolean> {
     const { context } = requestProps;
     const { req } = this.getRequestResponse(context);
-    const authReq = req as AuthenticatedRequest;
-    const user = authReq.user;
+    const user = (req as AuthenticatedRequest)?.user;
+    const routeLimit = this.getRouteLimit(
+      context,
+      requestProps.throttler?.name,
+    );
 
     if (user) {
-      // ADMIN and SUPER_ADMIN get effectively unlimited
       const role = user.role as UserRole;
-      if (role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN) {
-        requestProps.limit = Number.MAX_SAFE_INTEGER;
+      const isAdmin =
+        role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN;
+
+      if (isAdmin) {
+        requestProps.limit = routeLimit ?? UNLIMITED_LIMIT;
       } else {
-        // Fetch user's plan from DB to determine limit
-        const userRecord = await this.userRepository.findOne({
-          where: { id: user.userId },
-          select: ['plan'],
-        });
-
-        if (userRecord) {
-          const config = await this.rateLimitConfigRepository.findOne({
-            where: { plan: userRecord.plan },
-          });
-
-          if (config?.limitPerMinute !== null) {
-            requestProps.limit = config?.limitPerMinute ?? 60; // fallback if no config
-          } else {
-            // Unlimited (ENTERPRISE or no config limit)
-            requestProps.limit = Number.MAX_SAFE_INTEGER;
-          }
-        } else {
-          // User not found, use fallback limit to avoid blocking
-          requestProps.limit = 60;
-        }
+        const plan = await this.resolveUserPlan(user);
+        const planLimit = plan
+          ? await this.getPlanLimit(plan)
+          : DEFAULT_RATE_LIMIT_PER_MINUTE;
+        const effectivePlanLimit =
+          planLimit === null ? UNLIMITED_LIMIT : planLimit;
+        requestProps.limit =
+          routeLimit === undefined
+            ? effectivePlanLimit
+            : Math.min(routeLimit, effectivePlanLimit);
       }
     }
-    // If no user (public), keep default configured limit
 
     return super.handleRequest(requestProps);
+  }
+
+  private getRouteLimit(
+    context: ExecutionContext,
+    throttleName?: string,
+  ): number | undefined {
+    const limit = this.reflector.getAllAndOverride<number>(
+      `${THROTTLER_LIMIT_KEY}${throttleName ?? 'default'}`,
+      [context.getHandler(), context.getClass()],
+    );
+    return typeof limit === 'number' ? limit : undefined;
+  }
+
+  private async resolveUserPlan(
+    user: AuthenticatedRequest['user'],
+  ): Promise<UserPlan | null> {
+    if (!user) return null;
+    if (user.plan) return user.plan;
+
+    const cached = this.userPlans.get(user.userId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.plan;
+    }
+
+    const userRecord = await this.userRepository.findOne({
+      where: { id: user.userId },
+      select: ['plan'],
+    });
+    if (!userRecord?.plan) return null;
+
+    this.userPlans.set(user.userId, {
+      plan: userRecord.plan,
+      expiresAt: Date.now() + USER_PLAN_CACHE_TTL_MS,
+    });
+    return userRecord.plan;
+  }
+
+  private async getPlanLimit(plan: UserPlan): Promise<number | null> {
+    if (!this.planLimits.has(plan)) {
+      await this.loadPlanLimits();
+    }
+    return this.planLimits.has(plan)
+      ? this.planLimits.get(plan)!
+      : DEFAULT_RATE_LIMIT_PER_MINUTE;
+  }
+
+  private async loadPlanLimits(): Promise<void> {
+    if (this.planLimitsExpireAt > Date.now()) return;
+
+    const configs = await this.rateLimitConfigRepository.find();
+    this.planLimits.clear();
+    for (const config of configs) {
+      this.planLimits.set(config.plan, config.limitPerMinute);
+    }
+    this.planLimitsExpireAt = Date.now() + RATE_LIMIT_CONFIG_CACHE_TTL_MS;
   }
 }

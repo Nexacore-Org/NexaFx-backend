@@ -1,6 +1,5 @@
 import {
   Injectable,
-  Logger,
   ForbiddenException,
   NotFoundException,
   ConflictException,
@@ -8,7 +7,8 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan } from 'typeorm';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { Repository, LessThan, LessThanOrEqual, IsNull } from 'typeorm';
 import {
   Proposal,
   ProposalStatus,
@@ -16,6 +16,7 @@ import {
   VoteWeightSource,
 } from '../entities/proposal.entity';
 import { Vote, VoteChoice } from '../entities/vote.entity';
+import { ProposalBalanceSnapshot } from '../entities/proposal-balance-snapshot.entity';
 import { User, UserRole } from '../../users/user.entity';
 import { CreateProposalDto } from '../dto/create-proposal.dto';
 import { CastVoteDto } from '../dto/cast-vote.dto';
@@ -37,8 +38,6 @@ export interface VoteResults {
 
 @Injectable()
 export class ProposalService {
-  private readonly logger = new Logger(ProposalService.name);
-
   constructor(
     @InjectRepository(Proposal)
     private readonly proposalRepo: Repository<Proposal>,
@@ -46,6 +45,8 @@ export class ProposalService {
     private readonly voteRepo: Repository<Vote>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    @InjectRepository(ProposalBalanceSnapshot)
+    private readonly snapshotRepo: Repository<ProposalBalanceSnapshot>,
     private readonly daoService: DaoService,
   ) {}
 
@@ -67,11 +68,9 @@ export class ProposalService {
           'Only SUPER_ADMIN can create CONTRACT_UPGRADE proposals',
         );
       }
-      if (!createProposalDto.upgradeConfig?.auditReportUrl) {
-        throw new BadRequestException(
-          'auditReportUrl is required for CONTRACT_UPGRADE proposals',
-        );
-      }
+      throw new BadRequestException(
+        'CONTRACT_UPGRADE proposals are unavailable until staking data is supported',
+      );
     } else if (
       user.role !== UserRole.ADMIN &&
       user.role !== UserRole.SUPER_ADMIN
@@ -128,6 +127,15 @@ export class ProposalService {
     if (!voter) {
       throw new NotFoundException('User not found');
     }
+    if (
+      !voter.isActive ||
+      !voter.isVerified ||
+      voter.isSuspended ||
+      voter.isDeleted ||
+      voter.deletedAt
+    ) {
+      throw new ForbiddenException('Only eligible users can vote');
+    }
 
     const proposal = await this.proposalRepo.findOne({
       where: { id: proposalId },
@@ -164,20 +172,21 @@ export class ProposalService {
       throw new ConflictException('Voter has already voted on this proposal');
     }
 
-    // CONTRACT_UPGRADE: only PLATINUM stakers can vote, weight = staked XLM
     if (proposal.proposalType === ProposalType.CONTRACT_UPGRADE) {
-      const stakeTier = (voter as any).stakeTier;
-      if (stakeTier !== 'PLATINUM') {
-        throw new ForbiddenException(
-          'Only PLATINUM stakers can vote on contract upgrade proposals',
-        );
-      }
+      throw new BadRequestException(
+        'Voting on CONTRACT_UPGRADE proposals is unavailable until staking data is supported',
+      );
     }
 
-    // Use the balance snapshot captured at votingStartAt for vote weight.
-    // Falls back to the live balance only when no snapshot exists yet.
-    const snapshot = await this.getBalanceSnapshot(proposalId, voterId);
-    const xlmBalance = snapshot ?? voter.balances?.XLM ?? 0;
+    const snapshot = await this.snapshotRepo.findOne({
+      where: { proposalId, voterId },
+    });
+    if (!snapshot) {
+      throw new BadRequestException(
+        'Voting balance snapshot is not available for this voter',
+      );
+    }
+    const xlmBalance = Number(snapshot.weight);
 
     if (!xlmBalance || xlmBalance === 0) {
       throw new BadRequestException('Voter has no XLM balance to vote');
@@ -201,31 +210,61 @@ export class ProposalService {
     }
   }
 
-  /**
-   * Returns the voter's XLM balance snapshot for a proposal, captured at
-   * votingStartAt. Snapshots are stored per (proposalId, voterId) and are
-   * created lazily on the first vote so weight cannot be recycled across
-   * accounts after the voting window opens.
-   */
-  private async getBalanceSnapshot(
-    proposalId: string,
-    voterId: string,
-  ): Promise<number | null> {
-    try {
-      const rows: Array<{ weight: string | number }> =
-        await this.voteRepo.query(
-          `SELECT weight FROM proposal_balance_snapshots WHERE proposal_id = $1 AND voter_id = $2 LIMIT 1`,
-          [proposalId, voterId],
-        );
-      if (rows && rows.length > 0) {
-        return parseFloat(rows[0].weight.toString());
-      }
-    } catch (error) {
-      this.logger.warn(
-        `Balance snapshot lookup failed for proposal ${proposalId}: ${error?.message}`,
+  @Cron(CronExpression.EVERY_SECOND)
+  async captureDueBalanceSnapshots(): Promise<number> {
+    const proposals = await this.proposalRepo.find({
+      where: {
+        status: ProposalStatus.ACTIVE,
+        votingStartAt: LessThanOrEqual(new Date()),
+        balanceSnapshotsCaptured: false,
+      },
+    });
+
+    let captured = 0;
+    for (const proposal of proposals) {
+      captured += await this.proposalRepo.manager.transaction(
+        async (manager) => {
+          const claim = await manager
+            .createQueryBuilder()
+            .update(Proposal)
+            .set({ balanceSnapshotsCaptured: true })
+            .where(
+              '"id" = :id AND "status" = :status AND "balanceSnapshotsCaptured" = false',
+              { id: proposal.id, status: ProposalStatus.ACTIVE },
+            )
+            .execute();
+          if (!claim.affected) {
+            return 0;
+          }
+
+          const userRepo = manager.getRepository(User);
+          const snapshotRepo = manager.getRepository(ProposalBalanceSnapshot);
+          const users = await userRepo.find({
+            where: {
+              isActive: true,
+              isVerified: true,
+              isSuspended: false,
+              isDeleted: false,
+              deletedAt: IsNull(),
+              createdAt: LessThanOrEqual(proposal.votingStartAt),
+            },
+          });
+          const snapshots = users.map((user) =>
+            snapshotRepo.create({
+              proposalId: proposal.id,
+              voterId: user.id,
+              weight: String(user.balances?.XLM ?? 0),
+            }),
+          );
+          if (snapshots.length > 0) {
+            await snapshotRepo.insert(snapshots);
+          }
+          return snapshots.length;
+        },
       );
     }
-    return null;
+
+    return captured;
   }
 
   async getProposalDetail(proposalId: string) {
@@ -297,7 +336,7 @@ export class ProposalService {
           yesWeight: parseFloat(yesWeight.toFixed(8)),
           noWeight: parseFloat(noWeight.toFixed(8)),
           abstainWeight: parseFloat(abstainWeight.toFixed(8)),
-          quorumReached: proposal.status === ProposalStatus.PASSED,
+          quorumReached: proposal.quorumReached,
         },
       };
     }
@@ -312,7 +351,15 @@ export class ProposalService {
   }
 
   private async countEligibleVoters(): Promise<number> {
-    return this.userRepo.count();
+    return this.userRepo.count({
+      where: {
+        isActive: true,
+        isVerified: true,
+        isSuspended: false,
+        isDeleted: false,
+        deletedAt: IsNull(),
+      },
+    });
   }
 
   private calculateResults(
@@ -403,6 +450,7 @@ export class ProposalService {
       proposal.finalYesWeight = results.yesWeight;
       proposal.finalNoWeight = results.noWeight;
       proposal.finalAbstainWeight = results.abstainWeight;
+      proposal.quorumReached = results.quorumReached;
       proposal.status = results.passing
         ? ProposalStatus.PASSED
         : ProposalStatus.FAILED;
@@ -412,5 +460,71 @@ export class ProposalService {
     }
 
     return finalized;
+  }
+
+  async listProposals(
+    page = 1,
+    limit = 10,
+    status?: ProposalStatus,
+  ): Promise<{
+    data: Proposal[];
+    pagination: { page: number; limit: number; total: number; pages: number };
+  }> {
+    const maxPage = 1_000_000;
+    const maxLimit = 100;
+    if (!Number.isInteger(page) || page < 1 || page > maxPage) {
+      throw new BadRequestException(`page must be between 1 and ${maxPage}`);
+    }
+    if (!Number.isInteger(limit) || limit < 1 || limit > maxLimit) {
+      throw new BadRequestException(`limit must be between 1 and ${maxLimit}`);
+    }
+    if (status && !Object.values(ProposalStatus).includes(status)) {
+      throw new BadRequestException('Invalid proposal status');
+    }
+
+    const [data, total] = await this.proposalRepo.findAndCount({
+      where: status ? { status } : {},
+      order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async cancelProposal(proposalId: string, adminId: string): Promise<Proposal> {
+    const admin = await this.userRepo.findOne({ where: { id: adminId } });
+    if (
+      !admin ||
+      (admin.role !== UserRole.ADMIN && admin.role !== UserRole.SUPER_ADMIN)
+    ) {
+      throw new ForbiddenException('Only an admin can cancel proposals');
+    }
+
+    const proposal = await this.proposalRepo.findOne({
+      where: { id: proposalId },
+    });
+    if (!proposal) {
+      throw new NotFoundException('Proposal not found');
+    }
+    if (
+      proposal.status !== ProposalStatus.ACTIVE ||
+      proposal.votingEndAt <= new Date()
+    ) {
+      throw new ConflictException(
+        'Only ACTIVE proposals before votingEndAt can be cancelled',
+      );
+    }
+
+    proposal.status = ProposalStatus.CANCELLED;
+    return this.proposalRepo.save(proposal);
   }
 }

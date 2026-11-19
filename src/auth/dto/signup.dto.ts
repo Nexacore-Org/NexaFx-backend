@@ -10,6 +10,7 @@ import {
   IsBoolean,
   Equals,
 } from 'class-validator';
+import { IsStrongPassword } from './strong-password.decorator';
 
 export class SignupDto {
   @ApiProperty({
@@ -22,11 +23,10 @@ export class SignupDto {
 
   @ApiProperty({
     example: 'SecurePassword123!',
-    description: 'Password (minimum 12 characters)',
+    description: 'Password (12-128 characters, max 72 UTF-8 bytes)',
   })
   @IsString()
-  @MinLength(12)
-  @MaxLength(128)
+  @IsStrongPassword()
   password: string;
 
   @ApiPropertyOptional({

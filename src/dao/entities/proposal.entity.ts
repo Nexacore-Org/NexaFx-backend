@@ -34,9 +34,11 @@ export enum VoteWeightSource {
 }
 
 @Entity('proposals')
-@Index(['votingEndAt'])
+@Index('IDX_proposals_votingEndAt', ['votingEndAt'])
 export class Proposal {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn('uuid', {
+    primaryKeyConstraintName: 'PK_proposals_id',
+  })
   id: string;
 
   @Column({ type: 'varchar', length: 255 })
@@ -46,7 +48,7 @@ export class Proposal {
   description: string;
 
   @Column({ type: 'uuid' })
-  @Index()
+  @Index('IDX_proposals_proposerId')
   proposerId: string;
 
   @Column({
@@ -54,7 +56,7 @@ export class Proposal {
     enum: ProposalStatus,
     default: ProposalStatus.ACTIVE,
   })
-  @Index()
+  @Index('IDX_proposals_status')
   status: ProposalStatus;
 
   @Column({ type: 'timestamp with time zone' })
@@ -84,11 +86,17 @@ export class Proposal {
   @Column({ type: 'decimal', precision: 20, scale: 8, nullable: true })
   totalVotingWeight: number | null;
 
+  @Column({ type: 'boolean', default: false })
+  quorumReached: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  balanceSnapshotsCaptured: boolean;
+
   @Column({ type: 'varchar', length: 128, nullable: true })
   stellarContractId: string | null;
 
   @Column({ type: 'varchar', length: 128, nullable: true })
-  @Index()
+  @Index('IDX_proposals_onChainTxHash')
   onChainTxHash: string | null;
 
   @Column({ type: 'enum', enum: ProposalType, default: ProposalType.STANDARD })
@@ -121,7 +129,4 @@ export class Proposal {
     default: OnChainStatus.PENDING,
   })
   onChainStatus: OnChainStatus;
-
-  @Column({ nullable: true })
-  onChainTxHash?: string;
 }

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { UserRole } from '../user.entity';
+import { User, UserKycTier, UserPlan, UserRole } from '../user.entity';
 
 export class ProfileResponseDto {
   @ApiProperty({
@@ -43,9 +43,41 @@ export class ProfileResponseDto {
 
   @ApiProperty({
     example: true,
-    description: 'Whether the user email is verified',
+    description: 'Whether the user is verified',
   })
   isVerified: boolean;
+
+  @ApiPropertyOptional({
+    example: false,
+    description: 'Whether the user email is verified',
+  })
+  isEmailVerified: boolean;
+
+  @ApiPropertyOptional({
+    example: 'NONE',
+    enum: UserKycTier,
+    description: 'User KYC tier',
+  })
+  kycTier: UserKycTier;
+
+  @ApiPropertyOptional({
+    example: true,
+    description: 'Whether the account is active',
+  })
+  isActive: boolean;
+
+  @ApiPropertyOptional({
+    example: false,
+    description: 'Whether the account is suspended',
+  })
+  isSuspended: boolean;
+
+  @ApiPropertyOptional({
+    example: 'FREE',
+    enum: UserPlan,
+    description: 'User subscription plan',
+  })
+  plan: UserPlan;
 
   @ApiPropertyOptional({
     example: { NATIVE: 100.5, USDC: 50.25 },
@@ -92,4 +124,28 @@ export class ProfileResponseDto {
     default: 'en',
   })
   preferredLanguage?: string;
+
+  static fromUser(user: User): ProfileResponseDto {
+    return {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      phone: user.phone,
+      walletPublicKey: user.walletPublicKey,
+      isVerified: user.isVerified,
+      isEmailVerified: user.isEmailVerified,
+      kycTier: user.kycTier,
+      isActive: user.isActive,
+      isSuspended: user.isSuspended,
+      plan: user.plan,
+      balances: user.balances,
+      balanceLastSyncedAt: user.balanceLastSyncedAt,
+      isTwoFactorEnabled: user.isTwoFactorEnabled,
+      role: user.role,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      preferredLanguage: user.preferredLanguage,
+    };
+  }
 }

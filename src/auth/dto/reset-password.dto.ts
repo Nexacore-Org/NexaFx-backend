@@ -5,8 +5,8 @@ import {
   IsString,
   Length,
   MaxLength,
-  MinLength,
 } from 'class-validator';
+import { IsStrongPassword } from './strong-password.decorator';
 
 /**
  * DTO for the POST /auth/reset-password endpoint.
@@ -56,16 +56,18 @@ export class ResetPasswordDto {
   otp: string;
 
   /**
-   * The new password to set for the account. Must be at least 12 characters
-   * and no more than 128 characters.
+   * The new password to set for the account. Must be 12-128 characters and at
+   * most 72 UTF-8 bytes.
    */
   @ApiProperty({
     example: 'NewStrongPassword!123',
-    description: 'New password to set for the account (12–128 characters)',
+    description:
+      'New password to set for the account (12–128 characters, max 72 UTF-8 bytes)',
   })
   @IsString({ message: 'newPassword must be a string' })
   @IsNotEmpty({ message: 'newPassword is required' })
-  @MinLength(12, { message: 'newPassword must be at least 12 characters' })
-  @MaxLength(128, { message: 'newPassword must not exceed 128 characters' })
+  @IsStrongPassword({
+    message: 'newPassword must be 12-128 characters and at most 72 UTF-8 bytes',
+  })
   newPassword: string;
 }

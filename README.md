@@ -339,8 +339,8 @@ Copy `.env.example` to `.env` and configure the following variables:
 ### Exchange Rates Provider
 | Variable | Type | Required | Description |
 |----------|------|----------|-------------|
-| `EXCHANGE_RATES_PROVIDER_BASE_URL` | string | ✅ Yes | Provider API base URL (default: `https://api.exchangerate.host`) |
-| `EXCHANGE_RATES_PROVIDER_API_KEY` | string | ❌ No | API key if required by provider |
+| `EXCHANGE_RATES_PROVIDER_BASE_URL` | string | ✅ Yes | CoinGecko API base URL (default: `https://api.coingecko.com/api/v3`) |
+| `EXCHANGE_RATES_PROVIDER_API_KEY` | string | ❌ No | Optional CoinGecko Demo API key, sent in the `x-cg-demo-api-key` header |
 | `EXCHANGE_RATES_PROVIDER_TIMEOUT_MS` | number | ✅ Yes | Request timeout in milliseconds (default: 5000) |
 | `EXCHANGE_RATES_CACHE_TTL_SECONDS` | number | ✅ Yes | Cache duration in seconds (default: 600 = 10 min) |
 | `EXCHANGE_RATES_CACHE_MAX_SIZE` | number | ✅ Yes | Max cached rates (default: 1000) |

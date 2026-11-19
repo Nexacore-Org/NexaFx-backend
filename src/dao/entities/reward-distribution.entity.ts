@@ -15,15 +15,17 @@ export enum RewardDistributionStatus {
 
 @Entity('reward_distributions')
 export class RewardDistribution {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn('uuid', {
+    primaryKeyConstraintName: 'PK_reward_distributions_id',
+  })
   id: string;
 
   @Column({ type: 'uuid' })
-  @Index()
+  @Index('IDX_reward_distributions_userId')
   userId: string;
 
   @Column({ type: 'varchar', length: 64 })
-  @Index()
+  @Index('IDX_reward_distributions_contractId')
   contractId: string;
 
   @Column({ type: 'varchar', length: 128 })
@@ -46,14 +48,14 @@ export class RewardDistribution {
     enum: RewardDistributionStatus,
     default: RewardDistributionStatus.PENDING,
   })
-  @Index()
+  @Index('IDX_reward_distributions_status')
   status: RewardDistributionStatus;
 
   @Column({ type: 'text', nullable: true })
   errorMessage: string | null;
 
   @CreateDateColumn({ type: 'timestamp with time zone' })
-  @Index()
+  @Index('IDX_reward_distributions_createdAt')
   createdAt: Date;
 
   @UpdateDateColumn({ type: 'timestamp with time zone' })

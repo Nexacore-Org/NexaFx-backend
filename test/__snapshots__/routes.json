@@ -275,6 +275,7 @@
     "POST /transactions/deposit",
     "POST /transactions/swap",
     "POST /transactions/withdraw",
+    "POST /two-factor/backup-codes/regenerate",
     "POST /two-factor/confirm",
     "POST /two-factor/disable",
     "POST /two-factor/recover",

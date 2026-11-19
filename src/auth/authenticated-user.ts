@@ -1,11 +1,13 @@
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import type { UsersService } from '../users/users.service';
+import type { UserPlan } from '../users/user.entity';
 
 export interface JwtPayload {
   sub: string;
   email: string;
   role: string;
   authStage?: 'partial_auth';
+  tokenVersion?: number;
   // Impersonation fields — only present when isImpersonation === true
   isImpersonation?: boolean;
   impersonatedBy?: string;
@@ -21,6 +23,7 @@ export interface AuthenticatedUser {
   isImpersonation?: boolean;
   impersonatedBy?: string;
   jti?: string;
+  plan?: UserPlan;
 }
 
 /**
@@ -29,11 +32,13 @@ export interface AuthenticatedUser {
  *
  * Both the HTTP Passport strategy (JwtStrategy) and the WebSocket guard
  * (WsJwtGuard) call this, so the two transports cannot drift apart (#1321):
- *  - `partial_auth` tokens (password verified, 2FA still pending) are rejected
+ *  - `partial_auth` tokens (password verified, 2FA still pending) are returned
+ *    as a limited principal; HTTP callers must honour @AllowPartialAuth() and
+ *    WebSocket callers must reject the stage explicitly
  *  - suspended / deleted / deactivated accounts are rejected
  *  - impersonation tokens are downgraded to the USER role
  *
- * @throws ForbiddenException when the account or token stage forbids access
+ * @throws ForbiddenException when the account forbids access
  * @throws UnauthorizedException when the user cannot be resolved
  */
 export async function validateAuthenticatedUser(
@@ -44,16 +49,14 @@ export async function validateAuthenticatedUser(
     throw new UnauthorizedException('Invalid token payload');
   }
 
-  if (payload.authStage === 'partial_auth') {
-    throw new ForbiddenException(
-      'Two-factor verification required to access this resource',
-    );
-  }
-
   const user = await usersService.findById(payload.sub);
 
   if (!user) {
     throw new UnauthorizedException('User not found');
+  }
+
+  if ((payload.tokenVersion ?? 0) !== (user.tokenVersion ?? 0)) {
+    throw new UnauthorizedException('Session has been revoked');
   }
 
   if (user.isSuspended) {
@@ -77,5 +80,6 @@ export async function validateAuthenticatedUser(
     isImpersonation: payload.isImpersonation ?? false,
     impersonatedBy: payload.impersonatedBy,
     jti: payload.jti,
+    plan: user.plan,
   };
 }

@@ -7,6 +7,7 @@ import { UsersModule } from '../users/users.module';
 import { RatesGateway } from './rates.gateway';
 import { WsJwtGuard } from './ws-jwt.guard';
 import { GatewaysController } from './gateways.controller';
+import { resolveJwtSecret } from '../common/helpers/jwt-secret';
 
 @Module({
   imports: [
@@ -15,19 +16,11 @@ import { GatewaysController } from './gateways.controller';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
-        const secret = configService.get<string>('JWT_SECRET');
-        const isProduction =
-          configService.get<string>('NODE_ENV') === 'production';
-
-        if (!secret && isProduction) {
-          throw new Error('JWT_SECRET must be set in production environment');
-        }
-
         const expiresIn = (configService.get<string>('JWT_EXPIRES_IN') ??
           '15m') as StringValue;
 
         return {
-          secret: secret ?? 'default-secret-change-in-production',
+          secret: resolveJwtSecret(configService),
           signOptions: { expiresIn },
         };
       },

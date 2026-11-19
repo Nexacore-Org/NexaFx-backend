@@ -4,8 +4,8 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  MethodNotAllowedException,
   Post,
-  Query,
   Request,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -178,11 +178,26 @@ export class TwoFactorController {
   }
 
   @Get('backup-codes/regenerate')
+  @ApiOperation({ summary: 'Backup-code regeneration requires POST' })
+  regenerateViaGet(): never {
+    throw new MethodNotAllowedException(
+      'Use POST /two-factor/backup-codes/regenerate with a TOTP body',
+    );
+  }
+
+  @Throttle({
+    default: {
+      ttl: 60 * 1000,
+      limit: Number(process.env.THROTTLE_TWO_FACTOR_LIMIT ?? 5),
+    },
+  })
+  @Post('backup-codes/regenerate')
   @BlockDuringImpersonation()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Regenerate backup codes (requires active TOTP)',
   })
+  @ApiBody({ type: TwoFactorCodeDto })
   @ApiResponse({
     status: 200,
     description: 'New backup codes issued; all old codes are invalidated',
@@ -195,14 +210,14 @@ export class TwoFactorController {
   })
   async regenerate(
     @Request() req: { user: { userId: string } },
-    @Query('totpCode') totpCode: string,
+    @Body() dto: TwoFactorCodeDto,
   ): Promise<{ backupCodes: string[] }> {
-    if (!totpCode) {
+    if (!dto?.totpCode) {
       throw new UnauthorizedException('Invalid two-factor code');
     }
     return this.twoFactorService.regenerateBackupCodes(
       req.user.userId,
-      totpCode,
+      dto.totpCode,
     );
   }
 

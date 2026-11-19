@@ -4,6 +4,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../../users/users.service';
 import { RedisService } from '../../common/services/redis.service';
+import { resolveJwtSecret } from '../../common/helpers/jwt-secret';
 import {
   validateAuthenticatedUser,
   type AuthenticatedUser,
@@ -20,17 +21,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly usersService: UsersService,
     private readonly redisService: RedisService,
   ) {
-    const secret = configService.get<string>('JWT_SECRET');
-    const isProduction = configService.get<string>('NODE_ENV') === 'production';
-
-    if (!secret && isProduction) {
-      throw new Error('JWT_SECRET must be set in production environment');
-    }
-
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: secret || 'default-secret-change-in-production',
+      secretOrKey: resolveJwtSecret(configService),
       passReqToCallback: false,
     });
   }

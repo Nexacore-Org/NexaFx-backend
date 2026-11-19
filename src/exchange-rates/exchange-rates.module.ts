@@ -10,6 +10,7 @@ import { ExchangeRatesController } from './exchange-rates.controller';
 import { CurrenciesModule } from '../currencies/currencies.module';
 import { ExchangeRatesProviderClient } from './providers/exchange-rates.provider';
 import { ExchangeRateSnapshot } from './entities/exchange-rate-snapshot.entity';
+import { resolveJwtSecret } from '../common/helpers/jwt-secret';
 
 type JwtExpiryValue = `${number}${'s' | 'm' | 'h' | 'd'}`;
 
@@ -23,19 +24,11 @@ type JwtExpiryValue = `${number}${'s' | 'm' | 'h' | 'd'}`;
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
-        const secret = configService.get<string>('JWT_SECRET');
-        const isProduction =
-          configService.get<string>('NODE_ENV') === 'production';
-
-        if (!secret && isProduction) {
-          throw new Error('JWT_SECRET must be set in production environment');
-        }
-
         const expiresIn = (configService.get<string>('JWT_EXPIRES_IN') ??
           '15m') as JwtExpiryValue;
 
         return {
-          secret: secret ?? 'default-secret-change-in-production',
+          secret: resolveJwtSecret(configService),
           signOptions: { expiresIn },
         };
       },

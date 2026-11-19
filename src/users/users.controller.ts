@@ -122,6 +122,7 @@ export class UsersController {
   }
 
   @Get('me/data-export/:requestId/download')
+  @BlockDuringImpersonation()
   @ApiOperation({ summary: 'Download a completed data export archive' })
   @ApiResponse({ status: 200, description: 'ZIP archive stream' })
   @ApiResponse({ status: 404, description: 'Unknown, incomplete or expired export' })
@@ -151,7 +152,11 @@ export class UsersController {
   @Post('me/delete-account')
   @BlockDuringImpersonation()
   @HttpCode(HttpStatus.ACCEPTED)
-  @ApiOperation({ summary: 'Request account deletion (GDPR Article 17)' })
+  @ApiOperation({
+    summary: 'Request account deletion (GDPR Article 17)',
+    description:
+      'Canonical deletion flow. DELETE /users/me and the deprecated DELETE /users/profile create the same AccountDeletionService request: PII is anonymized immediately and the account is hard-deleted after 30 days.',
+  })
   @ApiResponse({
     status: 202,
     description: 'Account deletion request accepted and is being processed',
@@ -175,7 +180,12 @@ export class UsersController {
   @Delete('profile')
   @BlockDuringImpersonation()
   @HttpCode(HttpStatus.ACCEPTED)
-  @ApiOperation({ summary: 'Delete current user account' })
+  @ApiOperation({
+    summary: 'Delete current user account (deprecated)',
+    description:
+      'Deprecated alias of POST /users/me/delete-account. All deletion routes create a GDPR deletion request processed by AccountDeletionService: PII is anonymized immediately and the account is hard-deleted after 30 days.',
+    deprecated: true,
+  })
   @ApiResponse({
     status: 202,
     description: 'Account deletion request accepted and is being processed',
@@ -185,13 +195,14 @@ export class UsersController {
     description: 'Unauthorized - Invalid or missing JWT token',
   })
   @ApiResponse({ status: 404, description: 'User not found' })
-  async deleteProfile(
-    @Request() req: { user: { userId: string } },
-  ): Promise<{ message: string }> {
-    await this.usersService.deleteProfile(req.user.userId);
+  async deleteProfile(@Request() req: { user: { userId: string } }) {
+    const dataRequest =
+      await this.accountDeletionService.requestAccountDeletion(req.user.userId);
     return {
       message:
-        'Account deletion request accepted. Your PII has been marked for anonymization.',
+        'Account deletion request accepted. Your PII will be anonymized and your account will be inaccessible.',
+      requestId: dataRequest.id,
+      hardDeleteInDays: 30,
     };
   }
 
@@ -278,6 +289,7 @@ export class UsersController {
   }
 
   @Post('device-token')
+  @BlockDuringImpersonation()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Register a device token for push notifications' })
   @ApiBody({ type: DeviceTokenDto })
@@ -294,6 +306,7 @@ export class UsersController {
   }
 
   @Delete('device-token')
+  @BlockDuringImpersonation()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remove a device token for push notifications' })
   @ApiBody({ type: DeviceTokenDto })
@@ -327,6 +340,7 @@ export class UsersController {
   }
 
   @Patch('me/fcm-token')
+  @BlockDuringImpersonation()
   @ApiOperation({ summary: 'Update FCM token' })
   @ApiBody({
     schema: {
@@ -411,21 +425,30 @@ export class UsersController {
   }
 
   @Delete('me')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Soft delete current user account' })
+  @BlockDuringImpersonation()
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({
+    summary: 'Delete current user account',
+    description:
+      'Alias of POST /users/me/delete-account. Creates a single AccountDeletionService request that anonymizes PII immediately and hard-deletes the account after 30 days.',
+  })
   @ApiResponse({
-    status: 200,
-    description: 'User account soft deleted successfully',
+    status: 202,
+    description: 'Account deletion request accepted and is being processed',
   })
   @ApiResponse({
     status: 401,
     description: 'Unauthorized - Invalid or missing JWT token',
   })
-  async deleteMe(
-    @Request() req: { user: { userId: string } },
-  ): Promise<{ message: string }> {
-    await this.usersService.softDelete(req.user.userId);
-    return { message: 'User account has been deactivated' };
+  async deleteMe(@Request() req: { user: { userId: string } }) {
+    const dataRequest =
+      await this.accountDeletionService.requestAccountDeletion(req.user.userId);
+    return {
+      message:
+        'Account deletion request accepted. Your PII will be anonymized and your account will be inaccessible.',
+      requestId: dataRequest.id,
+      hardDeleteInDays: 30,
+    };
   }
 }
 

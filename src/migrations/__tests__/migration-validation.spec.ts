@@ -12,9 +12,15 @@
 
 import * as path from 'path';
 import * as fs from 'fs';
+import { getMetadataArgsStorage, QueryRunner } from 'typeorm';
 import { AddMissingIndexes1715421500000 } from '../1715421500000-AddMissingIndexes';
+import { CreateDaoTables1762500000000 } from '../1762500000000-CreateDaoTables';
 import { detectSchemaDrift } from '../../../scripts/validate-migrations';
 import { buildGlobPaths } from '../../database/data-source';
+import { Proposal } from '../../dao/entities/proposal.entity';
+import { ProposalBalanceSnapshot } from '../../dao/entities/proposal-balance-snapshot.entity';
+import { RewardDistribution } from '../../dao/entities/reward-distribution.entity';
+import { Vote } from '../../dao/entities/vote.entity';
 
 // ---------------------------------------------------------------------------
 // Helpers extracted from validate-migrations.ts (mirrored here for unit testing)
@@ -375,6 +381,90 @@ describe('AddMissingIndexes1715421500000', () => {
   it('declares transaction = false so CREATE INDEX CONCURRENTLY is allowed', () => {
     expect(migration.transaction).toBe(false);
   });
+});
+
+describe('CreateDaoTables1762500000000', () => {
+  it('creates tables and columns declared by all DAO entities', async () => {
+    const statements: string[] = [];
+    const runner = {
+      query: jest.fn(async (sql: string) => {
+        statements.push(sql);
+        return [];
+      }),
+    } as unknown as QueryRunner;
+
+    await new CreateDaoTables1762500000000().up(runner);
+    const migrationSql = statements.join('\n');
+    const entities = [Proposal, Vote, RewardDistribution, ProposalBalanceSnapshot];
+    const metadata = getMetadataArgsStorage();
+
+    for (const entity of entities) {
+      const table = metadata.tables.find((entry) => entry.target === entity);
+      expect(table).toBeDefined();
+      expect(migrationSql).toContain(`"${table?.name}"`);
+
+      const columns = metadata.columns.filter(
+        (column) => column.target === entity,
+      );
+      for (const column of columns) {
+        expect(migrationSql).toContain(
+          `"${column.options.name ?? column.propertyName}"`,
+        );
+      }
+
+      for (const index of metadata.indices.filter(
+        (entry) => entry.target === entity,
+      )) {
+        expect(migrationSql).toContain(`"${index.name}"`);
+      }
+
+      for (const unique of metadata.uniques.filter(
+        (entry) => entry.target === entity,
+      )) {
+        expect(migrationSql).toContain(`"${unique.name}"`);
+      }
+
+      for (const joinColumn of metadata.joinColumns.filter(
+        (entry) => entry.target === entity,
+      )) {
+        if (joinColumn.options?.foreignKeyConstraintName) {
+          expect(migrationSql).toContain(
+            `"${joinColumn.options.foreignKeyConstraintName}"`,
+          );
+        }
+      }
+    }
+
+    expect(migrationSql).toContain('UNIQUE ("proposalId", "voterId")');
+    expect(migrationSql).toContain('ON DELETE CASCADE');
+  });
+
+  it('drops every DAO table on rollback', async () => {
+    const statements: string[] = [];
+    const runner = {
+      query: jest.fn(async (sql: string) => {
+        statements.push(sql);
+        return [];
+      }),
+    } as unknown as QueryRunner;
+
+    await new CreateDaoTables1762500000000().down(runner);
+
+    for (const table of [
+      'proposal_balance_snapshots',
+      'reward_distributions',
+      'votes',
+      'proposals',
+    ]) {
+      expect(statements.join('\n')).toContain(
+        `DROP TABLE IF EXISTS "${table}"`,
+      );
+    }
+  });
+});
+
+describe('AddMissingIndexes1715421500000', () => {
+  const migration = new AddMissingIndexes1715421500000();
 
   it('does not reference the non-existent `kyc` table', () => {
     const tables = migration.indexes.map((index) => index.table);

@@ -4,21 +4,21 @@ import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, Profile } from 'passport-google-oauth20';
 import { AuthService } from '../auth.service';
 import { OAuthProvider } from '../entities/oauth-account.entity';
+import { RedisOAuthStateStore } from './redis-oauth-state.store';
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   constructor(
     configService: ConfigService,
     private readonly authService: AuthService,
+    stateStore: RedisOAuthStateStore,
   ) {
     super({
       clientID: configService.get<string>('GOOGLE_CLIENT_ID')!,
       clientSecret: configService.get<string>('GOOGLE_CLIENT_SECRET')!,
       callbackURL: configService.get<string>('GOOGLE_CALLBACK_URL')!,
       scope: ['email', 'profile'],
-      // OAuth login-CSRF protection: without a state parameter the callback
-      // accepts a response minted for someone else's authorisation request.
-      state: true,
+      store: stateStore,
     });
   }
 

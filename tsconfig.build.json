@@ -5,8 +5,6 @@
     "test",
     "dist",
     "scripts",
-    "**/*spec.ts",
-    "src/database/seed.ts",
-    "src/database/seeders/**"
+    "**/*spec.ts"
   ]
 }

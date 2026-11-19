@@ -1073,11 +1073,6 @@ export class TransactionsService {
       await this.transactionRepository.save(transaction);
     }
 
-    if (
-      requestingUserRole &&
-      !isAdmin &&
-      transaction.status !== TransactionStatus.PENDING
-    ) {
     // Unconditional for interactive callers: the old guard only ran when a
     // role was passed, and the controller passed undefined, so an already
     // verified transaction could be re-verified (and re-credited) forever.
@@ -1811,27 +1806,27 @@ export class TransactionsService {
       confidenceLabel: scores.confidenceLabel,
     });
   }
-  // src/transactions/services/transaction.service.ts
-// (Inside confirmation handler / webhook callback where deposit status becomes SUCCESS)
 
-async confirmDeposit(depositId: string): Promise<void> {
-  const deposit = await this.depositRepository.findOne({ where: { id: depositId } });
-  if (!deposit || deposit.status === 'SUCCESS') return;
-
-  // 1. Mark deposit as successful
-  deposit.status = 'SUCCESS';
-  await this.depositRepository.save(deposit);
-
-  // 2. Trigger referral reward ONLY upon successful deposit confirmation
-  try {
-    await this.referralsService.processReferralReward({
-      userId: deposit.userId,
-      depositId: deposit.id,
-      amount: Number(deposit.amount),
-      currency: deposit.currency,
+  async confirmDeposit(depositId: string): Promise<void> {
+    const deposit = await this.transactionRepository.findOne({
+      where: { id: depositId },
     });
-  } catch (error) {
-    this.logger.error(`Failed to process referral reward for deposit ${depositId}: ${error.message}`);
+    if (!deposit || deposit.status === TransactionStatus.SUCCESS) return;
+
+    const claimed = await this.transactionRepository.update(
+      { id: depositId, status: TransactionStatus.PENDING },
+      { status: TransactionStatus.SUCCESS },
+    );
+    if ((claimed.affected ?? 0) !== 1) return;
+
+    deposit.status = TransactionStatus.SUCCESS;
+    try {
+      await this.referralsService.processReferralReward(deposit.userId);
+    } catch (error) {
+      const referralError = toError(error);
+      this.logger.error(
+        `Failed to process referral reward for deposit ${depositId}: ${referralError.message}`,
+      );
+    }
   }
-}
 }

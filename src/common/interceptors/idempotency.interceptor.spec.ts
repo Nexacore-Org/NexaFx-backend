@@ -359,6 +359,68 @@ describe('IdempotencyInterceptor', () => {
       });
     });
 
+    it('waits for idempotency storage before emitting the response', (done) => {
+      const context = createMockExecutionContext(
+        'POST',
+        '/v2/transactions',
+        { 'idempotency-key': 'await-key' },
+        { amount: 10 },
+        { userId: 'user-123' },
+      );
+
+      mockService.validateIdempotencyKey.mockReturnValue({ valid: true });
+      mockService.checkIdempotency.mockResolvedValue(null);
+      let resolveStore: () => void = () => undefined;
+      mockService.storeIdempotency.mockReturnValue(
+        new Promise<void>((resolve) => {
+          resolveStore = resolve;
+        }),
+      );
+
+      const emitted: unknown[] = [];
+      interceptor
+        .intercept(context, {
+          handle: () => of({ id: 'tx-await' }),
+        } as CallHandler)
+        .subscribe({
+          next: (data) => emitted.push(data),
+          error: done.fail,
+          complete: () => {
+            expect(emitted).toEqual([{ id: 'tx-await' }]);
+            done();
+          },
+        });
+
+      expect(emitted).toEqual([]);
+      resolveStore();
+    });
+
+    it('propagates a storage failure to the caller', (done) => {
+      const context = createMockExecutionContext(
+        'POST',
+        '/v2/transactions',
+        { 'idempotency-key': 'reject-key' },
+        { amount: 10 },
+        { userId: 'user-123' },
+      );
+
+      mockService.validateIdempotencyKey.mockReturnValue({ valid: true });
+      mockService.checkIdempotency.mockResolvedValue(null);
+      mockService.storeIdempotency.mockRejectedValue(new Error('cache down'));
+
+      interceptor
+        .intercept(context, {
+          handle: () => of({ id: 'tx-reject' }),
+        } as CallHandler)
+        .subscribe({
+          next: () => done.fail('response emitted despite storage failure'),
+          error: (error) => {
+            expect(error.message).toBe('cache down');
+            done();
+          },
+        });
+    });
+
     it('maps a body mismatch to 422', (done) => {
       const context = createMockExecutionContext(
         'POST',

@@ -1,5 +1,5 @@
 import { DataSource } from 'typeorm';
-import { User } from '../../users/user.entity';
+import { User, UserRole } from '../../users/user.entity';
 import { v5 as uuidv5 } from 'uuid';
 import * as bcrypt from 'bcrypt';
 
@@ -11,97 +11,53 @@ export async function seedUsers(dataSource: DataSource) {
     {
       id: uuidv5('superadmin', NAMESPACE),
       email: 'superadmin@nexa.com',
-      password: await bcrypt.hash('SuperAdminPass123!', 10),
-      role: 'SUPER_ADMIN',
+      password: await bcrypt.hash('SuperAdminPass123!', 12),
+      role: UserRole.SUPER_ADMIN,
       isVerified: true,
+      isEmailVerified: true,
+      isActive: true,
       isTwoFactorEnabled: false,
     },
     {
       id: uuidv5('admin1', NAMESPACE),
       email: 'admin1@nexa.com',
-      password: await bcrypt.hash('AdminPass1!', 10),
-      role: 'ADMIN',
+      password: await bcrypt.hash('AdminPass1!', 12),
+      role: UserRole.ADMIN,
       isVerified: true,
+      isEmailVerified: true,
+      isActive: true,
       isTwoFactorEnabled: false,
     },
     {
       id: uuidv5('admin2', NAMESPACE),
       email: 'admin2@nexa.com',
-      password: await bcrypt.hash('AdminPass2!', 10),
-      role: 'ADMIN',
+      password: await bcrypt.hash('AdminPass2!', 12),
+      role: UserRole.ADMIN,
       isVerified: true,
+      isEmailVerified: true,
+      isActive: true,
       isTwoFactorEnabled: false,
     },
     {
       id: uuidv5('user1', NAMESPACE),
       email: 'user1@nexa.com',
-      password: await bcrypt.hash('UserPass1!', 10),
-      role: 'USER',
+      password: await bcrypt.hash('UserPass1!', 12),
+      role: UserRole.USER,
       isVerified: true,
+      isEmailVerified: true,
+      isActive: true,
       isTwoFactorEnabled: false,
     },
     {
       id: uuidv5('user2', NAMESPACE),
       email: 'user2@nexa.com',
-      password: await bcrypt.hash('UserPass2!', 10),
-      role: 'USER',
+      password: await bcrypt.hash('UserPass2!', 12),
+      role: UserRole.USER,
       isVerified: true,
+      isEmailVerified: true,
+      isActive: true,
       isTwoFactorEnabled: false,
     },
   ];
   await userRepository.upsert(users, ['id']);
-    const userRepository = dataSource.getRepository(User);
-    const users = [
-        {
-            id: uuidv5('superadmin', NAMESPACE),
-            email: 'superadmin@nexa.com',
-            password: await bcrypt.hash('SuperAdminPass123!', 12),
-            role: 'SUPER_ADMIN',
-            isVerified: true,
-            isEmailVerified: true,
-            isActive: true,
-            isTwoFactorEnabled: false,
-        },
-        {
-            id: uuidv5('admin1', NAMESPACE),
-            email: 'admin1@nexa.com',
-            password: await bcrypt.hash('AdminPass1!', 12),
-            role: 'ADMIN',
-            isVerified: true,
-            isEmailVerified: true,
-            isActive: true,
-            isTwoFactorEnabled: false,
-        },
-        {
-            id: uuidv5('admin2', NAMESPACE),
-            email: 'admin2@nexa.com',
-            password: await bcrypt.hash('AdminPass2!', 12),
-            role: 'ADMIN',
-            isVerified: true,
-            isEmailVerified: true,
-            isActive: true,
-            isTwoFactorEnabled: false,
-        },
-        {
-            id: uuidv5('user1', NAMESPACE),
-            email: 'user1@nexa.com',
-            password: await bcrypt.hash('UserPass1!', 12),
-            role: 'USER',
-            isVerified: true,
-            isEmailVerified: true,
-            isActive: true,
-            isTwoFactorEnabled: false,
-        },
-        {
-            id: uuidv5('user2', NAMESPACE),
-            email: 'user2@nexa.com',
-            password: await bcrypt.hash('UserPass2!', 12),
-            role: 'USER',
-            isVerified: true,
-            isEmailVerified: true,
-            isActive: true,
-            isTwoFactorEnabled: false,
-        },
-    ];
-    await userRepository.upsert(users, ['id']);
 }

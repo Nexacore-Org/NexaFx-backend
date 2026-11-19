@@ -28,6 +28,23 @@ which fails hard on any drift — this blocks every PR until it's fixed.
 
 ---
 
+## 🤖 Dependabot Updates
+
+Dependabot opens weekly npm PRs against `v2`. Repository auto-merge is disabled, so
+`.github/workflows/dependabot-auto-merge.yml` does **not** run `gh pr merge --auto`.
+For patch and minor updates of non-critical packages it approves the PR and adds the
+`auto-merge-approved` label; a maintainer still merges it after CI is green.
+
+Updates to security-critical packages are never approved automatically. The workflow
+adds the `needs-manual-review` label when any changed dependency is `stellar-sdk`,
+`@stellar/stellar-sdk`, `bcrypt`, `@nestjs/jwt`, `@nestjs/passport`, `typeorm`, `pg`,
+or a `passport*` package. These PRs require a human reviewer.
+
+Development dependencies are grouped into a single weekly PR by `.github/dependabot.yml`
+to reduce PR volume.
+
+---
+
 ## ✅ CI Must Be Green Before Merge
 
 CI is a gate, not a formality. A pull request may only be merged once **every**
@@ -45,10 +62,19 @@ actually **passed** — not merely run.
 - **Exactly one pipeline governs `v2`.** `ci-v2.yml` is the sole CI workflow for
   pushes and pull requests to `v2`; the legacy masked `ci.yml` has been retired
   and deleted. Do not reintroduce a second, parallel pipeline.
-- **Required status checks.** The jobs in `ci-v2.yml` are configured as required
-  status checks on the `v2` branch in GitHub branch protection settings. This is
-  a repository setting, not something a workflow file can enforce — if you have
-  admin access and the checks are not blocking, fix the branch protection rule.
+- **Required status checks.** The single check maintainers must mark required
+  on `v2` is `CI Pipeline (v2) / ci-success`. It is the aggregate gate that fails
+  whenever `build-and-test`, `e2e-tests`, or `validate-migrations` fails or is
+  skipped. Checking the individual jobs instead is optional and can be brittle
+  when the matrix changes. This is a repository setting, not something a
+  workflow file can enforce — if the check is not blocking, a maintainer must fix
+  the branch protection rule:
+  1. Open **Settings → Branches → v2**.
+  2. Add `CI Pipeline (v2) / ci-success` under **Require status checks to pass
+     before merging**.
+  3. Remove the individual `ci-v2.yml` job checks from that list if they were
+     previously required.
+  4. Enable **Require branches to be up to date before merging**.
 - **Expect red while fixes land.** Turning off masking is intentional: until the
   compile-error fixes elsewhere in the wave are merged, the pipeline will be red.
   That is the correct outcome — land the fixes, don't re-mask the checks.

@@ -1,15 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  INestApplication,
-  ValidationPipe,
-  VersioningType,
-  ClassSerializerInterceptor,
-} from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from '../../src/app.module';
-import { AllExceptionsFilter } from '../../src/common/filters/all-exceptions.filter';
-import { LoggingInterceptor } from '../../src/common/interceptors/logging.interceptor';
-import { TransformResponseInterceptor } from '../../src/common/interceptors/transform-response.interceptor';
+import { configureApp } from '../../src/configure-app';
 
 /**
  * Mock Firebase Admin SDK
@@ -151,39 +143,13 @@ jest.mock(
  * Create and configure a test NestJS application
  * with mocked external services and proper middleware setup
  */
-export async function createTestApp(): Promise<INestApplication> {
+export async function createTestApp(): Promise<NestExpressApplication> {
   const moduleFixture: TestingModule = await Test.createTestingModule({
     imports: [AppModule],
   }).compile();
 
-  const app = moduleFixture.createNestApplication();
-  const reflector = app.get(Reflector);
-
-  // Global Exception Filter
-  app.useGlobalFilters(new AllExceptionsFilter());
-
-  // Global Pipes
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-      transformOptions: { enableImplicitConversion: true },
-    }),
-  );
-
-  // Global Interceptors
-  app.useGlobalInterceptors(
-    new ClassSerializerInterceptor(reflector),
-    new LoggingInterceptor(),
-    new TransformResponseInterceptor(),
-  );
-
-  // Versioning
-  app.enableVersioning({
-    type: VersioningType.URI,
-    defaultVersion: '1',
-  });
+  const app = moduleFixture.createNestApplication<NestExpressApplication>();
+  configureApp(app);
 
   await app.init();
   return app;

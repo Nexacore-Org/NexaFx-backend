@@ -19,9 +19,23 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install PostgreSQL client
+        env:
+          PG_CLIENT_VERSION: ${{ vars.PG_CLIENT_VERSION || '15' }}
         run: |
+          set -euo pipefail
+          if [ -z "$PG_CLIENT_VERSION" ]; then
+            echo "PG_CLIENT_VERSION repository variable must not be empty" >&2
+            exit 1
+          fi
           sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-client
+          sudo install -d -m 0755 /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq "postgresql-client-${PG_CLIENT_VERSION}"
+          echo "PG_BIN=/usr/lib/postgresql/${PG_CLIENT_VERSION}/bin" >> "$GITHUB_ENV"
 
       - name: Generate backup timestamp
         id: timestamp
@@ -36,7 +50,12 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          pg_dump "$DATABASE_URL" \
+          set -euo pipefail
+          if [ -z "$DATABASE_URL" ]; then
+            echo "DATABASE_URL secret is empty; set it in repository secrets before running backups" >&2
+            exit 1
+          fi
+          "$PG_BIN/pg_dump" "$DATABASE_URL" \
             --format=custom \
             --no-acl \
             --no-owner \
@@ -63,6 +82,7 @@ jobs:
           echo "size=$(stat -c%s backup.dump.gz.enc)" >> $GITHUB_OUTPUT
 
       - name: Upload encrypted backup to S3
+        id: upload
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -80,15 +100,23 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
           BACKUP_BUCKET: ${{ secrets.BACKUP_BUCKET }}
+          S3_KEY: ${{ steps.upload.outputs.s3_key }}
+          SHA256: ${{ steps.checksum.outputs.sha256 }}
+          SIZE: ${{ steps.checksum.outputs.size }}
+          BACKUP_FILENAME: backup-${{ steps.timestamp.outputs.datetime }}.dump.gz.enc
+          MANIFEST_FILENAME: backup-${{ steps.timestamp.outputs.datetime }}.manifest.json
         run: |
-          SHA256="${{ steps.checksum.outputs.sha256 }}"
-          SIZE="${{ steps.checksum.outputs.size }}"
-          TIMESTAMP="${{ steps.timestamp.outputs.date }}"
-          PG_VERSION=$(pg_dump --version | head -1)
+          set -euo pipefail
+          if [ -z "$S3_KEY" ]; then
+            echo "Backup upload did not report an S3 key" >&2
+            exit 1
+          fi
+          PG_VERSION=$("$PG_BIN/pg_dump" --version | head -1)
 
           MANIFEST=$(cat <<MANIFEST_EOF
           {
-            "filename": "backup-${{ steps.timestamp.outputs.datetime }}.dump.gz.enc",
+            "key": "${S3_KEY}",
+            "filename": "${BACKUP_FILENAME}",
             "size": ${SIZE},
             "checksum": "${SHA256}",
             "createdAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
@@ -99,7 +127,7 @@ jobs:
 
           echo "${MANIFEST}" > manifest.json
 
-          aws s3 cp manifest.json "s3://${BACKUP_BUCKET}/nexafx/manifests/backup-${{ steps.timestamp.outputs.datetime }}.manifest.json"
+          aws s3 cp manifest.json "s3://${BACKUP_BUCKET}/nexafx/manifests/${MANIFEST_FILENAME}"
 
       - name: Clean up temporary files
         if: always()

@@ -1,6 +1,4 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
 import { I18nModule, AcceptLanguageResolver } from 'nestjs-i18n';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -23,7 +21,6 @@ import { HealthModule } from './health/health.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { NotificationsModule } from './notifications/notifications.module';
-import { GdprModule } from './modules/gdpr/gdpr.module';
 import { TransactionsModule } from './transactions/transaction.module';
 import { BeneficiariesModule } from './beneficiaries/beneficiaries.module';
 import { KycModule } from './kyc/kyc.module';
@@ -41,26 +38,99 @@ import { GraphQLApiModule } from './graphql/graphql.module';
 import { SuperAdminModule } from './super-admin/super-admin.module';
 import { MaintenanceGuard } from './super-admin/guards/maintenance.guard';
 import { buildThrottlerOptions } from './common/throttler/throttler.config';
+import { GatewaysModule } from './gateways/gateways.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
+import { WalletsModule } from './wallets/wallets.module';
+import { EscrowModule } from './escrow/escrow.module';
+import { RateAlertsModule } from './rate-alerts/rate-alerts.module';
+import { LedgerModule } from './ledger/ledger.module';
+import { UsersModule } from './users/users.module';
+import { PortfolioModule } from './portfolio/portfolio.module';
+import { FinancialHealthModule } from './financial-health/financial-health.module';
+import { CustomReportsModule } from './custom-reports/custom-reports.module';
+import { TransactionsV2Module } from './transactions/transaction-v2.module';
+import { TaxModule } from './tax/tax.module';
+import { FlagsModule } from './modules/flags/flags.module';
+import { UnifiedActivityFeedModule } from './unified-activity-feed/unified-activity-feed.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '.env',
+    }),
+    ScheduleModule.forRoot(),
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        type: 'postgres',
+        url: configService.get<string>('DATABASE_URL'),
+        synchronize: false,
+        ssl:
+          process.env.NODE_ENV === 'production'
+            ? { rejectUnauthorized: false }
+            : false,
+        autoLoadEntities: true,
+      }),
+    }),
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        connection: {
+          url:
+            configService.get<string>('REDIS_URL') || 'redis://localhost:6379',
+        },
+      }),
+    }),
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      // THROTTLE_TTL is documented in seconds; the factory coerces the env
-      // strings with Number() and converts the window to milliseconds.
       useFactory: (configService: ConfigService) =>
         buildThrottlerOptions({
           THROTTLE_TTL: configService.get<string>('THROTTLE_TTL'),
           THROTTLE_LIMIT: configService.get<string>('THROTTLE_LIMIT'),
         }),
     }),
+    FlagsModule,
+    TaxModule,
+    UnifiedActivityFeedModule,
+    I18nModule.forRootAsync({
+      useFactory: () => ({
+        fallbackLanguage: 'en',
+        loaderOptions: {
+          path: join(__dirname, '/i18n/'),
+          watch: true,
+        },
+      }),
+      resolvers: [AcceptLanguageResolver],
+    }),
+    CommonModule,
+    AuthModule,
+    CurrenciesModule,
+    ExchangeRatesModule,
+    RateComparisonModule,
+    GatewaysModule,
+    HealthModule,
+    AuditLogsModule,
+    NotificationsModule,
+    FirebaseModule,
+    TransactionsModule,
+    TransactionsV2Module,
+    ReferralsModule,
+    BeneficiariesModule,
+    KycModule,
+    ScheduledJobsModule,
+    ReceiptsModule,
+    FeesModule,
+    PushNotificationsModule,
+    QrModule,
+    RateAlertsModule,
+    AdminModule,
     SuperAdminModule,
     EscrowModule,
-    // DAO module provides Stellar Soroban contract interaction for reward distribution
     DaoModule,
-    // Stripe Issuing virtual cards, backed by the virtual_cards table
     CardsModule,
     GraphQLApiModule,
     WebhooksModule,
@@ -71,7 +141,12 @@ import { buildThrottlerOptions } from './common/throttler/throttler.config';
     FinancialHealthModule,
     CustomReportsModule,
   ],
+  controllers: [AppController],
   providers: [
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditInterceptor,
+    },
     {
       provide: APP_GUARD,
       useClass: MaintenanceGuard,

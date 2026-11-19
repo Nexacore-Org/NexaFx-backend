@@ -7,6 +7,12 @@ updates:
     target-branch: 'v2'
     open-pull-requests-limit: 10
     groups:
+      nestjs:
+        patterns:
+          - '@nestjs/*'
+    ignore:
+      - dependency-name: '@nestjs/*'
+        update-types: ['version-update:semver-major']
       dev-dependencies:
         patterns:
           - '*'

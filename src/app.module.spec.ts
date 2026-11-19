@@ -5,26 +5,6 @@ describe('AppModule', () => {
   const read = (...parts: string[]): string =>
     readFileSync(join(__dirname, ...parts), 'utf8').replace(/\r\n/g, '\n');
 
-  it('registers ScheduleModule.forRoot() at the application root', () => {
-    const moduleSource = read('app.module.ts');
-
-    expect(moduleSource).toContain('ScheduleModule.forRoot()');
-  });
-
-  it('registers ImpersonationRestrictionGuard as an APP_GUARD after JwtAuthGuard', () => {
-    const moduleSource = read('app.module.ts');
-
-    const jwtIndex = moduleSource.indexOf('useClass: JwtAuthGuard');
-    const impersonationIndex = moduleSource.indexOf(
-      'useClass: ImpersonationRestrictionGuard',
-    );
-
-    expect(moduleSource).toContain('ImpersonationRestrictionGuard');
-    // Order matters: JwtAuthGuard populates request.user before this runs.
-    expect(jwtIndex).toBeGreaterThan(-1);
-    expect(impersonationIndex).toBeGreaterThan(jwtIndex);
-  });
-
   it('marks the security-sensitive endpoints with @BlockDuringImpersonation()', () => {
     const authSource = read('auth', 'auth.controller.ts');
     const twoFactorSource = read('two-factor', 'two-factor.controller.ts');

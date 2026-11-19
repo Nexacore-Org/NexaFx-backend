@@ -21,14 +21,13 @@ async function seedUserAndGetToken(
 
   const rows = await dataSource.query(
     `INSERT INTO users (
-       email, "passwordHash", "walletPublicKey", "walletSecretKeyEncrypted",
+       email, "walletPublicKey", "walletSecretKeyEncrypted",
        "referralCode", role, "isActive", "isVerified", "createdAt", "updatedAt"
      )
-     VALUES ($1, $2, $3, $4, $5, $6, true, true, NOW(), NOW())
+     VALUES ($1, $2, $3, $4, $5, true, true, NOW(), NOW())
      RETURNING id`,
     [
       email,
-      'hashed-pw',
       'G' + 'A'.repeat(55),
       'enc-secret',
       Math.random().toString(36).slice(2, 10).toUpperCase(),

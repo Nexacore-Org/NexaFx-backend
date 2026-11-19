@@ -143,13 +143,16 @@ jest.mock(
  * Create and configure a test NestJS application
  * with mocked external services and proper middleware setup
  */
-export async function createTestApp(): Promise<NestExpressApplication> {
+export async function createTestApp(
+  configure?: (app: NestExpressApplication) => void,
+): Promise<NestExpressApplication> {
   const moduleFixture: TestingModule = await Test.createTestingModule({
     imports: [AppModule],
   }).compile();
 
   const app = moduleFixture.createNestApplication<NestExpressApplication>();
-  configureApp(app);
+  configureApp(app, { transformOptions: { enableImplicitConversion: true } });
+  configure?.(app);
 
   await app.init();
   return app;

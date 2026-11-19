@@ -1,9 +1,4 @@
-import {
-  Controller,
-  Get,
-  INestApplication,
-  Post,
-} from '@nestjs/common';
+import { Controller, Get, INestApplication, Post } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { NestExpressApplication } from '@nestjs/platform-express';
@@ -51,7 +46,7 @@ describe('Shared app pipeline (e2e)', () => {
     app = moduleFixture.createNestApplication<NestExpressApplication>();
     configureApp(app);
     app.use((req, _res, next) => {
-      (req as any).user = { userId: 'pipeline-test-user' };
+      req.user = { userId: 'pipeline-test-user' };
       next();
     });
     await app.init();

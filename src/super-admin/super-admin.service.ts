@@ -309,7 +309,10 @@ export class SuperAdminService {
     target: User,
     nextRole: UserRole,
   ): Promise<void> {
-    if (target.role !== UserRole.SUPER_ADMIN || nextRole === UserRole.SUPER_ADMIN) {
+    if (
+      target.role !== UserRole.SUPER_ADMIN ||
+      nextRole === UserRole.SUPER_ADMIN
+    ) {
       return;
     }
 

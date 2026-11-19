@@ -51,8 +51,8 @@ describe('DropPasswordHash migration', () => {
     expect(sql).toContain(
       'UPDATE "users" SET "passwordHash" = "password" WHERE "passwordHash" IS NULL',
     );
-    expect(
-      sql.indexOf('SET "passwordHash" = "password"'),
-    ).toBeLessThan(sql.indexOf('ALTER COLUMN "password" SET NOT NULL'));
+    expect(sql.indexOf('SET "passwordHash" = "password"')).toBeLessThan(
+      sql.indexOf('ALTER COLUMN "password" SET NOT NULL'),
+    );
   });
 });

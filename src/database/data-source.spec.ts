@@ -51,7 +51,10 @@ describe('data-source glob resolution (#1325)', () => {
     const [glob] = migrations;
 
     expect(
-      matchesGlob(glob, '/app/src/migrations/20261017001000-DropPasswordHash.ts'),
+      matchesGlob(
+        glob,
+        '/app/src/migrations/20261017001000-DropPasswordHash.ts',
+      ),
     ).toBe(true);
     expect(
       matchesGlob(

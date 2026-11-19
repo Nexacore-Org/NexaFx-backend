@@ -1,8 +1,4 @@
-import {
-  CallHandler,
-  ExecutionContext,
-  Logger,
-} from '@nestjs/common';
+import { CallHandler, ExecutionContext, Logger } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { firstValueFrom, of } from 'rxjs';
 import { AuditInterceptor } from './audit.interceptor';
@@ -37,7 +33,9 @@ describe('AuditInterceptor', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
   });
 
   afterEach(() => {

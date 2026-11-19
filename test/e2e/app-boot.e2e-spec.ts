@@ -138,9 +138,7 @@ const toArray = (value: unknown): string[] => {
     return ['/'];
   }
 
-  return (Array.isArray(value) ? value : [value]).map((item) =>
-    String(item),
-  );
+  return (Array.isArray(value) ? value : [value]).map((item) => String(item));
 };
 
 const versionPrefixes = (
@@ -165,8 +163,8 @@ const joinPaths = (parts: string[]): string[] =>
       (paths, part) =>
         part
           ? paths.flatMap((path) =>
-              toArray(part).map((fragment) =>
-                stripEndSlash(path) + addLeadingSlash(fragment),
+              toArray(part).map(
+                (fragment) => stripEndSlash(path) + addLeadingSlash(fragment),
               ),
             )
           : paths,
@@ -197,8 +195,7 @@ const collectRoutes = (app: INestApplication): string[] => {
 
   for (const wrapper of discovery.getControllers()) {
     const controller = wrapper.metatype as
-      | { prototype: Record<string, unknown> }
-      | undefined;
+      { prototype: Record<string, unknown> } | undefined;
     if (!controller) {
       continue;
     }
@@ -268,7 +265,7 @@ describe('AppModule boot (e2e)', () => {
   });
 
   it('keeps every AppModule import registered', () => {
-    const discovery = app.get(DiscoveryService) as unknown as {
+    const discovery = app.get<unknown>(DiscoveryService) as {
       getModules(): ModuleRefShape[];
     };
     const appModule = discovery
@@ -288,8 +285,8 @@ describe('AppModule boot (e2e)', () => {
   });
 
   it('registers every required global guard and the audit interceptor', () => {
-    const guards = app.get(APP_GUARD, { each: true }) as unknown[];
-    const interceptors = app.get(APP_INTERCEPTOR, { each: true }) as unknown[];
+    const guards = app.get<unknown[]>(APP_GUARD, { each: true });
+    const interceptors = app.get<unknown[]>(APP_INTERCEPTOR, { each: true });
 
     for (const guard of [
       MaintenanceGuard,

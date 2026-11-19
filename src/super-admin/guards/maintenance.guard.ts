@@ -57,7 +57,7 @@ export class MaintenanceGuard implements CanActivate {
     if (value && typeof value === 'object') {
       return Boolean(
         (value as Record<string, unknown>).maintenanceMode ??
-          (value as Record<string, unknown>).enabled,
+        (value as Record<string, unknown>).enabled,
       );
     }
 

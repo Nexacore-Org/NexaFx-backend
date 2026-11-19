@@ -117,7 +117,9 @@ export class IdempotencyInterceptor implements NestInterceptor {
           error['code'] === 'IDEMPOTENCY_KEY_BODY_MISMATCH' ||
           error['status'] === HttpStatus.UNPROCESSABLE_ENTITY
         ) {
-          return throwError(() => new UnprocessableEntityException(error.message));
+          return throwError(
+            () => new UnprocessableEntityException(error.message),
+          );
         }
         if (error['status'] === HttpStatus.BAD_REQUEST) {
           return throwError(() => new BadRequestException(error.message));

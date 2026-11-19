@@ -106,10 +106,11 @@ function runAndCapture(command: string, env?: NodeJS.ProcessEnv): string {
 
 export function detectSchemaDrift(schemaLogOutput: string): boolean {
   const noDriftMessage = /^No changes in database schema were found\.?$/i;
+  const ansiEscape = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
 
   return schemaLogOutput
     .split(/\r?\n/)
-    .map((line) => line.replace(/\u001b\[[0-9;]*m/g, '').trim())
+    .map((line) => line.replace(ansiEscape, '').trim())
     .filter((line) => line.length > 0 && !line.startsWith('>'))
     .some((line) => !noDriftMessage.test(line));
 }
@@ -222,10 +223,7 @@ async function main(): Promise<void> {
     // 2. Run all migrations (up)
     // -----------------------------------------------------------------------
     log('Running all migrations (up)...');
-    run(
-      `npm run typeorm -- migration:run -d ${DATA_SOURCE_PATH}`,
-      env,
-    );
+    run(`npm run typeorm -- migration:run -d ${DATA_SOURCE_PATH}`, env);
     log('All migrations applied successfully.');
 
     // -----------------------------------------------------------------------
@@ -234,10 +232,7 @@ async function main(): Promise<void> {
     log(`Reverting ${migrationCount} migration(s) (down)...`);
     for (let i = 0; i < migrationCount; i++) {
       log(`Reverting migration ${i + 1} of ${migrationCount}...`);
-      run(
-        `npm run typeorm -- migration:revert -d ${DATA_SOURCE_PATH}`,
-        env,
-      );
+      run(`npm run typeorm -- migration:revert -d ${DATA_SOURCE_PATH}`, env);
     }
     log('All migrations reverted successfully.');
 
@@ -270,7 +265,9 @@ async function main(): Promise<void> {
     // -----------------------------------------------------------------------
     // 6. Success
     // -----------------------------------------------------------------------
-    log('✅ Migration validation passed — round trip and schema check succeeded.');
+    log(
+      '✅ Migration validation passed — round trip and schema check succeeded.',
+    );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     logError(`Migration validation FAILED: ${message}`);
@@ -284,11 +281,9 @@ async function main(): Promise<void> {
     // -----------------------------------------------------------------------
     if (containerStarted) {
       log(`Stopping and removing container: ${CONTAINER_NAME}`);
-      const cleanup = spawnSync(
-        'docker',
-        ['stop', CONTAINER_NAME],
-        { stdio: 'pipe' },
-      );
+      const cleanup = spawnSync('docker', ['stop', CONTAINER_NAME], {
+        stdio: 'pipe',
+      });
       if (cleanup.status !== 0) {
         console.warn(
           '[validate-migrations] Warning: Could not stop container — it may have already exited.',

@@ -64,8 +64,7 @@ describe('configureApp', () => {
       defaultVersion: '1',
     });
 
-    const interceptors = (app.useGlobalInterceptors as jest.Mock).mock
-      .calls[0];
+    const interceptors = (app.useGlobalInterceptors as jest.Mock).mock.calls[0];
     expect(
       interceptors.some(
         (interceptor: unknown) => interceptor instanceof IdempotencyInterceptor,
@@ -73,7 +72,8 @@ describe('configureApp', () => {
     ).toBe(true);
     expect(
       interceptors.some(
-        (interceptor: unknown) => interceptor instanceof ClassSerializerInterceptor,
+        (interceptor: unknown) =>
+          interceptor instanceof ClassSerializerInterceptor,
       ),
     ).toBe(true);
 
@@ -91,10 +91,10 @@ describe('configureApp', () => {
     expect(pipes[0]).toBeInstanceOf(ValidationPipe);
 
     await expect(
-      (pipes[0] as ValidationPipe).transform(
-        { value: '1' },
-        { type: 'body', metatype: ConversionDto } as any,
-      ),
+      (pipes[0] as ValidationPipe).transform({ value: '1' }, {
+        type: 'body',
+        metatype: ConversionDto,
+      } as any),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

@@ -2,6 +2,7 @@ import { Reflector } from '@nestjs/core';
 import {
   ClassSerializerInterceptor,
   ValidationPipe,
+  ValidationPipeOptions,
   VersioningType,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -21,7 +22,10 @@ import { QueuesDashboardService } from './modules/queues/queues-dashboard.servic
 import { runWithRequestId } from './common/context/request-context';
 import { sanitizeRequestId } from './common/utils/request-id.util';
 
-export function configureApp(app: NestExpressApplication): void {
+export function configureApp(
+  app: NestExpressApplication,
+  validationPipeOptions?: ValidationPipeOptions,
+): void {
   const configService = app.get(ConfigService);
 
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -39,6 +43,7 @@ export function configureApp(app: NestExpressApplication): void {
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
+      ...validationPipeOptions,
     }),
   );
 

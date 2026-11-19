@@ -13,6 +13,11 @@ exercises the real HTTP response pipeline (Supertest against the Nest app):
 
 - `test/e2e/compression.e2e-spec.ts`
 
+The test app uses the shared `configureApp()` bootstrap from
+`src/configure-app.ts`, the same middleware setup used by `src/main.ts`,
+so removing compression from the production bootstrap makes the test fail. It runs
+once as part of the `npm run test:e2e` CI step.
+
 It verifies the documented `compression({ threshold: 1024 })` behaviour:
 
 - A response body **over** the 1024-byte threshold is served with

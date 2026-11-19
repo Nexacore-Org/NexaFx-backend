@@ -182,7 +182,7 @@ jobs:
           MAILGUN_DOMAIN: 'test.nexafx.com'
           MAILGUN_FROM_EMAIL: 'test@nexafx.com'
           FRONTEND_URL: 'http://localhost:3001'
-        run: npm run test:e2e -- --forceExit
+        run: npm run test:e2e -- --forceExit --runInBand
 
       - name: Run compression regression check
         env:

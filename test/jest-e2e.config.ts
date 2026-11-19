@@ -6,6 +6,7 @@ const config: Config = {
   rootDir: '..',
   testRegex: '.e2e-spec.ts$',
   testTimeout: 300000,
+  maxWorkers: 1,
   setupFilesAfterEnv: ['<rootDir>/test/setup.e2e.ts'],
   testPathIgnorePatterns: ['/node_modules/', '/dist/'],
 };

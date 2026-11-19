@@ -7,6 +7,7 @@ const config: Config = {
   testRegex: '.*\\.spec\\.ts$',
   collectCoverageFrom: ['**/*.(t|j)s'],
   coverageDirectory: '../coverage',
+  coverageReporters: ['json-summary', 'lcov', 'html', 'text-summary'],
   coverageThreshold: {
     global: {
       lines: 80,

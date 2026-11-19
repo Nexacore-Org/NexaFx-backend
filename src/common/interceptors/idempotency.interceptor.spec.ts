@@ -308,9 +308,9 @@ describe('IdempotencyInterceptor', () => {
       interceptor.intercept(context, {} as CallHandler).subscribe({
         next: (body) => {
           expect(body).toEqual({ id: 'tx-1' });
-          const response = context.switchToHttp().getResponse() as {
+          const response = context.switchToHttp().getResponse<{
             setHeader: jest.Mock;
-          };
+          }>();
           expect(response.setHeader).toHaveBeenCalledWith(
             'X-Idempotency-Replayed',
             'true',
@@ -432,9 +432,14 @@ describe('IdempotencyInterceptor', () => {
 
       mockService.validateIdempotencyKey.mockReturnValue({ valid: true });
       mockService.checkIdempotency.mockRejectedValue(
-        Object.assign(new Error('Idempotency key already used with a different request body'), {
-          code: 'IDEMPOTENCY_KEY_BODY_MISMATCH',
-        }),
+        Object.assign(
+          new Error(
+            'Idempotency key already used with a different request body',
+          ),
+          {
+            code: 'IDEMPOTENCY_KEY_BODY_MISMATCH',
+          },
+        ),
       );
 
       interceptor.intercept(context, {} as CallHandler).subscribe({

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/require-await */
 import { Operation, Asset } from 'stellar-sdk';
 import { randomBytes } from 'crypto';
 import {
@@ -1078,7 +1077,11 @@ export class TransactionsService {
     // verified transaction could be re-verified (and re-credited) forever.
     // The internal scheduler passes requestingUserId 'system' and is exempt.
     const isSystemCaller = requestingUserId === 'system';
-    if (!isAdmin && !isSystemCaller && transaction.status !== TransactionStatus.PENDING) {
+    if (
+      !isAdmin &&
+      !isSystemCaller &&
+      transaction.status !== TransactionStatus.PENDING
+    ) {
       throw new BadRequestException(
         `Transaction is already ${transaction.status.toLowerCase()} and cannot be re-verified`,
       );
@@ -1111,7 +1114,10 @@ export class TransactionsService {
           { status: TransactionStatus.SUCCESS },
         );
 
-        if (transaction.type === TransactionType.DEPOSIT && (claimed.affected ?? 0) === 1) {
+        if (
+          transaction.type === TransactionType.DEPOSIT &&
+          (claimed.affected ?? 0) === 1
+        ) {
           await this.updateUserBalance(
             transaction.userId,
             transaction.currency,

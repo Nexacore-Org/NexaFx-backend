@@ -27,7 +27,9 @@ import { CurrenciesModule } from '../currencies/currencies.module';
         const isProduction =
           configService.get<string>('NODE_ENV') === 'production';
         return {
-          autoSchemaFile: join(process.cwd(), 'src/graphql/schema.gql'),
+          autoSchemaFile: isProduction
+            ? true
+            : join(process.cwd(), 'src/graphql/schema.gql'),
           playground: !isProduction,
           introspection: !isProduction,
           validationRules: [

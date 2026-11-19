@@ -240,7 +240,7 @@ export class AuditLogsService {
       let filename: string;
 
       if (format === 'PDF') {
-        const pdfResult = this.generatePdfExport(logs, filters);
+        const pdfResult = await this.generatePdfExport(logs, filters);
         buffer = pdfResult.buffer;
         filename = pdfResult.filename;
       } else {
@@ -296,11 +296,16 @@ export class AuditLogsService {
   private generatePdfExport(
     logs: AuditLog[],
     filters: Record<string, any>,
-  ): { buffer: Buffer; filename: string } {
+  ): Promise<{ buffer: Buffer; filename: string }> {
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
     const chunks: Buffer[] = [];
-
-    doc.on('data', (chunk) => chunks.push(chunk));
+    const now = new Date();
+    const filename = `audit-export-${format(now, 'yyyy-MM-dd-HHmmss')}.pdf`;
+    const buffer = new Promise<Buffer>((resolve, reject) => {
+      doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+    });
 
     // Title and metadata
     doc
@@ -309,7 +314,6 @@ export class AuditLogsService {
       .text('Audit Log Export', { align: 'center' })
       .moveDown(0.5);
 
-    const now = new Date();
     const dateRange =
       filters.startDate && filters.endDate
         ? `${filters.startDate} to ${filters.endDate}`
@@ -409,10 +413,7 @@ export class AuditLogsService {
 
     doc.end();
 
-    return {
-      buffer: Buffer.concat(chunks),
-      filename: `audit-export-${format(now, 'yyyy-MM-dd-HHmmss')}.pdf`,
-    };
+    return buffer.then((content) => ({ buffer: content, filename }));
   }
 
   /**
@@ -484,7 +485,7 @@ export class AuditLogsService {
     const logs = result.logs;
 
     if (job.format === ExportFormat.PDF) {
-      return this.generatePdfExport(logs, job.filters);
+      return await this.generatePdfExport(logs, job.filters);
     } else {
       return this.generateCsvExport(logs);
     }

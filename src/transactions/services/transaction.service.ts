@@ -613,11 +613,6 @@ export class TransactionsService {
         amount: amount.toString(),
       });
 
-      // Use counterpartyMemo on Stellar if provided (truncated to 28 bytes)
-      const stellarMemo = createWithdrawalDto.memo
-        ? truncateMemoTo28Bytes(createWithdrawalDto.memo)
-        : `WITHDRAW-${transaction.id}`;
-
       await this.stellarService.createTransaction({
         sourcePublicKey: sourceAddress,
         operations: [paymentOperation],
@@ -630,10 +625,6 @@ export class TransactionsService {
       );
 
       const paymentResult = await this.stellarService.sendPayment({
-        destination: destinationAddress,
-        amount: amount.toString(),
-        secretKey,
-        memo: stellarMemo,
         sourcePublicKey: sourceAddress,
         destination: destinationAddress,
         asset: paymentAsset,

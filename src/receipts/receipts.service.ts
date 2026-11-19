@@ -532,9 +532,9 @@ If you have any questions about this transaction, please contact our support tea
         status: tx.status,
         txHash: tx.txHash,
         fee: tx.feeAmount,
-        counterpartyMemo: tx.counterpartyMemo ?? '',
-        userNote: tx.userNote ?? '',
-        tags: (tx.tags ?? []).join(', '),
+        counterpartyMemo: this.sanitizeSpreadsheetCell(tx.counterpartyMemo ?? ''),
+        userNote: this.sanitizeSpreadsheetCell(tx.userNote ?? ''),
+        tags: this.sanitizeSpreadsheetCell((tx.tags ?? []).join(', ')),
         createdAt: tx.createdAt.toISOString(),
       });
     });
@@ -596,9 +596,9 @@ If you have any questions about this transaction, please contact our support tea
         status: tx.status,
         txHash: tx.txHash,
         fee: tx.feeAmount,
-        counterpartyMemo: tx.counterpartyMemo ?? '',
-        userNote: tx.userNote ?? '',
-        tags: (tx.tags ?? []).join(', '),
+        counterpartyMemo: this.sanitizeSpreadsheetCell(tx.counterpartyMemo ?? ''),
+        userNote: this.sanitizeSpreadsheetCell(tx.userNote ?? ''),
+        tags: this.sanitizeSpreadsheetCell((tx.tags ?? []).join(', ')),
         createdAt: tx.createdAt.toISOString(),
       });
     });
@@ -628,47 +628,4 @@ If you have any questions about this transaction, please contact our support tea
     return value;
   }
 
-  async exportTransactionsCSV(userId: string): Promise<string> {
-    const transactions = await this.getTransactionsForExport(userId);
-    
-    let csvRows = ['ID,Date,Amount,Currency,Counterparty Memo,User Note,Tags'];
-
-    for (const tx of transactions) {
-      const memo = this.sanitizeSpreadsheetCell(tx.counterpartyMemo || '');
-      const note = this.sanitizeSpreadsheetCell(tx.userNote || '');
-      const tags = this.sanitizeSpreadsheetCell(tx.tags?.join(';') || '');
-
-      csvRows.push(`${tx.id},${tx.date},${tx.amount},${tx.currency},"${memo}","${note}","${tags}"`);
-    }
-
-    return csvRows.join('\n');
-  }
-
-  async exportTransactionsExcel(userId: string): Promise<any> {
-    const transactions = await this.getTransactionsForExport(userId);
-    // Excel export implementation using exceljs or similar
-    const workbook = new (require('exceljs').Workbook)();
-    const worksheet = workbook.addWorksheet('Transactions');
-
-    worksheet.addRow(['ID', 'Date', 'Amount', 'Currency', 'Counterparty Memo', 'User Note', 'Tags']);
-
-    for (const tx of transactions) {
-      worksheet.addRow([
-        tx.id,
-        tx.date,
-        tx.amount,
-        tx.currency,
-        this.sanitizeSpreadsheetCell(tx.counterpartyMemo || ''),
-        this.sanitizeSpreadsheetCell(tx.userNote || ''),
-        this.sanitizeSpreadsheetCell(tx.tags?.join(';') || ''),
-      ]);
-    }
-
-    return workbook;
-  }
-
-  private async getTransactionsForExport(userId: string): Promise<any[]> {
-    // Mock or repository query implementation
-    return [];
-  }
 }

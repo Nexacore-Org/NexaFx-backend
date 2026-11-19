@@ -7,7 +7,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { getQueueToken } from '@nestjs/bullmq';
 import { DataSource } from 'typeorm';
+import { Asset, Operation } from 'stellar-sdk';
 import { TransactionsService } from './transaction.service';
 import { Transaction, TransactionStatus } from '../entities/transaction.entity';
 import { CurrenciesService } from '../../currencies/currencies.service';
@@ -33,6 +35,10 @@ import { LedgerService } from '../../ledger/services/ledger.service';
 import { TransactionLimitService } from './transaction-limit.service';
 import { RedisService } from '../../modules/redis/redis.service';
 import { TransactionCategory } from '../../analytics/entities/transaction-category.entity';
+import { AmlService } from '../../modules/compliance/aml.service';
+import { MicroSavingsService } from '../../modules/micro-savings/micro-savings.service';
+import { UnifiedActivityFeedService } from '../../unified-activity-feed/unified-activity-feed.service';
+import { TAX_QUEUE } from '../../modules/queues/queue.constants';
 
 describe('TransactionsService fee integration behavior', () => {
   let service: TransactionsService;
@@ -60,6 +66,7 @@ describe('TransactionsService fee integration behavior', () => {
 
   const exchangeRatesService = {
     getRate: jest.fn(async () => ({ rate: 1 })),
+    getFreshRate: jest.fn(async () => ({ rate: 1 })),
   };
 
   const stellarService = {
@@ -70,7 +77,7 @@ describe('TransactionsService fee integration behavior', () => {
     findIncomingPayment: jest.fn(async () => null),
     verifyTransaction: jest.fn(async () => ({ status: 'SUCCESS' })),
     getWalletBalances: jest.fn(async () => [{ asset: 'XLM', balance: '100' }]),
-    getAssetWithDefaultIssuer: jest.fn((code: string) => ({ code })),
+    getAssetWithDefaultIssuer: jest.fn(() => Asset.native()),
     getAsset: jest.fn((code: string) => ({ code })),
     findBestPath: jest.fn(async () => [
       {
@@ -89,7 +96,7 @@ describe('TransactionsService fee integration behavior', () => {
         'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
       walletSecretKeyEncrypted:
         'SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-      balances: { XLM: 1000 },
+      balances: { XLM: 1000, USDC: 1000 },
     })),
     updateByUserId: jest.fn(async () => undefined),
   };
@@ -203,10 +210,27 @@ describe('TransactionsService fee integration behavior', () => {
         { provide: LedgerService, useValue: ledgerService },
         { provide: TransactionLimitService, useValue: transactionLimitService },
         { provide: RedisService, useValue: mockRedisService },
+        { provide: AmlService, useValue: { enqueue: jest.fn(async () => undefined) } },
+        {
+          provide: MicroSavingsService,
+          useValue: {
+            evaluatePerTransaction: jest.fn(async () => undefined),
+            evaluateBalanceThreshold: jest.fn(async () => undefined),
+          },
+        },
+        {
+          provide: UnifiedActivityFeedService,
+          useValue: { append: jest.fn(async () => undefined) },
+        },
+        { provide: getQueueToken(TAX_QUEUE), useValue: { add: jest.fn(async () => undefined) } },
       ],
     }).compile();
 
     service = moduleRef.get(TransactionsService);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('calls calculateFee and recordFee during deposit', async () => {
@@ -353,6 +377,127 @@ describe('TransactionsService fee integration behavior', () => {
       }),
       expect.anything(),
     );
+  });
+
+  it('withdraws native XLM using Asset.native() for the payment', async () => {
+    const nativeAsset = Asset.native();
+    stellarService.getAssetWithDefaultIssuer.mockReturnValueOnce(nativeAsset);
+    const paymentSpy = jest.spyOn(Operation, 'payment');
+
+    await service.createWithdrawal('user-1', {
+      amount: 100,
+      currency: 'XLM',
+      destinationAddress:
+        'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+    });
+
+    expect(paymentSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        destination: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+        asset: nativeAsset,
+        amount: '100',
+      }),
+    );
+    expect(stellarService.sendPayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        asset: nativeAsset,
+        amount: '100',
+        secretKey: expect.any(String),
+      }),
+    );
+  });
+
+  it('withdraws an issued asset using its configured issuer', async () => {
+    const issuer =
+      'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335XPB7X3NCQXMK3SBEG3CIFE7G';
+    const issuedAsset = new Asset('USDC', issuer);
+    currenciesService.getCurrency.mockResolvedValueOnce({
+      isActive: true,
+      code: 'USDC',
+      issuer,
+    });
+    stellarService.getAssetWithDefaultIssuer.mockReturnValueOnce(issuedAsset);
+    const paymentSpy = jest.spyOn(Operation, 'payment');
+
+    await service.createWithdrawal('user-1', {
+      amount: 100,
+      currency: 'USDC',
+      destinationAddress:
+        'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+    });
+
+    expect(paymentSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        asset: issuedAsset,
+        amount: '100',
+      }),
+    );
+    expect(stellarService.sendPayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        asset: issuedAsset,
+        amount: '100',
+      }),
+    );
+  });
+
+  it('persists the Stellar hash on the withdrawal row immediately after submission', async () => {
+    await service.createWithdrawal('user-1', {
+      amount: 100,
+      currency: 'XLM',
+      destinationAddress:
+        'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+    });
+
+    expect(transactionRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        txHash: 'stellar-hash',
+        stellarTxHash: 'stellar-hash',
+      }),
+    );
+  });
+
+  it('debits the withdrawal amount and same-currency fee in one balance update', async () => {
+    const updateBalance = jest.spyOn(
+      service as unknown as { updateUserBalance: jest.Mock },
+      'updateUserBalance',
+    );
+
+    await service.createWithdrawal('user-1', {
+      amount: 100,
+      currency: 'XLM',
+      destinationAddress:
+        'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+    });
+
+    expect(updateBalance).toHaveBeenCalledWith('user-1', 'XLM', -101.25);
+    expect(ledgerService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        feeAmount: '1.25000000',
+        feeCurrency: 'XLM',
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('debits a different fee currency separately from the withdrawal amount', async () => {
+    feesService.calculateFee.mockResolvedValueOnce({
+      feeAmount: 1.25,
+      feeCurrency: 'USDC',
+      feeType: FeeType.FLAT,
+    });
+    const updateBalance = jest
+      .spyOn(service as unknown as { updateUserBalance: jest.Mock }, 'updateUserBalance')
+      .mockResolvedValue(undefined);
+
+    await service.createWithdrawal('user-1', {
+      amount: 100,
+      currency: 'XLM',
+      destinationAddress:
+        'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+    });
+
+    expect(updateBalance).toHaveBeenCalledWith('user-1', 'XLM', -100);
+    expect(updateBalance).toHaveBeenCalledWith('user-1', 'USDC', -1.25);
   });
 
   it('throws BadRequestException when neither destinationAddress nor beneficiaryId is provided', async () => {
@@ -529,5 +674,22 @@ describe('TransactionsService fee integration behavior', () => {
         }),
       );
     });
+  });
+
+  it('falls back to the currency issuer when Stellar config has none', async () => {
+    const issuer =
+      'GDSBCQO34HWPGUGQSP3QBFEXVTSR2PW46UIGTHVWGWJGQKH3AFNHXHXN';
+    stellarService.getAssetWithDefaultIssuer.mockImplementationOnce(() => {
+      throw new Error('No Stellar issuer configured for USDC on TESTNET');
+    });
+    currenciesService.getCurrency.mockResolvedValueOnce({
+      code: 'USDC',
+      issuer,
+    } as any);
+
+    const asset = await (service as any).getAssetHelper('USDC');
+
+    expect(stellarService.getAsset).toHaveBeenCalledWith('USDC', issuer);
+    expect(asset).toEqual({ code: 'USDC' });
   });
 });

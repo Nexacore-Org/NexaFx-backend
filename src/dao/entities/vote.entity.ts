@@ -16,23 +16,28 @@ export enum VoteChoice {
 }
 
 @Entity('votes')
-@Index(['proposalId', 'voterId'], { unique: true })
+@Index('IDX_votes_proposalId_voterId', ['proposalId', 'voterId'], {
+  unique: true,
+})
 export class Vote {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'PK_votes_id' })
   id: string;
 
   @Column({ type: 'uuid' })
-  @Index()
+  @Index('IDX_votes_proposalId')
   proposalId: string;
 
   @ManyToOne(() => Proposal, (proposal) => proposal.votes, {
     onDelete: 'CASCADE',
   })
-  @JoinColumn({ name: 'proposalId' })
+  @JoinColumn({
+    name: 'proposalId',
+    foreignKeyConstraintName: 'FK_votes_proposalId',
+  })
   proposal: Proposal;
 
   @Column({ type: 'uuid' })
-  @Index()
+  @Index('IDX_votes_voterId')
   voterId: string;
 
   @Column({
@@ -47,37 +52,4 @@ export class Vote {
 
   @CreateDateColumn({ type: 'timestamp with time zone' })
   castAt: Date;
-}
-
-/**
- * Per-proposal balance snapshot captured at votingStartAt.
- *
- * Vote weight is derived from this snapshot rather than the voter's live
- * XLM balance so that funds cannot be recycled across accounts to vote
- * multiple times with the same XLM.
- */
-@Entity('proposal_balance_snapshots')
-@Index(['proposalId', 'voterId'], { unique: true })
-export class ProposalBalanceSnapshot {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
-  @Column({ type: 'uuid' })
-  @Index()
-  proposalId: string;
-
-  @ManyToOne(() => Proposal, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'proposalId' })
-  proposal: Proposal;
-
-  @Column({ type: 'uuid' })
-  @Index()
-  voterId: string;
-
-  /** XLM balance weight captured at votingStartAt (snapshot, not live) */
-  @Column({ type: 'decimal', precision: 20, scale: 8 })
-  weight: number;
-
-  @CreateDateColumn({ type: 'timestamp with time zone' })
-  capturedAt: Date;
 }

@@ -13,3 +13,10 @@ updates:
     ignore:
       - dependency-name: '@nestjs/*'
         update-types: ['version-update:semver-major']
+      dev-dependencies:
+        patterns:
+          - '*'
+        dependency-type: 'development'
+        update-types:
+          - 'minor'
+          - 'patch'

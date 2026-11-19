@@ -28,6 +28,23 @@ which fails hard on any drift — this blocks every PR until it's fixed.
 
 ---
 
+## 🤖 Dependabot Updates
+
+Dependabot opens weekly npm PRs against `v2`. Repository auto-merge is disabled, so
+`.github/workflows/dependabot-auto-merge.yml` does **not** run `gh pr merge --auto`.
+For patch and minor updates of non-critical packages it approves the PR and adds the
+`auto-merge-approved` label; a maintainer still merges it after CI is green.
+
+Updates to security-critical packages are never approved automatically. The workflow
+adds the `needs-manual-review` label when any changed dependency is `stellar-sdk`,
+`@stellar/stellar-sdk`, `bcrypt`, `@nestjs/jwt`, `@nestjs/passport`, `typeorm`, `pg`,
+or a `passport*` package. These PRs require a human reviewer.
+
+Development dependencies are grouped into a single weekly PR by `.github/dependabot.yml`
+to reduce PR volume.
+
+---
+
 ## ✅ CI Must Be Green Before Merge
 
 CI is a gate, not a formality. A pull request may only be merged once **every**

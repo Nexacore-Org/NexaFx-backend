@@ -13,6 +13,7 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "lint:check": "eslint \"{src,apps,libs,test}/**/*.ts\" --max-warnings 4000",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
@@ -31,7 +32,7 @@
     "seed:fresh": "ts-node src/database/seed-fresh.ts",
     "commitlint": "commitlint --config commitlint.config.js",
     "release": "semantic-release",
-    "release:prerelease": "semantic-release --branch v2",
+    "release:prerelease": "semantic-release",
     "prepare": "husky"
   },
   "dependencies": {

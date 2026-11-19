@@ -15,12 +15,7 @@ export async function seedReferrals(dataSource: DataSource) {
     {
       id: uuidv5('ref2', NAMESPACE),
       referrerId: uuidv5('user2', NAMESPACE),
-      refereeId: uuidv5('user3', NAMESPACE),
-    },
-    {
-      id: uuidv5('ref3', NAMESPACE),
-      referrerId: uuidv5('user3', NAMESPACE),
-      refereeId: uuidv5('user4', NAMESPACE),
+      refereeId: uuidv5('user1', NAMESPACE),
     },
   ];
   await referralRepository.upsert(referrals, ['id']);

@@ -23,31 +23,31 @@ export class AddMissingIndexes1715421500000 implements MigrationInterface {
    * which never existed in any entity or migration.
    */
   readonly indexes: ReadonlyArray<IndexDefinition> = [
-    { table: 'users', name: 'idx_users_email', columns: '"email"' },
-    { table: 'users', name: 'idx_users_phone', columns: '"phone"' },
+    { table: 'users', name: 'IDX_97672ac88f789774dd47f7c8be', columns: '"email"' },
+    { table: 'users', name: 'IDX_a000cca60bcf04454e72769949', columns: '"phone"' },
     {
       table: 'users',
-      name: 'idx_users_referral_code',
+      name: 'IDX_b7f8278f4e89249bb75c9a1589',
       columns: '"referralCode"',
     },
     {
       table: 'transactions',
-      name: 'idx_transactions_user_id',
+      name: 'IDX_6bb58f2b6e30cb51a6504599f4',
       columns: '"userId"',
     },
     {
       table: 'transactions',
-      name: 'idx_transactions_status',
+      name: 'IDX_da87c55b3bbbe96c6ed88ea7ee',
       columns: '"status"',
     },
-    { table: 'wallets', name: 'idx_wallets_user_id', columns: '"userId"' },
+    { table: 'wallets', name: 'IDX_2ecdb33f23e9a6fc392025c0b9', columns: '"userId"' },
     {
       table: 'audit_logs',
-      name: 'idx_audit_logs_user_id',
+      name: 'IDX_cfa83f61e4d27a87fcae1e025a',
       columns: '"userId"',
     },
-    { table: 'kyc_records', name: 'idx_kyc_user_id', columns: '"userId"' },
-    { table: 'otps', name: 'idx_otps_user_id', columns: '"userId"' },
+    { table: 'kyc_records', name: 'IDX_bb87c5ec834284b29466a9b4d6', columns: '"userId"' },
+    { table: 'otps', name: 'IDX_82b0deb105275568cdcef2823e', columns: '"userId"' },
   ];
 
   public async up(queryRunner: QueryRunner): Promise<void> {

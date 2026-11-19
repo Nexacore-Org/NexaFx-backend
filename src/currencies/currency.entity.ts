@@ -11,8 +11,8 @@ export class Currency {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'varchar', length: 3, unique: true })
-  code: string; // e.g., NGN, USD, EUR
+  @Column({ type: 'varchar', length: 10, unique: true })
+  code: string; // e.g., NGN, USD, USDC
 
   @Column({ type: 'varchar', length: 100 })
   name: string; // e.g., "Nigerian Naira"

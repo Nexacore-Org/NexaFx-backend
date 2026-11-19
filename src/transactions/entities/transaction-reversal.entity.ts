@@ -35,12 +35,12 @@ export class TransactionReversal {
   @Column({ type: 'text', nullable: true })
   reason: string | null;
 
-  @Column({ type: 'uuid' })
-  authorisedBy: string;
+  @Column({ type: 'uuid', nullable: true })
+  authorisedBy: string | null;
 
   @ManyToOne(() => User, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'authorisedBy' })
-  authorisedByUser: User;
+  authorisedByUser: User | null;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   legalReference: string | null;

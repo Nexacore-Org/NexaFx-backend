@@ -6,7 +6,14 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThanOrEqual } from 'typeorm';
 import { CurrencyPair } from '../entities/currency-pair.entity';
+import {
+  CreateCurrencyPairDto,
+  SuspendPairDto,
+  UpdateCurrencyPairDto,
+} from '../dto/currency-pair.dto';
 import { ExchangeRatesService } from '../../exchange-rates/exchange-rates.service';
+
+const CURRENCY_CODE_PATTERN = /^[A-Z0-9]{2,10}$/;
 
 @Injectable()
 export class CurrencyPairService {
@@ -62,44 +69,45 @@ export class CurrencyPairService {
     });
   }
 
-  async create(data: Partial<CurrencyPair>): Promise<CurrencyPair> {
+  async create(data: CreateCurrencyPairDto): Promise<CurrencyPair> {
+    this.assertPairPayload(data);
+
     const pair = this.currencyPairRepository.create({
       ...data,
-      fromCurrencyCode: data.fromCurrencyCode?.toUpperCase(),
-      toCurrencyCode: data.toCurrencyCode?.toUpperCase(),
+      fromCurrencyCode: data.fromCurrencyCode.toUpperCase(),
+      toCurrencyCode: data.toCurrencyCode.toUpperCase(),
     });
     return this.currencyPairRepository.save(pair);
   }
 
-  async update(id: string, data: Partial<CurrencyPair>): Promise<CurrencyPair> {
+  async update(id: string, data: UpdateCurrencyPairDto): Promise<CurrencyPair> {
+    this.assertPairPayload(data);
+
     const pair = await this.currencyPairRepository.findOne({ where: { id } });
     if (!pair) throw new NotFoundException('Currency pair not found');
 
-    Object.assign(pair, data);
+    Object.assign(pair, {
+      ...data,
+      ...(data.fromCurrencyCode
+        ? { fromCurrencyCode: data.fromCurrencyCode.toUpperCase() }
+        : {}),
+      ...(data.toCurrencyCode
+        ? { toCurrencyCode: data.toCurrencyCode.toUpperCase() }
+        : {}),
+    });
     return this.currencyPairRepository.save(pair);
   }
 
-  async suspend(
-    id: string,
-    reason: string,
-    durationIso: string,
-  ): Promise<CurrencyPair> {
+  async suspend(id: string, data: SuspendPairDto): Promise<CurrencyPair> {
     const pair = await this.currencyPairRepository.findOne({ where: { id } });
     if (!pair) throw new NotFoundException('Currency pair not found');
 
-    // Simple duration parsing (ISO 8601 duration or simple seconds/minutes/hours)
-    // For simplicity, we'll assume the user provides a future date or we use a library if available.
-    // Since I don't know the libraries, I'll use a simple approach: assume duration is in minutes for now
-    // OR just use a Date object if the user provides ISO string.
-    // The requirement says "ISO duration". I'll use a basic parser or just expect a valid Date string for now.
-    // Wait, requirement says "ISO duration". Let's use `Date` and add time to it.
-
-    const durationMs = this.parseDuration(durationIso);
+    const durationMs = this.parseDuration(data.duration);
     const suspendedUntil = new Date(Date.now() + durationMs);
 
     pair.isActive = false;
     pair.suspendedUntil = suspendedUntil;
-    pair.suspensionReason = reason;
+    pair.suspensionReason = data.reason;
 
     return this.currencyPairRepository.save(pair);
   }
@@ -191,6 +199,42 @@ export class CurrencyPairService {
     }
 
     return pair;
+  }
+
+  private assertPairPayload(data: Partial<CurrencyPair>): void {
+    const forbidden = ['id', 'createdAt', 'updatedAt', 'deletedAt'];
+    const presentForbidden = forbidden.filter(
+      (key) => (data as Record<string, unknown>)[key] !== undefined,
+    );
+    if (presentForbidden.length > 0) {
+      throw new BadRequestException(
+        `Cannot set read-only fields: ${presentForbidden.join(', ')}`,
+      );
+    }
+
+    for (const key of ['fromCurrencyCode', 'toCurrencyCode'] as const) {
+      const code = data[key];
+      if (code !== undefined && !CURRENCY_CODE_PATTERN.test(code)) {
+        throw new BadRequestException(`${key} must be a 2-10 character code`);
+      }
+    }
+
+    const { spreadPercent, minAmountUsd, maxAmountUsd } = data;
+    if (
+      spreadPercent !== undefined &&
+      (spreadPercent < 0 || spreadPercent > 100)
+    ) {
+      throw new BadRequestException('spreadPercent must be between 0 and 100');
+    }
+    if (
+      minAmountUsd !== undefined &&
+      maxAmountUsd !== undefined &&
+      minAmountUsd > maxAmountUsd
+    ) {
+      throw new BadRequestException(
+        'minAmountUsd must be less than or equal to maxAmountUsd',
+      );
+    }
   }
 
   private parseDuration(isoDuration: string): number {

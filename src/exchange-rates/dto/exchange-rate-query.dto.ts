@@ -1,25 +1,23 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsString, Length, Matches } from 'class-validator';
+import { IsString, Matches } from 'class-validator';
 
 export class ExchangeRateQueryDto {
   @ApiProperty({
     example: 'NGN',
-    description: 'Base currency code (ISO 4217)',
+    description: 'Source currency code (2-10 uppercase letters or digits)',
   })
   @IsString()
-  @Length(3, 3)
-  @Matches(/^[A-Za-z]{3}$/)
+  @Matches(/^[A-Z0-9]{2,10}$/)
   @Transform(({ value }) => String(value).toUpperCase())
   from: string;
 
   @ApiProperty({
-    example: 'USD',
-    description: 'Target currency code (ISO 4217)',
+    example: 'USDC',
+    description: 'Target currency code (2-10 uppercase letters or digits)',
   })
   @IsString()
-  @Length(3, 3)
-  @Matches(/^[A-Za-z]{3}$/)
+  @Matches(/^[A-Z0-9]{2,10}$/)
   @Transform(({ value }) => String(value).toUpperCase())
   to: string;
 }

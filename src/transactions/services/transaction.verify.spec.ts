@@ -26,11 +26,18 @@ describe('TransactionsService.verifyTransaction', () => {
   const stellarService = { verifyTransaction: jest.fn() };
   const activityFeedService = { append: jest.fn() };
   const redisService = { delete: jest.fn() };
-  const amlService = { queueScreening: jest.fn() };
-  const auditLogsService = { logAuthEvent: jest.fn() };
-  const webhookService = { dispatch: jest.fn() };
-  const taxQueue = { add: jest.fn() };
-  const microSavingsService = { evaluate: jest.fn() };
+  const amlService = { enqueue: jest.fn(async () => undefined) };
+  const auditLogsService = {
+    logAuthEvent: jest.fn(),
+    logTransactionEvent: jest.fn(async () => undefined),
+  };
+  const webhookService = { dispatch: jest.fn(async () => undefined) };
+  const taxQueue = { add: jest.fn(async () => undefined) };
+  const microSavingsService = {
+    evaluatePerTransaction: jest.fn(async () => undefined),
+    evaluateBalanceThreshold: jest.fn(async () => undefined),
+  };
+  const ledgerService = { reverse: jest.fn(async () => undefined) };
   const usersService = { findById: jest.fn(), updateByUserId: jest.fn() };
 
   const makeTransaction = (overrides: Partial<Transaction> = {}) =>
@@ -42,6 +49,7 @@ describe('TransactionsService.verifyTransaction', () => {
       amount: '100.00000000',
       currency: 'XLM',
       txHash: 'hash-1',
+      createdAt: new Date(),
       ...overrides,
     }) as Transaction;
 
@@ -59,9 +67,10 @@ describe('TransactionsService.verifyTransaction', () => {
       webhookService,
       taxQueue,
       microSavingsService,
+      ledgerService,
       usersService,
       logger: { log: jest.fn(), error: jest.fn(), warn: jest.fn() },
-      sendTransactionNotification: jest.fn(),
+      sendTransactionNotification: jest.fn(async () => undefined),
       updateUserBalance: jest.fn(),
     };
     for (const [key, value] of Object.entries(deps)) {
@@ -223,6 +232,101 @@ describe('TransactionsService.verifyTransaction', () => {
       await expect(
         service.verifyTransaction('tx-1', 'user-1', UserRole.USER, 'user-1'),
       ).rejects.toThrow(/blockchain hash/i);
+    });
+  });
+
+  describe('not found reconciliation', () => {
+    it('leaves a recent NOT_FOUND transaction PENDING', async () => {
+      transactionRepository.findOne.mockResolvedValue(
+        makeTransaction({ createdAt: new Date(Date.now() - 1_000) }),
+      );
+      stellarService.verifyTransaction.mockResolvedValue({
+        status: 'NOT_FOUND',
+      });
+
+      const result = await service.verifyTransaction(
+        'tx-1',
+        'user-1',
+        UserRole.USER,
+        'user-1',
+      );
+
+      expect(result.status).toBe(TransactionStatus.PENDING);
+      expect(transactionRepository.save).not.toHaveBeenCalled();
+      expect(ledgerService.reverse).not.toHaveBeenCalled();
+    });
+
+    it('fails and reverses a NOT_FOUND transaction past the time bound and margin', async () => {
+      transactionRepository.findOne.mockResolvedValue(
+        makeTransaction({
+          type: TransactionType.WITHDRAW,
+          createdAt: new Date(Date.now() - (180_000 + 60_000 + 1_000)),
+        }),
+      );
+      stellarService.verifyTransaction.mockResolvedValue({
+        status: 'NOT_FOUND',
+      });
+
+      const result = await service.verifyTransaction(
+        'tx-1',
+        'user-1',
+        UserRole.USER,
+        'user-1',
+      );
+
+      expect(result.status).toBe(TransactionStatus.FAILED);
+      expect(result.failureReason).toMatch(/not found/i);
+      expect(transactionRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({ status: TransactionStatus.FAILED }),
+      );
+      expect(ledgerService.reverse).toHaveBeenCalledTimes(1);
+      expect(
+        (service as unknown as { updateUserBalance: jest.Mock })
+          .updateUserBalance,
+      ).toHaveBeenCalledWith('user-1', 'XLM', 100);
+    });
+
+    it('keeps transient verification results PENDING', async () => {
+      transactionRepository.findOne.mockResolvedValue(makeTransaction());
+      stellarService.verifyTransaction.mockResolvedValue({ status: 'PENDING' });
+
+      const result = await service.verifyTransaction(
+        'tx-1',
+        'user-1',
+        UserRole.USER,
+        'user-1',
+      );
+
+      expect(result.status).toBe(TransactionStatus.PENDING);
+      expect(transactionRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('skips side effects when another worker already claimed the failure', async () => {
+      transactionRepository.findOne.mockResolvedValue(
+        makeTransaction({
+          type: TransactionType.WITHDRAW,
+          createdAt: new Date(Date.now() - (180_000 + 60_000 + 1_000)),
+        }),
+      );
+      transactionRepository.update.mockResolvedValueOnce({ affected: 0 });
+      stellarService.verifyTransaction.mockResolvedValue({
+        status: 'NOT_FOUND',
+      });
+
+      const result = await service.verifyTransaction(
+        'tx-1',
+        'user-1',
+        UserRole.USER,
+        'user-1',
+      );
+
+      expect(result.status).toBe(TransactionStatus.FAILED);
+      expect(
+        (service as unknown as { updateUserBalance: jest.Mock })
+          .updateUserBalance,
+      ).not.toHaveBeenCalled();
+      expect(ledgerService.reverse).not.toHaveBeenCalled();
+      expect(transactionRepository.save).not.toHaveBeenCalled();
     });
   });
 });

@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { StellarService } from './stellar.service';
 import { AuditLogsService } from '../../audit-logs/audit-logs.service';
+import { AuditAction } from '../../audit-logs/enums/audit-action.enum';
 
 describe('StellarService', () => {
   let service: StellarService;
@@ -103,6 +104,47 @@ describe('StellarService', () => {
     expect(transactionBuilder.transaction).toHaveBeenCalledWith(
       'stellar-inbound-hash',
     );
+  });
+
+  it('returns NOT_FOUND when Horizon reports a missing transaction hash', async () => {
+    const notFound = Object.assign(new Error('Transaction not found'), {
+      response: { status: 404 },
+    });
+    const transactionBuilder = {
+      transaction: jest.fn().mockReturnThis(),
+      call: jest.fn().mockRejectedValue(notFound),
+    };
+
+    Object.defineProperty(service, 'server', {
+      value: { transactions: jest.fn(() => transactionBuilder) },
+    });
+
+    await expect(
+      service.verifyTransaction('missing-hash', 'user-1'),
+    ).resolves.toEqual({ status: 'NOT_FOUND' });
+    expect(mockAuditLogsService.logSystemEvent).toHaveBeenCalledWith(
+      AuditAction.TRANSACTION_VERIFIED,
+      'user-1',
+      expect.objectContaining({ status: 'NOT_FOUND' }),
+    );
+  });
+
+  it('keeps PENDING on transient Horizon errors', async () => {
+    const unavailable = Object.assign(new Error('Horizon unavailable'), {
+      status: 500,
+    });
+    const transactionBuilder = {
+      transaction: jest.fn().mockReturnThis(),
+      call: jest.fn().mockRejectedValue(unavailable),
+    };
+
+    Object.defineProperty(service, 'server', {
+      value: { transactions: jest.fn(() => transactionBuilder) },
+    });
+
+    await expect(service.verifyTransaction('hash-1')).resolves.toEqual({
+      status: 'PENDING',
+    });
   });
 
   it('skips Friendbot funding in production', async () => {

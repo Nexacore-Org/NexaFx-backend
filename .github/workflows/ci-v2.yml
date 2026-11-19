@@ -237,6 +237,8 @@ jobs:
       - name: Verify Docker is available
         run: docker --version && docker info
 
+      # Runs migration:run on a brand-new empty PostgreSQL database and then
+      # schema:log to catch entity/schema drift.
       - name: Run migration validation
         run: npm run migration:validate
 

@@ -8,7 +8,7 @@ export async function seedCurrencies(dataSource: DataSource) {
       code: 'XLM',
       name: 'Stellar Lumens',
       decimals: 7,
-      isBase: true,
+      isBase: false,
       isActive: true,
     },
     {
@@ -30,7 +30,7 @@ export async function seedCurrencies(dataSource: DataSource) {
       code: 'NGN',
       name: 'Nigerian Naira',
       decimals: 2,
-      isBase: false,
+      isBase: true,
       isActive: true,
     },
     {

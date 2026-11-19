@@ -189,6 +189,43 @@ export class UsersService {
     return attempts;
   }
 
+  async incrementTwoFactorFailedAttempts(
+    userId: string,
+    maxAttempts: number,
+    lockoutMinutes: number,
+  ): Promise<number> {
+    const result = await this.userRepository
+      .createQueryBuilder()
+      .update(User)
+      .set({ twoFactorFailedAttempts: () => '"twoFactorFailedAttempts" + 1' })
+      .where('id = :userId', { userId })
+      .returning('"twoFactorFailedAttempts"')
+      .execute();
+
+    const attempts = Number(result?.raw?.[0]?.twoFactorFailedAttempts ?? 0);
+
+    if (attempts >= maxAttempts) {
+      await this.userRepository.update(userId, {
+        twoFactorFailedAttempts: 0,
+        twoFactorLockedUntil: new Date(Date.now() + lockoutMinutes * 60_000),
+      });
+    }
+
+    return attempts;
+  }
+
+  async acceptTotpStep(userId: string, step: number): Promise<boolean> {
+    const result = await this.userRepository
+      .createQueryBuilder()
+      .update(User)
+      .set({ lastTotpStep: step })
+      .where('id = :userId', { userId })
+      .andWhere('("lastTotpStep" IS NULL OR "lastTotpStep" < :step)', { step })
+      .execute();
+
+    return (result.affected ?? 0) > 0;
+  }
+
   /** Clears the lockout state after a completed login. */
   async clearFailedLoginAttempts(userId: string): Promise<void> {
     await this.userRepository.update(userId, {

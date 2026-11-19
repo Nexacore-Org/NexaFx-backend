@@ -5,6 +5,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ThrottlerException } from '@nestjs/throttler';
 import { IsNull } from 'typeorm';
 import * as speakeasy from 'speakeasy';
 import * as qrcode from 'qrcode';
@@ -15,6 +16,9 @@ import { UsersService } from '../users/users.service';
 import { EncryptionService } from '../common/services/encryption.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { ConfigService } from '@nestjs/config';
+import { RefreshTokensService } from '../tokens/refresh-tokens.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/entities/notification.entity';
 
 jest.mock('speakeasy', () => ({
   generateSecret: jest.fn(),
@@ -25,7 +29,14 @@ jest.mock('bcrypt', () => ({ hash: jest.fn(), compare: jest.fn() }));
 
 describe('TwoFactorService', () => {
   let service: TwoFactorService;
-  let usersService: { findById: jest.Mock; updateByUserId: jest.Mock };
+  let usersService: {
+    findById: jest.Mock;
+    updateByUserId: jest.Mock;
+    incrementTwoFactorFailedAttempts: jest.Mock;
+    acceptTotpStep: jest.Mock;
+  };
+  let refreshTokensService: { revokeAllUserTokens: jest.Mock };
+  let notificationsService: { create: jest.Mock };
   let encryptionService: { encrypt: jest.Mock; decrypt: jest.Mock };
   let repo: {
     create: jest.Mock;
@@ -57,7 +68,13 @@ describe('TwoFactorService', () => {
     usersService = {
       findById: jest.fn(),
       updateByUserId: jest.fn().mockResolvedValue(undefined),
+      incrementTwoFactorFailedAttempts: jest.fn().mockResolvedValue(1),
+      acceptTotpStep: jest.fn().mockResolvedValue(true),
     };
+    refreshTokensService = {
+      revokeAllUserTokens: jest.fn().mockResolvedValue(undefined),
+    };
+    notificationsService = { create: jest.fn().mockResolvedValue(undefined) };
     encryptionService = {
       encrypt: jest.fn().mockReturnValue('enc-secret'),
       decrypt: jest.fn().mockReturnValue('PLAINSECRET'),
@@ -80,6 +97,8 @@ describe('TwoFactorService', () => {
         { provide: EncryptionService, useValue: encryptionService },
         { provide: AuditLogsService, useValue: { logAuthEvent: jest.fn() } },
         { provide: ConfigService, useValue: { get: jest.fn() } },
+        { provide: RefreshTokensService, useValue: refreshTokensService },
+        { provide: NotificationsService, useValue: notificationsService },
       ],
     }).compile();
 
@@ -255,6 +274,45 @@ describe('TwoFactorService', () => {
         }),
       );
       expect(repo.delete).toHaveBeenCalledWith({ userId: 'user-1' });
+      expect(refreshTokensService.revokeAllUserTokens).toHaveBeenCalledWith(
+        'user-1',
+      );
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        'user-1',
+        NotificationType.SECURITY_ALERT,
+        'Two-factor authentication disabled',
+        expect.any(String),
+      );
+    });
+
+    it('rejects a disable attempt while the user is locked', async () => {
+      usersService.findById.mockResolvedValue({
+        ...enabledUser,
+        twoFactorLockedUntil: new Date(Date.now() + 5 * 60_000),
+      });
+
+      await expect(
+        service.disableTwoFactor('user-1', '123456'),
+      ).rejects.toBeInstanceOf(ThrottlerException);
+      expect(repo.delete).not.toHaveBeenCalled();
+      expect(refreshTokensService.revokeAllUserTokens).not.toHaveBeenCalled();
+    });
+
+    it('rejects a replayed TOTP code on disable', async () => {
+      usersService.findById.mockResolvedValue({
+        ...enabledUser,
+        lastTotpStep: Math.floor(Date.now() / 1000 / 30) - 1,
+      });
+      totpVerify.mockReturnValue(true);
+
+      await expect(
+        service.disableTwoFactor('user-1', '123456'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(usersService.acceptTotpStep).not.toHaveBeenCalled();
+      expect(
+        usersService.incrementTwoFactorFailedAttempts,
+      ).toHaveBeenCalledWith('user-1', 5, 15);
+      expect(repo.delete).not.toHaveBeenCalled();
     });
 
     it('throws NotFoundException for an unknown user', async () => {
@@ -419,6 +477,36 @@ describe('TwoFactorService', () => {
       expect(repo.delete.mock.invocationCallOrder[0]).toBeLessThan(
         repo.save.mock.invocationCallOrder[0],
       );
+    });
+
+    it('rejects regeneration while locked', async () => {
+      usersService.findById.mockResolvedValue({
+        ...enabledUser,
+        twoFactorLockedUntil: new Date(Date.now() + 5 * 60_000),
+      });
+
+      await expect(
+        service.regenerateBackupCodes('user-1', '123456'),
+      ).rejects.toBeInstanceOf(ThrottlerException);
+      expect(repo.delete).not.toHaveBeenCalled();
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects a replayed TOTP code on regeneration', async () => {
+      usersService.findById.mockResolvedValue({
+        ...enabledUser,
+        lastTotpStep: Math.floor(Date.now() / 1000 / 30) - 1,
+      });
+      totpVerify.mockReturnValue(true);
+
+      await expect(
+        service.regenerateBackupCodes('user-1', '123456'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(usersService.acceptTotpStep).not.toHaveBeenCalled();
+      expect(
+        usersService.incrementTwoFactorFailedAttempts,
+      ).toHaveBeenCalledWith('user-1', 5, 15);
+      expect(repo.delete).not.toHaveBeenCalled();
     });
 
     it('throws NotFoundException for an unknown user', async () => {

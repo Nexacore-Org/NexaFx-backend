@@ -63,6 +63,7 @@ describe('UsersService', () => {
             find: jest.fn(),
             save: jest.fn(),
             update: jest.fn(),
+            createQueryBuilder: jest.fn(),
           },
         },
         {
@@ -249,6 +250,69 @@ describe('UsersService', () => {
       expect(typeof payload.password).toBe('string');
       expect(payload.password).not.toBe('Secret123!');
       expect(payload).not.toHaveProperty('passwordHash');
+    });
+  });
+
+  describe('two-factor atomic updates', () => {
+    const queryBuilder = () => {
+      const qb = {
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        returning: jest.fn().mockReturnThis(),
+        execute: jest.fn(),
+      };
+      (userRepository.createQueryBuilder as unknown as jest.Mock).mockReturnValue(
+        qb,
+      );
+      return qb;
+    };
+
+    it('increments failures in SQL so parallel guesses cannot share a count', async () => {
+      const qb = queryBuilder();
+      qb.execute
+        .mockResolvedValueOnce({ raw: [{ twoFactorFailedAttempts: 1 }] })
+        .mockResolvedValueOnce({ raw: [{ twoFactorFailedAttempts: 2 }] });
+
+      const results = await Promise.all([
+        service.incrementTwoFactorFailedAttempts('user-123', 5, 15),
+        service.incrementTwoFactorFailedAttempts('user-123', 5, 15),
+      ]);
+
+      expect(results).toEqual([1, 2]);
+      expect(qb.set).toHaveBeenCalledWith({
+        twoFactorFailedAttempts: expect.any(Function),
+      });
+      expect(qb.returning).toHaveBeenCalledWith('"twoFactorFailedAttempts"');
+      expect(userRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('locks the user at the threshold using the returned count', async () => {
+      const qb = queryBuilder();
+      qb.execute.mockResolvedValue({ raw: [{ twoFactorFailedAttempts: 5 }] });
+
+      await expect(
+        service.incrementTwoFactorFailedAttempts('user-123', 5, 30),
+      ).resolves.toBe(5);
+      expect(userRepository.update).toHaveBeenCalledWith('user-123', {
+        twoFactorFailedAttempts: 0,
+        twoFactorLockedUntil: expect.any(Date),
+      });
+    });
+
+    it('advances lastTotpStep only when the stored step is older', async () => {
+      const qb = queryBuilder();
+      qb.execute
+        .mockResolvedValueOnce({ affected: 1 })
+        .mockResolvedValueOnce({ affected: 0 });
+
+      await expect(service.acceptTotpStep('user-123', 42)).resolves.toBe(true);
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        '("lastTotpStep" IS NULL OR "lastTotpStep" < :step)',
+        { step: 42 },
+      );
+      await expect(service.acceptTotpStep('user-123', 42)).resolves.toBe(false);
     });
   });
 });

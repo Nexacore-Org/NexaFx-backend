@@ -29,11 +29,13 @@ export interface AuthenticatedUser {
  *
  * Both the HTTP Passport strategy (JwtStrategy) and the WebSocket guard
  * (WsJwtGuard) call this, so the two transports cannot drift apart (#1321):
- *  - `partial_auth` tokens (password verified, 2FA still pending) are rejected
+ *  - `partial_auth` tokens (password verified, 2FA still pending) are returned
+ *    as a limited principal; HTTP callers must honour @AllowPartialAuth() and
+ *    WebSocket callers must reject the stage explicitly
  *  - suspended / deleted / deactivated accounts are rejected
  *  - impersonation tokens are downgraded to the USER role
  *
- * @throws ForbiddenException when the account or token stage forbids access
+ * @throws ForbiddenException when the account forbids access
  * @throws UnauthorizedException when the user cannot be resolved
  */
 export async function validateAuthenticatedUser(
@@ -42,12 +44,6 @@ export async function validateAuthenticatedUser(
 ): Promise<AuthenticatedUser> {
   if (!payload?.sub) {
     throw new UnauthorizedException('Invalid token payload');
-  }
-
-  if (payload.authStage === 'partial_auth') {
-    throw new ForbiddenException(
-      'Two-factor verification required to access this resource',
-    );
   }
 
   const user = await usersService.findById(payload.sub);

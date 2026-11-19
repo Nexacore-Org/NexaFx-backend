@@ -69,7 +69,11 @@ describe('AuthService login lockout', () => {
         { provide: OtpsService, useValue: { generateOtp: jest.fn() } },
         {
           provide: RefreshTokensService,
-          useValue: { createRefreshToken: jest.fn(), revokeAllUserTokens: jest.fn() },
+          useValue: {
+            createRefreshToken: jest.fn(),
+            rotateRefreshToken: jest.fn(),
+            revokeAllUserTokens: jest.fn(),
+          },
         },
         { provide: OtpDeliveryService, useValue: { sendOtp: jest.fn() } },
         { provide: JwtService, useValue: { sign: jest.fn(), verify: jest.fn() } },
@@ -305,11 +309,11 @@ describe('AuthService login lockout', () => {
     it('refreshAccessToken stops minting tokens for a deleted account', async () => {
       const refreshTokensService = (service as unknown as {
         refreshTokensService: {
-          validateRefreshToken: jest.Mock;
+          rotateRefreshToken: jest.Mock;
           createRefreshToken: jest.Mock;
         };
       }).refreshTokensService;
-      refreshTokensService.validateRefreshToken.mockResolvedValue({
+      refreshTokensService.rotateRefreshToken.mockResolvedValue({
         userId: 'user-1',
       });
       usersService.findById.mockResolvedValue(deleted());
@@ -321,11 +325,11 @@ describe('AuthService login lockout', () => {
     it('refreshAccessToken stops minting tokens for a suspended account', async () => {
       const refreshTokensService = (service as unknown as {
         refreshTokensService: {
-          validateRefreshToken: jest.Mock;
+          rotateRefreshToken: jest.Mock;
           createRefreshToken: jest.Mock;
         };
       }).refreshTokensService;
-      refreshTokensService.validateRefreshToken.mockResolvedValue({
+      refreshTokensService.rotateRefreshToken.mockResolvedValue({
         userId: 'user-1',
       });
       usersService.findById.mockResolvedValue(suspended());
@@ -338,12 +342,12 @@ describe('AuthService login lockout', () => {
     it('still issues tokens for a healthy account', async () => {
       const refreshTokensService = (service as unknown as {
         refreshTokensService: {
-          validateRefreshToken: jest.Mock;
+          rotateRefreshToken: jest.Mock;
           createRefreshToken: jest.Mock;
         };
         jwtService: { sign: jest.Mock };
       }).refreshTokensService;
-      refreshTokensService.validateRefreshToken.mockResolvedValue({
+      refreshTokensService.rotateRefreshToken.mockResolvedValue({
         userId: 'user-1',
       });
       refreshTokensService.createRefreshToken.mockResolvedValue('refresh');

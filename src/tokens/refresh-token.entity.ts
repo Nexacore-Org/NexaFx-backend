@@ -11,6 +11,7 @@ import { User } from '../users/user.entity';
 
 @Entity('refresh_tokens')
 @Index(['userId', 'revokedAt'])
+@Index(['familyId'])
 @Index(['tokenHash'], { unique: true })
 export class RefreshToken {
   /**
@@ -29,6 +30,9 @@ export class RefreshToken {
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
   user: User;
+
+  @Column({ type: 'uuid' })
+  familyId: string;
 
   @Column({ type: 'varchar', length: 255, unique: true })
   tokenHash: string;

@@ -91,27 +91,23 @@ describe('AuthService OAuth completion', () => {
   });
 
   describe('completeOAuthLogin', () => {
-    it('issues full tokens when 2FA is off', async () => {
+    it('only reports the 2FA state and issues no tokens when 2FA is off', async () => {
       usersService.findById.mockResolvedValue(makeUser());
 
       const result = await service.completeOAuthLogin(USER_ID);
 
-      expect(result.requiresTwoFactor).toBe(false);
-      expect(result.tokens.accessToken).toBe('jwt-token');
-      expect(result.tokens.refreshToken).toBe('refresh-token');
+      expect(result).toEqual({ requiresTwoFactor: false });
+      expect(jwtService.sign).not.toHaveBeenCalled();
+      expect(refreshTokensService.createRefreshToken).not.toHaveBeenCalled();
     });
 
-    it('issues only a partial_auth token when 2FA is enabled', async () => {
+    it('only reports the 2FA state and issues no tokens when 2FA is enabled', async () => {
       usersService.findById.mockResolvedValue(makeUser({ isTwoFactorEnabled: true }));
 
       const result = await service.completeOAuthLogin(USER_ID);
 
-      expect(result.requiresTwoFactor).toBe(true);
-      expect(result.tokens.refreshToken).toBeUndefined();
-      expect(jwtService.sign).toHaveBeenCalledWith(
-        expect.objectContaining({ sub: USER_ID, authStage: 'partial_auth' }),
-        { expiresIn: '5m' },
-      );
+      expect(result).toEqual({ requiresTwoFactor: true });
+      expect(jwtService.sign).not.toHaveBeenCalled();
       expect(refreshTokensService.createRefreshToken).not.toHaveBeenCalled();
     });
 
@@ -149,6 +145,23 @@ describe('AuthService OAuth completion', () => {
   });
 
   describe('exchangeOauthCode', () => {
+    it('issues exactly one refresh token after the callback issued none', async () => {
+      usersService.findById.mockResolvedValue(makeUser());
+      oauthCodeService.consume.mockResolvedValue({
+        userId: USER_ID,
+        requiresTwoFactor: false,
+        isNew: false,
+      });
+
+      await service.completeOAuthLogin(USER_ID);
+      expect(refreshTokensService.createRefreshToken).not.toHaveBeenCalled();
+
+      const result = await service.exchangeOauthCode('valid-code');
+
+      expect(result.refreshToken).toBe('refresh-token');
+      expect(refreshTokensService.createRefreshToken).toHaveBeenCalledTimes(1);
+    });
+
     it('returns tokens for a valid code', async () => {
       usersService.findById.mockResolvedValue(makeUser());
       oauthCodeService.consume.mockResolvedValue({

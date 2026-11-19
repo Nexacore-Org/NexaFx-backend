@@ -6,6 +6,7 @@ export interface JwtPayload {
   email: string;
   role: string;
   authStage?: 'partial_auth';
+  tokenVersion?: number;
   // Impersonation fields — only present when isImpersonation === true
   isImpersonation?: boolean;
   impersonatedBy?: string;
@@ -54,6 +55,10 @@ export async function validateAuthenticatedUser(
 
   if (!user) {
     throw new UnauthorizedException('User not found');
+  }
+
+  if ((payload.tokenVersion ?? 0) !== (user.tokenVersion ?? 0)) {
+    throw new UnauthorizedException('Session has been revoked');
   }
 
   if (user.isSuspended) {

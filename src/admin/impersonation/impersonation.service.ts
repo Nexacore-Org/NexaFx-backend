@@ -112,6 +112,7 @@ export class ImpersonationService {
         impersonatedBy: adminId,
         role: UserRole.USER,
         isImpersonation: true,
+        tokenVersion: targetUser.tokenVersion ?? 0,
         jti,
       },
       {

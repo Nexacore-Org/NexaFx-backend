@@ -25,6 +25,7 @@ import {
   TransactionBuildError,
   TransactionSubmissionError,
   WalletGenerationError,
+  type StellarResultCodes,
 } from './stellar.errors';
 import { AuditLogsService } from '../../audit-logs/audit-logs.service';
 import { AuditAction } from '../../audit-logs/enums/audit-action.enum';
@@ -41,7 +42,7 @@ interface StellarErrorShape {
     status?: number;
     data?: {
       extras?: {
-        result_codes?: string;
+        result_codes?: StellarResultCodes;
       };
     };
   };
@@ -363,8 +364,8 @@ export class StellarService {
       }
 
       throw new TransactionSubmissionError(
-        error.response?.data?.extras?.result_codes ??
-          'Stellar payment submission failed',
+        error.response?.data?.extras?.result_codes,
+        'Stellar payment submission failed',
       );
     }
   }
@@ -435,8 +436,8 @@ export class StellarService {
         );
       }
       throw new TransactionSubmissionError(
-        error.response?.data?.extras?.result_codes ??
-          'Stellar escrow account creation failed',
+        error.response?.data?.extras?.result_codes,
+        'Stellar escrow account creation failed',
       );
     }
   }
@@ -514,8 +515,8 @@ export class StellarService {
         );
       }
       throw new TransactionSubmissionError(
-        error.response?.data?.extras?.result_codes ??
-          'Stellar escrow account closure failed',
+        error.response?.data?.extras?.result_codes,
+        'Stellar escrow account closure failed',
       );
     }
   }
@@ -779,8 +780,8 @@ export class StellarService {
       }
 
       throw new TransactionSubmissionError(
-        error.response?.data?.extras?.result_codes ??
-          'Transaction submission failed',
+        error.response?.data?.extras?.result_codes,
+        'Transaction submission failed',
       );
     }
   }

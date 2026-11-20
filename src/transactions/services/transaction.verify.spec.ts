@@ -23,7 +23,11 @@ describe('TransactionsService.verifyTransaction', () => {
     save: jest.fn(),
     update: jest.fn(),
   };
-  const stellarService = { verifyTransaction: jest.fn() };
+  const stellarService = {
+    verifyTransaction: jest.fn(),
+    findIncomingPayment: jest.fn(),
+  };
+  const currenciesService = { getCurrency: jest.fn() };
   const activityFeedService = { append: jest.fn() };
   const redisService = { delete: jest.fn() };
   const amlService = { enqueue: jest.fn(async () => undefined) };
@@ -60,6 +64,7 @@ describe('TransactionsService.verifyTransaction', () => {
     const deps = {
       transactionRepository,
       stellarService,
+      currenciesService,
       activityFeedService,
       redisService,
       amlService,
@@ -327,6 +332,82 @@ describe('TransactionsService.verifyTransaction', () => {
       ).not.toHaveBeenCalled();
       expect(ledgerService.reverse).not.toHaveBeenCalled();
       expect(transactionRepository.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deposit auto-detection', () => {
+    it('matches a PENDING deposit without txHash via Horizon and credits it once', async () => {
+      transactionRepository.findOne.mockResolvedValue(
+        makeTransaction({
+          txHash: null as unknown as string,
+          metadata: { depositAddress: 'GDEPOSIT', depositMemo: 'memo-1' },
+        }),
+      );
+      currenciesService.getCurrency.mockResolvedValue({ issuer: undefined });
+      stellarService.findIncomingPayment.mockResolvedValue({
+        hash: 'inbound-hash',
+      });
+      stellarService.verifyTransaction.mockResolvedValue({ status: 'SUCCESS' });
+
+      await service.verifyTransaction('tx-1', 'user-1', UserRole.USER, 'user-1');
+
+      expect(stellarService.findIncomingPayment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          address: 'GDEPOSIT',
+          memo: 'memo-1',
+        }),
+      );
+      expect(transactionRepository.update).toHaveBeenCalledWith(
+        { id: 'tx-1', status: TransactionStatus.PENDING },
+        { status: TransactionStatus.SUCCESS },
+      );
+      expect(
+        (service as unknown as { updateUserBalance: jest.Mock }).updateUserBalance,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        (service as unknown as { updateUserBalance: jest.Mock }).updateUserBalance,
+      ).toHaveBeenCalledWith('user-1', 'XLM', 100);
+    });
+
+    it('still rejects a non-deposit row without txHash', async () => {
+      transactionRepository.findOne.mockResolvedValue(
+        makeTransaction({
+          type: TransactionType.WITHDRAW,
+          txHash: null as unknown as string,
+        }),
+      );
+
+      await expect(
+        service.verifyTransaction('tx-1', 'user-1', UserRole.USER, 'user-1'),
+      ).rejects.toThrow(/blockchain hash/i);
+      expect(stellarService.findIncomingPayment).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('repeated verification', () => {
+    it('does not refund an already-FAILED withdrawal on a second verify', async () => {
+      const failedWithdrawal = () =>
+        makeTransaction({
+          type: TransactionType.WITHDRAW,
+          status: TransactionStatus.FAILED,
+        });
+      transactionRepository.findOne
+        .mockResolvedValueOnce(failedWithdrawal())
+        .mockResolvedValueOnce(failedWithdrawal());
+      transactionRepository.update.mockResolvedValue({ affected: 0 });
+      stellarService.verifyTransaction.mockResolvedValue({ status: 'FAILED' });
+
+      await service.verifyTransaction('tx-1', 'admin-1', UserRole.ADMIN, 'admin-1');
+      await service.verifyTransaction('tx-1', 'admin-1', UserRole.ADMIN, 'admin-1');
+
+      expect(transactionRepository.update).toHaveBeenCalledWith(
+        { id: 'tx-1', status: TransactionStatus.PENDING },
+        expect.objectContaining({ status: TransactionStatus.FAILED }),
+      );
+      expect(
+        (service as unknown as { updateUserBalance: jest.Mock }).updateUserBalance,
+      ).not.toHaveBeenCalled();
+      expect(ledgerService.reverse).not.toHaveBeenCalled();
     });
   });
 });

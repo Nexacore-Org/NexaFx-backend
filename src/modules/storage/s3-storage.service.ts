@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { StorageService } from './storage.service';
 import {
   S3Client,
@@ -8,7 +8,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
-import * as path from 'path';
+import { ALLOWED_FILE_TYPES } from '../../common/constants/allowed-file-types';
 
 @Injectable()
 export class S3StorageService implements StorageService {
@@ -29,10 +29,12 @@ export class S3StorageService implements StorageService {
 
   async upload(file: Express.Multer.File, pathParam: string): Promise<string> {
     const env = process.env.NODE_ENV || 'development';
+    const fileType = ALLOWED_FILE_TYPES[file.mimetype];
+    if (!fileType) {
+      throw new BadRequestException('Unsupported file type');
+    }
 
-    // Secure naming
-    const fileExt = path.extname(file.originalname).toLowerCase();
-    const safeFilename = `${uuidv4()}${fileExt}`;
+    const safeFilename = `${uuidv4()}${fileType.extension}`;
     const relativeKey = `${env}/${pathParam}/${safeFilename}`.replace(
       /\\/g,
       '/',
@@ -47,7 +49,7 @@ export class S3StorageService implements StorageService {
         Bucket: this.bucketName,
         Key: relativeKey,
         Body: file.buffer,
-        ContentType: file.mimetype,
+        ContentType: fileType.contentType,
       }),
     );
 
@@ -58,6 +60,7 @@ export class S3StorageService implements StorageService {
     const command = new GetObjectCommand({
       Bucket: this.bucketName,
       Key: key,
+      ResponseContentDisposition: 'attachment',
     });
 
     return getSignedUrl(this.s3Client, command, {

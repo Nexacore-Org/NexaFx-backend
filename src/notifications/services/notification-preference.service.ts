@@ -25,6 +25,12 @@ const NON_DISABLEABLE_TYPES = new Set<NotificationType>([
 // Unsubscribe links are bearer credentials, so they must not live forever.
 const UNSUBSCRIBE_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 
+export interface NotificationChannelPreferences {
+  emailEnabled: boolean;
+  pushEnabled: boolean;
+  inAppEnabled: boolean;
+}
+
 @Injectable()
 export class NotificationPreferenceService {
   constructor(
@@ -105,15 +111,48 @@ export class NotificationPreferenceService {
     notificationType: NotificationType,
     channel: 'email' | 'push' | 'inApp',
   ): Promise<boolean> {
+    const preferences = await this.getChannelPreferences(
+      userId,
+      notificationType,
+    );
+
+    if (channel === 'email') return preferences.emailEnabled;
+    if (channel === 'push') return preferences.pushEnabled;
+    return preferences.inAppEnabled;
+  }
+
+  async getChannelPreferences(
+    userId: string,
+    notificationType: NotificationType,
+  ): Promise<NotificationChannelPreferences> {
     if (NON_DISABLEABLE_TYPES.has(notificationType)) {
-      return true;
+      return {
+        emailEnabled: true,
+        pushEnabled: true,
+        inAppEnabled: true,
+      };
     }
 
-    const preference = await this.getPreference(userId, notificationType);
+    let preference = await this.preferenceRepository.findOne({
+      where: { userId, notificationType },
+    });
 
-    if (channel === 'email') return preference.emailEnabled;
-    if (channel === 'push') return preference.pushEnabled;
-    return preference.inAppEnabled;
+    if (!preference) {
+      await this.createDefaults(userId);
+      preference = await this.preferenceRepository.findOne({
+        where: { userId, notificationType },
+      });
+    }
+
+    if (!preference) {
+      throw new BadRequestException('Notification preference was not created');
+    }
+
+    return {
+      emailEnabled: preference.emailEnabled,
+      pushEnabled: preference.pushEnabled,
+      inAppEnabled: preference.inAppEnabled,
+    };
   }
 
   async unsubscribe(token: string): Promise<{ message: string }> {

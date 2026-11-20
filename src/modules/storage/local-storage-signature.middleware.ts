@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import * as crypto from 'crypto';
+import { getStorageSigningSecret } from './storage-signing-secret';
 
 @Injectable()
 export class LocalStorageSignatureMiddleware implements NestMiddleware {
@@ -41,12 +42,18 @@ export class LocalStorageSignatureMiddleware implements NestMiddleware {
       throw new GoneException('Access denied: Signed URL has expired');
     }
 
-    const secret = process.env.JWT_SECRET || 'local-secret';
-    const hmac = crypto.createHmac('sha256', secret);
+    const hmac = crypto.createHmac('sha256', getStorageSigningSecret());
     hmac.update(`${key}:${expires}`);
-    const expectedSignature = hmac.digest('hex');
+    const expectedSignature = Buffer.from(hmac.digest('hex'), 'hex');
+    const suppliedSignature =
+      typeof signature === 'string' && /^[a-f\d]{64}$/i.test(signature)
+        ? Buffer.from(signature, 'hex')
+        : undefined;
 
-    if (signature !== expectedSignature) {
+    if (
+      !suppliedSignature ||
+      !crypto.timingSafeEqual(suppliedSignature, expectedSignature)
+    ) {
       this.logger.warn(`Access denied to ${key}: Invalid signature`);
       throw new ForbiddenException('Access denied: Invalid signature');
     }

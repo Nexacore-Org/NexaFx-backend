@@ -1,4 +1,12 @@
-import { Controller, Post, Get, Body, Request, Logger } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Request,
+  Logger,
+  HttpCode,
+} from '@nestjs/common';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -94,6 +102,7 @@ export class TransactionV2Controller {
   }
 
   @Post('estimate')
+  @HttpCode(200)
   @ApiOperation({
     summary: 'Estimate transaction fees',
     description:
@@ -115,7 +124,31 @@ export class TransactionV2Controller {
     return this.feeEstimatorService.estimateTransaction(req.user.userId, dto);
   }
 
+  @Post('estimate/conversion')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Estimate a currency conversion',
+    description:
+      'Returns an exchange quote and configured conversion fee. ' +
+      'Estimate is valid for 30 seconds.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Conversion estimate with fee breakdown',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid conversion parameters',
+  })
+  async estimateConversion(
+    @Request() req,
+    @Body() dto: EstimateConversionDto,
+  ): Promise<ConversionEstimateResult> {
+    return this.feeEstimatorService.estimateConversion(req.user.userId, dto);
+  }
+
   @Post('estimate/batch')
+  @HttpCode(200)
   @ApiOperation({
     summary: 'Batch estimate transaction fees',
     description:

@@ -1,62 +1,32 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsNotEmpty,
-  IsNumber,
-  IsOptional,
-  IsString,
-  IsUUID,
-} from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsIn, IsNumber, IsPositive, IsUUID } from 'class-validator';
 
 export class DistributeRewardDto {
-  @ApiProperty({ description: 'User UUID receiving the reward' })
+  @ApiProperty({ description: 'UUID of the user receiving the reward' })
   @IsUUID()
   userId: string;
 
-  @ApiPropertyOptional({
-    description:
-      'Soroban contract ID (C...) to invoke; environment default can apply',
+  @ApiProperty({
+    description: 'Unique request ID used to prevent duplicate rewards',
   })
-  @IsOptional()
-  @IsString()
-  contractId?: string;
+  @IsUUID()
+  requestId: string;
 
-  @ApiProperty({ description: 'Contract function name' })
-  @IsString()
-  @IsNotEmpty()
-  functionName: string;
-
-  @ApiPropertyOptional({
-    description: 'Arguments to pass to the contract function',
+  @ApiProperty({
+    description: 'Positive reward amount with up to 7 decimal places',
   })
-  @IsOptional()
-  args?: any[];
-
-  @ApiProperty({ description: 'Reward amount', example: 100.5 })
-  @IsNumber()
-  amount: number;
-
-  @ApiProperty({ description: 'Reward currency', example: 'XLM' })
-  @IsString()
-  @IsNotEmpty()
-  currency: string;
-
-
-
-
-  @IsString()
-  @IsOptional()
-  @Matches(/^C[A-Z0-9]{55}$/, { message: 'Invalid Stellar contract ID format.' })
-  contractId?: string;
-
-  @IsString()
-  userId: string;
-
+  @IsNumber(
+    { maxDecimalPlaces: 7 },
+    { message: 'Amount cannot exceed 7 decimal places.' },
+  )
   @IsPositive({ message: 'Amount must be a positive number.' })
-  @IsNumber({ maxDecimalPlaces: 7 }, { message: 'Amount cannot exceed 7 decimal places.' })
   amount: number;
 
-  @IsString()
+  @ApiProperty({
+    description: 'Reward currency',
+    example: 'XLM',
+    enum: ['XLM', 'USDC'],
+  })
   @IsIn(['XLM', 'USDC'], { message: 'Unsupported reward currency.' })
   currency: string;
 }
-

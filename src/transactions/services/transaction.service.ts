@@ -379,6 +379,35 @@ export class TransactionsService {
     ipAddress?: string,
     userAgent?: string,
   ): Promise<Transaction> {
+    if (this.limitsService) {
+      return this.createWithdrawalTransaction(
+        userId,
+        createWithdrawalDto,
+        ipAddress,
+        userAgent,
+      );
+    }
+
+    return this.transactionLimitService.withLimitCheck(
+      userId,
+      createWithdrawalDto.amount,
+      createWithdrawalDto.currency,
+      () =>
+        this.createWithdrawalTransaction(
+          userId,
+          createWithdrawalDto,
+          ipAddress,
+          userAgent,
+        ),
+    );
+  }
+
+  private async createWithdrawalTransaction(
+    userId: string,
+    createWithdrawalDto: CreateWithdrawalDto,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<Transaction> {
     const { amount, currency, beneficiaryId } = createWithdrawalDto;
     let { destinationAddress } = createWithdrawalDto;
 
@@ -441,8 +470,6 @@ export class TransactionsService {
         amount,
         currency,
       );
-    } else {
-      await this.transactionLimitService.check(userId, amount, currency);
     }
 
     const userBalance = await this.getUserBalance(userId, currency);
@@ -684,6 +711,35 @@ export class TransactionsService {
     ipAddress?: string,
     userAgent?: string,
   ): Promise<Transaction> {
+    if (this.limitsService) {
+      return this.createSwapTransaction(
+        userId,
+        createSwapDto,
+        ipAddress,
+        userAgent,
+      );
+    }
+
+    return this.transactionLimitService.withLimitCheck(
+      userId,
+      createSwapDto.amount,
+      createSwapDto.fromCurrency,
+      () =>
+        this.createSwapTransaction(
+          userId,
+          createSwapDto,
+          ipAddress,
+          userAgent,
+        ),
+    );
+  }
+
+  private async createSwapTransaction(
+    userId: string,
+    createSwapDto: CreateSwapDto,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<Transaction> {
     const { amount, fromCurrency, toCurrency, sourceAddress, walletId } =
       createSwapDto;
 
@@ -698,8 +754,6 @@ export class TransactionsService {
         amount,
         fromCurrency,
       );
-    } else {
-      await this.transactionLimitService.check(userId, amount, fromCurrency);
     }
 
     if (fromCurrency === toCurrency) {
@@ -709,9 +763,17 @@ export class TransactionsService {
     }
 
     // 1. Validate Currency Pair
+    const amountUsd =
+      fromCurrency.toUpperCase() === 'USD'
+        ? amount
+        : amount *
+          (
+            await this.exchangeRatesService.getFreshRate(fromCurrency, 'USD')
+          ).rate;
     const pair = await this.currencyPairService.validatePair(
       fromCurrency,
       toCurrency,
+      amountUsd,
     );
 
     // 2. Check Balance (including fee)
@@ -1014,6 +1076,11 @@ export class TransactionsService {
     amount: number,
     mode: 'strict-send' | 'strict-receive' = 'strict-send',
   ): Promise<any> {
+    const pair = await this.currencyPairService.validatePair(
+      fromCurrency,
+      toCurrency,
+    );
+
     const cacheKey = `${fromCurrency}-${toCurrency}-${amount}-${mode}`;
     const redisKey = this.redisService.key('quotes', cacheKey);
     const redisCached = await this.redisService.getJson<any>(redisKey);
@@ -1046,11 +1113,7 @@ export class TransactionsService {
       });
     }
 
-    const pair = await this.currencyPairService.findByCodes(
-      fromCurrency,
-      toCurrency,
-    );
-    const spreadPercent = pair ? pair.spreadPercent : 0;
+    const spreadPercent = pair.spreadPercent;
 
     const results = paths.map((path) => {
       const destAmount = parseFloat(path.destination_amount);

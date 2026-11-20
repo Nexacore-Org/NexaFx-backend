@@ -10,6 +10,7 @@ import { Vote } from './entities/vote.entity';
 import { ProposalBalanceSnapshot } from './entities/proposal-balance-snapshot.entity';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { UsersModule } from '../users/users.module';
+import { User } from '../users/user.entity';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { UsersModule } from '../users/users.module';
       Proposal,
       Vote,
       ProposalBalanceSnapshot,
+      User,
     ]),
     AuditLogsModule,
     UsersModule,

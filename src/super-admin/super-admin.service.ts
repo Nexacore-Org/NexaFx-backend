@@ -47,7 +47,13 @@ export class SuperAdminService {
     actorUserId: string,
     dto: CreateManagedAdminDto,
   ): Promise<
-    Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'>
+    Omit<
+      User,
+      | 'password'
+      | 'walletSecretKeyEncrypted'
+      | 'twoFactorSecret'
+      | 'pendingTwoFactorSecret'
+    >
   > {
     const actor = await this.requireSuperAdmin(actorUserId);
     const role = dto.role ?? UserRole.ADMIN;
@@ -107,7 +113,13 @@ export class SuperAdminService {
     targetUserId: string,
     dto: UpdateManagedAdminRoleDto,
   ): Promise<
-    Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'>
+    Omit<
+      User,
+      | 'password'
+      | 'walletSecretKeyEncrypted'
+      | 'twoFactorSecret'
+      | 'pendingTwoFactorSecret'
+    >
   > {
     const actor = await this.requireSuperAdmin(actorUserId);
 
@@ -123,6 +135,52 @@ export class SuperAdminService {
       throw new BadRequestException('Unsupported managed role');
     }
 
+    const { savedUser, previousRole, changed } =
+      await this.dataSource.transaction(async (manager) => {
+        const activeSuperAdmins = await manager.find(User, {
+          where: {
+            role: UserRole.SUPER_ADMIN,
+            isSuspended: false,
+            isDeleted: false,
+          },
+          order: { id: 'ASC' },
+          lock: { mode: 'pessimistic_write' },
+        });
+        const target = await manager.findOne(User, {
+          where: { id: targetUserId },
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (!target) {
+          throw new NotFoundException('User not found');
+        }
+
+        if (target.role === dto.role) {
+          return {
+            savedUser: target,
+            previousRole: target.role,
+            changed: false,
+          };
+        }
+
+        this.assertSuperAdminDemotionSafety(
+          target,
+          dto.role,
+          activeSuperAdmins,
+        );
+
+        const previousRole = target.role;
+        target.role = dto.role;
+        return {
+          savedUser: await manager.save(User, target),
+          previousRole,
+          changed: true,
+        };
+      });
+
+    if (!changed) {
+      return this.sanitizeUser(savedUser);
+    }
     const result = await this.dataSource.transaction(async (manager) => {
       const users = manager.getRepository(User);
       const superAdmins = await users.find({
@@ -174,7 +232,13 @@ export class SuperAdminService {
     actorUserId: string,
     targetUserId: string,
   ): Promise<
-    Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'>
+    Omit<
+      User,
+      | 'password'
+      | 'walletSecretKeyEncrypted'
+      | 'twoFactorSecret'
+      | 'pendingTwoFactorSecret'
+    >
   > {
     return this.updateManagedAdminRole(actorUserId, targetUserId, {
       role: UserRole.USER,
@@ -205,6 +269,151 @@ export class SuperAdminService {
     dto: UpdatePlatformConfigDto,
   ) {
     const actor = await this.requireSuperAdmin(actorUserId);
+    const { snapshot, maintenanceMode, currencies, feeConfigs } =
+      await this.dataSource.transaction(async (manager) => {
+        let config = await manager.findOne(PlatformConfig, {
+          where: {},
+          order: { createdAt: 'ASC' },
+        });
+
+        if (!config) {
+          config = manager.create(PlatformConfig, {
+            key: 'maintenanceMode',
+            category: 'system',
+            value: { maintenanceMode: false },
+          });
+        }
+
+        const previousMaintenanceMode = config.maintenanceMode;
+        if (dto.maintenanceMode !== undefined) {
+          config.maintenanceMode = dto.maintenanceMode;
+        }
+
+        const currencyChanges: {
+          currency: Currency;
+          before: { isActive: boolean };
+          after: { isActive: boolean };
+          code: string;
+        }[] = [];
+
+        for (const currencyUpdate of dto.currencies ?? []) {
+          const currency = await manager.findOne(Currency, {
+            where: { code: currencyUpdate.code.toUpperCase() },
+          });
+
+          if (!currency) {
+            throw new NotFoundException(
+              `Currency '${currencyUpdate.code}' not found`,
+            );
+          }
+
+          currencyChanges.push({
+            currency,
+            code: currency.code,
+            before: { isActive: currency.isActive },
+            after: { isActive: currencyUpdate.isActive },
+          });
+          currency.isActive = currencyUpdate.isActive;
+        }
+
+        const feeChanges: {
+          feeConfig: FeeConfig;
+          before: Pick<
+            FeeConfig,
+            'feeType' | 'feeValue' | 'minFee' | 'maxFee' | 'isActive'
+          >;
+          after: Pick<
+            FeeConfig,
+            'feeType' | 'feeValue' | 'minFee' | 'maxFee' | 'isActive'
+          >;
+          id: string;
+        }[] = [];
+
+        for (const feeUpdate of dto.feeConfigs ?? []) {
+          const feeConfig = await manager.findOne(FeeConfig, {
+            where: { id: feeUpdate.id },
+          });
+
+          if (!feeConfig) {
+            throw new NotFoundException(
+              `Fee config with ID '${feeUpdate.id}' not found`,
+            );
+          }
+
+          const before = {
+            feeType: feeConfig.feeType,
+            feeValue: feeConfig.feeValue,
+            minFee: feeConfig.minFee,
+            maxFee: feeConfig.maxFee,
+            isActive: feeConfig.isActive,
+          };
+
+          if (feeUpdate.feeType !== undefined) {
+            feeConfig.feeType = feeUpdate.feeType;
+          }
+          if (feeUpdate.feeValue !== undefined) {
+            feeConfig.feeValue = feeUpdate.feeValue.toString();
+          }
+          if (feeUpdate.minFee !== undefined) {
+            feeConfig.minFee = feeUpdate.minFee.toString();
+          }
+          if (feeUpdate.maxFee !== undefined) {
+            feeConfig.maxFee = feeUpdate.maxFee.toString();
+          }
+          if (feeUpdate.isActive !== undefined) {
+            feeConfig.isActive = feeUpdate.isActive;
+          }
+
+          if (
+            feeConfig.minFee !== null &&
+            feeConfig.maxFee !== null &&
+            parseFloat(feeConfig.minFee) > parseFloat(feeConfig.maxFee)
+          ) {
+            throw new BadRequestException(
+              'minFee cannot be greater than maxFee',
+            );
+          }
+
+          feeChanges.push({
+            feeConfig,
+            id: feeConfig.id,
+            before,
+            after: {
+              feeType: feeConfig.feeType,
+              feeValue: feeConfig.feeValue,
+              minFee: feeConfig.minFee,
+              maxFee: feeConfig.maxFee,
+              isActive: feeConfig.isActive,
+            },
+          });
+        }
+
+        const snapshot = await manager.save(PlatformConfig, config);
+        for (const change of currencyChanges) {
+          await manager.save(Currency, change.currency);
+        }
+        for (const change of feeChanges) {
+          await manager.save(FeeConfig, change.feeConfig);
+        }
+
+        return {
+          snapshot,
+          maintenanceMode: {
+            before: previousMaintenanceMode,
+            after: snapshot.maintenanceMode,
+          },
+          currencies: currencyChanges.map(({ code, before, after }) => ({
+            code,
+            before,
+            after,
+          })),
+          feeConfigs: feeChanges.map(({ id, before, after }) => ({
+            id,
+            before,
+            after,
+          })),
+        };
+      });
     const { snapshot, before, after } = await this.dataSource.transaction(
       async (manager) => {
         const configRepository = manager.getRepository(PlatformConfig);
@@ -330,6 +539,9 @@ export class SuperAdminService {
       entity: AuditEntityType.SYSTEM,
       metadata: {
         actorRole: actor.role,
+        maintenanceMode,
+        currencies,
+        feeConfigs,
         before,
         after,
       },
@@ -383,22 +595,26 @@ export class SuperAdminService {
   private assertSuperAdminDemotionSafety(
     target: User,
     nextRole: UserRole,
+    activeSuperAdmins: User[],
     superAdmins: User[],
   ): void {
     if (
       target.role !== UserRole.SUPER_ADMIN ||
-      nextRole === UserRole.SUPER_ADMIN
+      nextRole === UserRole.SUPER_ADMIN ||
+      target.isSuspended ||
+      target.isDeleted
     ) {
       return;
     }
 
+    if (activeSuperAdmins.length <= 1) {
     const superAdminCount = superAdmins.filter(
       (user) => !user.isSuspended && !user.isDeleted,
     ).length;
 
     if (superAdminCount <= 1) {
       throw new BadRequestException(
-        'Cannot demote the last remaining SUPER_ADMIN',
+        'Cannot demote the last active SUPER_ADMIN',
       );
     }
   }
@@ -423,6 +639,14 @@ export class SuperAdminService {
 
   private sanitizeUser(
     user: User,
+  ): Omit<
+    User,
+    | 'password'
+    | 'walletSecretKeyEncrypted'
+    | 'twoFactorSecret'
+    | 'pendingTwoFactorSecret'
+  > {
+    return instanceToPlain(user);
   ): Omit<User, 'password' | 'walletSecretKeyEncrypted' | 'twoFactorSecret'> {
     return instanceToPlain(user) as Omit<
       User,

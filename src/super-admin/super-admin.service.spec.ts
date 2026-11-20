@@ -37,21 +37,33 @@ describe('SuperAdminService', () => {
   let dataSource: DataSource;
   let usersService: UsersService;
   let auditLogsService: AuditLogsService;
+  let manager: {
+    find: jest.Mock;
+    findOne: jest.Mock;
+    create: jest.Mock;
+    save: jest.Mock;
+  };
+  let dataSource: { transaction: jest.Mock };
 
-  const superAdminUser = {
+  const superAdminUser = Object.assign(new User(), {
     id: 'super-admin-id',
     email: 'super-admin@nexafx.test',
     role: UserRole.SUPER_ADMIN,
     referralCode: 'SUPER001',
     isVerified: true,
-  } as User;
+    isSuspended: false,
+    isDeleted: false,
+  });
 
-  const adminUser = {
+  const adminUser = Object.assign(new User(), {
     id: 'admin-user-id',
     email: 'admin@nexafx.test',
     role: UserRole.ADMIN,
     referralCode: 'ADMIN001',
     isVerified: true,
+    isSuspended: false,
+    isDeleted: false,
+  });
   } as User;
 
   const maintenanceConfig = {
@@ -60,12 +72,23 @@ describe('SuperAdminService', () => {
   } as PlatformConfig;
 
   beforeEach(async () => {
+    manager = {
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue(null),
+      create: jest.fn((_entity, values) => values),
+      save: jest.fn(async (_entity, entity) => entity),
+    };
+    dataSource = {
+      transaction: jest.fn((work) => work(manager)),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SuperAdminService,
         {
           provide: getRepositoryToken(User),
           useValue: {
+            findOne: jest.fn().mockResolvedValue(superAdminUser),
             findOne: jest.fn(),
             find: jest.fn(),
             count: jest.fn(),
@@ -74,28 +97,22 @@ describe('SuperAdminService', () => {
         },
         {
           provide: getRepositoryToken(Currency),
-          useValue: {
-            findOne: jest.fn(),
-            find: jest.fn(),
-            save: jest.fn(),
-          },
+          useValue: { findOne: jest.fn(), find: jest.fn(), save: jest.fn() },
         },
         {
           provide: getRepositoryToken(FeeConfig),
-          useValue: {
-            findOne: jest.fn(),
-            find: jest.fn(),
-            save: jest.fn(),
-          },
+          useValue: { findOne: jest.fn(), find: jest.fn(), save: jest.fn() },
         },
         {
           provide: getRepositoryToken(PlatformConfig),
           useValue: {
             findOne: jest.fn(),
+            find: jest.fn(),
             create: jest.fn((value) => value),
             save: jest.fn(),
           },
         },
+        { provide: DataSource, useValue: dataSource },
         {
           provide: DataSource,
           useValue: { transaction: jest.fn() },
@@ -119,9 +136,7 @@ describe('SuperAdminService', () => {
         },
         {
           provide: EncryptionService,
-          useValue: {
-            encrypt: jest.fn().mockReturnValue('encrypted-secret'),
-          },
+          useValue: { encrypt: jest.fn().mockReturnValue('encrypted-secret') },
         },
         {
           provide: AuditLogsService,
@@ -148,15 +163,6 @@ describe('SuperAdminService', () => {
 
     service = module.get<SuperAdminService>(SuperAdminService);
     userRepository = module.get<Repository<User>>(getRepositoryToken(User));
-    currencyRepository = module.get<Repository<Currency>>(
-      getRepositoryToken(Currency),
-    );
-    feeConfigRepository = module.get<Repository<FeeConfig>>(
-      getRepositoryToken(FeeConfig),
-    );
-    platformConfigRepository = module.get<Repository<PlatformConfig>>(
-      getRepositoryToken(PlatformConfig),
-    );
     usersService = module.get<UsersService>(UsersService);
     auditLogsService = module.get<AuditLogsService>(AuditLogsService);
     dataSource = module.get<DataSource>(DataSource);
@@ -178,6 +184,18 @@ describe('SuperAdminService', () => {
   it('creates an ADMIN user and records a privileged audit log', async () => {
     jest
       .spyOn(userRepository, 'findOne')
+      .mockImplementation(async (options) => {
+        const where = Array.isArray(options.where)
+          ? options.where[0]
+          : options.where;
+        if (where && 'id' in where) {
+          return where.id === superAdminUser.id
+            ? superAdminUser
+            : adminUser;
+        }
+        return null;
+      });
+    jest.spyOn(usersService, 'createUser').mockResolvedValue(adminUser);
       .mockImplementation(async ({ where }) => {
         if (where?.id === superAdminUser.id) return superAdminUser;
         if (where?.id === adminUser.id)
@@ -216,8 +234,16 @@ describe('SuperAdminService', () => {
         role: UserRole.ADMIN,
       }),
     ).rejects.toThrow(ForbiddenException);
+    expect(dataSource.transaction).not.toHaveBeenCalled();
   });
 
+  it('prevents demoting the last active SUPER_ADMIN under a row lock', async () => {
+    const target = Object.assign(new User(), {
+      ...adminUser,
+      role: UserRole.SUPER_ADMIN,
+    });
+    manager.find.mockResolvedValue([target]);
+    manager.findOne.mockResolvedValue(target);
   it('prevents demoting the last active SUPER_ADMIN when suspended admins exist', async () => {
     const suspendedActor = { ...superAdminUser, isSuspended: true };
     const target = {
@@ -245,10 +271,64 @@ describe('SuperAdminService', () => {
       });
 
     await expect(
-      service.updateManagedAdminRole(superAdminUser.id, adminUser.id, {
+      service.updateManagedAdminRole(superAdminUser.id, target.id, {
         role: UserRole.ADMIN,
       }),
     ).rejects.toThrow(BadRequestException);
+
+    expect(manager.find).toHaveBeenCalledWith(
+      User,
+      expect.objectContaining({
+        where: {
+          role: UserRole.SUPER_ADMIN,
+          isSuspended: false,
+          isDeleted: false,
+        },
+        lock: { mode: 'pessimistic_write' },
+      }),
+    );
+    expect(manager.save).not.toHaveBeenCalled();
+  });
+
+  it('removes all class-transformer excluded fields from role-change responses', async () => {
+    const target = Object.assign(new User(), {
+      ...adminUser,
+      role: UserRole.SUPER_ADMIN,
+      pendingTwoFactorSecret: 'pending-secret',
+      password: 'password',
+      walletSecretKeyEncrypted: 'encrypted-wallet-secret',
+      twoFactorSecret: 'active-secret',
+    });
+    const otherActiveSuperAdmin = Object.assign(new User(), {
+      id: 'other-super-admin',
+      role: UserRole.SUPER_ADMIN,
+      isSuspended: false,
+      isDeleted: false,
+    });
+    manager.find.mockResolvedValue([target, otherActiveSuperAdmin]);
+    manager.findOne.mockResolvedValue(target);
+
+    const result = await service.updateManagedAdminRole(
+      superAdminUser.id,
+      target.id,
+      { role: UserRole.ADMIN },
+    );
+
+    expect(result.role).toBe(UserRole.ADMIN);
+    expect(result).not.toHaveProperty('pendingTwoFactorSecret');
+    expect(result).not.toHaveProperty('password');
+    expect(result).not.toHaveProperty('walletSecretKeyEncrypted');
+    expect(result).not.toHaveProperty('twoFactorSecret');
+  });
+
+  it('updates config atomically and audits previous and new values', async () => {
+    const config = Object.assign(new PlatformConfig(), {
+      id: 'platform-config-id',
+      key: 'maintenanceMode',
+      category: 'system',
+      value: { maintenanceMode: false },
+    });
+    const currency = Object.assign(new Currency(), {
     expect(userRepository.save).not.toHaveBeenCalled();
   });
 
@@ -257,9 +337,8 @@ describe('SuperAdminService', () => {
       id: 'currency-usd',
       code: 'USD',
       isActive: true,
-      isBase: false,
-    } as Currency;
-    const feeConfig = {
+    });
+    const feeConfig = Object.assign(new FeeConfig(), {
       id: 'fee-config-id',
       transactionType: FeeTransactionType.DEPOSIT,
       currency: 'USD',
@@ -268,6 +347,14 @@ describe('SuperAdminService', () => {
       minFee: null,
       maxFee: null,
       isActive: true,
+    });
+    manager.findOne.mockImplementation(async (entity, options) => {
+      if (entity === PlatformConfig) return config;
+      if (entity === Currency && options.where.code === 'USD') return currency;
+      if (entity === FeeConfig && options.where.id === feeConfig.id) {
+        return feeConfig;
+      }
+      return null;
     } as FeeConfig;
 
     jest.spyOn(userRepository, 'findOne').mockResolvedValue(superAdminUser);
@@ -296,6 +383,8 @@ describe('SuperAdminService', () => {
     });
 
     expect(result.maintenanceMode).toBe(true);
+    expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+    expect(manager.save).toHaveBeenCalledTimes(3);
     expect(currencyRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({ code: 'USD', isActive: false }),
     );
@@ -306,6 +395,21 @@ describe('SuperAdminService', () => {
       expect.objectContaining({
         userId: superAdminUser.id,
         metadata: expect.objectContaining({
+          maintenanceMode: { before: false, after: true },
+          currencies: [
+            {
+              code: 'USD',
+              before: { isActive: true },
+              after: { isActive: false },
+            },
+          ],
+          feeConfigs: [
+            {
+              id: feeConfig.id,
+              before: expect.objectContaining({ feeValue: '1.5' }),
+              after: expect.objectContaining({ feeValue: '2' }),
+            },
+          ],
           actorRole: UserRole.SUPER_ADMIN,
           before: expect.objectContaining({
             maintenanceMode: false,
@@ -358,7 +462,80 @@ describe('SuperAdminService', () => {
     expect(auditLogsService.createLog).not.toHaveBeenCalled();
   });
 
+  it('does not save earlier config changes when a later currency is missing', async () => {
+    const config = Object.assign(new PlatformConfig(), {
+      id: 'platform-config-id',
+      key: 'maintenanceMode',
+      category: 'system',
+      value: { maintenanceMode: false },
+    });
+    const currency = Object.assign(new Currency(), {
+      id: 'currency-usd',
+      code: 'USD',
+      isActive: true,
+    });
+    manager.findOne.mockImplementation(async (entity, options) => {
+      if (entity === PlatformConfig) return config;
+      if (entity === Currency && options.where.code === 'USD') return currency;
+      return null;
+    });
+
+    await expect(
+      service.updatePlatformConfig(superAdminUser.id, {
+        maintenanceMode: true,
+        currencies: [
+          { code: 'USD', isActive: false },
+          { code: 'MISSING', isActive: true },
+        ],
+      }),
+    ).rejects.toThrow(NotFoundException);
+
+    expect(manager.save).not.toHaveBeenCalled();
+    expect(auditLogsService.createLog).not.toHaveBeenCalled();
+  });
+
+  it('does not save config changes when a fee range is invalid', async () => {
+    const config = Object.assign(new PlatformConfig(), {
+      id: 'platform-config-id',
+      key: 'maintenanceMode',
+      category: 'system',
+      value: { maintenanceMode: false },
+    });
+    const feeConfig = Object.assign(new FeeConfig(), {
+      id: 'fee-config-id',
+      feeType: FeeType.FLAT,
+      feeValue: '1',
+      minFee: '0',
+      maxFee: '10',
+      isActive: true,
+    });
+    manager.findOne.mockImplementation(async (entity) => {
+      if (entity === PlatformConfig) return config;
+      if (entity === FeeConfig) return feeConfig;
+      return null;
+    });
+
+    await expect(
+      service.updatePlatformConfig(superAdminUser.id, {
+        maintenanceMode: true,
+        feeConfigs: [{ id: feeConfig.id, minFee: 20 }],
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(manager.save).not.toHaveBeenCalled();
+    expect(auditLogsService.createLog).not.toHaveBeenCalled();
+  });
+
   it('throws when a requested fee config does not exist', async () => {
+    const config = Object.assign(new PlatformConfig(), {
+      id: 'platform-config-id',
+      key: 'maintenanceMode',
+      category: 'system',
+      value: { maintenanceMode: false },
+    });
+    manager.findOne.mockImplementation(async (entity) =>
+      entity === PlatformConfig ? config : null,
+    );
     jest.spyOn(userRepository, 'findOne').mockResolvedValue(superAdminUser);
     jest
       .spyOn(platformConfigRepository, 'findOne')
@@ -370,6 +547,7 @@ describe('SuperAdminService', () => {
         feeConfigs: [{ id: 'missing-fee-config', feeValue: 3 }],
       }),
     ).rejects.toThrow(NotFoundException);
+    expect(manager.save).not.toHaveBeenCalled();
   });
 
   it('omits pending two-factor secrets from super-admin responses', async () => {

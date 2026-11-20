@@ -1,9 +1,11 @@
-import { Injectable, Logger, Scope } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Injectable, Logger } from '@nestjs/common';
 import { TransactionsService } from './transaction.service';
 import { UserRole } from '../../users/user.entity';
 
 const SYSTEM_USER_ID = 'system';
+
+/** Upper bound for a single manual verification pass. */
+const VERIFICATION_BATCH_SIZE = 100;
 
 interface VerificationSummary {
   total: number;
@@ -24,9 +26,12 @@ export class TransactionVerificationService {
   constructor(private readonly transactionsService: TransactionsService) {}
 
   /**
-   * Automatically verifies pending transactions every 5 minutes.
+   * Verifies a bounded batch of pending transactions.
+   *
+   * This is intentionally NOT scheduled: ScheduledJobsService.reconcilePendingTransactions
+   * is the single cron that reconciles PENDING rows and is the only one that
+   * honours the processingLockedAt claim. This method is kept for manual use.
    */
-  @Cron(CronExpression.EVERY_5_MINUTES)
   async verifyPendingTransactions(): Promise<VerificationSummary | void> {
     if (this.isRunning) {
       this.logger.warn(
@@ -42,7 +47,9 @@ export class TransactionVerificationService {
 
     try {
       const pendingTransactions =
-        await this.transactionsService.getPendingTransactions();
+        await this.transactionsService.getPendingTransactions(
+          VERIFICATION_BATCH_SIZE,
+        );
 
       if (pendingTransactions.length === 0) {
         this.logger.log('No pending transactions found.');
@@ -76,11 +83,11 @@ export class TransactionVerificationService {
         (result) => result.status === 'fulfilled',
       ).length;
 
-      const failedResults = results.filter(
-        (result) => result.status === 'rejected',
+      const failedResults = results.flatMap((result, index) =>
+        result.status === 'rejected' ? [{ result, index }] : [],
       );
 
-      failedResults.forEach((result, index) => {
+      failedResults.forEach(({ result, index }) => {
         const transactionId = pendingTransactions[index]?.id;
 
         this.logger.error(

@@ -32,6 +32,7 @@ import { Currency } from '../../currencies/currency.entity';
 import { CurrencyPairService } from '../../currencies/services/currency-pair.service';
 import { ExchangeRatesService } from '../../exchange-rates/exchange-rates.service';
 import { StellarService } from '../../modules/stellar/stellar.service';
+import { TransactionSubmissionError } from '../../modules/stellar/stellar.errors';
 import { UsersService } from '../../users/users.service';
 import { AuditLogsService } from '../../audit-logs/audit-logs.service';
 import { AuditAction } from '../../audit-logs/enums/audit-action.enum';
@@ -103,6 +104,26 @@ function isStellarSubmitResult(value: unknown): value is StellarSubmitResult {
     value !== null &&
     'hash' in value &&
     typeof (value as Record<string, unknown>).hash === 'string'
+  );
+}
+
+/**
+ * Slippage-style Horizon failures are identified by structured result codes,
+ * not by parsing a human-readable message (which used to be "[object Object]").
+ */
+function isSlippageSubmissionError(error: Error): boolean {
+  const resultCodes =
+    error instanceof TransactionSubmissionError ? error.resultCodes : undefined;
+  const codes = [
+    ...(resultCodes?.transaction ? [resultCodes.transaction] : []),
+    ...(resultCodes?.operations ?? []),
+  ];
+  const haystack = `${error.message} ${codes.join(' ')}`;
+
+  return (
+    haystack.includes('op_under_dest_min') ||
+    haystack.includes('tx_too_late') ||
+    haystack.includes('op_over_source_max')
   );
 }
 
@@ -939,10 +960,7 @@ export class TransactionsService {
 
         lastError = error;
 
-        const isSlippageError =
-          error.message.includes('op_under_dest_min') ||
-          error.message.includes('tx_too_late') ||
-          error.message.includes('op_over_source_max');
+        const isSlippageError = isSlippageSubmissionError(error);
 
         if (!isSlippageError || i === Math.min(maxRetries, paths.length - 1)) {
           throw new BadRequestException(`Swap failed: ${error.message}`);
@@ -1182,12 +1200,15 @@ export class TransactionsService {
     }
 
     if (!transaction.txHash) {
-      if (
-        transaction.type !== TransactionType.DEPOSIT ||
-        transaction.status !== TransactionStatus.PENDING ||
-        !transaction.metadata?.depositAddress ||
-        !transaction.metadata?.depositMemo
-      ) {
+      // Deposits are created without a txHash, so they must be matched against
+      // Horizon before verification. Only non-matchable rows are rejected here.
+      const canAutoDetectDeposit =
+        transaction.type === TransactionType.DEPOSIT &&
+        transaction.status === TransactionStatus.PENDING &&
+        Boolean(transaction.metadata?.depositAddress) &&
+        Boolean(transaction.metadata?.depositMemo);
+
+      if (!canAutoDetectDeposit) {
         throw new BadRequestException(
           'Transaction does not have a blockchain hash yet',
         );
@@ -1252,6 +1273,21 @@ export class TransactionsService {
           STELLAR_TRANSACTION_TIME_BOUND_MS + NOT_FOUND_GRACE_MARGIN_MS;
 
       if (verificationResult.status === 'SUCCESS') {
+        // Claim the transition atomically: only the caller that actually moved
+        // the row out of PENDING runs side effects, so repeated or concurrent
+        // verify calls cannot inflate the balance or duplicate events.
+        const claimed = await this.transactionRepository.update(
+          { id: transactionId, status: TransactionStatus.PENDING },
+          { status: TransactionStatus.SUCCESS },
+        );
+
+        if ((claimed.affected ?? 0) === 0) {
+          this.logger.warn(
+            `Transaction ${transactionId} was already transitioned from ${oldStatus}; skipping verification side effects`,
+          );
+          return transaction;
+        }
+
         transaction.status = TransactionStatus.SUCCESS;
         await this.activityFeedService.append(
           transaction.userId,
@@ -1261,18 +1297,7 @@ export class TransactionsService {
         );
         await this.redisService.delete('admin_stats');
 
-        // Claim the transition atomically: only the caller that actually moved
-        // the row out of PENDING credits the balance, so repeated or concurrent
-        // verify calls cannot inflate it.
-        const claimed = await this.transactionRepository.update(
-          { id: transactionId, status: TransactionStatus.PENDING },
-          { status: TransactionStatus.SUCCESS },
-        );
-
-        if (
-          transaction.type === TransactionType.DEPOSIT &&
-          (claimed.affected ?? 0) === 1
-        ) {
+        if (transaction.type === TransactionType.DEPOSIT) {
           const { feeAmount, feeCurrency, sameCurrencyFee } =
             this.getFeeBreakdown(transaction);
           await this.updateUserBalance(
@@ -1307,8 +1332,11 @@ export class TransactionsService {
           ? 'Transaction hash was not found on the blockchain after the time bound'
           : 'Transaction verification failed on blockchain';
 
+        // The FAILED transition must be claimed from PENDING as well. Using the
+        // in-memory status here let an admin re-verify an already-FAILED
+        // withdrawal and mint another refund on every call.
         const claimed = await this.transactionRepository.update(
-          { id: transactionId, status: oldStatus },
+          { id: transactionId, status: TransactionStatus.PENDING },
           {
             status: TransactionStatus.FAILED,
             failureReason: transaction.failureReason,
@@ -1715,12 +1743,15 @@ export class TransactionsService {
   }
 
   /**
-   * Get pending transactions that need verification
+   * Get a bounded, oldest-first batch of pending transactions that need verification.
    */
-  async getPendingTransactions(): Promise<Transaction[]> {
+  async getPendingTransactions(limit = 100): Promise<Transaction[]> {
+    const safeLimit = Math.min(Math.max(Math.trunc(limit) || 100, 1), 500);
+
     return this.transactionRepository.find({
       where: { status: TransactionStatus.PENDING },
       order: { createdAt: 'ASC' },
+      take: safeLimit,
     });
   }
 

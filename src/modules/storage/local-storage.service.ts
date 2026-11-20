@@ -4,6 +4,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
+import { ALLOWED_FILE_TYPES } from '../../common/constants/allowed-file-types';
+import { getStorageSigningSecret } from './storage-signing-secret';
 
 @Injectable()
 export class LocalStorageService implements StorageService {
@@ -12,62 +14,81 @@ export class LocalStorageService implements StorageService {
 
   async upload(file: Express.Multer.File, pathParam: string): Promise<string> {
     const env = process.env.NODE_ENV || 'development';
+    const fileType = ALLOWED_FILE_TYPES[file.mimetype];
+    if (!fileType) {
+      throw new BadRequestException('Unsupported file type');
+    }
 
-    // Prevent path traversal in the directory path
     const targetDir = path.resolve(this.uploadsBase, env, pathParam);
-    if (!targetDir.startsWith(this.uploadsBase)) {
+    if (!this.isInsideUploads(targetDir)) {
       throw new BadRequestException('Path traversal detected');
     }
 
-    // Ensure the folder exists
-    if (!fs.existsSync(targetDir)) {
-      fs.mkdirSync(targetDir, { recursive: true });
-    }
+    await fs.promises.mkdir(targetDir, { recursive: true });
 
-    // Secure naming
-    const fileExt = path.extname(file.originalname).toLowerCase();
-    const safeFilename = `${uuidv4()}${fileExt}`;
+    const safeFilename = `${uuidv4()}${fileType.extension}`;
     const fullPath = path.join(targetDir, safeFilename);
 
-    // Save buffer
-    fs.writeFileSync(fullPath, file.buffer);
+    await fs.promises.writeFile(fullPath, file.buffer);
 
-    const relativeKey = `${env}/${pathParam}/${safeFilename}`.replace(
-      /\\/g,
-      '/',
-    );
+    const relativeKey = path
+      .relative(this.uploadsBase, fullPath)
+      .split(path.sep)
+      .join('/');
     this.logger.log(`Uploaded file to local storage: ${relativeKey}`);
 
     return relativeKey;
   }
 
   async getSignedUrl(key: string, expiresInSeconds: number): Promise<string> {
-    // Basic sanitization
-    const sanitizedKey = key.replace(/\.\./g, '');
+    const fullPath = this.resolveInsideUploads(key);
+    const normalizedKey = path
+      .relative(this.uploadsBase, fullPath)
+      .split(path.sep)
+      .join('/');
     const expires = Math.floor(Date.now() / 1000) + expiresInSeconds;
 
     const port = process.env.PORT || '3000';
     const baseUrl = process.env.BACKEND_URL || `http://localhost:${port}`;
 
-    const secret = process.env.JWT_SECRET || 'local-secret';
-    const hmac = crypto.createHmac('sha256', secret);
-    hmac.update(`${sanitizedKey}:${expires}`);
+    const hmac = crypto.createHmac('sha256', getStorageSigningSecret());
+    hmac.update(`${normalizedKey}:${expires}`);
     const signature = hmac.digest('hex');
 
-    return `${baseUrl}/uploads/${sanitizedKey}?expires=${expires}&signature=${signature}`;
+    return `${baseUrl}/uploads/${normalizedKey}?expires=${expires}&signature=${signature}`;
   }
 
   async delete(key: string): Promise<void> {
-    const sanitizedKey = key.replace(/\.\./g, '');
-    const fullPath = path.resolve(this.uploadsBase, sanitizedKey);
+    const fullPath = this.resolveInsideUploads(key);
+    try {
+      await fs.promises.unlink(fullPath);
+      this.logger.log(`Deleted file from local storage: ${key}`);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        error.code === 'ENOENT'
+      ) {
+        return;
+      }
+      throw error;
+    }
+  }
 
-    if (!fullPath.startsWith(this.uploadsBase)) {
+  private resolveInsideUploads(key: string): string {
+    const fullPath = path.resolve(this.uploadsBase, key);
+    if (!this.isInsideUploads(fullPath)) {
       throw new BadRequestException('Path traversal detected');
     }
+    return fullPath;
+  }
 
-    if (fs.existsSync(fullPath)) {
-      fs.unlinkSync(fullPath);
-      this.logger.log(`Deleted file from local storage: ${key}`);
-    }
+  private isInsideUploads(targetPath: string): boolean {
+    const relativePath = path.relative(this.uploadsBase, targetPath);
+    return (
+      relativePath !== '..' &&
+      !relativePath.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relativePath)
+    );
   }
 }

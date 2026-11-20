@@ -5,6 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { fromBuffer } from 'file-type';
+import { ALLOWED_FILE_TYPES } from '../constants/allowed-file-types';
 
 const ALLOWED_MIME_TYPES = new Set([
   'image/jpeg',
@@ -17,15 +18,6 @@ const ALLOWED_VIDEO_MIME_TYPES = new Set([
   'video/webm',
   'video/quicktime',
 ]);
-
-const ALLOWED_EXTENSIONS: Record<string, string> = {
-  'image/jpeg': '.jpg',
-  'image/png': '.png',
-  'application/pdf': '.pdf',
-  'video/mp4': '.mp4',
-  'video/webm': '.webm',
-  'video/quicktime': '.mov',
-};
 
 const VIDEO_FIELD_NAMES = new Set(['videoSelfie']);
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB for images/docs
@@ -90,9 +82,6 @@ export class FileValidationPipe implements PipeTransform {
 
     file.mimetype = detected.mime;
 
-    const correctExt = ALLOWED_EXTENSIONS[detected.mime];
-    if (correctExt) {
-      file.originalname = `${fieldName}${correctExt}`;
-    }
+    file.originalname = `${fieldName}${ALLOWED_FILE_TYPES[detected.mime].extension}`;
   }
 }

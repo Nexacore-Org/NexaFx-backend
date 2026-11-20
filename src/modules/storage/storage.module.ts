@@ -3,6 +3,7 @@ import { LocalStorageSignatureMiddleware } from './local-storage-signature.middl
 import { STORAGE_SERVICE_TOKEN } from './storage.service';
 import { LocalStorageService } from './local-storage.service';
 import { S3StorageService } from './s3-storage.service';
+import { getStorageSigningSecret } from './storage-signing-secret';
 
 @Module({
   providers: [
@@ -12,6 +13,9 @@ import { S3StorageService } from './s3-storage.service';
       provide: STORAGE_SERVICE_TOKEN,
       useFactory: (local: LocalStorageService, s3: S3StorageService) => {
         const driver = process.env.STORAGE_DRIVER || 'local';
+        if (driver !== 's3') {
+          getStorageSigningSecret();
+        }
         return driver === 's3' ? s3 : local;
       },
       inject: [LocalStorageService, S3StorageService],
@@ -21,7 +25,8 @@ import { S3StorageService } from './s3-storage.service';
 })
 export class StorageModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    // Apply signature verification on `/uploads/*`
-    consumer.apply(LocalStorageSignatureMiddleware).forRoutes('uploads/*');
+    if ((process.env.STORAGE_DRIVER || 'local') !== 's3') {
+      consumer.apply(LocalStorageSignatureMiddleware).forRoutes('uploads/*');
+    }
   }
 }

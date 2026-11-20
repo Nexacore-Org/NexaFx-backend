@@ -1,4 +1,4 @@
-﻿import { Test, TestingModule } from '@nestjs/testing';
+import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ThrottlerStorageService } from '@nestjs/throttler';
@@ -13,6 +13,7 @@ import { RedisService } from '../common/services/redis.service';
 describe('UsersService', () => {
   let service: UsersService;
   let userRepository: Repository<User>;
+  let stellarService: { getWalletBalances: jest.Mock };
 
   const mockUser: User = {
     id: 'user-123',
@@ -23,7 +24,10 @@ describe('UsersService', () => {
     walletPublicKey: 'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOUJ3UHMNGUAO7UP',
     walletSecretKeyEncrypted: 'encrypted-secret',
     twoFactorSecret: null,
-    balances: { NATIVE: 100.5, USDC: 50.25 },
+    // Custodial ledger balance and the on-chain snapshot are deliberately
+    // different so tests can tell which one a code path reads or writes.
+    balances: { XLM: 7, USD: 3 },
+    onChainBalances: { NATIVE: 100.5, USDC: 50.25 },
     balanceLastSyncedAt: new Date('2025-03-27T10:30:00Z'),
     referralCode: 'ABC12345',
     referredBy: null,
@@ -107,6 +111,7 @@ describe('UsersService', () => {
     userRepository = (moduleRef as any).get(
       getRepositoryToken(User),
     ) as Repository<User>;
+    stellarService = (moduleRef as any).get(StellarService);
   });
 
   describe('getProfile', () => {
@@ -118,7 +123,9 @@ describe('UsersService', () => {
       expect(result).toBeDefined();
       expect(result.id).toBe('user-123');
       expect(result.email).toBe('test@example.com');
+      // The profile shows the on-chain snapshot, not the custodial ledger.
       expect(result.balances).toEqual({ NATIVE: 100.5, USDC: 50.25 });
+      expect(result.balances).not.toEqual(mockUser.balances);
       expect(result.balanceLastSyncedAt).toEqual(
         new Date('2025-03-27T10:30:00Z'),
       );
@@ -186,7 +193,7 @@ describe('UsersService', () => {
     });
 
     it('should return empty balances object when user has no funded wallet', async () => {
-      const userWithoutBalances = { ...mockUser, balances: {} };
+      const userWithoutBalances = { ...mockUser, onChainBalances: {} };
       jest
         .spyOn(userRepository, 'findOne')
         .mockResolvedValue(userWithoutBalances);
@@ -198,15 +205,58 @@ describe('UsersService', () => {
   });
 
   describe('syncWalletBalanceSnapshots', () => {
-    it('should set balanceLastSyncedAt when syncing balances', async () => {
+    it('writes the snapshot to onChainBalances and never touches users.balances', async () => {
       jest.spyOn(userRepository, 'find').mockResolvedValue([mockUser]);
+      const updateSpy = jest
+        .spyOn(userRepository, 'update')
+        .mockResolvedValue(undefined as any);
+      stellarService.getWalletBalances.mockResolvedValue([
+        { asset: 'XLM', balance: '12.5' },
+        { asset: 'USDC', assetIssuer: 'GISSUER', balance: '3.25' },
+      ]);
 
       const result = await service.syncWalletBalanceSnapshots();
 
-      expect(result).toBeDefined();
-      expect(result.processed).toBeGreaterThan(0);
-      expect(result.updated).toBeGreaterThan(-1);
-      expect(result.failed).toBeGreaterThan(-1);
+      expect(result).toEqual({ processed: 1, updated: 1, failed: 0 });
+      expect(updateSpy).toHaveBeenCalledTimes(1);
+      const [id, patch] = updateSpy.mock.calls[0] as [string, any];
+      expect(id).toBe('user-123');
+      expect(patch.onChainBalances).toEqual({
+        XLM: 12.5,
+        'USDC:GISSUER': 3.25,
+      });
+      expect(patch.balanceLastSyncedAt).toBeInstanceOf(Date);
+      // The custodial ledger must not be part of the write at all.
+      expect(patch).not.toHaveProperty('balances');
+      expect(Object.keys(patch).sort()).toEqual([
+        'balanceLastSyncedAt',
+        'onChainBalances',
+      ]);
+    });
+
+    it('does not even load users.balances while syncing', async () => {
+      const findSpy = jest
+        .spyOn(userRepository, 'find')
+        .mockResolvedValue([] as User[]);
+
+      await service.syncWalletBalanceSnapshots();
+
+      expect(findSpy).toHaveBeenCalledWith({
+        select: ['id', 'walletPublicKey'],
+      });
+    });
+
+    it('writes nothing for a user whose wallet lookup fails and counts the failure', async () => {
+      jest.spyOn(userRepository, 'find').mockResolvedValue([mockUser]);
+      const updateSpy = jest.spyOn(userRepository, 'update');
+      stellarService.getWalletBalances.mockRejectedValue(
+        new Error('horizon down'),
+      );
+
+      const result = await service.syncWalletBalanceSnapshots();
+
+      expect(result).toEqual({ processed: 1, updated: 0, failed: 1 });
+      expect(updateSpy).not.toHaveBeenCalled();
     });
   });
 

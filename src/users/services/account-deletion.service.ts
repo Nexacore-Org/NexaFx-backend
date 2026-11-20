@@ -185,6 +185,7 @@ export class AccountDeletionService {
       user.isTwoFactorEnabled = false;
       user.fcmTokens = [];
       user.balances = {};
+      user.onChainBalances = {};
       user.isSuspended = false;
       user.isDeleted = true;
       if ('deletedAt' in user) {
@@ -323,6 +324,7 @@ export class AccountDeletionService {
       user.isTwoFactorEnabled = false;
       user.fcmTokens = [];
       user.balances = {};
+      user.onChainBalances = {};
       user.isSuspended = false;
       user.isDeleted = true;
       if ('deletedAt' in user) {

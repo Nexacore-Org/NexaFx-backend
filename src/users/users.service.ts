@@ -375,7 +375,7 @@ export class UsersService {
     failed: number;
   }> {
     const users = await this.userRepository.find({
-      select: ['id', 'walletPublicKey', 'balances'],
+      select: ['id', 'walletPublicKey'],
     });
 
     let updated = 0;
@@ -387,8 +387,10 @@ export class UsersService {
           user.walletPublicKey,
         );
         const snapshot = this.toSnapshotBalances(liveBalances);
+        // The snapshot goes to its own column. users.balances is the custodial
+        // ledger and must never be overwritten by on-chain data.
         await this.userRepository.update(user.id, {
-          balances: snapshot,
+          onChainBalances: snapshot,
           balanceLastSyncedAt: new Date(),
         });
         updated += 1;

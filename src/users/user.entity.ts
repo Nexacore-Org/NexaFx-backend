@@ -99,8 +99,19 @@ export class User {
   @Column({ type: 'timestamptz', nullable: true })
   twoFactorLockedUntil: Date | null;
 
+  /**
+   * Custodial ledger balance. Owned by BalanceService; changed only by
+   * internal credits and debits. The Stellar sync must never write it.
+   */
   @Column({ type: 'jsonb', nullable: true, default: {} })
   balances: Record<string, number>;
+
+  /**
+   * Latest on-chain (Stellar) balance snapshot. Informational only: it is
+   * written by the periodic sync and is never used for ledger checks.
+   */
+  @Column({ type: 'jsonb', nullable: true, default: {} })
+  onChainBalances: Record<string, number>;
 
   @Column({ type: 'jsonb', nullable: true, default: [] })
   fcmTokens: string[];

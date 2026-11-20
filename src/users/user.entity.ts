@@ -105,6 +105,11 @@ export class User {
   @Column({ type: 'jsonb', nullable: true, default: [] })
   fcmTokens: string[];
 
+  /**
+   * @deprecated Notification delivery preferences are stored in the
+   * notification_preferences table. This legacy JSON column is retained for
+   * compatibility and is not consulted when dispatching notifications.
+   */
   @Column({
     type: 'jsonb',
     nullable: true,

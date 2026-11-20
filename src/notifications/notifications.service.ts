@@ -124,52 +124,43 @@ export class NotificationsService {
     title: string,
     body: string,
     data?: Record<string, any>,
-  ): Promise<Notification> {
-    // 1. Create the in-app notification record in the DB
-    const notification = await this.create(userId, type, title, body, data);
+  ): Promise<Notification | null> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      this.logger.warn(
+        `User ${userId} not found during notification dispatch.`,
+      );
+      return null;
+    }
+
+    const channels = await this.preferenceService.getChannelPreferences(
+      userId,
+      type,
+    );
+    const notification = channels.inAppEnabled
+      ? await this.create(userId, type, title, body, data)
+      : null;
 
     try {
-      // 2. Fetch the user and their notification preferences
-      const user = await this.userRepository.findOne({ where: { id: userId } });
-      if (!user) {
-        this.logger.warn(
-          `User ${userId} not found during notification dispatch.`,
-        );
-        return notification;
-      }
-
-      const prefs = (user as any).notificationPreferences || {
-        email: true,
-        push: true,
-        types: { TRANSACTION: true, KYC: true, RATE_ALERT: true },
-      };
-
-      // Check if this type is enabled for the user
-      const isTypeEnabled = prefs.types?.[type] !== false;
-
-      if (!isTypeEnabled) {
-        this.logger.log(
-          `Notification type ${type} is disabled for user ${userId}. Skipping delivery.`,
-        );
-        return notification;
-      }
-
-      // 3. Send FCM push if push preference is enabled (opt-in based on user preferences)
-      if (prefs.push === true) {
-        const notificationData = (notification.data || {}) as Record<
-          string,
-          any
-        >;
-        const fcmData = buildFcmData(type, notificationData);
+      if (channels.pushEnabled) {
+        const notificationData =
+          notification?.data ?? this.resolveActionUrl(type, data);
+        const fcmData = buildFcmData(type, {
+          notificationId: String(notificationData.notificationId ?? ''),
+          resourceId:
+            notificationData.transactionId ??
+            notificationData.resourceId ??
+            notificationData.relatedId,
+          resourceType: notificationData.resourceType,
+          actionType: notificationData.actionType,
+        });
         await this.fcmService.sendPush(userId, title, body, fcmData);
       }
 
-      // 4. Send email if email preference is enabled (opt-in based on user preferences)
-      if (prefs.email === true && user.email) {
+      if (channels.emailEnabled && user.email) {
         await this.sendEmail(userId, type, user.email, title, body);
       }
     } catch (error) {
-      // Catch and log dispatch errors to ensure main flows are not blocked
       this.logger.error(
         `Failed to deliver dispatch notifications for user ${userId}: ${error instanceof Error ? error.message : String(error)}`,
       );
@@ -199,7 +190,7 @@ export class NotificationsService {
   async createAndSend(
     userId: string,
     payload: { title: string; body: string; type: NotificationType },
-  ): Promise<Notification> {
+  ): Promise<Notification | null> {
     return this.dispatch(userId, payload.type, payload.title, payload.body);
   }
 

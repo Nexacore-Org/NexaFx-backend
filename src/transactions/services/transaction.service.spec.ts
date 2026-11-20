@@ -154,6 +154,14 @@ describe('TransactionsService fee integration behavior', () => {
   };
   const transactionLimitService = {
     check: jest.fn(async () => undefined),
+    withLimitCheck: jest.fn(
+      async (
+        _userId: string,
+        _amount: number,
+        _currency: string,
+        operation: () => Promise<unknown>,
+      ) => operation(),
+    ),
   };
   const queryRunner = {
     connect: jest.fn(async () => undefined),

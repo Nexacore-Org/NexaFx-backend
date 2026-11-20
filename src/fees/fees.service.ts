@@ -21,6 +21,7 @@ export interface CalculatedFee {
   feeAmount: number;
   feeCurrency: string;
   feeType: FeeType;
+  feeValue?: string;
 }
 
 @Injectable()
@@ -47,7 +48,12 @@ export class FeesService {
     const config = await this.findActiveConfig(transactionType, currency);
 
     if (!config) {
-      return { feeAmount: 0, feeCurrency: currency, feeType: FeeType.FLAT };
+      return {
+        feeAmount: 0,
+        feeCurrency: currency,
+        feeType: FeeType.FLAT,
+        feeValue: '0',
+      };
     }
 
     let feeAmountDecimal: Decimal;
@@ -76,6 +82,7 @@ export class FeesService {
       feeAmount,
       feeCurrency: currency,
       feeType: config.feeType,
+      feeValue: config.feeValue,
     };
   }
 

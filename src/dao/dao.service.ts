@@ -1,4 +1,10 @@
-import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  HttpException,
+  HttpStatus,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -8,6 +14,7 @@ import {
   Operation,
   TransactionBuilder,
   nativeToScVal,
+  Address,
   Horizon,
   rpc,
 } from 'stellar-sdk';
@@ -16,6 +23,28 @@ import {
   RewardDistributionStatus,
 } from './entities/reward-distribution.entity';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { User } from '../users/user.entity';
+import { IdempotencyService } from '../common/services/idempotency.service';
+import { DistributeRewardDto } from './dto/distribute-reward.dto';
+
+const DAO_REWARD_FUNCTION = 'distribute';
+
+function amountToStroops(amount: number): bigint {
+  const [mantissa, exponentPart] = amount.toString().toLowerCase().split('e');
+  const [whole, fraction = ''] = mantissa.split('.');
+  const shift = 7 - fraction.length + Number(exponentPart || 0);
+  const value = BigInt(`${whole}${fraction}`);
+
+  if (shift >= 0) {
+    return value * 10n ** BigInt(shift);
+  }
+
+  const divisor = 10n ** BigInt(-shift);
+  if (value % divisor !== 0n) {
+    throw new Error('Amount cannot exceed 7 decimal places.');
+  }
+  return value / divisor;
+}
 
 @Injectable()
 export class DaoService {
@@ -32,7 +61,10 @@ export class DaoService {
     private readonly configService: ConfigService,
     @InjectRepository(RewardDistribution)
     private readonly rewardDistributionRepo: Repository<RewardDistribution>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
     private readonly auditLogsService: AuditLogsService,
+    private readonly idempotencyService: IdempotencyService,
   ) {
     this.sorobanRpcUrl =
       this.configService.get<string>('STELLAR_SOROBAN_RPC_URL') || '';
@@ -80,8 +112,6 @@ export class DaoService {
     functionName: string,
     args: any[] = [],
   ): Promise<{ txHash: string; result: any }> {
-    const targetContractId = contractId || this.defaultContractId;
-
     if (
       this.daoConfigError ||
       !this.sorobanServer ||
@@ -95,12 +125,16 @@ export class DaoService {
       );
     }
 
-    if (!targetContractId) {
+    if (
+      contractId !== this.defaultContractId ||
+      functionName !== DAO_REWARD_FUNCTION
+    ) {
       throw new HttpException(
-        'Contract ID is required',
+        'Only the configured DAO reward function may be invoked',
         HttpStatus.BAD_REQUEST,
       );
     }
+    const targetContractId = this.defaultContractId;
 
     // Verify Soroban RPC health
     try {
@@ -114,7 +148,7 @@ export class DaoService {
     }
 
     try {
-      const hostArgs = (args || []).map((item) => nativeToScVal(item));
+      const hostArgs = args || [];
 
       const sourcePublicKey = this.hotWalletKeypair.publicKey();
       const account = await this.horizonServer.loadAccount(sourcePublicKey);
@@ -163,90 +197,126 @@ export class DaoService {
 
   async distributeReward(
     adminId: string,
-    payload: {
-      userId: string;
-      contractId?: string;
-      functionName: string;
-      args?: any[];
-      amount: number;
-      currency: string;
-    },
+    payload: DistributeRewardDto,
   ): Promise<RewardDistribution> {
-    const contractId = payload.contractId || this.defaultContractId;
-
-    let distribution = this.rewardDistributionRepo.create({
-      userId: payload.userId,
-      contractId,
-      functionName: payload.functionName,
-      args: payload.args || null,
+    const requestBody = {
       amount: payload.amount,
       currency: payload.currency,
-      txHash: null,
-      status: RewardDistributionStatus.PENDING,
-      errorMessage: null,
-    });
-
-    distribution = await this.rewardDistributionRepo.save(distribution);
-
-    await this.auditLogsService.logSystemEvent(
-      `DAO reward distribution attempt`,
-      distribution.id,
-      {
-        adminId,
-        userId: payload.userId,
-        contractId,
-        functionName: payload.functionName,
-        amount: payload.amount,
-        currency: payload.currency,
-      },
+    };
+    const idempotency = await this.idempotencyService.beginIdempotency(
+      payload.requestId,
+      payload.userId,
+      requestBody,
+      'POST /dao/distribute-reward',
     );
+    if (idempotency.state === 'replay') {
+      return idempotency.body as RewardDistribution;
+    }
 
     try {
-      const { txHash } = await this.invokeContract(
-        contractId,
-        payload.functionName,
-        payload.args || [],
-      );
-
-      distribution.txHash = txHash;
-      distribution.status = RewardDistributionStatus.SUCCESS;
-      await this.rewardDistributionRepo.save(distribution);
-
-      await this.auditLogsService.logSystemEvent(
-        `DAO reward distribution succeeded`,
-        distribution.id,
-        {
-          adminId,
-          txHash,
-          distributionId: distribution.id,
-        },
-      );
-
-      return distribution;
-    } catch (err: any) {
-      if (
-        err instanceof HttpException &&
-        err.getStatus() === HttpStatus.SERVICE_UNAVAILABLE
-      ) {
-        this.logger.warn('Soroban RPC unavailable - distribution aborted');
-        throw err;
+      const user = await this.userRepo.findOne({
+        where: { id: payload.userId },
+      });
+      if (!user) {
+        throw new NotFoundException('User not found');
       }
 
-      distribution.status = RewardDistributionStatus.FAILED;
-      distribution.errorMessage = err?.message || 'Contract invocation failed';
-      await this.rewardDistributionRepo.save(distribution);
+      const contractId = this.defaultContractId;
+      const functionName = DAO_REWARD_FUNCTION;
+      const args = [user.walletPublicKey, payload.amount, payload.currency];
+      let distribution = this.rewardDistributionRepo.create({
+        userId: payload.userId,
+        contractId,
+        functionName,
+        args,
+        amount: payload.amount,
+        currency: payload.currency,
+        txHash: null,
+        status: RewardDistributionStatus.PENDING,
+        errorMessage: null,
+      });
+
+      distribution = await this.rewardDistributionRepo.save(distribution);
 
       await this.auditLogsService.logSystemEvent(
-        `DAO reward distribution failed`,
+        `DAO reward distribution attempt`,
         distribution.id,
         {
           adminId,
-          error: distribution.errorMessage,
-          distributionId: distribution.id,
+          userId: payload.userId,
+          contractId,
+          functionName,
+          amount: payload.amount,
+          currency: payload.currency,
         },
       );
 
+      try {
+        const amountInStroops = amountToStroops(payload.amount);
+        const contractArgs = [
+          Address.fromString(user.walletPublicKey),
+          nativeToScVal(amountInStroops, { type: 'i128' }),
+          nativeToScVal(payload.currency, { type: 'symbol' }),
+        ];
+        const { txHash } = await this.invokeContract(
+          contractId,
+          functionName,
+          contractArgs,
+        );
+
+        distribution.txHash = txHash;
+        distribution.status = RewardDistributionStatus.SUCCESS;
+        await this.rewardDistributionRepo.save(distribution);
+
+        await this.auditLogsService.logSystemEvent(
+          `DAO reward distribution succeeded`,
+          distribution.id,
+          {
+            adminId,
+            txHash,
+            distributionId: distribution.id,
+          },
+        );
+      } catch (err: any) {
+        if (
+          err instanceof HttpException &&
+          err.getStatus() === HttpStatus.SERVICE_UNAVAILABLE
+        ) {
+          this.logger.warn('Soroban RPC unavailable - distribution aborted');
+          throw err;
+        }
+
+        distribution.status = RewardDistributionStatus.FAILED;
+        distribution.errorMessage =
+          err?.message || 'Contract invocation failed';
+        await this.rewardDistributionRepo.save(distribution);
+
+        await this.auditLogsService.logSystemEvent(
+          `DAO reward distribution failed`,
+          distribution.id,
+          {
+            adminId,
+            error: distribution.errorMessage,
+            distributionId: distribution.id,
+          },
+        );
+      }
+
+      await this.idempotencyService.storeIdempotency(
+        payload.requestId,
+        payload.userId,
+        'POST /dao/distribute-reward',
+        201,
+        distribution,
+        requestBody,
+      );
       return distribution;
+    } catch (err) {
+      await this.idempotencyService.releaseIdempotency(
+        payload.requestId,
+        payload.userId,
+      );
+      throw err;
     }
   }
 

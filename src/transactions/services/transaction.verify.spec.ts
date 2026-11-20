@@ -376,7 +376,7 @@ describe('TransactionsService.verifyTransaction', () => {
       ).toHaveBeenCalledTimes(1);
       expect(
         (service as unknown as { updateUserBalance: jest.Mock }).updateUserBalance,
-      ).toHaveBeenCalledWith('user-1', 'XLM', 100);
+      ).toHaveBeenCalledWith('user-1', 'XLM', money('100'));
     });
 
     it('still rejects a non-deposit row without txHash', async () => {

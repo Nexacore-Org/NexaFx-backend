@@ -5,11 +5,13 @@ import {
   BadRequestException,
   ForbiddenException,
   NotFoundException,
+  ConflictException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { getQueueToken } from '@nestjs/bullmq';
 import { DataSource } from 'typeorm';
 import Decimal from 'decimal.js';
+import { IsNull } from 'typeorm';
 import { BalanceService } from '../../balances/balance.service';
 import { Asset, Operation } from 'stellar-sdk';
 import { TransactionsService } from './transaction.service';
@@ -174,11 +176,15 @@ describe('TransactionsService fee integration behavior', () => {
     release: jest.fn(async () => undefined),
     manager: {
       save: jest.fn(async (_entity: unknown, payload: any) => payload),
+      update: jest.fn(async () => ({ affected: 1 })),
     },
   };
   const dataSource = {
     createQueryRunner: jest.fn(() => queryRunner),
   };
+
+  const amlService = { enqueue: jest.fn(async () => undefined) };
+  const taxQueue = { add: jest.fn(async () => undefined) };
 
   const balanceService = {
     getBalance: jest.fn(async () => '1000'),
@@ -237,7 +243,7 @@ describe('TransactionsService fee integration behavior', () => {
         { provide: LedgerService, useValue: ledgerService },
         { provide: TransactionLimitService, useValue: transactionLimitService },
         { provide: RedisService, useValue: mockRedisService },
-        { provide: AmlService, useValue: { enqueue: jest.fn(async () => undefined) } },
+        { provide: AmlService, useValue: amlService },
         { provide: BalanceService, useValue: balanceService },
         {
           provide: MicroSavingsService,
@@ -250,7 +256,7 @@ describe('TransactionsService fee integration behavior', () => {
           provide: UnifiedActivityFeedService,
           useValue: { append: jest.fn(async () => undefined) },
         },
-        { provide: getQueueToken(TAX_QUEUE), useValue: { add: jest.fn(async () => undefined) } },
+        { provide: getQueueToken(TAX_QUEUE), useValue: taxQueue },
       ],
     }).compile();
 
@@ -667,10 +673,6 @@ describe('TransactionsService fee integration behavior', () => {
     it('should cancel a PENDING transaction owned by the user', async () => {
       const pending = makePending();
       transactionRepository.findOne.mockResolvedValue(pending);
-      transactionRepository.save.mockResolvedValue({
-        ...pending,
-        status: TransactionStatus.CANCELLED,
-      });
 
       const result = await service.cancelTransaction(
         'tx-cancel-test',
@@ -681,6 +683,20 @@ describe('TransactionsService fee integration behavior', () => {
       expect(transactionRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'tx-cancel-test' },
       });
+      // The claim, the ledger reversal and the commit are one transaction.
+      expect(queryRunner.manager.update).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          id: 'tx-cancel-test',
+          status: TransactionStatus.PENDING,
+        }),
+        expect.objectContaining({ status: TransactionStatus.CANCELLED }),
+      );
+      expect(ledgerService.reverse).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'tx-cancel-test' }),
+        queryRunner,
+      );
+      expect(queryRunner.commitTransaction).toHaveBeenCalled();
       expect(auditLogsService.logTransactionEvent).toHaveBeenCalledWith(
         'user-1',
         expect.any(String),
@@ -706,14 +722,14 @@ describe('TransactionsService fee integration behavior', () => {
       expect(auditLogsService.logTransactionEvent).not.toHaveBeenCalled();
     });
 
-    it('should throw BadRequestException when cancelling a non-PENDING transaction', async () => {
+    it('should return 409 when cancelling a non-PENDING transaction', async () => {
       transactionRepository.findOne.mockResolvedValue(
         makePending({ status: TransactionStatus.SUCCESS }),
       );
 
       await expect(
         service.cancelTransaction('tx-cancel-test', 'user-1'),
-      ).rejects.toThrow(BadRequestException);
+      ).rejects.toThrow(ConflictException);
 
       await expect(
         service.cancelTransaction('tx-cancel-test', 'user-1'),
@@ -721,6 +737,7 @@ describe('TransactionsService fee integration behavior', () => {
         'Cannot cancel transaction with status SUCCESS. Only PENDING transactions can be cancelled.',
       );
 
+      expect(queryRunner.manager.update).not.toHaveBeenCalled();
       expect(auditLogsService.logTransactionEvent).not.toHaveBeenCalled();
     });
 
@@ -734,33 +751,292 @@ describe('TransactionsService fee integration behavior', () => {
       expect(auditLogsService.logTransactionEvent).not.toHaveBeenCalled();
     });
 
-    it('should log a warning when cancelling a transaction that has a txHash', async () => {
-      const transactionWithHash = makePending({
-        txHash: 'stellar-hash-123',
-      });
+    it('rejects cancelling a transaction already submitted to Stellar', async () => {
+      transactionRepository.findOne.mockResolvedValue(
+        makePending({ txHash: 'stellar-hash-123' }),
+      );
 
-      transactionRepository.findOne.mockResolvedValue(transactionWithHash);
-      transactionRepository.save.mockResolvedValue({
-        ...transactionWithHash,
-        status: TransactionStatus.CANCELLED,
-      });
+      await expect(
+        service.cancelTransaction('tx-cancel-test', 'user-1'),
+      ).rejects.toThrow(ConflictException);
 
-      const loggerWarnSpy = jest.spyOn((service as any).logger, 'warn');
+      expect(queryRunner.manager.update).not.toHaveBeenCalled();
+      expect(ledgerService.reverse).not.toHaveBeenCalled();
+      expect(balanceService.applyDelta).not.toHaveBeenCalled();
+      expect(auditLogsService.logTransactionEvent).not.toHaveBeenCalled();
+    });
+
+    it('makes the claim itself refuse a transaction submitted after the read', async () => {
+      transactionRepository.findOne.mockResolvedValue(makePending());
+      queryRunner.manager.update.mockResolvedValueOnce({ affected: 0 });
+
+      await expect(
+        service.cancelTransaction('tx-cancel-test', 'user-1'),
+      ).rejects.toThrow(ConflictException);
+
+      const criteria = (
+        queryRunner.manager.update.mock.calls[0] as unknown[]
+      )[1] as Record<string, unknown>;
+      expect(criteria.txHash).toEqual(IsNull());
+      expect(queryRunner.rollbackTransaction).toHaveBeenCalled();
+      expect(balanceService.applyDelta).not.toHaveBeenCalled();
+      expect(ledgerService.reverse).not.toHaveBeenCalled();
+    });
+
+    it('restores the reserved balance when a stale withdrawal is cancelled', async () => {
+      transactionRepository.findOne.mockResolvedValue(
+        makePending({
+          type: TransactionType.WITHDRAW,
+          feeAmount: '1.25',
+          feeCurrency: 'XLM',
+          createdAt: new Date(Date.now() - 60 * 60 * 1000),
+        }),
+      );
 
       await service.cancelTransaction('tx-cancel-test', 'user-1');
 
-      expect(loggerWarnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('has already been submitted to Stellar'),
-      );
-
-      expect(auditLogsService.logTransactionEvent).toHaveBeenCalledWith(
+      expect(balanceService.applyDelta).toHaveBeenCalledTimes(1);
+      expect(balanceService.applyDelta).toHaveBeenCalledWith(
         'user-1',
-        expect.any(String),
-        'tx-cancel-test',
-        expect.objectContaining({
-          txHash: 'stellar-hash-123',
+        'XLM',
+        money('101.25'),
+        queryRunner.manager,
+      );
+    });
+
+    it('refuses to cancel a withdrawal that may still be inside its request', async () => {
+      transactionRepository.findOne.mockResolvedValue(
+        makePending({
+          type: TransactionType.WITHDRAW,
+          createdAt: new Date(),
         }),
       );
+
+      await expect(
+        service.cancelTransaction('tx-cancel-test', 'user-1'),
+      ).rejects.toThrow(ConflictException);
+
+      expect(queryRunner.startTransaction).not.toHaveBeenCalled();
+      expect(balanceService.applyDelta).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('status state machine (#1455)', () => {
+    const OLD = new Date(Date.now() - 60 * 60 * 1000);
+    const makeTx = (overrides: Record<string, unknown> = {}): Transaction =>
+      ({
+        id: 'tx-1',
+        userId: 'user-1',
+        status: TransactionStatus.PENDING,
+        type: TransactionType.DEPOSIT,
+        amount: '100',
+        currency: 'XLM',
+        feeAmount: '1.25',
+        feeCurrency: 'XLM',
+        txHash: null,
+        createdAt: OLD,
+        ...overrides,
+      }) as unknown as Transaction;
+
+    const update = (to: TransactionStatus) =>
+      service.updateTransactionStatus('tx-1', to, 'admin-1', 'because');
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    const S = TransactionStatus;
+    it.each([
+      [S.SUCCESS, S.PENDING],
+      [S.SUCCESS, S.FAILED],
+      [S.SUCCESS, S.CANCELLED],
+      [S.FAILED, S.SUCCESS],
+      [S.FAILED, S.PENDING],
+      [S.FAILED, S.CANCELLED],
+      [S.CANCELLED, S.SUCCESS],
+      [S.CANCELLED, S.FAILED],
+      [S.CANCELLED, S.PENDING],
+      [S.PENDING, S.PENDING],
+    ])('rejects %s to %s with 409 and changes nothing', async (from, to) => {
+      transactionRepository.findOne.mockResolvedValue(makeTx({ status: from }));
+
+      await expect(update(to)).rejects.toThrow(ConflictException);
+
+      expect(queryRunner.manager.update).not.toHaveBeenCalled();
+      expect(balanceService.applyDelta).not.toHaveBeenCalled();
+      expect(ledgerService.reverse).not.toHaveBeenCalled();
+      expect(taxQueue.add).not.toHaveBeenCalled();
+      expect(amlService.enqueue).not.toHaveBeenCalled();
+      expect(auditLogsService.logTransactionEvent).not.toHaveBeenCalled();
+    });
+
+    it('returns 404 for an unknown transaction', async () => {
+      transactionRepository.findOne.mockResolvedValue(null);
+
+      await expect(update(S.SUCCESS)).rejects.toThrow(NotFoundException);
+    });
+
+    it('PENDING to SUCCESS on a deposit credits net of fee, once, in the same transaction', async () => {
+      transactionRepository.findOne.mockResolvedValue(makeTx());
+
+      const result = await update(S.SUCCESS);
+
+      expect(result.status).toBe(S.SUCCESS);
+      expect(queryRunner.manager.update).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ id: 'tx-1', status: S.PENDING }),
+        expect.objectContaining({
+          status: S.SUCCESS,
+          failureReason: 'because',
+        }),
+      );
+      expect(balanceService.applyDelta).toHaveBeenCalledTimes(1);
+      expect(balanceService.applyDelta).toHaveBeenCalledWith(
+        'user-1',
+        'XLM',
+        money('98.75'),
+        queryRunner.manager,
+      );
+      expect(ledgerService.reverse).not.toHaveBeenCalled();
+      expect(queryRunner.commitTransaction).toHaveBeenCalledTimes(1);
+      expect(taxQueue.add).toHaveBeenCalled();
+      expect(amlService.enqueue).toHaveBeenCalledWith('tx-1');
+    });
+
+    it('PENDING to FAILED on a withdrawal refunds amount + fee and reverses the ledger', async () => {
+      transactionRepository.findOne.mockResolvedValue(
+        makeTx({ type: TransactionType.WITHDRAW }),
+      );
+
+      await update(S.FAILED);
+
+      expect(balanceService.applyDelta).toHaveBeenCalledWith(
+        'user-1',
+        'XLM',
+        money('101.25'),
+        queryRunner.manager,
+      );
+      expect(ledgerService.reverse).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'tx-1' }),
+        queryRunner,
+      );
+      expect(taxQueue.add).not.toHaveBeenCalled();
+      expect(amlService.enqueue).not.toHaveBeenCalled();
+    });
+
+    it('refunds a fee in a different currency separately', async () => {
+      transactionRepository.findOne.mockResolvedValue(
+        makeTx({ type: TransactionType.WITHDRAW, feeCurrency: 'USDC' }),
+      );
+
+      await update(S.CANCELLED);
+
+      expect(balanceService.applyDelta).toHaveBeenCalledWith(
+        'user-1',
+        'XLM',
+        money('100'),
+        queryRunner.manager,
+      );
+      expect(balanceService.applyDelta).toHaveBeenCalledWith(
+        'user-1',
+        'USDC',
+        money('1.25'),
+        queryRunner.manager,
+      );
+    });
+
+    it('PENDING to CANCELLED on a stale swap gives back the reserved amount + fee', async () => {
+      transactionRepository.findOne.mockResolvedValue(
+        makeTx({ type: TransactionType.SWAP, currency: 'XLM' }),
+      );
+
+      await update(S.CANCELLED);
+
+      expect(balanceService.applyDelta).toHaveBeenCalledTimes(1);
+      expect(balanceService.applyDelta).toHaveBeenCalledWith(
+        'user-1',
+        'XLM',
+        money('101.25'),
+        queryRunner.manager,
+      );
+    });
+
+    it('moves no money when a deposit fails, but still reverses the ledger', async () => {
+      transactionRepository.findOne.mockResolvedValue(makeTx());
+
+      await update(S.FAILED);
+
+      expect(balanceService.applyDelta).not.toHaveBeenCalled();
+      expect(ledgerService.reverse).toHaveBeenCalledTimes(1);
+    });
+
+    it('applies nothing and fires no side effects when it loses the race for the claim', async () => {
+      transactionRepository.findOne.mockResolvedValue(makeTx());
+      queryRunner.manager.update.mockResolvedValueOnce({ affected: 0 });
+
+      await expect(update(S.SUCCESS)).rejects.toThrow(ConflictException);
+
+      expect(queryRunner.rollbackTransaction).toHaveBeenCalled();
+      expect(queryRunner.commitTransaction).not.toHaveBeenCalled();
+      expect(balanceService.applyDelta).not.toHaveBeenCalled();
+      expect(ledgerService.reverse).not.toHaveBeenCalled();
+      expect(taxQueue.add).not.toHaveBeenCalled();
+      expect(amlService.enqueue).not.toHaveBeenCalled();
+      expect(auditLogsService.logTransactionEvent).not.toHaveBeenCalled();
+    });
+
+    it('rolls the whole transition back when the balance effect fails', async () => {
+      transactionRepository.findOne.mockResolvedValue(makeTx());
+      balanceService.applyDelta.mockRejectedValueOnce(
+        new BadRequestException('Insufficient balance'),
+      );
+
+      await expect(update(S.SUCCESS)).rejects.toThrow('Insufficient balance');
+
+      expect(queryRunner.rollbackTransaction).toHaveBeenCalled();
+      expect(queryRunner.commitTransaction).not.toHaveBeenCalled();
+      expect(queryRunner.release).toHaveBeenCalled();
+      expect(taxQueue.add).not.toHaveBeenCalled();
+      expect(auditLogsService.logTransactionEvent).not.toHaveBeenCalled();
+    });
+
+    it('rolls back when the ledger reversal fails', async () => {
+      transactionRepository.findOne.mockResolvedValue(
+        makeTx({ type: TransactionType.WITHDRAW }),
+      );
+      ledgerService.reverse.mockRejectedValueOnce(new Error('ledger down'));
+
+      await expect(update(S.FAILED)).rejects.toThrow('ledger down');
+
+      expect(queryRunner.rollbackTransaction).toHaveBeenCalled();
+      expect(queryRunner.commitTransaction).not.toHaveBeenCalled();
+    });
+
+    it('does not settle a withdrawal that may still be inside its request', async () => {
+      transactionRepository.findOne.mockResolvedValue(
+        makeTx({ type: TransactionType.WITHDRAW, createdAt: new Date() }),
+      );
+
+      await expect(update(S.FAILED)).rejects.toThrow(ConflictException);
+
+      expect(queryRunner.startTransaction).not.toHaveBeenCalled();
+      expect(balanceService.applyDelta).not.toHaveBeenCalled();
+    });
+
+    it('allows a young withdrawal that already has a hash, and a young deposit', async () => {
+      transactionRepository.findOne.mockResolvedValueOnce(
+        makeTx({
+          type: TransactionType.WITHDRAW,
+          createdAt: new Date(),
+          txHash: 'abc',
+        }),
+      );
+      await expect(update(S.FAILED)).resolves.toBeDefined();
+
+      transactionRepository.findOne.mockResolvedValueOnce(
+        makeTx({ createdAt: new Date() }),
+      );
+      await expect(update(S.SUCCESS)).resolves.toBeDefined();
     });
   });
 

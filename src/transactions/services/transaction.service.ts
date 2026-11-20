@@ -7,11 +7,12 @@ import {
   InternalServerErrorException,
   Logger,
   ForbiddenException,
+  ConflictException,
   Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, IsNull, Repository } from 'typeorm';
 import Decimal from 'decimal.js';
 import { BalanceService } from '../../balances/balance.service';
 import { toDecimal } from '../../balances/decimal.util';
@@ -143,6 +144,26 @@ const STELLAR_ACCOUNT_CHECK_TIMEOUT_MS = 5_000;
 
 const STELLAR_TRANSACTION_TIME_BOUND_MS = 180_000;
 const NOT_FOUND_GRACE_MARGIN_MS = 60_000;
+
+/**
+ * The only legal status changes. A PENDING transaction can settle exactly
+ * once; SUCCESS, FAILED and CANCELLED are terminal. Anything else is a 409,
+ * because a later change would not be matched by a balance or ledger
+ * adjustment and the books would diverge from the chain.
+ */
+const ALLOWED_STATUS_TRANSITIONS: Record<
+  TransactionStatus,
+  TransactionStatus[]
+> = {
+  [TransactionStatus.PENDING]: [
+    TransactionStatus.SUCCESS,
+    TransactionStatus.FAILED,
+    TransactionStatus.CANCELLED,
+  ],
+  [TransactionStatus.SUCCESS]: [],
+  [TransactionStatus.FAILED]: [],
+  [TransactionStatus.CANCELLED]: [],
+};
 
 /**
  * Verifies that a Stellar account exists and is funded before attempting a
@@ -1316,22 +1337,10 @@ export class TransactionsService {
         await this.redisService.delete('admin_stats');
 
         if (transaction.type === TransactionType.DEPOSIT) {
-          const { feeAmount, feeCurrency, sameCurrencyFee } =
-            this.getFeeBreakdown(transaction);
-          await this.updateUserBalance(
-            transaction.userId,
-            transaction.currency,
-            toDecimal(transaction.amount).minus(
-              sameCurrencyFee ? feeAmount : 0,
-            ),
+          await this.applyTransitionBalanceEffects(
+            transaction,
+            TransactionStatus.SUCCESS,
           );
-          if (!sameCurrencyFee && feeAmount.gt(0)) {
-            await this.updateUserBalance(
-              transaction.userId,
-              feeCurrency,
-              feeAmount.neg(),
-            );
-          }
           try {
             await this.referralsService.processReferralReward(
               transaction.userId,
@@ -1369,20 +1378,10 @@ export class TransactionsService {
         }
 
         if (transaction.type === TransactionType.WITHDRAW) {
-          const { feeAmount, feeCurrency, sameCurrencyFee } =
-            this.getFeeBreakdown(transaction);
-          await this.updateUserBalance(
-            transaction.userId,
-            transaction.currency,
-            toDecimal(transaction.amount).plus(sameCurrencyFee ? feeAmount : 0),
+          await this.applyTransitionBalanceEffects(
+            transaction,
+            TransactionStatus.FAILED,
           );
-          if (!sameCurrencyFee && feeAmount.gt(0)) {
-            await this.updateUserBalance(
-              transaction.userId,
-              feeCurrency,
-              feeAmount,
-            );
-          }
         }
 
         if (isExpiredNotFound && oldStatus === TransactionStatus.PENDING) {
@@ -1505,13 +1504,14 @@ export class TransactionsService {
     }
 
     const oldStatus = transaction.status;
-    transaction.status = status;
 
-    if (reason) {
-      transaction.failureReason = reason;
-    }
-
-    await this.transactionRepository.save(transaction);
+    // Reject illegal changes (e.g. SUCCESS to PENDING, FAILED to SUCCESS) with
+    // 409, then apply a legal one atomically together with its balance and
+    // ledger effects. The claim is conditional, so a concurrent verify, cancel
+    // or second admin request can never apply the effects twice.
+    await this.applyPendingTransition(transaction, status, {
+      failureReason: reason || undefined,
+    });
 
     if (transaction.status === TransactionStatus.SUCCESS) {
       await this.activityFeedService.append(
@@ -1538,6 +1538,7 @@ export class TransactionsService {
         newStatus: status,
         updatedBy: adminId,
         reason,
+        adminOverride: true,
         ip: ipAddress,
         device: userAgent,
       },
@@ -1594,21 +1595,25 @@ export class TransactionsService {
     }
 
     if (transaction.status !== TransactionStatus.PENDING) {
-      throw new BadRequestException(
+      throw new ConflictException(
         `Cannot cancel transaction with status ${transaction.status}. Only PENDING transactions can be cancelled.`,
       );
     }
 
     if (transaction.txHash) {
-      this.logger.warn(
-        `Transaction ${transactionId} has already been submitted to Stellar (txHash: ${transaction.txHash}). Cancelling in DB but on-chain state may differ.`,
+      throw new ConflictException(
+        'This transaction has already been submitted to the Stellar network and can no longer be cancelled.',
       );
     }
 
     const oldStatus = transaction.status;
-    transaction.status = TransactionStatus.CANCELLED;
-    await this.transactionRepository.save(transaction);
-    await this.ledgerService.reverse(transaction);
+    // requireNoTxHash makes the claim itself refuse a transaction that got
+    // submitted between the read above and the write.
+    await this.applyPendingTransition(
+      transaction,
+      TransactionStatus.CANCELLED,
+      { requireNoTxHash: true },
+    );
 
     await this.auditLogsService.logTransactionEvent(
       transaction.userId,
@@ -1877,6 +1882,173 @@ export class TransactionsService {
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────
+
+  /**
+   * Reject any status change the state machine does not allow with a 409.
+   */
+  private assertTransitionAllowed(
+    from: TransactionStatus,
+    to: TransactionStatus,
+  ): void {
+    if (!ALLOWED_STATUS_TRANSITIONS[from]?.includes(to)) {
+      throw new ConflictException(
+        `Illegal status transition ${from} to ${to}. Only PENDING transactions can move to SUCCESS, FAILED or CANCELLED.`,
+      );
+    }
+  }
+
+  /**
+   * A withdrawal or swap that has no hash yet and is younger than the Stellar
+   * time bound may still be inside the request that created it. Its funds are
+   * reserved and the send can still happen, so refunding or settling it now
+   * would let the same money be spent twice.
+   */
+  private assertNotInFlight(transaction: Transaction): void {
+    const sendsFunds =
+      transaction.type === TransactionType.WITHDRAW ||
+      transaction.type === TransactionType.SWAP;
+    if (!sendsFunds || transaction.txHash) {
+      return;
+    }
+
+    const createdAt = new Date(transaction.createdAt).getTime();
+    const ageMs = Date.now() - createdAt;
+    if (
+      Number.isFinite(createdAt) &&
+      ageMs < STELLAR_TRANSACTION_TIME_BOUND_MS + NOT_FOUND_GRACE_MARGIN_MS
+    ) {
+      throw new ConflictException(
+        'Transaction is still being processed. Try again once it has been submitted or has expired.',
+      );
+    }
+  }
+
+  /**
+   * Move a PENDING transaction to a terminal status together with its balance
+   * and ledger effects, all in one database transaction.
+   *
+   * The status change is a conditional UPDATE (WHERE status = PENDING, plus
+   * txHash IS NULL when requireNoTxHash is set). Only the request that wins it
+   * applies the effects, so repeated, concurrent or racing callers cannot
+   * credit, refund or reverse twice. If anything fails, everything rolls back.
+   */
+  private async applyPendingTransition(
+    transaction: Transaction,
+    target: TransactionStatus,
+    options: { failureReason?: string; requireNoTxHash?: boolean } = {},
+  ): Promise<void> {
+    this.assertTransitionAllowed(transaction.status, target);
+    this.assertNotInFlight(transaction);
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const claimed = await queryRunner.manager.update(
+        Transaction,
+        {
+          id: transaction.id,
+          status: TransactionStatus.PENDING,
+          ...(options.requireNoTxHash ? { txHash: IsNull() } : {}),
+        },
+        {
+          status: target,
+          ...(options.failureReason !== undefined
+            ? { failureReason: options.failureReason }
+            : {}),
+        },
+      );
+
+      if ((claimed.affected ?? 0) !== 1) {
+        throw new ConflictException(
+          'Transaction was changed by another request and can no longer be updated',
+        );
+      }
+
+      await this.applyTransitionBalanceEffects(
+        transaction,
+        target,
+        queryRunner.manager,
+      );
+
+      if (target !== TransactionStatus.SUCCESS) {
+        await this.ledgerService.reverse(transaction, queryRunner);
+      }
+
+      await queryRunner.commitTransaction();
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
+    }
+
+    transaction.status = target;
+    if (options.failureReason !== undefined) {
+      transaction.failureReason = options.failureReason;
+    }
+  }
+
+  /**
+   * Balance effects of a transaction settling. verifyTransaction and the
+   * manual transition path both use this, so a verified and a forced status
+   * change always move the same money.
+   *
+   * SUCCESS of a DEPOSIT credits the amount net of a same-currency fee (a fee
+   * in another currency is debited separately). FAILED or CANCELLED of a
+   * WITHDRAW gives back the amount and fee that were reserved, and of a SWAP
+   * the reserved amount plus fee in the source currency.
+   */
+  private async applyTransitionBalanceEffects(
+    transaction: Transaction,
+    target: TransactionStatus,
+    manager?: EntityManager,
+  ): Promise<void> {
+    const { feeAmount, feeCurrency, sameCurrencyFee } =
+      this.getFeeBreakdown(transaction);
+    const adjust = (currency: string, amount: Decimal.Value) =>
+      manager
+        ? this.updateUserBalance(transaction.userId, currency, amount, manager)
+        : this.updateUserBalance(transaction.userId, currency, amount);
+
+    if (
+      target === TransactionStatus.SUCCESS &&
+      transaction.type === TransactionType.DEPOSIT
+    ) {
+      await adjust(
+        transaction.currency,
+        toDecimal(transaction.amount).minus(sameCurrencyFee ? feeAmount : 0),
+      );
+      if (!sameCurrencyFee && feeAmount.gt(0)) {
+        await adjust(feeCurrency, feeAmount.neg());
+      }
+      return;
+    }
+
+    if (
+      target !== TransactionStatus.FAILED &&
+      target !== TransactionStatus.CANCELLED
+    ) {
+      return;
+    }
+
+    if (transaction.type === TransactionType.WITHDRAW) {
+      await adjust(
+        transaction.currency,
+        toDecimal(transaction.amount).plus(sameCurrencyFee ? feeAmount : 0),
+      );
+      if (!sameCurrencyFee && feeAmount.gt(0)) {
+        await adjust(feeCurrency, feeAmount);
+      }
+    } else if (transaction.type === TransactionType.SWAP) {
+      // createSwap reserves amount + fee from the source currency.
+      await adjust(
+        transaction.currency,
+        toDecimal(transaction.amount).plus(feeAmount),
+      );
+    }
+  }
 
   private getFeeBreakdown(transaction: Transaction): {
     feeAmount: Decimal;

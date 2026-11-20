@@ -18,6 +18,7 @@ import { ImpersonationController } from './impersonation/impersonation.controlle
 import { ImpersonationService } from './impersonation/impersonation.service';
 import { JwtModule } from '@nestjs/jwt';
 import { UsersModule } from '../users/users.module';
+import { TransactionsModule } from '../transactions/transaction.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { UsersModule } from '../users/users.module';
     KycModule,
     JwtModule,
     UsersModule,
+    TransactionsModule,
   ],
   controllers: [AdminController, ImpersonationController],
   providers: [AdminService, BackupManifestService, ImpersonationService],

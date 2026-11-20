@@ -28,10 +28,12 @@ import { KycModule } from '../kyc/kyc.module';
 import { MicroSavingsModule } from '../modules/micro-savings/micro-savings.module';
 import { UnifiedActivityFeedModule } from '../unified-activity-feed/unified-activity-feed.module';
 import { QueuesModule } from '../modules/queues/queues.module';
+import { BalancesModule } from '../balances/balances.module';
 
 @Module({
   imports: [
     QueuesModule,
+    BalancesModule,
     TypeOrmModule.forFeature([
       Transaction,
       TransactionCategory,

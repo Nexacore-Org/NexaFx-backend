@@ -22,6 +22,7 @@ import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { NotificationsModule } from './notifications/notifications.module';
 import { TransactionsModule } from './transactions/transaction.module';
+import { BalancesModule } from './balances/balances.module';
 import { BeneficiariesModule } from './beneficiaries/beneficiaries.module';
 import { KycModule } from './kyc/kyc.module';
 import { ScheduledJobsModule } from './scheduled-jobs/scheduled-jobs.module';
@@ -116,6 +117,7 @@ import { UnifiedActivityFeedModule } from './unified-activity-feed/unified-activ
     AuditLogsModule,
     NotificationsModule,
     FirebaseModule,
+    BalancesModule,
     TransactionsModule,
     TransactionsV2Module,
     ReferralsModule,

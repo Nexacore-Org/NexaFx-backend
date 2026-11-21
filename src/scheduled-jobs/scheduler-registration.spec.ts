@@ -28,6 +28,12 @@ import { RedisService } from '../common/services/redis.service';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { SanctionsService } from '../sanctions/sanctions.service';
 import { LoansService } from '../loans/loans.service';
+import { getQueueToken } from '@nestjs/bullmq';
+import { AccountDeletionService } from '../users/services/account-deletion.service';
+import { AmlService } from '../modules/compliance/aml.service';
+import { VaultsService } from '../vaults/vaults.service';
+import { BalanceService } from '../balances/balance.service';
+import { TAX_QUEUE } from '../modules/queues/queue.constants';
 
 type ProviderWrapper = {
   name: string;
@@ -167,6 +173,11 @@ describe('Scheduler registration', () => {
             processInterestAccruals: jest.fn(),
           },
         },
+        { provide: AccountDeletionService, useValue: {} },
+        { provide: AmlService, useValue: { enqueue: jest.fn() } },
+        { provide: VaultsService, useValue: {} },
+        { provide: getQueueToken(TAX_QUEUE), useValue: { add: jest.fn() } },
+        { provide: BalanceService, useValue: {} },
       ],
     }).compile();
   });

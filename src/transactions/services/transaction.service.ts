@@ -7,11 +7,15 @@ import {
   InternalServerErrorException,
   Logger,
   ForbiddenException,
+  ConflictException,
   Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, IsNull, Repository } from 'typeorm';
+import Decimal from 'decimal.js';
+import { BalanceService } from '../../balances/balance.service';
+import { toDecimal } from '../../balances/decimal.util';
 import {
   Transaction,
   TransactionStatus,
@@ -36,7 +40,7 @@ import { TransactionSubmissionError } from '../../modules/stellar/stellar.errors
 import { UsersService } from '../../users/users.service';
 import { AuditLogsService } from '../../audit-logs/audit-logs.service';
 import { AuditAction } from '../../audit-logs/enums/audit-action.enum';
-import { User, UserRole } from '../../users/user.entity';
+import { UserRole } from '../../users/user.entity';
 import { ReferralsService } from '../../referrals/referrals.service';
 import { CalculatedFee, FeesService } from '../../fees/fees.service';
 import {
@@ -80,6 +84,12 @@ export function buildStellarMemo(prefix: 'W' | 'S', transactionId: string): stri
     .digest('hex')
     .slice(0, 26);
   return `${prefix}-${hash}`;
+}
+
+/** One signed-free balance movement in a single currency. */
+interface BalanceMovement {
+  currency: string;
+  amount: Decimal.Value;
 }
 
 /** Narrows an unknown catch value to a plain Error with a message string. */
@@ -136,57 +146,81 @@ const STELLAR_TRANSACTION_TIME_BOUND_MS = 180_000;
 const NOT_FOUND_GRACE_MARGIN_MS = 60_000;
 
 /**
- * Verifies that a Stellar account exists and is funded before attempting a
- * payment. Throwing here prevents creating a PENDING transaction that will
- * immediately fail on-chain and waste a fee.
+ * The only legal status changes. A PENDING transaction can settle exactly
+ * once; SUCCESS, FAILED and CANCELLED are terminal. Anything else is a 409,
+ * because a later change would not be matched by a balance or ledger
+ * adjustment and the books would diverge from the chain.
+ */
+const ALLOWED_STATUS_TRANSITIONS: Record<
+  TransactionStatus,
+  TransactionStatus[]
+> = {
+  [TransactionStatus.PENDING]: [
+    TransactionStatus.SUCCESS,
+    TransactionStatus.FAILED,
+    TransactionStatus.CANCELLED,
+  ],
+  [TransactionStatus.SUCCESS]: [],
+  [TransactionStatus.FAILED]: [],
+  [TransactionStatus.CANCELLED]: [],
+};
+
+/**
+ * Verifies that the destination Stellar account is activated before any
+ * payment is attempted. Throwing here (a 400, before any database write or
+ * balance reservation) prevents a withdrawal that would burn a fee and end
+ * up FAILED on-chain with op_no_destination.
  *
- * Timeout (5 s): the withdrawal still proceeds — the Stellar network will
- * surface the failure if the account really is unfunded.
+ * Only an authoritative "does not exist" (Horizon 404, via
+ * StellarService.accountExists) rejects the withdrawal.
  *
- * Non-404 errors (network blips, etc.): logged and swallowed so that
- * transient connectivity issues do not block valid withdrawals.
+ * Timeout (5 s) and any other error (network blips, 5xx): logged and the
+ * withdrawal proceeds, so transient connectivity issues do not block valid
+ * withdrawals. The network will still surface a real failure.
  */
 async function validateStellarDestination(
   stellarService: StellarService,
   address: string,
   logger: Logger,
 ): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let exists: boolean;
+
   try {
-    await Promise.race([
-      stellarService.getWalletBalances(address),
-      new Promise<never>((_, reject) =>
-        setTimeout(
+    exists = await Promise.race([
+      stellarService.accountExists(address),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
           () => reject(new Error('timeout')),
           STELLAR_ACCOUNT_CHECK_TIMEOUT_MS,
-        ),
-      ),
+        );
+      }),
     ]);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
 
     if (message === 'timeout') {
       logger.warn(
-        `Stellar account validation timed out for ${address} — proceeding with withdrawal`,
+        `Stellar account validation timed out for ${address}, proceeding with withdrawal`,
       );
-      return; // Do not block on timeout
-    }
-
-    const is404 =
-      message.includes('404') ||
-      message.toLowerCase().includes('not found') ||
-      message.toLowerCase().includes('does not exist');
-
-    if (is404) {
-      throw new BadRequestException(
-        'Destination account is not activated on the Stellar network. ' +
-          'The recipient must fund their account with at least 1 XLM before ' +
-          'a payment can be sent to it.',
+    } else {
+      // Transient error: log and allow the submission to proceed.
+      logger.warn(
+        `Stellar destination validation could not complete for ${address}: ${message}`,
       );
     }
+    return;
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
 
-    // Transient error — log and allow the submission to proceed
-    logger.warn(
-      `Stellar destination validation returned a non-404 error for ${address}: ${message}`,
+  if (!exists) {
+    throw new BadRequestException(
+      'Destination account is not activated on the Stellar network. ' +
+        'The recipient must fund their account with at least 1 XLM before ' +
+        'a payment can be sent to it.',
     );
   }
 }
@@ -227,6 +261,7 @@ export class TransactionsService {
     @InjectQueue(TAX_QUEUE)
     private readonly taxQueue: Queue,
     private readonly activityFeedService: UnifiedActivityFeedService,
+    private readonly balanceService: BalanceService,
   ) {}
 
   /**
@@ -494,7 +529,7 @@ export class TransactionsService {
     }
 
     const userBalance = await this.getUserBalance(userId, currency);
-    if (parseFloat(userBalance) < amount) {
+    if (!BalanceService.isSufficient(userBalance, amount)) {
       await this.auditLogsService.logTransactionEvent(
         userId,
         AuditAction.WITHDRAWAL_CREATED + '_FAILED',
@@ -540,8 +575,10 @@ export class TransactionsService {
 
     const feeCurrency = (fee.feeCurrency ?? currency).toUpperCase();
     const sameCurrencyFee = feeCurrency === currency.toUpperCase();
-    const totalDeduction = amount + (sameCurrencyFee ? fee.feeAmount : 0);
-    if (parseFloat(userBalance) < totalDeduction) {
+    const totalDeduction = toDecimal(amount).plus(
+      sameCurrencyFee ? toDecimal(fee.feeAmount) : 0,
+    );
+    if (!BalanceService.isSufficient(userBalance, totalDeduction)) {
       throw new BadRequestException(
         'Insufficient balance to cover the transaction amount and fee',
       );
@@ -549,7 +586,7 @@ export class TransactionsService {
 
     if (!sameCurrencyFee && fee.feeAmount > 0) {
       const feeBalance = await this.getUserBalance(userId, fee.feeCurrency);
-      if (parseFloat(feeBalance) < fee.feeAmount) {
+      if (!BalanceService.isSufficient(feeBalance, fee.feeAmount)) {
         throw new BadRequestException(
           'Insufficient balance to cover the transaction fee',
         );
@@ -562,6 +599,21 @@ export class TransactionsService {
       this.logger,
     );
     // ── End pre-submission validation ───────────────────────────────────────
+
+    // Reserve the funds BEFORE anything is sent on-chain. Each debit is one
+    // atomic conditional UPDATE and all of them commit together, so two
+    // concurrent withdrawals can never both spend the same balance. Nothing
+    // is persisted yet, so losing the race fails cleanly with a 400.
+    const reservedDebits: BalanceMovement[] = sameCurrencyFee
+      ? [{ currency, amount: totalDeduction }]
+      : [
+          { currency, amount: toDecimal(amount) },
+          ...(fee.feeAmount > 0
+            ? [{ currency: fee.feeCurrency, amount: toDecimal(fee.feeAmount) }]
+            : []),
+        ];
+    await this.reserveFunds(userId, reservedDebits);
+    let submitted = false;
 
     const transaction = this.transactionRepository.create({
       userId,
@@ -613,11 +665,6 @@ export class TransactionsService {
         amount: amount.toString(),
       });
 
-      // Use counterpartyMemo on Stellar if provided (truncated to 28 bytes)
-      const stellarMemo = createWithdrawalDto.memo
-        ? truncateMemoTo28Bytes(createWithdrawalDto.memo)
-        : `WITHDRAW-${transaction.id}`;
-
       await this.stellarService.createTransaction({
         sourcePublicKey: sourceAddress,
         operations: [paymentOperation],
@@ -630,10 +677,6 @@ export class TransactionsService {
       );
 
       const paymentResult = await this.stellarService.sendPayment({
-        destination: destinationAddress,
-        amount: amount.toString(),
-        secretKey,
-        memo: stellarMemo,
         sourcePublicKey: sourceAddress,
         destination: destinationAddress,
         asset: paymentAsset,
@@ -643,26 +686,11 @@ export class TransactionsService {
         userId,
       });
 
+      // Funds left the account on-chain: the reservation is now final.
+      submitted = true;
       transaction.txHash = paymentResult.hash;
       transaction.stellarTxHash = paymentResult.hash;
       await this.transactionRepository.save(transaction);
-
-      if (sameCurrencyFee) {
-        await this.updateUserBalance(
-          userId,
-          currency,
-          -(amount + fee.feeAmount),
-        );
-      } else {
-        await this.updateUserBalance(userId, currency, -amount);
-        if (fee.feeAmount > 0) {
-          await this.updateUserBalance(
-            userId,
-            fee.feeCurrency,
-            -fee.feeAmount,
-          );
-        }
-      }
 
       if (beneficiaryId) {
         try {
@@ -689,6 +717,10 @@ export class TransactionsService {
     } catch (err) {
       const error = toError(err);
       this.logger.error(`Failed to create withdrawal transaction`, error);
+
+      if (!submitted) {
+        await this.refundFunds(userId, reservedDebits, transaction.id);
+      }
 
       transaction.status = TransactionStatus.FAILED;
       transaction.failureReason = error.message;
@@ -799,7 +831,7 @@ export class TransactionsService {
 
     // 2. Check Balance (including fee)
     const userBalance = await this.getUserBalance(userId, fromCurrency);
-    if (parseFloat(userBalance) < amount) {
+    if (!BalanceService.isSufficient(userBalance, amount)) {
       throw new BadRequestException('Insufficient balance');
     }
 
@@ -820,7 +852,8 @@ export class TransactionsService {
           feeType: FeeType.FLAT,
         };
 
-    if (parseFloat(userBalance) < amount + fee.feeAmount) {
+    const swapDebit = toDecimal(amount).plus(toDecimal(fee.feeAmount));
+    if (!BalanceService.isSufficient(userBalance, swapDebit)) {
       throw new BadRequestException(
         'Insufficient balance to cover the swap amount and fee',
       );
@@ -867,6 +900,13 @@ export class TransactionsService {
       const effectiveAmount =
         destinationAmount * (1 - pair.spreadPercent / 100);
       const effectiveRate = effectiveAmount / amount;
+
+      // Reserve amount + fee atomically before submitting. Refunded in the
+      // catch below if this attempt fails before the swap reaches the network.
+      const swapReservation: BalanceMovement[] = [
+        { currency: fromCurrency, amount: swapDebit },
+      ];
+      await this.reserveFunds(userId, swapReservation);
 
       const transaction = this.transactionRepository.create({
         userId,
@@ -954,6 +994,10 @@ export class TransactionsService {
           `Failed attempt ${i} to execute swap: ${error.message}`,
         );
 
+        // Nothing reached the network (submit is the last statement of the
+        // try block), so give the reserved funds back.
+        await this.refundFunds(userId, swapReservation, transaction.id);
+
         transaction.status = TransactionStatus.FAILED;
         transaction.failureReason = error.message;
         await this.transactionRepository.save(transaction);
@@ -977,16 +1021,15 @@ export class TransactionsService {
       transaction.status = TransactionStatus.SUCCESS;
       await this.transactionRepository.save(transaction);
 
+      // The debit was reserved above; only the destination credit remains.
       await this.runBestEffort(
         () =>
-          this.applySwapBalanceUpdates(
+          this.updateUserBalance(
             userId,
-            fromCurrency,
-            -(amount + fee.feeAmount),
             toCurrency,
-            effectiveAmount,
+            effectiveAmount.toFixed(8),
           ),
-        `swap balance updates for transaction ${transaction.id}`,
+        `swap destination credit for transaction ${transaction.id}`,
       );
       await this.runBestEffort(
         () =>
@@ -1298,21 +1341,10 @@ export class TransactionsService {
         await this.redisService.delete('admin_stats');
 
         if (transaction.type === TransactionType.DEPOSIT) {
-          const { feeAmount, feeCurrency, sameCurrencyFee } =
-            this.getFeeBreakdown(transaction);
-          await this.updateUserBalance(
-            transaction.userId,
-            transaction.currency,
-            parseFloat(transaction.amount) -
-              (sameCurrencyFee ? feeAmount : 0),
+          await this.applyTransitionBalanceEffects(
+            transaction,
+            TransactionStatus.SUCCESS,
           );
-          if (!sameCurrencyFee && feeAmount > 0) {
-            await this.updateUserBalance(
-              transaction.userId,
-              feeCurrency,
-              -feeAmount,
-            );
-          }
           try {
             await this.referralsService.processReferralReward(
               transaction.userId,
@@ -1350,21 +1382,10 @@ export class TransactionsService {
         }
 
         if (transaction.type === TransactionType.WITHDRAW) {
-          const { feeAmount, feeCurrency, sameCurrencyFee } =
-            this.getFeeBreakdown(transaction);
-          await this.updateUserBalance(
-            transaction.userId,
-            transaction.currency,
-            parseFloat(transaction.amount) +
-              (sameCurrencyFee ? feeAmount : 0),
+          await this.applyTransitionBalanceEffects(
+            transaction,
+            TransactionStatus.FAILED,
           );
-          if (!sameCurrencyFee && feeAmount > 0) {
-            await this.updateUserBalance(
-              transaction.userId,
-              feeCurrency,
-              feeAmount,
-            );
-          }
         }
 
         if (isExpiredNotFound && oldStatus === TransactionStatus.PENDING) {
@@ -1487,13 +1508,14 @@ export class TransactionsService {
     }
 
     const oldStatus = transaction.status;
-    transaction.status = status;
 
-    if (reason) {
-      transaction.failureReason = reason;
-    }
-
-    await this.transactionRepository.save(transaction);
+    // Reject illegal changes (e.g. SUCCESS to PENDING, FAILED to SUCCESS) with
+    // 409, then apply a legal one atomically together with its balance and
+    // ledger effects. The claim is conditional, so a concurrent verify, cancel
+    // or second admin request can never apply the effects twice.
+    await this.applyPendingTransition(transaction, status, {
+      failureReason: reason || undefined,
+    });
 
     if (transaction.status === TransactionStatus.SUCCESS) {
       await this.activityFeedService.append(
@@ -1520,6 +1542,7 @@ export class TransactionsService {
         newStatus: status,
         updatedBy: adminId,
         reason,
+        adminOverride: true,
         ip: ipAddress,
         device: userAgent,
       },
@@ -1576,21 +1599,25 @@ export class TransactionsService {
     }
 
     if (transaction.status !== TransactionStatus.PENDING) {
-      throw new BadRequestException(
+      throw new ConflictException(
         `Cannot cancel transaction with status ${transaction.status}. Only PENDING transactions can be cancelled.`,
       );
     }
 
     if (transaction.txHash) {
-      this.logger.warn(
-        `Transaction ${transactionId} has already been submitted to Stellar (txHash: ${transaction.txHash}). Cancelling in DB but on-chain state may differ.`,
+      throw new ConflictException(
+        'This transaction has already been submitted to the Stellar network and can no longer be cancelled.',
       );
     }
 
     const oldStatus = transaction.status;
-    transaction.status = TransactionStatus.CANCELLED;
-    await this.transactionRepository.save(transaction);
-    await this.ledgerService.reverse(transaction);
+    // requireNoTxHash makes the claim itself refuse a transaction that got
+    // submitted between the read above and the write.
+    await this.applyPendingTransition(
+      transaction,
+      TransactionStatus.CANCELLED,
+      { requireNoTxHash: true },
+    );
 
     await this.auditLogsService.logTransactionEvent(
       transaction.userId,
@@ -1860,12 +1887,179 @@ export class TransactionsService {
 
   // ── Private helpers ─────────────────────────────────────────────────────────
 
+  /**
+   * Reject any status change the state machine does not allow with a 409.
+   */
+  private assertTransitionAllowed(
+    from: TransactionStatus,
+    to: TransactionStatus,
+  ): void {
+    if (!ALLOWED_STATUS_TRANSITIONS[from]?.includes(to)) {
+      throw new ConflictException(
+        `Illegal status transition ${from} to ${to}. Only PENDING transactions can move to SUCCESS, FAILED or CANCELLED.`,
+      );
+    }
+  }
+
+  /**
+   * A withdrawal or swap that has no hash yet and is younger than the Stellar
+   * time bound may still be inside the request that created it. Its funds are
+   * reserved and the send can still happen, so refunding or settling it now
+   * would let the same money be spent twice.
+   */
+  private assertNotInFlight(transaction: Transaction): void {
+    const sendsFunds =
+      transaction.type === TransactionType.WITHDRAW ||
+      transaction.type === TransactionType.SWAP;
+    if (!sendsFunds || transaction.txHash) {
+      return;
+    }
+
+    const createdAt = new Date(transaction.createdAt).getTime();
+    const ageMs = Date.now() - createdAt;
+    if (
+      Number.isFinite(createdAt) &&
+      ageMs < STELLAR_TRANSACTION_TIME_BOUND_MS + NOT_FOUND_GRACE_MARGIN_MS
+    ) {
+      throw new ConflictException(
+        'Transaction is still being processed. Try again once it has been submitted or has expired.',
+      );
+    }
+  }
+
+  /**
+   * Move a PENDING transaction to a terminal status together with its balance
+   * and ledger effects, all in one database transaction.
+   *
+   * The status change is a conditional UPDATE (WHERE status = PENDING, plus
+   * txHash IS NULL when requireNoTxHash is set). Only the request that wins it
+   * applies the effects, so repeated, concurrent or racing callers cannot
+   * credit, refund or reverse twice. If anything fails, everything rolls back.
+   */
+  private async applyPendingTransition(
+    transaction: Transaction,
+    target: TransactionStatus,
+    options: { failureReason?: string; requireNoTxHash?: boolean } = {},
+  ): Promise<void> {
+    this.assertTransitionAllowed(transaction.status, target);
+    this.assertNotInFlight(transaction);
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const claimed = await queryRunner.manager.update(
+        Transaction,
+        {
+          id: transaction.id,
+          status: TransactionStatus.PENDING,
+          ...(options.requireNoTxHash ? { txHash: IsNull() } : {}),
+        },
+        {
+          status: target,
+          ...(options.failureReason !== undefined
+            ? { failureReason: options.failureReason }
+            : {}),
+        },
+      );
+
+      if ((claimed.affected ?? 0) !== 1) {
+        throw new ConflictException(
+          'Transaction was changed by another request and can no longer be updated',
+        );
+      }
+
+      await this.applyTransitionBalanceEffects(
+        transaction,
+        target,
+        queryRunner.manager,
+      );
+
+      if (target !== TransactionStatus.SUCCESS) {
+        await this.ledgerService.reverse(transaction, queryRunner);
+      }
+
+      await queryRunner.commitTransaction();
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
+    }
+
+    transaction.status = target;
+    if (options.failureReason !== undefined) {
+      transaction.failureReason = options.failureReason;
+    }
+  }
+
+  /**
+   * Balance effects of a transaction settling. verifyTransaction and the
+   * manual transition path both use this, so a verified and a forced status
+   * change always move the same money.
+   *
+   * SUCCESS of a DEPOSIT credits the amount net of a same-currency fee (a fee
+   * in another currency is debited separately). FAILED or CANCELLED of a
+   * WITHDRAW gives back the amount and fee that were reserved, and of a SWAP
+   * the reserved amount plus fee in the source currency.
+   */
+  private async applyTransitionBalanceEffects(
+    transaction: Transaction,
+    target: TransactionStatus,
+    manager?: EntityManager,
+  ): Promise<void> {
+    const { feeAmount, feeCurrency, sameCurrencyFee } =
+      this.getFeeBreakdown(transaction);
+    const adjust = (currency: string, amount: Decimal.Value) =>
+      manager
+        ? this.updateUserBalance(transaction.userId, currency, amount, manager)
+        : this.updateUserBalance(transaction.userId, currency, amount);
+
+    if (
+      target === TransactionStatus.SUCCESS &&
+      transaction.type === TransactionType.DEPOSIT
+    ) {
+      await adjust(
+        transaction.currency,
+        toDecimal(transaction.amount).minus(sameCurrencyFee ? feeAmount : 0),
+      );
+      if (!sameCurrencyFee && feeAmount.gt(0)) {
+        await adjust(feeCurrency, feeAmount.neg());
+      }
+      return;
+    }
+
+    if (
+      target !== TransactionStatus.FAILED &&
+      target !== TransactionStatus.CANCELLED
+    ) {
+      return;
+    }
+
+    if (transaction.type === TransactionType.WITHDRAW) {
+      await adjust(
+        transaction.currency,
+        toDecimal(transaction.amount).plus(sameCurrencyFee ? feeAmount : 0),
+      );
+      if (!sameCurrencyFee && feeAmount.gt(0)) {
+        await adjust(feeCurrency, feeAmount);
+      }
+    } else if (transaction.type === TransactionType.SWAP) {
+      // createSwap reserves amount + fee from the source currency.
+      await adjust(
+        transaction.currency,
+        toDecimal(transaction.amount).plus(feeAmount),
+      );
+    }
+  }
+
   private getFeeBreakdown(transaction: Transaction): {
-    feeAmount: number;
+    feeAmount: Decimal;
     feeCurrency: string;
     sameCurrencyFee: boolean;
   } {
-    const feeAmount = parseFloat(transaction.feeAmount?.toString() ?? '0');
+    const feeAmount = toDecimal(transaction.feeAmount?.toString() ?? '0');
     const feeCurrency = (
       transaction.feeCurrency ?? transaction.currency
     ).toUpperCase();
@@ -1885,39 +2079,6 @@ export class TransactionsService {
       await action();
     } catch (err) {
       this.logger.error(`${description} failed: ${toError(err).message}`);
-    }
-  }
-
-  private async applySwapBalanceUpdates(
-    userId: string,
-    fromCurrency: string,
-    fromAmount: number,
-    toCurrency: string,
-    toAmount: number,
-  ): Promise<void> {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-      await this.updateUserBalance(
-        userId,
-        fromCurrency,
-        fromAmount,
-        queryRunner.manager,
-      );
-      await this.updateUserBalance(
-        userId,
-        toCurrency,
-        toAmount,
-        queryRunner.manager,
-      );
-      await queryRunner.commitTransaction();
-    } catch (err) {
-      await queryRunner.rollbackTransaction();
-      throw err;
-    } finally {
-      await queryRunner.release();
     }
   }
 
@@ -1954,62 +2115,90 @@ export class TransactionsService {
     userId: string,
     currency: string,
   ): Promise<string> {
-    const user = await this.usersService.findById(userId);
-
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    if (user.balances?.[currency] !== undefined) {
-      return user.balances[currency].toString();
-    }
-
-    return '0.00';
+    return this.balanceService.getBalance(userId, currency);
   }
 
+  /**
+   * Atomic signed balance adjustment: positive credits, negative debits and
+   * throws 'Insufficient balance' when funds are missing. The check and the
+   * write are one statement inside BalanceService, never read-modify-write.
+   */
   private async updateUserBalance(
     userId: string,
     currency: string,
-    amount: number,
+    amount: Decimal.Value,
     manager?: EntityManager,
   ): Promise<void> {
     this.logger.log(
-      `Updating balance for user ${userId}: ${amount} ${currency}`,
+      `Updating balance for user ${userId}: ${amount.toString()} ${currency}`,
     );
 
-    const user = manager
-      ? await manager.findOne(User, { where: { id: userId } })
-      : await this.usersService.findById(userId);
-
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    user.balances ??= {};
-
-    const currentBalance = parseFloat(
-      user.balances[currency]?.toString() ?? '0',
+    const newBalance = await this.balanceService.applyDelta(
+      userId,
+      currency,
+      amount,
+      manager,
     );
-
-    const newBalance = currentBalance + amount;
-
-    if (newBalance < 0) {
-      throw new BadRequestException('Insufficient balance');
-    }
-
-    user.balances[currency] = newBalance;
-
-    if (manager) {
-      await manager.save(User, user);
-    } else {
-      await this.usersService.updateByUserId(userId, {
-        balances: user.balances,
-      });
-    }
 
     this.logger.log(
       `Updated user ${userId} balance for ${currency}. New balance: ${newBalance}`,
     );
+  }
+
+  /**
+   * Debit every movement or none of them: all conditional UPDATEs share one
+   * database transaction.
+   */
+  private async reserveFunds(
+    userId: string,
+    debits: BalanceMovement[],
+  ): Promise<void> {
+    await this.withBalanceTransaction(async (manager) => {
+      for (const { currency, amount } of debits) {
+        await this.balanceService.debit(userId, currency, amount, manager);
+      }
+    });
+  }
+
+  /**
+   * Give back funds reserved for a send that never reached the network. A
+   * failed refund is logged loudly because the ledger then needs repair.
+   */
+  private async refundFunds(
+    userId: string,
+    credits: BalanceMovement[],
+    transactionId?: string,
+  ): Promise<void> {
+    try {
+      await this.withBalanceTransaction(async (manager) => {
+        for (const { currency, amount } of credits) {
+          await this.balanceService.credit(userId, currency, amount, manager);
+        }
+      });
+    } catch (refundError) {
+      this.logger.error(
+        `CRITICAL: failed to refund reserved funds to user ${userId} for transaction ${transactionId ?? 'n/a'}: ${toError(refundError).message}`,
+      );
+    }
+  }
+
+  private async withBalanceTransaction<T>(
+    work: (manager: EntityManager) => Promise<T>,
+  ): Promise<T> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const result = await work(queryRunner.manager);
+      await queryRunner.commitTransaction();
+      return result;
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
+    }
   }
 
   private async sendTransactionNotification(

@@ -18,6 +18,12 @@ import { TransactionsService } from '../transactions/services/transaction.servic
 import { StellarService } from '../blockchain/stellar/stellar.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
+import { getQueueToken } from '@nestjs/bullmq';
+import { AccountDeletionService } from '../users/services/account-deletion.service';
+import { AmlService } from '../modules/compliance/aml.service';
+import { VaultsService } from '../vaults/vaults.service';
+import { BalanceService } from '../balances/balance.service';
+import { TAX_QUEUE } from '../modules/queues/queue.constants';
 import { RateAlertsService } from '../rate-alerts/rate-alerts.service';
 import { LedgerVerificationService } from '../ledger/services/ledger-verification.service';
 import { WebhookService } from '../webhooks/services/webhook.service';
@@ -174,6 +180,14 @@ describe('ScheduledJobsService', () => {
           useValue: {
             processInterestAccruals: jest.fn(),
           },
+        },
+        { provide: AccountDeletionService, useValue: {} },
+        { provide: AmlService, useValue: { enqueue: jest.fn() } },
+        { provide: VaultsService, useValue: {} },
+        { provide: getQueueToken(TAX_QUEUE), useValue: { add: jest.fn() } },
+        {
+          provide: BalanceService,
+          useValue: { applyDelta: jest.fn(async () => '0') },
         },
       ],
     }).compile();

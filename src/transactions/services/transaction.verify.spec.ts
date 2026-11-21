@@ -1,3 +1,4 @@
+import Decimal from 'decimal.js';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Transaction, TransactionStatus, TransactionType } from '../entities/transaction.entity';
 import { UserRole } from '../../users/user.entity';
@@ -43,6 +44,15 @@ describe('TransactionsService.verifyTransaction', () => {
   };
   const ledgerService = { reverse: jest.fn(async () => undefined) };
   const usersService = { findById: jest.fn(), updateByUserId: jest.fn() };
+
+  /** Exact-decimal money matcher: balances now move as Decimal values. */
+  const money = (expected: string) => ({
+    asymmetricMatch: (actual: unknown) =>
+      actual !== null &&
+      actual !== undefined &&
+      new Decimal(String(actual)).eq(new Decimal(expected)),
+    toAsymmetricMatcher: () => `Money(${expected})`,
+  });
 
   const makeTransaction = (overrides: Partial<Transaction> = {}) =>
     ({
@@ -176,7 +186,7 @@ describe('TransactionsService.verifyTransaction', () => {
       expect(
         (service as unknown as { updateUserBalance: jest.Mock })
           .updateUserBalance,
-      ).toHaveBeenCalledWith('user-1', 'XLM', 100);
+      ).toHaveBeenCalledWith('user-1', 'XLM', money('100'));
     });
 
     it('credits a deposit net of the recorded fee', async () => {
@@ -189,7 +199,7 @@ describe('TransactionsService.verifyTransaction', () => {
       expect(
         (service as unknown as { updateUserBalance: jest.Mock })
           .updateUserBalance,
-      ).toHaveBeenCalledWith('user-1', 'XLM', 98.75);
+      ).toHaveBeenCalledWith('user-1', 'XLM', money('98.75'));
     });
 
     it('deducts a fee recorded in another currency from that currency', async () => {
@@ -202,11 +212,11 @@ describe('TransactionsService.verifyTransaction', () => {
       expect(
         (service as unknown as { updateUserBalance: jest.Mock })
           .updateUserBalance,
-      ).toHaveBeenCalledWith('user-1', 'XLM', 100);
+      ).toHaveBeenCalledWith('user-1', 'XLM', money('100'));
       expect(
         (service as unknown as { updateUserBalance: jest.Mock })
           .updateUserBalance,
-      ).toHaveBeenCalledWith('user-1', 'USDC', -1.25);
+      ).toHaveBeenCalledWith('user-1', 'USDC', money('-1.25'));
     });
 
     it('does not credit when the row was already claimed', async () => {
@@ -288,7 +298,7 @@ describe('TransactionsService.verifyTransaction', () => {
       expect(
         (service as unknown as { updateUserBalance: jest.Mock })
           .updateUserBalance,
-      ).toHaveBeenCalledWith('user-1', 'XLM', 100);
+      ).toHaveBeenCalledWith('user-1', 'XLM', money('100'));
     });
 
     it('keeps transient verification results PENDING', async () => {
@@ -366,7 +376,7 @@ describe('TransactionsService.verifyTransaction', () => {
       ).toHaveBeenCalledTimes(1);
       expect(
         (service as unknown as { updateUserBalance: jest.Mock }).updateUserBalance,
-      ).toHaveBeenCalledWith('user-1', 'XLM', 100);
+      ).toHaveBeenCalledWith('user-1', 'XLM', money('100'));
     });
 
     it('still rejects a non-deposit row without txHash', async () => {

@@ -139,7 +139,7 @@ export class ProfileResponseDto {
       isActive: user.isActive,
       isSuspended: user.isSuspended,
       plan: user.plan,
-      balances: user.balances,
+      balances: user.onChainBalances,
       balanceLastSyncedAt: user.balanceLastSyncedAt,
       isTwoFactorEnabled: user.isTwoFactorEnabled,
       role: user.role,

@@ -14,7 +14,7 @@ export const baseConfig: Config = {
     ],
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(@noble|@scure|@stellar|uint8array-extras|uuid)/)',
+    'node_modules/(?!(@noble|@scure|@stellar|@exodus|uint8array-extras|uuid)/)',
   ],
   moduleNameMapper: {
     '^src/(.*)$': join(__dirname, 'src', '$1'),

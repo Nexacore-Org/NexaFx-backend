@@ -81,6 +81,7 @@ describe('TransactionsService fee integration behavior', () => {
     findIncomingPayment: jest.fn(async () => null),
     verifyTransaction: jest.fn(async () => ({ status: 'SUCCESS' })),
     getWalletBalances: jest.fn(async () => [{ asset: 'XLM', balance: '100' }]),
+    accountExists: jest.fn(async () => true),
     getAssetWithDefaultIssuer: jest.fn(() => Asset.native()),
     getAsset: jest.fn((code: string) => ({ code })),
     findBestPath: jest.fn(async () => [
@@ -488,6 +489,87 @@ describe('TransactionsService fee integration behavior', () => {
         stellarTxHash: 'stellar-hash',
       }),
     );
+  });
+
+  describe('destination account validation (#1456)', () => {
+    const dto = {
+      amount: 100,
+      currency: 'XLM',
+      destinationAddress:
+        'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+    };
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('rejects a withdrawal to an unfunded account with 400 before any write', async () => {
+      stellarService.accountExists.mockResolvedValueOnce(false);
+
+      await expect(service.createWithdrawal('user-1', dto)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(
+        (async () => {
+          stellarService.accountExists.mockResolvedValueOnce(false);
+          await service.createWithdrawal('user-1', dto);
+        })(),
+      ).rejects.toThrow('Destination account is not activated');
+
+      expect(stellarService.accountExists).toHaveBeenCalledWith(
+        dto.destinationAddress,
+      );
+      // No balance reserved, no row persisted, no ledger entry, nothing sent.
+      expect(balanceService.debit).not.toHaveBeenCalled();
+      expect(transactionRepository.create).not.toHaveBeenCalled();
+      expect(transactionRepository.save).not.toHaveBeenCalled();
+      expect(queryRunner.manager.save).not.toHaveBeenCalled();
+      expect(ledgerService.record).not.toHaveBeenCalled();
+      expect(stellarService.sendPayment).not.toHaveBeenCalled();
+    });
+
+    it('proceeds when the destination account exists', async () => {
+      stellarService.accountExists.mockResolvedValueOnce(true);
+
+      await service.createWithdrawal('user-1', dto);
+
+      expect(stellarService.sendPayment).toHaveBeenCalledTimes(1);
+    });
+
+    it('proceeds when the check times out', async () => {
+      jest.useFakeTimers();
+      stellarService.accountExists.mockReturnValueOnce(
+        new Promise<boolean>(() => undefined),
+      );
+
+      const pending = service.createWithdrawal('user-1', dto);
+      await jest.advanceTimersByTimeAsync(5_000);
+      await pending;
+
+      expect(stellarService.sendPayment).toHaveBeenCalledTimes(1);
+    });
+
+    it('proceeds on a transient error instead of blocking a valid withdrawal', async () => {
+      stellarService.accountExists.mockRejectedValueOnce(
+        new Error('Horizon unavailable'),
+      );
+
+      await service.createWithdrawal('user-1', dto);
+
+      expect(stellarService.sendPayment).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not treat an unrelated error mentioning "not found" as an unfunded account', async () => {
+      // The old check sniffed error text. Only an authoritative false from
+      // accountExists may reject.
+      stellarService.accountExists.mockRejectedValueOnce(
+        new Error('route not found 404 does not exist'),
+      );
+
+      await service.createWithdrawal('user-1', dto);
+
+      expect(stellarService.sendPayment).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('withdrawal balance reservation', () => {

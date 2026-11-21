@@ -219,6 +219,35 @@ export class StellarService {
     return xlm?.balance ?? '0';
   }
 
+  /**
+   * Whether an account is activated (exists) on the Stellar network.
+   *
+   * Returns false ONLY when Horizon answers 404. Any other failure (timeout,
+   * 5xx, connectivity) throws, so callers can tell "definitely not activated"
+   * apart from "could not check". getWalletBalances and getAccountBalance
+   * cannot make that distinction: they turn a 404 into an empty result.
+   */
+  async accountExists(publicKey: string): Promise<boolean> {
+    try {
+      await this.server.loadAccount(publicKey);
+      return true;
+    } catch (err: unknown) {
+      const error = toStellarError(err);
+      const statusCode = error.response?.status ?? error.status;
+
+      if (statusCode === 404) {
+        return false;
+      }
+
+      this.logger.error(
+        `Failed to check whether Stellar account ${publicKey} exists: ${error.message}`,
+      );
+      throw new TransactionBuildError(
+        'Failed to check Stellar account existence',
+      );
+    }
+  }
+
   async getWalletBalances(publicKey: string): Promise<WalletBalanceResult[]> {
     try {
       const account = await this.server.loadAccount(publicKey);

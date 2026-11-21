@@ -166,57 +166,61 @@ const ALLOWED_STATUS_TRANSITIONS: Record<
 };
 
 /**
- * Verifies that a Stellar account exists and is funded before attempting a
- * payment. Throwing here prevents creating a PENDING transaction that will
- * immediately fail on-chain and waste a fee.
+ * Verifies that the destination Stellar account is activated before any
+ * payment is attempted. Throwing here (a 400, before any database write or
+ * balance reservation) prevents a withdrawal that would burn a fee and end
+ * up FAILED on-chain with op_no_destination.
  *
- * Timeout (5 s): the withdrawal still proceeds — the Stellar network will
- * surface the failure if the account really is unfunded.
+ * Only an authoritative "does not exist" (Horizon 404, via
+ * StellarService.accountExists) rejects the withdrawal.
  *
- * Non-404 errors (network blips, etc.): logged and swallowed so that
- * transient connectivity issues do not block valid withdrawals.
+ * Timeout (5 s) and any other error (network blips, 5xx): logged and the
+ * withdrawal proceeds, so transient connectivity issues do not block valid
+ * withdrawals. The network will still surface a real failure.
  */
 async function validateStellarDestination(
   stellarService: StellarService,
   address: string,
   logger: Logger,
 ): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let exists: boolean;
+
   try {
-    await Promise.race([
-      stellarService.getWalletBalances(address),
-      new Promise<never>((_, reject) =>
-        setTimeout(
+    exists = await Promise.race([
+      stellarService.accountExists(address),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
           () => reject(new Error('timeout')),
           STELLAR_ACCOUNT_CHECK_TIMEOUT_MS,
-        ),
-      ),
+        );
+      }),
     ]);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
 
     if (message === 'timeout') {
       logger.warn(
-        `Stellar account validation timed out for ${address} — proceeding with withdrawal`,
+        `Stellar account validation timed out for ${address}, proceeding with withdrawal`,
       );
-      return; // Do not block on timeout
-    }
-
-    const is404 =
-      message.includes('404') ||
-      message.toLowerCase().includes('not found') ||
-      message.toLowerCase().includes('does not exist');
-
-    if (is404) {
-      throw new BadRequestException(
-        'Destination account is not activated on the Stellar network. ' +
-          'The recipient must fund their account with at least 1 XLM before ' +
-          'a payment can be sent to it.',
+    } else {
+      // Transient error: log and allow the submission to proceed.
+      logger.warn(
+        `Stellar destination validation could not complete for ${address}: ${message}`,
       );
     }
+    return;
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
 
-    // Transient error — log and allow the submission to proceed
-    logger.warn(
-      `Stellar destination validation returned a non-404 error for ${address}: ${message}`,
+  if (!exists) {
+    throw new BadRequestException(
+      'Destination account is not activated on the Stellar network. ' +
+        'The recipient must fund their account with at least 1 XLM before ' +
+        'a payment can be sent to it.',
     );
   }
 }

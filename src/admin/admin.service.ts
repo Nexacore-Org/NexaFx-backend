@@ -60,6 +60,7 @@ import {
   SnapshotStatus,
 } from '../database/entities/migration-snapshot.entity';
 import { DataSource } from 'typeorm';
+import { TransactionsService } from '../transactions/services/transaction.service';
 
 @Injectable()
 export class AdminService {
@@ -84,6 +85,7 @@ export class AdminService {
     @InjectRepository(MigrationSnapshot)
     private readonly migrationSnapshotRepository: Repository<MigrationSnapshot>,
     private readonly dataSource: DataSource,
+    private readonly transactionsService: TransactionsService,
   ) {}
 
   async listTransactionLimits() {
@@ -603,36 +605,20 @@ export class AdminService {
       );
     }
 
-    const transaction = await this.transactionRepository.findOne({
-      where: { id: transactionId },
-    });
-
-    if (!transaction) {
-      throw new NotFoundException('Transaction not found');
-    }
-
-    const oldStatus = transaction.status;
-    transaction.status = status;
-    transaction.failureReason = reason;
-    await this.transactionRepository.save(transaction);
-
-    await this.auditLogsService.logTransactionEvent(
-      transaction.userId,
-      AuditAction.TRANSACTION_STATUS_UPDATED,
-      transaction.id,
-      {
-        oldStatus,
-        newStatus: status,
-        updatedBy: adminId,
-        reason,
-        ip: ipAddress,
-        device: userAgent,
-        adminOverride: true,
-      },
+    // One implementation for every manual status change: it enforces the
+    // transition table (409 on illegal moves) and applies the same balance and
+    // ledger effects as verifyTransaction, atomically.
+    const transaction = await this.transactionsService.updateTransactionStatus(
+      transactionId,
+      status,
+      adminId,
+      reason,
+      ipAddress,
+      userAgent,
     );
 
     this.logger.log(
-      `Transaction ${transactionId} status overridden by admin ${adminId}: ${oldStatus} -> ${status}. Reason: ${reason}`,
+      `Transaction ${transactionId} status overridden by admin ${adminId} to ${status}. Reason: ${reason}`,
     );
 
     return transaction;

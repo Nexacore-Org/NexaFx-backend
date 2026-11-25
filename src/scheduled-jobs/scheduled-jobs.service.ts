@@ -1,6 +1,8 @@
 import { Injectable, Logger, Scope } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Repository } from 'typeorm';
+import Decimal from 'decimal.js';
+import { BalanceService } from '../balances/balance.service';
 import * as os from 'os';
 import {
   Transaction,
@@ -72,6 +74,7 @@ export class ScheduledJobsService {
     private readonly sanctionsService: SanctionsService,
     private readonly loansService: LoansService,
     private readonly vaultsService: VaultsService,
+    private readonly balanceService: BalanceService,
   ) {
     // Truncate hostname to 255 characters to match DB column constraint
     this.instanceId = os.hostname().substring(0, 255);
@@ -519,7 +522,7 @@ export class ScheduledJobsService {
         await this.updateUserBalance(
           transaction.userId,
           transaction.currency,
-          parseFloat(transaction.amount),
+          transaction.amount,
         );
 
         this.logger.log(
@@ -597,7 +600,7 @@ export class ScheduledJobsService {
         await this.updateUserBalance(
           transaction.userId,
           transaction.currency,
-          parseFloat(transaction.amount),
+          transaction.amount,
         );
 
         this.logger.log(
@@ -772,43 +775,27 @@ export class ScheduledJobsService {
   }
 
   /**
-   * Update user balance atomically
+   * Adjust a user balance atomically. Positive credits, negative debits
+   * (guarded against overdraw). Delegates to BalanceService so the check and
+   * the write are one statement, never a read-modify-write.
    */
   private async updateUserBalance(
     userId: string,
     currency: string,
-    amount: number,
+    amount: Decimal.Value,
   ): Promise<void> {
     this.logger.debug(
-      `[Balance Update] Updating balance for user ${userId}: +${amount} ${currency}`,
+      `[Balance Update] Updating balance for user ${userId}: ${amount.toString()} ${currency}`,
     );
 
-    const user = await this.usersService.findById(userId);
-
-    if (!user) {
-      throw new Error(`User ${userId} not found`);
-    }
-
-    // Initialize balances if not exists
-    if (!user.balances) {
-      user.balances = {};
-    }
-
-    const currentBalance = parseFloat(
-      user.balances[currency]?.toString() || '0',
+    const newBalance = await this.balanceService.applyDelta(
+      userId,
+      currency,
+      amount,
     );
-    const newBalance = currentBalance + amount;
-
-    if (newBalance < 0) {
-      throw new Error('Insufficient balance for this operation');
-    }
-
-    user.balances[currency] = newBalance;
-
-    await this.usersService.update(userId, { balances: user.balances });
 
     this.logger.debug(
-      `[Balance Update] Balance updated for user ${userId}: ${currentBalance} -> ${newBalance} ${currency}`,
+      `[Balance Update] Balance updated for user ${userId}: now ${newBalance} ${currency}`,
     );
   }
 

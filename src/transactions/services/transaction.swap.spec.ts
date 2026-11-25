@@ -4,6 +4,8 @@ import { BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { getQueueToken } from '@nestjs/bullmq';
 import { DataSource } from 'typeorm';
+import Decimal from 'decimal.js';
+import { BalanceService } from '../../balances/balance.service';
 import { TransactionsService } from './transaction.service';
 import {
   Transaction,
@@ -58,6 +60,15 @@ Asset.constructor = jest.fn(() => ({ isNative: () => false }));
 (Asset as any) = jest.fn(() => ({ isNative: () => false }));
 (Asset as any).native = jest.fn(() => ({ isNative: () => true }));
 
+/** Exact-decimal money matcher: balances move as Decimal values. */
+const money = (expected: string) => ({
+  asymmetricMatch: (actual: unknown) =>
+    actual !== null &&
+    actual !== undefined &&
+    new Decimal(String(actual)).eq(new Decimal(expected)),
+  toAsymmetricMatcher: () => `Money(${expected})`,
+});
+
 describe('TransactionsService.createSwap', () => {
   let service: TransactionsService;
   let transactionRepository: any;
@@ -65,6 +76,8 @@ describe('TransactionsService.createSwap', () => {
   let notificationsService: any;
   let activityFeedService: any;
   let currencyPairService: any;
+  let balanceService: any;
+  let queryRunnerMock: any;
 
   const mockRedisService = {
     del: jest.fn(),
@@ -104,8 +117,15 @@ describe('TransactionsService.createSwap', () => {
     activityFeedService = {
       append: jest.fn(async () => ({})),
     };
+    balanceService = {
+      getBalance: jest.fn(async () => '100'),
+      debit: jest.fn(async () => '89'),
+      credit: jest.fn(async () => '100'),
+      applyDelta: jest.fn(async () => '100'),
+    };
     const ledgerService = {
       record: jest.fn(async () => undefined),
+      reverse: jest.fn(async () => undefined),
     };
     const queryRunner = {
       connect: jest.fn(async () => undefined),
@@ -117,6 +137,7 @@ describe('TransactionsService.createSwap', () => {
         save: jest.fn(async (_entity: unknown, payload: any) => payload),
       },
     };
+    queryRunnerMock = queryRunner;
     const dataSource = {
       createQueryRunner: jest.fn(() => queryRunner),
     };
@@ -230,6 +251,7 @@ describe('TransactionsService.createSwap', () => {
           },
         },
         { provide: UnifiedActivityFeedService, useValue: activityFeedService },
+        { provide: BalanceService, useValue: balanceService },
         { provide: AmlService, useValue: { enqueue: jest.fn(async () => undefined) } },
         {
           provide: MicroSavingsService,
@@ -408,5 +430,78 @@ describe('TransactionsService.createSwap', () => {
         failureReason: 'Stellar error',
       }),
     );
+  });
+
+  describe('balance reservation', () => {
+    const dto = {
+      amount: 10,
+      fromCurrency: 'XLM',
+      toCurrency: 'USDC',
+      sourceAddress: 'G123',
+    };
+
+    it('reserves amount + fee atomically before submitting, then credits the destination', async () => {
+      const order: string[] = [];
+      balanceService.debit.mockImplementationOnce(async () => {
+        order.push('debit');
+        return '89';
+      });
+      stellarService.submitTransaction.mockImplementationOnce(async () => {
+        order.push('submit');
+        return { hash: 'stellar-hash' };
+      });
+
+      await service.createSwap('user-1', dto);
+
+      expect(order).toEqual(['debit', 'submit']);
+      // 10 swapped + 1 flat fee, summed exactly.
+      expect(balanceService.debit).toHaveBeenCalledWith(
+        'user-1',
+        'XLM',
+        money('11'),
+        queryRunnerMock.manager,
+      );
+      // Only the destination credit remains after a successful submit.
+      expect((service as any).updateUserBalance).toHaveBeenCalledTimes(1);
+      expect((service as any).updateUserBalance).toHaveBeenCalledWith(
+        'user-1',
+        'USDC',
+        '99.50000000',
+      );
+      expect(balanceService.credit).not.toHaveBeenCalled();
+    });
+
+    it('refunds the reservation when the swap fails before reaching the network', async () => {
+      stellarService.submitTransaction.mockRejectedValueOnce(
+        new Error('Stellar error'),
+      );
+
+      await expect(service.createSwap('user-1', dto)).rejects.toThrow(
+        BadRequestException,
+      );
+
+      expect(balanceService.credit).toHaveBeenCalledTimes(1);
+      expect(balanceService.credit).toHaveBeenCalledWith(
+        'user-1',
+        'XLM',
+        money('11'),
+        queryRunnerMock.manager,
+      );
+      expect((service as any).updateUserBalance).not.toHaveBeenCalled();
+    });
+
+    it('submits nothing when the atomic debit loses the race', async () => {
+      balanceService.debit.mockRejectedValueOnce(
+        new BadRequestException('Insufficient balance'),
+      );
+
+      await expect(service.createSwap('user-1', dto)).rejects.toThrow(
+        BadRequestException,
+      );
+
+      expect(stellarService.submitTransaction).not.toHaveBeenCalled();
+      expect(transactionRepository.create).not.toHaveBeenCalled();
+      expect(balanceService.credit).not.toHaveBeenCalled();
+    });
   });
 });

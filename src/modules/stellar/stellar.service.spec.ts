@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { StellarService } from './stellar.service';
 import { AuditLogsService } from '../../audit-logs/audit-logs.service';
 import { AuditAction } from '../../audit-logs/enums/audit-action.enum';
+import { TransactionBuildError } from './stellar.errors';
 
 describe('StellarService', () => {
   let service: StellarService;
@@ -234,6 +235,80 @@ describe('StellarService', () => {
       expect(() => configured.getAssetWithDefaultIssuer('ZZZ')).toThrow(
         /No Stellar issuer configured/,
       );
+    });
+  });
+
+  describe('accountExists', () => {
+    const address = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
+
+    const withLoadAccount = (loadAccount: jest.Mock) =>
+      Object.defineProperty(service, 'server', { value: { loadAccount } });
+
+    it('returns true for an activated account', async () => {
+      const loadAccount = jest.fn().mockResolvedValue({ balances: [] });
+      withLoadAccount(loadAccount);
+
+      await expect(service.accountExists(address)).resolves.toBe(true);
+      expect(loadAccount).toHaveBeenCalledWith(address);
+    });
+
+    it('returns false when Horizon answers 404 (response.status)', async () => {
+      withLoadAccount(
+        jest.fn().mockRejectedValue(
+          Object.assign(new Error('Not Found'), {
+            response: { status: 404 },
+          }),
+        ),
+      );
+
+      await expect(service.accountExists(address)).resolves.toBe(false);
+    });
+
+    it('returns false when the error carries a top-level 404 status', async () => {
+      withLoadAccount(
+        jest
+          .fn()
+          .mockRejectedValue(
+            Object.assign(new Error('Not Found'), { status: 404 }),
+          ),
+      );
+
+      await expect(service.accountExists(address)).resolves.toBe(false);
+    });
+
+    it('throws, instead of reporting "missing", on a Horizon server error', async () => {
+      withLoadAccount(
+        jest
+          .fn()
+          .mockRejectedValue(
+            Object.assign(new Error('Horizon unavailable'), { status: 503 }),
+          ),
+      );
+
+      await expect(service.accountExists(address)).rejects.toBeInstanceOf(
+        TransactionBuildError,
+      );
+    });
+
+    it('throws on a timeout or connectivity error with no status', async () => {
+      withLoadAccount(jest.fn().mockRejectedValue(new Error('ETIMEDOUT')));
+
+      await expect(service.accountExists(address)).rejects.toBeInstanceOf(
+        TransactionBuildError,
+      );
+    });
+
+    it('contrast: getWalletBalances hides a missing account as an empty list', async () => {
+      withLoadAccount(
+        jest.fn().mockRejectedValue(
+          Object.assign(new Error('Not Found'), {
+            response: { status: 404 },
+          }),
+        ),
+      );
+
+      // This is why destination checks must not rely on it.
+      await expect(service.getWalletBalances(address)).resolves.toEqual([]);
     });
   });
 });

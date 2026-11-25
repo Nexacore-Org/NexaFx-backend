@@ -357,15 +357,26 @@ export class TransactionConfidenceService {
 
     if (transaction.metadata?.destinationAddress) {
       try {
-        await this.stellarService.getAccountBalance(
+        const exists = await this.stellarService.accountExists(
           transaction.metadata.destinationAddress,
         );
-        impact = 5;
-        description = 'Recipient Stellar account is active and funded';
-      } catch {
-        impact = -10;
+        if (exists) {
+          impact = 5;
+          description = 'Recipient Stellar account is active and funded';
+        } else {
+          impact = -10;
+          description =
+            'Recipient Stellar account is not activated. It must be funded with at least 1 XLM before a payment can arrive';
+        }
+      } catch (err: unknown) {
+        // We could not check (timeout, Horizon error). That says nothing about
+        // the recipient, so do not mark it as unfunded.
+        impact = 0;
         description =
-          'Recipient Stellar account not found or not activated — may require account funding first';
+          'Recipient Stellar account could not be verified right now';
+        this.logger.warn(
+          `Recipient account check failed for ${transaction.metadata.destinationAddress}: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
 

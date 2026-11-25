@@ -21,10 +21,12 @@ import { AnalyticsModule } from '../analytics/analytics.module';
 import { SanctionsModule } from '../sanctions/sanctions.module';
 import { LoansModule } from '../loans/loans.module';
 import { QueuesModule } from '../modules/queues/queues.module';
+import { BalancesModule } from '../balances/balances.module';
 
 @Module({
   imports: [
     QueuesModule,
+    BalancesModule,
     TypeOrmModule.forFeature([
       Transaction,
       Notification,

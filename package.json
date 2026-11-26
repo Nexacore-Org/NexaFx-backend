@@ -63,7 +63,7 @@
                          "@nestjs/terminus":  "^11.1.1",
                          "@nestjs/throttler":  "^6.5.0",
                          "@nestjs/typeorm":  "^11.0.3",
-                         "@nestjs/websockets":  "^11.2.11",
+                         "@nestjs/websockets":  "^12.6.0",
                          "@stellar/stellar-sdk":  "^17.2.1",
                          "archiver":  "^8.0.0",
                          "async-mutex":  "^0.5.0",
